@@ -206,7 +206,10 @@ each kept observation it runs, in order:
    recent observations' text (bounded by `mentorWindowDuration` and
    `mentorWindowTokenBudget`), a compact event summary, the categories
    currently suppressed for the app, and, when `sendThumbnail` is on, the
-   latest kept thumbnail as an image. The reply is `{"reason": string,
+   latest kept thumbnail as an image. While mentorship contexts are enforced
+   the message also names the declared context the moment was placed in, with
+   its description, so the suggestion stays useful for that work. The reply is
+   `{"reason": string,
    "suggestion": null | {title, body, explanation, category, confidence}}`. A
    null suggestion is the normal outcome.
 
@@ -313,15 +316,20 @@ panel status bar, and the Mentor card.
   each, bounded by the window duration and token budget in Settings) and, by
   default, the latest kept thumbnail as a JPEG image. "Send the latest
   screenshot to the mentor model" in Settings > Mentor turns the image off, in
-  which case the mentor tier receives text only. Nothing else is sent: no
-  file names, no keystrokes, no earlier thumbnails, no key.
+  which case the mentor tier receives text only. While mentorship contexts
+  are enforced, the mentor tier also receives the name and description of the
+  declared context the moment was placed in. Nothing else is sent: no file
+  names, no keystrokes, no earlier thumbnails, no key.
 - The API key lives in the login keychain, is passed per request, and is never
   written to the journal, the logs, or the debug panel, which show at most its
   last four characters.
 - With **only mentor inside these contexts** on, the declared context names and
   descriptions are part of the triage system prompt, so they do leave the
-  machine with every triage call. Nothing else about the contexts is sent: the
-  placement is decided here from the model's answer, not there.
+  machine with every triage call. When triage places a moment inside one of
+  them, the mentor call carries that one context's name and description so the
+  suggestion stays useful for that work. A moment placed outside never reaches
+  the mentor tier, so no context information is sent for it; the placement
+  itself is decided here from the model's answer, not there.
 - **Excluded apps** (Settings > Privacy) default to Keychain Access, Passwords,
   and common password managers. While one is frontmost Mentor captures no frame,
   reads no window title or element, runs no OCR, and journals only that the app
