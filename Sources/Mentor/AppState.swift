@@ -462,6 +462,31 @@ final class AppState {
         }
     }
 
+    /// One line for the menu saying where the declared contexts put the
+    /// current activity, or nil when contexts have nothing to say: they are
+    /// not being enforced and no always-outside rule has stopped anything.
+    var mentorContextLine: String? {
+        let mentor = settings.mentor
+        guard let record = mentorStatus.lastContext else {
+            guard mentor.onlyMentorInsideContexts else { return nil }
+            return mentor.contexts.isEmpty
+                ? "Context: none declared, so nothing is mentored"
+                : "Context: not judged yet"
+        }
+        switch record.placement {
+        case .notEnforced:
+            return nil
+        case .inside(let match):
+            return "Context: \(match.label)"
+        case .outside(let exclusion):
+            if case .alwaysOutside = exclusion, !mentor.onlyMentorInsideContexts {
+                return "Context: \(exclusion.label)"
+            }
+            guard mentor.onlyMentorInsideContexts else { return nil }
+            return "Context: out, \(exclusion.label)"
+        }
+    }
+
     // MARK: Private
 
     private func handle(_ event: SensingEvent) {

@@ -180,19 +180,26 @@ public actor MentorLoop {
         switch scheduler.triageGate(for: observation, conditions: conditions(now: now), now: now) {
         case .hold(let hold):
             status.lastGate = MentorStatus.GateRecord(at: now, observationID: observation.id, hold: hold)
+            if case .alwaysOutside(let rule) = hold {
+                noteContext(.outside(.alwaysOutside(rule: rule)), for: observation, at: now)
+            } else if case .noContextsDeclared = hold {
+                noteContext(.outside(.noContextsDeclared), for: observation, at: now)
+            }
             await publishStatus()
             return
         case .run:
             status.lastGate = MentorStatus.GateRecord(at: now, observationID: observation.id, hold: nil)
         }
         scheduler.noteTriageStarted(observation: observation, now: now)
-        guard let verdict = await runTriage(observation) else {
+        guard let triaged = await runTriage(observation) else {
             await publishStatus()
             return
         }
+        let (verdict, placement) = triaged
+        noteContext(placement, for: observation, at: Date())
 
         now = Date()
-        switch scheduler.mentorGate(triage: verdict, conditions: conditions(now: now), now: now) {
+        switch scheduler.mentorGate(triage: verdict, context: placement, conditions: conditions(now: now), now: now) {
         case .hold(let hold):
             status.lastMentorHold = MentorStatus.MentorHoldRecord(at: now, hold: hold)
             await publishStatus()
@@ -201,33 +208,46 @@ public actor MentorLoop {
             status.lastMentorHold = nil
         }
         scheduler.noteMentorStarted(now: now)
-        await runMentor(observation)
+        await runMentor(observation, context: placement)
         await publishStatus()
+    }
+
+    private func noteContext(_ placement: ContextPlacement, for observation: ActivityObservation, at now: Date) {
+        status.lastContext = MentorStatus.ContextRecord(
+            at: now, placement: placement, appName: observation.focus.appName
+        )
     }
 
     // MARK: Triage tier
 
     /// Text only: app and window, accessibility summary, the latest OCR text,
-    /// and a compact event summary.
-    private func runTriage(_ observation: ActivityObservation) async -> TriageVerdict? {
+    /// and a compact event summary. While contexts are enforced the system
+    /// prompt also carries the declared list and the reply places the snapshot
+    /// in one of them, so the placement costs no extra call. Returns the
+    /// verdict with that placement, or nil when the call did not produce one.
+    private func runTriage(_ observation: ActivityObservation) async -> (TriageVerdict, ContextPlacement)? {
         guard let apiKey else { return nil }
         let now = Date()
         let events = (try? await journal.recentEvents(limit: MentorLoop.eventLookback)) ?? []
-        let text = PromptBuilder.triageMessage(observation: observation, recentEvents: events, now: now)
+        let contexts = settings.onlyMentorInsideContexts ? settings.contexts : []
+        let pinned = settings.pinnedContext(for: observation.focus)
+        let text = PromptBuilder.triageMessage(
+            observation: observation, recentEvents: events, pinnedContext: pinned?.context.name, now: now
+        )
         let model = settings.triageModelInfo
         let request = MessagesRequest(
             model: model.id,
             maxTokens: MentorLoop.triageMaxTokens,
-            system: [SystemBlock(text: MentorPrompts.triageSystem)],
+            system: [SystemBlock(text: MentorPrompts.triageSystem(contexts: contexts))],
             messages: [Message(role: .user, content: [.text(text)])],
             outputConfig: OutputConfig(
-                format: OutputFormat(schema: MentorPrompts.triageSchema),
+                format: OutputFormat(schema: MentorPrompts.triageSchema(contexts: contexts)),
                 effort: settings.effort(for: .triage)
             )
         )
         let call = await perform(tier: .triage, request: request, apiKey: apiKey, timeout: MentorLoop.triageTimeout)
         var record = call.record
-        var verdict: TriageVerdict?
+        var triaged: (TriageVerdict, ContextPlacement)?
         switch call.result {
         case .failure(let error):
             record.outcome = .error
@@ -238,23 +258,25 @@ public actor MentorLoop {
                 record.detail = "the API declined this request"
             } else if var decoded = MentorLoop.decode(TriageVerdict.self, from: response) {
                 decoded.reason = decoded.reason.withPlainDashes
-                verdict = decoded
-                record.outcome = decoded.worthALook ? .candidate : .quiet
+                let placement = settings.contextPlacement(for: observation.focus, triage: decoded)
+                triaged = (decoded, placement)
+                record.outcome = placement.isOutside ? .outOfContext : (decoded.worthALook ? .candidate : .quiet)
                 record.detail = decoded.reason
+                record.context = settings.onlyMentorInsideContexts ? placement.label : nil
             } else {
                 record.outcome = response.isTruncated ? .truncated : .error
                 record.detail = "could not parse the triage reply"
             }
         }
         status.lastTriage = await store(record)
-        return verdict
+        return triaged
     }
 
     // MARK: Mentor tier
 
     /// The rolling window of recent observations' text plus, when enabled,
     /// the latest kept thumbnail as an image.
-    private func runMentor(_ observation: ActivityObservation) async {
+    private func runMentor(_ observation: ActivityObservation, context: ContextPlacement) async {
         guard let apiKey else { return }
         let now = Date()
         let since = now.addingTimeInterval(-settings.mentorWindowDuration)
@@ -276,7 +298,8 @@ public actor MentorLoop {
         }
         content.append(.text(PromptBuilder.mentorMessage(
             window: window, latest: observation, recentEvents: events,
-            suppressed: suppressed, includesImage: jpeg != nil, now: now
+            suppressed: suppressed, includesImage: jpeg != nil,
+            context: settings.contexts.first { $0.id == context.contextID }, now: now
         )))
         let model = settings.mentorModelInfo
         let request = MessagesRequest(
@@ -292,6 +315,7 @@ public actor MentorLoop {
         let call = await perform(tier: .mentor, request: request, apiKey: apiKey, timeout: MentorLoop.mentorTimeout)
         let shownAt = Date()
         var record = call.record
+        record.context = settings.onlyMentorInsideContexts ? context.label : nil
         var toShow: Suggestion?
         switch call.result {
         case .failure(let error):
@@ -326,7 +350,8 @@ public actor MentorLoop {
                             confidence: payload.confidence,
                             observationID: observation.id == 0 ? nil : observation.id,
                             model: response.model,
-                            promptVersion: MentorPrompts.version
+                            promptVersion: MentorPrompts.version,
+                            context: context.contextName
                         )
                     }
                 } else {

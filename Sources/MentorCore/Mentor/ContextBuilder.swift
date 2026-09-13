@@ -95,14 +95,24 @@ public enum PromptBuilder {
     public static let eventLimit = 12
 
     /// Text only: app and window, accessibility summary, the OCR text, and a
-    /// compact event summary.
-    public static func triageMessage(observation: ActivityObservation, recentEvents: [JournalEvent], now: Date) -> String {
+    /// compact event summary. `pinnedContext` is the declared context an
+    /// always-inside rule already settled, which the model is told rather than
+    /// asked, so the cached system prompt stays the same for every call.
+    public static func triageMessage(
+        observation: ActivityObservation,
+        recentEvents: [JournalEvent],
+        pinnedContext: String? = nil,
+        now: Date
+    ) -> String {
         var lines: [String] = []
         lines.append("Time: \(clock(now))")
         lines.append("App: \(observation.focus.appName)\(observation.focus.bundleID.map { " (\($0))" } ?? "")")
         lines.append("Window: \(observation.focus.windowTitle ?? "untitled")")
         lines.append("Trigger: \(observation.reason.label)")
         lines.append("Accessibility: \(observation.focus.summary)")
+        if let pinnedContext {
+            lines.append("Context: the user has declared this app or site to be inside \"\(pinnedContext)\", so answer that context with confidence 1.")
+        }
         lines.append("")
         lines.append("Recent events:")
         lines.append(eventSummary(recentEvents, now: now))
@@ -122,11 +132,17 @@ public enum PromptBuilder {
         recentEvents: [JournalEvent],
         suppressed: [SuggestionCategory],
         includesImage: Bool,
+        context: MentorshipContext? = nil,
         now: Date
     ) -> String {
         var lines: [String] = []
         lines.append("Time: \(clock(now))")
         lines.append("The user is in \(latest.focus.appName), window \"\(latest.focus.windowTitle ?? "untitled")\".")
+        if let context {
+            var line = "The user asked to be mentored while \(context.name)"
+            if !context.detail.isEmpty { line += " (\(context.detail))" }
+            lines.append(line + ", and this moment was placed in that context. Keep the suggestion useful for that work.")
+        }
         if suppressed.isEmpty {
             lines.append("Suppressed categories for this app: none.")
         } else {

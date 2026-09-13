@@ -4,11 +4,11 @@ import Foundation
 /// log entry can be traced to the exact prompt that produced it. Bump
 /// `version` whenever either prompt or schema changes.
 public enum MentorPrompts {
-    public static let version = 3
+    public static let version = 4
 
     // MARK: Triage
 
-    public static let triageSystem = """
+    static let triageBase = """
     You are the triage stage of Mentor, a macOS app that watches what its user is doing and, rarely, \
     offers a live suggestion the way an expert sitting beside them would. You do not write suggestions. \
     You decide whether the stronger mentor model should look at this moment at all.
@@ -37,7 +37,35 @@ public enum MentorPrompts {
     sentence in plain text with plain hyphens, naming the concrete sign you saw, or why you passed.
     """
 
-    public static let triageSchema: JSONValue = [
+    /// The extra section appended to the triage system prompt while the user
+    /// enforces mentorship contexts. It changes only when the declared list
+    /// changes, so the cached prefix is rewritten once per edit.
+    static func triageContextSection(_ contexts: [MentorshipContext]) -> String {
+        let declared = contexts.map { context in
+            context.detail.isEmpty ? "- \"\(context.name)\"" : "- \"\(context.name)\": \(context.detail)"
+        }.joined(separator: "\n")
+        let opening = """
+        The user has declared the kinds of work they want mentoring in, and asked to be left alone \
+        everywhere else. Place this snapshot in one of them, in the same answer:
+        """
+        let closing = """
+        Set context to the name of the one this snapshot belongs to, exactly as written above, or to null \
+        when it belongs to none of them. Judge the work, not the app: the same app can be inside one \
+        moment and outside the next. Set context_confidence from 0 to 1 for how sure you are of that \
+        placement. A snapshot outside every context is never shown to the user, so answer null when you \
+        are unsure, and answer worth_a_look on its own merits either way.
+        """
+        return "\n\n" + opening + "\n\n" + declared + "\n\n" + closing
+    }
+
+    /// The triage system prompt, with the declared contexts appended when the
+    /// user is enforcing them. One cached block; identical calls hit the cache.
+    public static func triageSystem(contexts: [MentorshipContext]) -> String {
+        guard !contexts.isEmpty else { return triageBase }
+        return triageBase + triageContextSection(contexts)
+    }
+
+    static let triageBaseSchema: JSONValue = [
         "type": "object",
         "properties": [
             "worth_a_look": ["type": "boolean"],
@@ -46,6 +74,29 @@ public enum MentorPrompts {
         "required": ["worth_a_look", "reason"],
         "additionalProperties": false,
     ]
+
+    /// The triage output schema. While contexts are enforced it also asks which
+    /// declared context the snapshot belongs to; the enum of declared names
+    /// means the model cannot answer with a context that does not exist.
+    public static func triageSchema(contexts: [MentorshipContext]) -> JSONValue {
+        guard !contexts.isEmpty else { return triageBaseSchema }
+        return [
+            "type": "object",
+            "properties": [
+                "worth_a_look": ["type": "boolean"],
+                "reason": ["type": "string"],
+                "context": [
+                    "anyOf": [
+                        ["type": "null"],
+                        ["type": "string", "enum": .array(contexts.map { .string($0.name) })],
+                    ],
+                ],
+                "context_confidence": ["type": "number"],
+            ],
+            "required": ["worth_a_look", "reason", "context", "context_confidence"],
+            "additionalProperties": false,
+        ]
+    }
 
     // MARK: Mentor
 
@@ -126,19 +177,29 @@ extension String {
     }
 }
 
-/// What the triage tier returns.
+/// What the triage tier returns. The two context fields are asked for only
+/// while mentorship contexts are enforced, so both are optional: a reply
+/// without them leaves the placement unanswered, which counts as outside.
 public struct TriageVerdict: Codable, Equatable, Sendable {
     public var worthALook: Bool
     public var reason: String
+    /// The declared context this snapshot belongs to, or nil for none of them.
+    public var context: String?
+    /// How sure the model is of that placement, 0 to 1.
+    public var contextConfidence: Double?
 
-    public init(worthALook: Bool, reason: String) {
+    public init(worthALook: Bool, reason: String, context: String? = nil, contextConfidence: Double? = nil) {
         self.worthALook = worthALook
         self.reason = reason
+        self.context = context
+        self.contextConfidence = contextConfidence
     }
 
     private enum CodingKeys: String, CodingKey {
         case worthALook = "worth_a_look"
         case reason
+        case context
+        case contextConfidence = "context_confidence"
     }
 }
 

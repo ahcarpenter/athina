@@ -104,8 +104,8 @@ enum Fixtures {
         #expect(scheduler.triageGate(for: later, conditions: slowed, now: t0 + 25) == .hold(.tooSoon(until: t0 + 40)))
         #expect(scheduler.triageGate(for: later, conditions: slowed, now: t0 + 40) == .run)
         let yes = TriageVerdict(worthALook: true, reason: "x")
-        #expect(scheduler.mentorGate(triage: yes, conditions: slowed, now: t0 + 130) == .hold(.tooSoon(until: t0 + 240)))
-        #expect(scheduler.mentorGate(triage: yes, conditions: slowed, now: t0 + 240) == .run)
+        #expect(scheduler.mentorGate(triage: yes, context: .notEnforced, conditions: slowed, now: t0 + 130) == .hold(.tooSoon(until: t0 + 240)))
+        #expect(scheduler.mentorGate(triage: yes, context: .notEnforced, conditions: slowed, now: t0 + 240) == .run)
         #expect(scheduler.nextTriageAllowed(multiplier: 0.5) == t0 + 20)
     }
 
@@ -134,12 +134,112 @@ enum Fixtures {
         var scheduler = MentorScheduler(settings: settings)
         let no = TriageVerdict(worthALook: false, reason: "reading docs")
         let yes = TriageVerdict(worthALook: true, reason: "repeated manual steps")
-        #expect(scheduler.mentorGate(triage: no, conditions: conditions(), now: t0) == .hold(.triageSaidNo(reason: "reading docs")))
-        #expect(scheduler.mentorGate(triage: yes, conditions: conditions(), now: t0) == .run)
+        #expect(scheduler.mentorGate(triage: no, context: .notEnforced, conditions: conditions(), now: t0) == .hold(.triageSaidNo(reason: "reading docs")))
+        #expect(scheduler.mentorGate(triage: yes, context: .notEnforced, conditions: conditions(), now: t0) == .run)
         scheduler.noteMentorStarted(now: t0)
-        #expect(scheduler.mentorGate(triage: yes, conditions: conditions(), now: t0 + 60) == .hold(.tooSoon(until: t0 + 120)))
-        #expect(scheduler.mentorGate(triage: yes, conditions: conditions(), now: t0 + 120) == .run)
-        #expect(scheduler.mentorGate(triage: yes, conditions: conditions(spend: 1), now: t0 + 120) == .hold(.spendCapReached(until: t0 + 3600)))
+        #expect(scheduler.mentorGate(triage: yes, context: .notEnforced, conditions: conditions(), now: t0 + 60) == .hold(.tooSoon(until: t0 + 120)))
+        #expect(scheduler.mentorGate(triage: yes, context: .notEnforced, conditions: conditions(), now: t0 + 120) == .run)
+        #expect(scheduler.mentorGate(triage: yes, context: .notEnforced, conditions: conditions(spend: 1), now: t0 + 120) == .hold(.spendCapReached(until: t0 + 3600)))
+    }
+
+    // MARK: Mentorship contexts
+
+    private var contexts: [MentorshipContext] {
+        [
+            MentorshipContext(name: "writing Swift", alwaysInside: [ContextRule(kind: .app, value: "com.apple.dt.Xcode")]),
+            MentorshipContext(name: "reading API documentation"),
+        ]
+    }
+
+    /// The gate's settings for one combination of the switch and the lists.
+    private func contextSettings(enforcing: Bool, declared: Bool = true, alwaysOutside: [ContextRule] = []) -> MentorSettings {
+        var s = settings
+        s.onlyMentorInsideContexts = enforcing
+        s.contexts = declared ? contexts : []
+        s.alwaysOutside = alwaysOutside
+        return s.validated()
+    }
+
+    private func inside(_ name: String, confidence: Double = 0.9) -> ContextPlacement {
+        .inside(ContextMatch(contextID: UUID(), name: name, confidence: confidence))
+    }
+
+    @Test func anAlwaysOutsideAppSkipsTriageEntirelyWithOrWithoutTheSwitch() {
+        let rule = ContextRule(kind: .app, value: "com.apple.dt.Xcode")
+        let observation = Fixtures.observation(at: t0)
+        for enforcing in [true, false] {
+            let scheduler = MentorScheduler(settings: contextSettings(enforcing: enforcing, alwaysOutside: [rule]))
+            guard case .hold(.alwaysOutside(let held)) = scheduler.triageGate(for: observation, conditions: conditions(), now: t0) else {
+                Issue.record("expected an always-outside hold with the switch \(enforcing ? "on" : "off")")
+                return
+            }
+            #expect(held.value == rule.value)
+        }
+    }
+
+    @Test func anAlwaysOutsideSiteSkipsTriageOnTheWindowTitle() {
+        let scheduler = MentorScheduler(settings: contextSettings(
+            enforcing: true, alwaysOutside: [ContextRule(kind: .site, value: "mail.google.com")]
+        ))
+        let inbox = Fixtures.observation(at: t0, app: "Safari", bundleID: "com.apple.Safari", window: "Inbox - mail.google.com")
+        let docs = Fixtures.observation(id: 2, at: t0, app: "Safari", bundleID: "com.apple.Safari", window: "SCStream - Apple Developer")
+        #expect(scheduler.triageGate(for: inbox, conditions: conditions(), now: t0).isHold)
+        #expect(scheduler.triageGate(for: docs, conditions: conditions(), now: t0) == .run)
+    }
+
+    @Test func enforcingWithNoContextDeclaredHoldsTriageSoNothingIsSpent() {
+        let scheduler = MentorScheduler(settings: contextSettings(enforcing: true, declared: false))
+        #expect(scheduler.triageGate(for: Fixtures.observation(at: t0), conditions: conditions(), now: t0) == .hold(.noContextsDeclared))
+
+        let off = MentorScheduler(settings: contextSettings(enforcing: false, declared: false))
+        #expect(off.triageGate(for: Fixtures.observation(at: t0), conditions: conditions(), now: t0) == .run)
+    }
+
+    @Test func enforcingWithAContextDeclaredStillRunsTriage() {
+        let scheduler = MentorScheduler(settings: contextSettings(enforcing: true))
+        #expect(scheduler.triageGate(for: Fixtures.observation(at: t0), conditions: conditions(), now: t0) == .run)
+    }
+
+    @Test func outOfContextNeverReachesTheMentorTierHoweverKeenTriageWas() {
+        let scheduler = MentorScheduler(settings: contextSettings(enforcing: true))
+        let yes = TriageVerdict(worthALook: true, reason: "repeated manual steps", context: nil, contextConfidence: 0.9)
+        let exclusions: [ContextExclusion] = [
+            .noMatch(reason: ""),
+            .belowConfidence(name: "writing Swift", confidence: 0.2, threshold: 0.6),
+            .unanswered,
+            .noContextsDeclared,
+        ]
+        for exclusion in exclusions {
+            #expect(scheduler.mentorGate(
+                triage: yes, context: .outside(exclusion), conditions: conditions(), now: t0
+            ) == .hold(.outOfContext(exclusion)))
+        }
+    }
+
+    @Test func insideAContextStillHasToPassEveryOtherCheck() {
+        var scheduler = MentorScheduler(settings: contextSettings(enforcing: true))
+        let yes = TriageVerdict(worthALook: true, reason: "repeated manual steps", context: "writing Swift", contextConfidence: 0.9)
+        let no = TriageVerdict(worthALook: false, reason: "reading", context: "writing Swift", contextConfidence: 0.9)
+        let placement = inside("writing Swift")
+        #expect(scheduler.mentorGate(triage: yes, context: placement, conditions: conditions(), now: t0) == .run)
+        #expect(scheduler.mentorGate(triage: no, context: placement, conditions: conditions(), now: t0) == .hold(.triageSaidNo(reason: "reading")))
+        #expect(scheduler.mentorGate(triage: yes, context: placement, conditions: conditions(spend: 1), now: t0) == .hold(.spendCapReached(until: t0 + 3600)))
+        scheduler.noteMentorStarted(now: t0)
+        #expect(scheduler.mentorGate(triage: yes, context: placement, conditions: conditions(), now: t0 + 60) == .hold(.tooSoon(until: t0 + 120)))
+    }
+
+    @Test func theContextCheckIsMadeBeforeTriagesOwnJudgement() {
+        let scheduler = MentorScheduler(settings: contextSettings(enforcing: true))
+        let no = TriageVerdict(worthALook: false, reason: "reading", context: nil, contextConfidence: 0.9)
+        #expect(scheduler.mentorGate(
+            triage: no, context: .outside(.noMatch(reason: "")), conditions: conditions(), now: t0
+        ) == .hold(.outOfContext(.noMatch(reason: ""))))
+    }
+
+    @Test func withTheSwitchOffTheContextNeverHoldsTheMentorTier() {
+        let scheduler = MentorScheduler(settings: contextSettings(enforcing: false))
+        let yes = TriageVerdict(worthALook: true, reason: "x")
+        #expect(scheduler.mentorGate(triage: yes, context: .notEnforced, conditions: conditions(), now: t0) == .run)
     }
 
     @Test func observationsThatQueuedBehindALongCallAreDropped() {
@@ -161,5 +261,13 @@ enum Fixtures {
         #expect(TextSimilarity.lineJaccard("a\nb", "c\nd") == 0)
         #expect(TextSimilarity.lineJaccard("", "") == 1)
         #expect(TextSimilarity.lineJaccard("a\nb\nc\nd", "a\nb\nc\ne") == 0.6)
+    }
+}
+
+extension MentorScheduler.TriageGate {
+    /// Reads better than a full pattern match when only "did it hold" matters.
+    var isHold: Bool {
+        if case .hold = self { return true }
+        return false
     }
 }

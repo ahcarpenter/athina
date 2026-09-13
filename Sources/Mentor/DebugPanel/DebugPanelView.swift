@@ -642,6 +642,7 @@ private struct MentorCard: View {
                 // Model reasons can run long; four lines keeps spend and cadence in view.
                 VStack(alignment: .leading, spacing: 4) {
                     Field(label: "Triage gate", value: triageGate(now: context.date), lineLimit: 4)
+                    Field(label: "Context", value: contextVerdict(now: context.date), lineLimit: 4)
                     Field(label: "Last triage", value: describe(state.mentorStatus.lastTriage, now: context.date), lineLimit: 4)
                     Field(label: "Mentor gate", value: mentorGate(now: context.date), lineLimit: 4)
                     Field(label: "Last mentor", value: describe(state.mentorStatus.lastMentor, now: context.date), lineLimit: 4)
@@ -659,6 +660,25 @@ private struct MentorCard: View {
             return "held \(when): \(hold.label)"
         }
         return "ran \(when) on observation #\(gate.observationID)"
+    }
+
+    /// Where the declared contexts put the latest activity, and what settled it.
+    private func contextVerdict(now: Date) -> String {
+        let mentor = state.settings.mentor
+        guard mentor.onlyMentorInsideContexts else {
+            if let record = state.mentorStatus.lastContext, case .outside(let exclusion) = record.placement,
+               case .alwaysOutside = exclusion {
+                return "not enforced, but \(exclusion.label) (\(Formatting.age(record.at, now: now)), \(record.appName))"
+            }
+            let declared = mentor.contexts.count
+            return "not enforced (\(declared) declared, \(mentor.alwaysOutside.count) always outside)"
+        }
+        guard let record = state.mentorStatus.lastContext else {
+            return mentor.contexts.isEmpty
+                ? "enforced with no context declared, so nothing is mentored"
+                : "enforcing \(mentor.contexts.count) contexts, nothing judged yet"
+        }
+        return "\(record.placement.label) \(Formatting.age(record.at, now: now)) in \(record.appName)"
     }
 
     private func mentorGate(now: Date) -> String {
@@ -778,6 +798,12 @@ private struct CallLogRow: View {
                         .font(.caption)
                         .lineLimit(2)
                         .textSelection(.enabled)
+                }
+                if let context = call.context, !context.isEmpty {
+                    Label(context, systemImage: "target")
+                        .font(.caption)
+                        .foregroundStyle(call.outcome == .outOfContext ? Color.orange : .secondary)
+                        .lineLimit(2)
                 }
             }
         }

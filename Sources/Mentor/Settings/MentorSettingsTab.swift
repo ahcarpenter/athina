@@ -27,6 +27,9 @@ struct MentorSettingsTab: View {
                     .foregroundStyle(.secondary)
             }
 
+            MentorshipContextsSection()
+            AlwaysOutsideSection()
+
             Section("Cadence") {
                 NumberRow(
                     "Triage at most every", value: $state.settings.mentor.triageMinInterval,
