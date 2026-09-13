@@ -315,7 +315,9 @@ final class AppState {
     /// Records feedback for a suggestion, whether it came from the toast or the
     /// history window. A non-answer (expiry or closing the toast) is recorded
     /// once and never overwrites anything: closing a re-shown toast just closes it.
-    /// Returns the task that journals the feedback, or nil when nothing was recorded.
+    /// Tell me more is recorded once too; re-expanding a folded toast is only a
+    /// view change. Returns the task that journals the feedback, or nil when
+    /// nothing was recorded.
     @discardableResult
     func respond(to suggestionID: Int64, with feedback: SuggestionFeedback) -> Task<Void, Never>? {
         let existing = suggestionHistory.first { $0.id == suggestionID }?.feedback
@@ -327,6 +329,7 @@ final class AppState {
             }
         }
         if feedback.isNonAnswer, existing != nil { return nil }
+        if feedback == .tellMeMore, existing == .tellMeMore { return nil }
         if let index = suggestionHistory.firstIndex(where: { $0.id == suggestionID }) {
             suggestionHistory[index].feedback = feedback
             suggestionHistory[index].feedbackAt = Date()
@@ -388,10 +391,11 @@ final class AppState {
     private func toastHoverChanged(_ hovering: Bool) {
         guard let active = activeSuggestion else { return }
         if hovering {
-            if let deadline = toastDeadline {
-                toastRemaining = max(2, deadline.timeIntervalSinceNow)
-            }
+            // cancelToastExpiry clears toastRemaining, so record the remainder after it.
+            guard let deadline = toastDeadline else { return }
+            let remaining = max(2, deadline.timeIntervalSinceNow)
             cancelToastExpiry()
+            toastRemaining = remaining
         } else if let remaining = toastRemaining {
             toastRemaining = nil
             scheduleToastExpiry(for: active.id, after: remaining)

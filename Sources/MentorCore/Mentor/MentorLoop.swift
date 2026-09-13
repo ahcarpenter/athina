@@ -33,7 +33,8 @@ public actor MentorLoop {
     private var lastPublishedStatus: MentorStatus?
     private var mode: SensingMode = .stopped
     private var apiKey: String?
-    private var inFlight: ModelTier?
+    /// Tiers with a call in progress; a Test Connection can overlap a tier call.
+    private var inFlight: Set<ModelTier> = []
     private var consumeTask: Task<Void, Never>?
 
     public init(
@@ -166,7 +167,7 @@ public actor MentorLoop {
         return MentorScheduler.Conditions(
             mode: mode,
             hasAPIKey: apiKey != nil,
-            callInFlight: inFlight != nil,
+            callInFlight: !inFlight.isEmpty,
             spendFraction: spend.fraction(now: now),
             cadenceMultiplier: spend.cadenceMultiplier(now: now),
             nextHourStart: SpendMeter.nextHourStart(after: now)
@@ -235,10 +236,11 @@ public actor MentorLoop {
             if response.isRefusal {
                 record.outcome = .refused
                 record.detail = "the API declined this request"
-            } else if let decoded = MentorLoop.decode(TriageVerdict.self, from: response) {
+            } else if var decoded = MentorLoop.decode(TriageVerdict.self, from: response) {
+                decoded.reason = decoded.reason.withPlainDashes
                 verdict = decoded
                 record.outcome = decoded.worthALook ? .candidate : .quiet
-                record.detail = decoded.reason.withPlainDashes
+                record.detail = decoded.reason
             } else {
                 record.outcome = response.isTruncated ? .truncated : .error
                 record.detail = "could not parse the triage reply"
@@ -302,22 +304,23 @@ public actor MentorLoop {
             } else if let verdict = MentorLoop.decode(MentorVerdict.self, from: response) {
                 record.detail = verdict.reason.withPlainDashes
                 if let payload = verdict.suggestion {
+                    let title = payload.title.withPlainDashes
                     if payload.confidence < settings.minimumConfidence {
                         record.outcome = .belowConfidence
-                        record.detail = "\(payload.title) (confidence \(Int((payload.confidence * 100).rounded()))%)"
+                        record.detail = "\(title) (confidence \(Int((payload.confidence * 100).rounded()))%)"
                     } else if let reason = settings.suppression(for: payload.category, bundleID: observation.focus.bundleID, now: now) {
                         record.outcome = .suppressed
-                        record.detail = "\(payload.title) (\(reason.label))"
+                        record.detail = "\(title) (\(reason.label))"
                     } else {
                         record.outcome = .suggested
-                        record.detail = payload.title
+                        record.detail = title
                         toShow = Suggestion(
                             timestamp: shownAt,
                             bundleID: observation.focus.bundleID,
                             appName: observation.focus.appName,
                             windowTitle: observation.focus.windowTitle,
                             category: payload.category,
-                            title: payload.title.withPlainDashes,
+                            title: title,
                             body: payload.body.withPlainDashes,
                             explanation: payload.explanation.withPlainDashes,
                             confidence: payload.confidence,
@@ -360,7 +363,7 @@ public actor MentorLoop {
     /// The single path to the network. Marks the tier in flight, times the
     /// call, and prices its usage; the caller sets the outcome.
     private func perform(tier: ModelTier, request: MessagesRequest, apiKey: String, timeout: TimeInterval) async -> CallResult {
-        inFlight = tier
+        inFlight.insert(tier)
         await publishStatus()
         let started = Date()
         let result: Result<MessagesResponse, ClaudeClientError>
@@ -372,7 +375,7 @@ public actor MentorLoop {
             result = .failure(.transport(error.localizedDescription))
         }
         let latency = Date().timeIntervalSince(started)
-        inFlight = nil
+        inFlight.remove(tier)
         let usage = (try? result.get().usage) ?? Usage()
         let record = ModelCallRecord(
             timestamp: started,
@@ -433,7 +436,7 @@ public actor MentorLoop {
         status.cadenceMultiplier = multiplier
         status.nextTriageAt = scheduler.nextTriageAllowed(multiplier: multiplier)
         status.nextMentorAt = scheduler.nextMentorAllowed(multiplier: multiplier)
-        status.inFlight = inFlight
+        status.inFlight = ModelTier.allCases.first { inFlight.contains($0) }
         guard status != lastPublishedStatus else { return }
         lastPublishedStatus = status
         await broadcaster.send(.status(status))

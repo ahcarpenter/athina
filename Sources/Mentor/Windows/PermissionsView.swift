@@ -15,7 +15,7 @@ struct PermissionsView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Mentor needs two permissions")
                         .font(.title2.weight(.semibold))
-                    Text("Mentor watches what you are doing so it can understand your work. Everything it senses stays on this Mac in a local journal you control. This version makes no network requests at all.")
+                    Text("Mentor watches what you are doing so it can understand your work. Everything it senses stays on this Mac in a local journal you control. The only network peer is api.anthropic.com, reached only by the mentor loop once you save an API key.")
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

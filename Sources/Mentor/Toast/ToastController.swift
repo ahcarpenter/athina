@@ -106,8 +106,8 @@ struct ToastView: View {
         VStack(alignment: .leading, spacing: 0) {
             if let suggestion = model.suggestion {
                 ToastContent(suggestion: suggestion, expanded: model.expanded, onToggle: {
-                    // The first expansion is the "tell me more" answer; folding
-                    // back and forth afterwards is only a view change.
+                    // Expanding reports "tell me more"; AppState records it once
+                    // per suggestion, so folding back and forth is only a view change.
                     let wasExpanded = model.expanded
                     model.expanded.toggle()
                     if !wasExpanded { onAction(.tellMeMore) }
