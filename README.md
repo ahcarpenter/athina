@@ -266,9 +266,10 @@ answer null whenever it is unsure rather than guessing. A moment triage leaves
 at null never reaches the mentor tier and never becomes a suggestion; the
 triage call is logged with the `outOfContext` outcome and the reason. The
 schema offers only the declared names, so the model cannot answer with a
-context that does not exist. The system prompt is one cached block, so editing
-the list costs a single cache write and every call after it reads from cache
-again.
+context that does not exist. The declared list is part of the triage system
+prompt's single cached block, so an edit changes that prefix once; whether the
+triage prompt is served from cache at all is the per-model question answered
+above.
 
 Up to `ContextRules.maxContexts` (12) contexts may be declared, each with a
 unique name of at most 60 characters and a description of at most 280. The
@@ -360,7 +361,7 @@ and path. Centre: the latest kept frame with OCR boxes overlaid and the
 recognized text below; selecting an observation in the timeline shows that
 frame instead. Right: a live timeline of observations and events from the
 journal (suggestions and feedback included), or, under Model calls, a scrolling
-log of every API call with prompt size, tokens, cost, latency, outcome, the
+log of every API call with prompt size, tokens, cost, latency, outcome, and the
 model's reason. The status bar shows mode, permission state, last and next
 capture with reason, seconds since input, spend this hour against the cap, and
 the app's own CPU and memory.
