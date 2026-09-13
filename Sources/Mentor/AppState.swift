@@ -307,8 +307,8 @@ final class AppState {
     // MARK: Suggestions
 
     /// Records feedback for a suggestion, whether it came from the toast or the
-    /// history window. Expiry never overwrites an answer the user already gave:
-    /// closing an expanded toast just closes it.
+    /// history window. Expiry is only recorded once and never overwrites an
+    /// answer the user gave: closing an expanded or re-shown toast just closes it.
     func respond(to suggestionID: Int64, with feedback: SuggestionFeedback) {
         let existing = suggestionHistory.first { $0.id == suggestionID }?.feedback
         if activeSuggestion?.id == suggestionID {
@@ -319,7 +319,7 @@ final class AppState {
                 activeSuggestion = nil
             }
         }
-        if feedback == .expired, let existing, existing != .expired { return }
+        if feedback == .expired, existing != nil { return }
         if let index = suggestionHistory.firstIndex(where: { $0.id == suggestionID }) {
             suggestionHistory[index].feedback = feedback
             suggestionHistory[index].feedbackAt = Date()
