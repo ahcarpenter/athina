@@ -4,7 +4,7 @@ import SwiftUI
 
 struct SettingsView: View {
     enum Tab: Hashable {
-        case cadence, frames, journal, privacy
+        case mentor, cadence, frames, journal, privacy
     }
 
     @Environment(AppState.self) private var state
@@ -16,6 +16,9 @@ struct SettingsView: View {
 
     var body: some View {
         TabView(selection: $tab) {
+            MentorSettingsTab()
+                .tabItem { Label("Mentor", systemImage: "lightbulb") }
+                .tag(Tab.mentor)
             CadenceSettings()
                 .tabItem { Label("Cadence", systemImage: "timer") }
                 .tag(Tab.cadence)
@@ -370,7 +373,7 @@ private struct AddExcludedAppPopover: View {
 
 // MARK: - Rows
 
-private struct NumberRow: View {
+struct NumberRow: View {
     let title: String
     @Binding var value: Double
     let range: ClosedRange<Double>
@@ -415,7 +418,7 @@ private struct NumberRow: View {
     }
 }
 
-private struct IntRow: View {
+struct IntRow: View {
     let title: String
     @Binding var value: Int
     let range: ClosedRange<Int>
@@ -461,7 +464,7 @@ private struct IntRow: View {
 }
 
 /// A duration picker with a unit menu, for retention periods.
-private struct DurationRow: View {
+struct DurationRow: View {
     let title: String
     @Binding var value: TimeInterval
 
@@ -531,7 +534,7 @@ private struct DurationRow: View {
 }
 
 extension Comparable {
-    fileprivate func clamped(to range: ClosedRange<Self>) -> Self {
+    func clamped(to range: ClosedRange<Self>) -> Self {
         min(max(self, range.lowerBound), range.upperBound)
     }
 }

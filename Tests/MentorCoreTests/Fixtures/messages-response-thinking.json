@@ -1,0 +1,18 @@
+{
+  "id": "msg_01Fable",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-fable-5-1",
+  "content": [
+    {"type": "thinking", "thinking": "", "signature": "abc"},
+    {"type": "text", "text": "{\"reason\": \"The user is reading documentation\", \"suggestion\": null}"}
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 3120,
+    "cache_creation_input_tokens": 760,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 342
+  }
+}

@@ -25,7 +25,8 @@ let package = Package(
         ),
         .testTarget(
             name: "MentorCoreTests",
-            dependencies: ["MentorCore"]
+            dependencies: ["MentorCore"],
+            resources: [.copy("Fixtures")]
         ),
     ],
     swiftLanguageModes: [.v6]
