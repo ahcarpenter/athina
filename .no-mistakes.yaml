@@ -1,0 +1,5 @@
+# no-mistakes repository configuration (read from the default branch).
+# The test step runs this exact command instead of having an agent derive
+# scenarios against the built app, which needs permissions no runner has.
+commands:
+  test: "swift test"
