@@ -16,6 +16,7 @@ final class ToastController {
     private var panel: NSPanel?
     private var hosting: NSHostingView<ToastView>?
     private var model = ToastModel()
+    private var outsideClickMonitors: [Any] = []
 
     func show(_ suggestion: Suggestion, expanded: Bool) {
         model.suggestion = suggestion
@@ -25,10 +26,49 @@ final class ToastController {
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main ?? NSScreen.screens.first
         place(panel, on: screen)
         panel.orderFrontRegardless()
+        startWatchingForOutsideClicks()
     }
 
     func dismiss() {
+        stopWatchingForOutsideClicks()
         panel?.orderOut(nil)
+    }
+
+    // MARK: Outside clicks
+
+    /// A mouse-down anywhere but the toast dismisses it, the way a macOS
+    /// notification banner goes away when you click elsewhere. The global
+    /// monitor sees clicks in other apps and on the desktop, which carry no
+    /// window of ours; the local one sees clicks in Mentor's own windows and
+    /// passes every event through, so only an event aimed at the toast's own
+    /// panel keeps it up and its buttons still work. Only mouse-down is watched,
+    /// so scrolling, typing, and moving the pointer leave the toast alone.
+    /// Neither monitor makes the panel key or activates the app.
+    private func startWatchingForOutsideClicks() {
+        guard outsideClickMonitors.isEmpty else { return }
+        let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        if let global = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { [weak self] event in
+            MainActor.assumeIsolated { self?.handleClick(event) }
+        }) {
+            outsideClickMonitors.append(global)
+        }
+        if let local = NSEvent.addLocalMonitorForEvents(matching: clicks, handler: { [weak self] event in
+            MainActor.assumeIsolated { self?.handleClick(event) }
+            return event
+        }) {
+            outsideClickMonitors.append(local)
+        }
+    }
+
+    private func stopWatchingForOutsideClicks() {
+        for monitor in outsideClickMonitors { NSEvent.removeMonitor(monitor) }
+        outsideClickMonitors.removeAll()
+    }
+
+    private func handleClick(_ event: NSEvent) {
+        guard let panel, panel.isVisible, event.window !== panel else { return }
+        guard let suggestion = model.suggestion else { return }
+        onAction?(suggestion.id, .dismissed)
     }
 
     /// Re-fits the panel after its content changed size (expand or collapse),
