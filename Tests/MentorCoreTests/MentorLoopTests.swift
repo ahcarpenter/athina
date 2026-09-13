@@ -107,7 +107,7 @@ import Testing
     @Test func candidateTriggersMentorWithWindowAndThumbnail() async throws {
         let h = try await Harness()
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
-        await h.client.enqueue(json: Self.suggestion(), model: "claude-fable-5-1", usage: Usage(inputTokens: 2000, outputTokens: 300, cacheCreationInputTokens: 700, cacheReadInputTokens: 0))
+        await h.client.enqueue(json: Self.suggestion(), model: "claude-opus-5", usage: Usage(inputTokens: 2000, outputTokens: 300, cacheCreationInputTokens: 700, cacheReadInputTokens: 0))
         let older = try await h.journal.record(Fixtures.observation(at: Date().addingTimeInterval(-60), window: "old.swift", text: "older screen"))
         _ = older
         let jpeg = Data(repeating: 0xFF, count: 100)
@@ -117,7 +117,7 @@ import Testing
         let sent = await h.client.sent
         #expect(sent.count == 2)
         let mentor = try #require(sent.last?.request)
-        #expect(mentor.model == "claude-fable-5-1")
+        #expect(mentor.model == "claude-opus-5")
         #expect(mentor.outputConfig?.effort == .medium)
         #expect(mentor.system.first?.text == MentorPrompts.mentorSystem)
         #expect(mentor.imageByteCount == 100)
@@ -142,7 +142,7 @@ import Testing
         #expect(suggestion.id > 0)
         #expect(suggestion.title == "Use --filter")
         #expect(suggestion.category == .shortcut)
-        #expect(suggestion.model == "claude-fable-5-1")
+        #expect(suggestion.model == "claude-opus-5")
         #expect(suggestion.observationID == latest.id)
         #expect(try await h.journal.recentSuggestions(limit: 5).first?.id == suggestion.id)
         let journaled = try await h.journal.recentEvents(limit: 5)
@@ -150,8 +150,27 @@ import Testing
         let status = await h.loop.currentStatus()
         #expect(status.lastMentor?.outcome == .suggested)
         #expect(status.callsThisHour == 2)
-        let expectedCost = PriceTable.defaults.cost(of: Usage(inputTokens: 2000, outputTokens: 300, cacheCreationInputTokens: 700, cacheReadInputTokens: 0), model: "claude-fable-5-1")!
+        let expectedCost = PriceTable.defaults.cost(of: Usage(inputTokens: 2000, outputTokens: 300, cacheCreationInputTokens: 700, cacheReadInputTokens: 0), model: "claude-opus-5")!
         #expect(abs((status.lastMentor?.cost ?? 0) - expectedCost) < 1e-9)
+    }
+
+    @Test func perTierEffortReachesEachRequest() async throws {
+        var settings = MentorSettings()
+        settings.triageModel = "claude-sonnet-5"
+        settings.triageEffort = .xhigh
+        settings.mentorModel = "claude-fable-5-1"
+        settings.mentorEffort = .high
+        let h = try await Harness(settings: settings)
+        await h.client.enqueue(json: Self.yes, model: "claude-sonnet-5")
+        await h.client.enqueue(json: Self.silence, model: "claude-fable-5-1")
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
+        let sent = await h.client.sent
+        #expect(sent[0].request.model == "claude-sonnet-5")
+        #expect(sent[0].request.outputConfig?.effort == .xhigh)
+        #expect(sent[1].request.model == "claude-fable-5-1")
+        #expect(sent[1].request.outputConfig?.effort == .high)
+        let json = String(decoding: try AnthropicClient.encoder.encode(sent[0].request), as: UTF8.self)
+        #expect(json.contains(#""effort":"xhigh""#))
     }
 
     @Test func thumbnailIsWithheldWhenTheSettingIsOff() async throws {

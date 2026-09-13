@@ -193,26 +193,37 @@ each kept observation it runs, in order:
    (line-set overlap of at least `triageSimilarityThreshold`, 0.9). Nothing
    runs while paused, idle, on an excluded app, without permissions, without an
    API key, while another call is in flight, or while the spend cap holds.
-2. **Triage call** on the cheap model (`claude-haiku-4-5-20251001` by default)
-   with structured output: `{"worth_a_look": bool, "reason": string}`.
+2. **Triage call** on the cheap model (`claude-haiku-4-5-20251001` by default;
+   Sonnet 5, Opus 5, and Fable 5.1 are offered too) with structured output:
+   `{"worth_a_look": bool, "reason": string}`.
 3. **Mentor gate** (`MentorScheduler.mentorGate`), the single yes-or-no between
    triage and the strong model: triage said yes, the spend cap is not reached,
    and at least `mentorMinInterval` (2 min) has passed since the last mentor
    call. A later phase adds its declared-contexts check inside this gate.
-4. **Mentor call** on the strong model (`claude-fable-5-1` by default, or
-   `claude-opus-5` from Settings) with a rolling window of recent observations'
-   text (bounded by `mentorWindowDuration` and `mentorWindowTokenBudget`), a
+4. **Mentor call** on the strong model (`claude-opus-5` at medium effort by
+   default; Sonnet 5 and Fable 5.1 are offered too) with a rolling window of
+   recent observations' text (bounded by `mentorWindowDuration` and `mentorWindowTokenBudget`), a
    compact event summary, the categories currently suppressed for the app,
    and, when `sendThumbnail` is on, the latest kept thumbnail as an image. The
    reply is `{"reason": string, "suggestion": null | {title, body, explanation,
    category, confidence}}`. A null suggestion is the normal outcome.
+
+   Each tier has its own model and effort in Settings > Mentor. Effort (low,
+   medium, high, extra high) goes out as `output_config.effort` only to models
+   that accept it; Haiku 4.5 rejects the parameter, so its effort control is
+   disabled and nothing is sent. Thinking is left at each model's default
+   (adaptive on Sonnet 5, Opus 5, and Fable 5.1); no thinking configuration is
+   sent.
+
 5. **Delivery.** A suggestion under `minimumConfidence` or in a snoozed or
    never-for-this category is logged and dropped. Otherwise it is journaled and
    shown as a toast: a floating, non-activating panel under the menu bar that
    never takes keyboard focus and auto-dismisses after `toastTimeout` (60 s;
    the countdown pauses while the pointer is over it). Closing it with the x
    is journaled as dismissed, a timeout as expired. *Tell me more* expands the
-   full explanation in place and the toast then stays until closed. *Not now* dismisses and snoozes
+   full explanation above the button bar (scrolling past 300 points) and
+   becomes *Show less*; the three buttons stay pinned to the bottom edge in
+   both states, and an expanded toast stays until closed. *Not now* dismisses and snoozes
    that category for that app for `notNowSnooze` (1 h). *Never for this*
    records that the category must never be raised for that app again (the rule
    is listed and removable in Settings > Mentor). Every suggestion and every

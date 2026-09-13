@@ -2,11 +2,13 @@ import Foundation
 
 // MARK: - Request
 
-/// Reasoning depth for models that accept `output_config.effort`.
+/// Reasoning depth for models that accept `output_config.effort`. Sent as-is;
+/// `xhigh` is accepted by every effort-capable model in the catalog.
 public enum Effort: String, Codable, CaseIterable, Sendable, Identifiable {
     case low
     case medium
     case high
+    case xhigh
 
     public var id: String { rawValue }
 
@@ -15,6 +17,7 @@ public enum Effort: String, Codable, CaseIterable, Sendable, Identifiable {
         case .low: "Low"
         case .medium: "Medium"
         case .high: "High"
+        case .xhigh: "Extra high"
         }
     }
 }

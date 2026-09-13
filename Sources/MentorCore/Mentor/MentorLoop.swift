@@ -221,7 +221,7 @@ public actor MentorLoop {
             messages: [Message(role: .user, content: [.text(text)])],
             outputConfig: OutputConfig(
                 format: OutputFormat(schema: MentorPrompts.triageSchema),
-                effort: model.supportsEffort ? .low : nil
+                effort: settings.effort(for: .triage)
             )
         )
         let call = await perform(tier: .triage, request: request, apiKey: apiKey, timeout: MentorLoop.triageTimeout)
@@ -284,7 +284,7 @@ public actor MentorLoop {
             messages: [Message(role: .user, content: content)],
             outputConfig: OutputConfig(
                 format: OutputFormat(schema: MentorPrompts.mentorSchema),
-                effort: model.supportsEffort ? settings.mentorEffort : nil
+                effort: settings.effort(for: .mentor)
             )
         )
         let call = await perform(tier: .mentor, request: request, apiKey: apiKey, timeout: MentorLoop.mentorTimeout)

@@ -14,23 +14,15 @@ struct MentorSettingsTab: View {
 
             Section("Models") {
                 Toggle("Enable the mentor loop", isOn: $state.settings.mentor.enabled)
-                Picker("Triage model", selection: $state.settings.mentor.triageModel) {
-                    ForEach(ModelCatalog.triageChoices) { model in
-                        Text(model.displayName).tag(model.id)
-                    }
-                }
-                Picker("Mentor model", selection: $state.settings.mentor.mentorModel) {
-                    ForEach(ModelCatalog.mentorChoices) { model in
-                        Text(model.displayName).tag(model.id)
-                    }
-                }
-                Picker("Mentor effort", selection: $state.settings.mentor.mentorEffort) {
-                    ForEach(Effort.allCases) { effort in
-                        Text(effort.label).tag(effort)
-                    }
-                }
-                .pickerStyle(.segmented)
-                Text("Triage runs on change moments and decides whether the mentor model should look. Both system prompts are cached, so repeated calls pay the cache-read rate for them.")
+                TierRows(
+                    tier: "Triage", choices: ModelCatalog.triageChoices,
+                    model: $state.settings.mentor.triageModel, effort: $state.settings.mentor.triageEffort
+                )
+                TierRows(
+                    tier: "Mentor", choices: ModelCatalog.mentorChoices,
+                    model: $state.settings.mentor.mentorModel, effort: $state.settings.mentor.mentorEffort
+                )
+                Text("Triage runs on change moments and decides whether the mentor model should look. Effort sets how much the model thinks before answering and is sent only to models that accept it. Both system prompts are cached, so repeated calls pay the cache-read rate for them.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -92,6 +84,47 @@ struct MentorSettingsTab: View {
             NeverRulesSection()
         }
         .formStyle(.grouped)
+    }
+}
+
+/// A tier's model picker and effort picker. The effort picker is disabled,
+/// with a note, when the chosen model rejects the effort parameter.
+private struct TierRows: View {
+    let tier: String
+    let choices: [ClaudeModel]
+    @Binding var model: String
+    @Binding var effort: Effort
+
+    private var supportsEffort: Bool {
+        ModelCatalog.model(id: model)?.supportsEffort ?? false
+    }
+
+    var body: some View {
+        Picker("\(tier) model", selection: $model) {
+            ForEach(choices) { choice in
+                Text(choice.displayName).tag(choice.id)
+            }
+        }
+        LabeledContent {
+            Picker("", selection: $effort) {
+                ForEach(Effort.allCases) { level in
+                    Text(level.label).tag(level)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .disabled(!supportsEffort)
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("\(tier) effort")
+                if !supportsEffort {
+                    Text("\(ModelCatalog.displayName(for: model)) does not support effort; none is sent.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 }
 

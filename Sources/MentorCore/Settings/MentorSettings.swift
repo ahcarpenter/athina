@@ -8,8 +8,9 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     /// Master switch. Off means no model call of any kind.
     public var enabled = true
     public var triageModel = ModelCatalog.haiku45.id
-    public var mentorModel = ModelCatalog.fable51.id
-    /// Reasoning depth for the mentor tier on models that accept it.
+    public var mentorModel = ModelCatalog.opus5.id
+    /// Reasoning depth per tier, sent only to models that accept it.
+    public var triageEffort: Effort = .low
     public var mentorEffort: Effort = .medium
 
     // MARK: Cadence
@@ -58,7 +59,7 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     // MARK: Codable with per-field defaults
 
     private enum CodingKeys: String, CodingKey {
-        case enabled, triageModel, mentorModel, mentorEffort
+        case enabled, triageModel, mentorModel, triageEffort, mentorEffort
         case triageMinInterval, mentorMinInterval, triageSimilarityThreshold
         case mentorWindowDuration, mentorWindowTokenBudget, sendThumbnail
         case minimumConfidence, toastTimeout, notNowSnooze
@@ -72,6 +73,7 @@ public struct MentorSettings: Codable, Equatable, Sendable {
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? d.enabled
         triageModel = try c.decodeIfPresent(String.self, forKey: .triageModel) ?? d.triageModel
         mentorModel = try c.decodeIfPresent(String.self, forKey: .mentorModel) ?? d.mentorModel
+        triageEffort = try c.decodeIfPresent(Effort.self, forKey: .triageEffort) ?? d.triageEffort
         mentorEffort = try c.decodeIfPresent(Effort.self, forKey: .mentorEffort) ?? d.mentorEffort
         triageMinInterval = try c.decodeIfPresent(TimeInterval.self, forKey: .triageMinInterval) ?? d.triageMinInterval
         mentorMinInterval = try c.decodeIfPresent(TimeInterval.self, forKey: .mentorMinInterval) ?? d.mentorMinInterval
@@ -92,8 +94,8 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     /// Clamps every value into a range the loop can operate with.
     public func validated() -> MentorSettings {
         var s = self
-        if ModelCatalog.model(id: s.triageModel) == nil { s.triageModel = ModelSettingsDefaults.triageModel }
-        if ModelCatalog.model(id: s.mentorModel) == nil { s.mentorModel = ModelSettingsDefaults.mentorModel }
+        if !ModelCatalog.triageChoices.contains(where: { $0.id == s.triageModel }) { s.triageModel = ModelSettingsDefaults.triageModel }
+        if !ModelCatalog.mentorChoices.contains(where: { $0.id == s.mentorModel }) { s.mentorModel = ModelSettingsDefaults.mentorModel }
         s.triageMinInterval = s.triageMinInterval.clamped(to: 5...3600)
         s.mentorMinInterval = s.mentorMinInterval.clamped(to: 10...7200)
         s.triageSimilarityThreshold = s.triageSimilarityThreshold.clamped(to: 0.5...1)
@@ -112,7 +114,16 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     // MARK: Convenience
 
     public var triageModelInfo: ClaudeModel { ModelCatalog.model(id: triageModel) ?? ModelCatalog.haiku45 }
-    public var mentorModelInfo: ClaudeModel { ModelCatalog.model(id: mentorModel) ?? ModelCatalog.fable51 }
+    public var mentorModelInfo: ClaudeModel { ModelCatalog.model(id: mentorModel) ?? ModelCatalog.opus5 }
+
+    /// The effort to send for a tier: nil when its model rejects the parameter.
+    public func effort(for tier: ModelTier) -> Effort? {
+        switch tier {
+        case .triage: triageModelInfo.supportsEffort ? triageEffort : nil
+        case .mentor: mentorModelInfo.supportsEffort ? mentorEffort : nil
+        case .test: nil
+        }
+    }
 
     /// Why a category must not be raised for an app right now, if it must not.
     public func suppression(for category: SuggestionCategory, bundleID: String?, now: Date) -> SuppressionRules.Reason? {

@@ -34,10 +34,11 @@ public enum ModelCatalog {
     )
 
     public static let all: [ClaudeModel] = [haiku45, sonnet5, opus5, fable51]
-    /// Cheap models suitable for the triage tier.
-    public static let triageChoices: [ClaudeModel] = [haiku45, sonnet5]
-    /// Strong models suitable for the mentor tier.
-    public static let mentorChoices: [ClaudeModel] = [fable51, opus5]
+    /// Models offered for the triage tier: the cheap default plus every
+    /// effort-capable model, so extra-high effort is reachable there too.
+    public static let triageChoices: [ClaudeModel] = [haiku45, sonnet5, opus5, fable51]
+    /// Models offered for the mentor tier.
+    public static let mentorChoices: [ClaudeModel] = [sonnet5, opus5, fable51]
 
     public static func model(id: String) -> ClaudeModel? {
         all.first { $0.id == id }

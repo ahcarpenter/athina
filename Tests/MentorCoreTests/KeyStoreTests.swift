@@ -34,20 +34,26 @@ import Testing
     @Test func defaultsMatchTheSpec() {
         let s = MentorSettings()
         #expect(s.triageModel == "claude-haiku-4-5-20251001")
-        #expect(s.mentorModel == "claude-fable-5-1")
+        #expect(s.mentorModel == "claude-opus-5")
+        #expect(s.mentorEffort == .medium)
+        #expect(s.triageEffort == .low)
+        #expect(s.effort(for: .triage) == nil)
+        #expect(s.effort(for: .mentor) == .medium)
+        #expect(Effort.allCases.contains(.xhigh))
+        #expect(ModelCatalog.triageChoices.contains { $0.supportsEffort })
         #expect(s.triageMinInterval == 20)
         #expect(s.mentorMinInterval == 120)
         #expect(s.hourlySpendCap == 1)
         #expect(s.toastTimeout == 60)
         #expect(s.sendThumbnail)
         #expect(s.enabled)
-        #expect(ModelCatalog.mentorChoices.map(\.id).contains("claude-opus-5"))
+        #expect(ModelCatalog.mentorChoices.map(\.id).contains("claude-fable-5-1"))
     }
 
     @Test func missingKeysTakeDefaultsAndBadModelsFallBack() throws {
-        let data = Data(#"{"mentor": {"mentorModel": "claude-imaginary", "triageMinInterval": 1, "hourlySpendCap": 5000}}"#.utf8)
+        let data = Data(#"{"mentor": {"mentorModel": "claude-haiku-4-5-20251001", "triageMinInterval": 1, "hourlySpendCap": 5000}}"#.utf8)
         let decoded = try JSONDecoder().decode(SensingSettings.self, from: data)
-        #expect(decoded.mentor.mentorModel == "claude-fable-5-1")
+        #expect(decoded.mentor.mentorModel == "claude-opus-5")
         #expect(decoded.mentor.triageMinInterval == 5)
         #expect(decoded.mentor.hourlySpendCap == 1000)
         #expect(decoded.mentor.mentorMinInterval == 120)
@@ -60,7 +66,9 @@ import Testing
             .appendingPathComponent("settings.json")
         let store = SettingsStore(url: url)
         var settings = SensingSettings()
-        settings.mentor.mentorModel = "claude-opus-5"
+        settings.mentor.mentorModel = "claude-fable-5-1"
+        settings.mentor.triageModel = "claude-sonnet-5"
+        settings.mentor.triageEffort = .xhigh
         settings.mentor.sendThumbnail = false
         settings.mentor.neverRules = [NeverRule(bundleID: "com.a", appName: "A", category: .risk, createdAt: Date(timeIntervalSince1970: 1_700_000_000))]
         settings.mentor.prices.prices["claude-opus-5"]?.inputPerMillion = 4
@@ -68,6 +76,7 @@ import Testing
         let loaded = store.load()
         #expect(loaded == settings)
         #expect(loaded.mentor.prices.prices["claude-opus-5"]?.inputPerMillion == 4)
+        #expect(loaded.mentor.effort(for: .triage) == .xhigh)
     }
 
     @Test func oldSettingsFilesWithoutMentorSectionStillLoad() throws {
