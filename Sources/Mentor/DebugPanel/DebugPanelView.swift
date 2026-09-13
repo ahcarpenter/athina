@@ -675,7 +675,8 @@ private struct MentorCard: View {
         }
         var notJudgedYet: String {
             if mentor.contexts.isEmpty { return "enforced with no context declared, so nothing is mentored" }
-            let enforcing = "enforcing \(mentor.contexts.count) contexts"
+            let count = mentor.contexts.count
+            let enforcing = "enforcing \(count) \(count == 1 ? "context" : "contexts")"
             guard let appName = state.focus?.appName else { return "\(enforcing), not judged yet" }
             return "\(enforcing), not yet judged in \(appName)"
         }
