@@ -11,7 +11,7 @@ final class AppState {
     static let shared = AppState()
 
     static let timelineLimit = 300
-    private static let log = Logger(subsystem: "com.ahcarpenter.mentor", category: "app")
+    static let log = Logger(subsystem: "com.ahcarpenter.mentor", category: "app")
 
     var settings: SensingSettings {
         didSet {
@@ -150,6 +150,7 @@ final class AppState {
     }
 
     func requestPermission(_ permission: Permission) {
+        AppState.log.notice("requesting permission \(permission.rawValue, privacy: .public)")
         PermissionProbe.request(permission)
         Task {
             try? await Task.sleep(for: .seconds(1))
