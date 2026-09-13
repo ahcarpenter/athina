@@ -84,6 +84,10 @@ public actor MentorLoop {
 
     public func updateSettings(_ newSettings: MentorSettings) async {
         let validated = newSettings.validated()
+        if validated.onlyMentorInsideContexts != settings.onlyMentorInsideContexts
+            || validated.contexts != settings.contexts {
+            status.lastContext = nil
+        }
         settings = validated
         scheduler.settings = validated
         spend.cap = validated.hourlySpendCap

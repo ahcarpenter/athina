@@ -262,6 +262,24 @@ import Testing
         #expect(status.lastContext?.placement == .notEnforced)
     }
 
+    @Test func editingTheContextListDropsTheRecordedVerdict() async throws {
+        let settings = Self.enforcing()
+        let h = try await Harness(settings: settings)
+        await h.client.enqueue(json: Self.triage(false, context: "writing Swift"))
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        #expect(await h.loop.currentStatus().lastContext?.placement.contextName == "writing Swift")
+
+        var unrelated = settings
+        unrelated.toastTimeout = 90
+        await h.loop.updateSettings(unrelated)
+        #expect(await h.loop.currentStatus().lastContext?.placement.contextName == "writing Swift")
+
+        var edited = unrelated
+        edited.contexts = [MentorshipContext(name: "drafting documents")]
+        await h.loop.updateSettings(edited)
+        #expect(await h.loop.currentStatus().lastContext == nil)
+    }
+
     @Test func perTierEffortReachesEachRequest() async throws {
         var settings = MentorSettings()
         settings.triageModel = "claude-sonnet-5"
