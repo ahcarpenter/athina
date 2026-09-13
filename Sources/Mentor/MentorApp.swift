@@ -22,6 +22,7 @@ struct MentorApp: App {
                 .environment(state)
         }
         .defaultSize(width: 1180, height: 720)
+        .defaultLaunchBehavior(LaunchArguments.windowToOpen == WindowID.debug ? .presented : .suppressed)
         .restorationBehavior(.disabled)
 
         Window("Mentor Permissions", id: WindowID.permissions) {
@@ -29,14 +30,16 @@ struct MentorApp: App {
                 .environment(state)
         }
         .windowResizability(.contentSize)
-        .defaultLaunchBehavior(state.needsPermissionsOnboarding ? .presented : .suppressed)
+        .defaultLaunchBehavior(state.needsPermissionsOnboarding || LaunchArguments.windowToOpen == WindowID.permissions ? .presented : .suppressed)
         .restorationBehavior(.disabled)
 
         Window("Mentor Settings", id: WindowID.settings) {
             SettingsView()
                 .environment(state)
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 600, height: 560)
+        .windowResizability(.contentMinSize)
+        .defaultLaunchBehavior(LaunchArguments.windowToOpen == WindowID.settings ? .presented : .suppressed)
         .restorationBehavior(.disabled)
     }
 }
@@ -45,6 +48,17 @@ enum WindowID {
     static let debug = "debug"
     static let permissions = "permissions"
     static let settings = "settings"
+}
+
+/// Developer aids on the command line: `Mentor --open debug|settings|permissions` presents
+/// that window at launch (for example `open build/Mentor.app --args --open debug`),
+/// and `--snapshot <dir>` is handled by `Snapshots`.
+enum LaunchArguments {
+    static var windowToOpen: String? {
+        let arguments = CommandLine.arguments
+        guard let index = arguments.firstIndex(of: "--open"), index + 1 < arguments.count else { return nil }
+        return arguments[index + 1]
+    }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {

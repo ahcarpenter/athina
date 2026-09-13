@@ -158,7 +158,7 @@ extension AppState {
             lastCaptureReason: .inputSettled,
             nextDueAt: now.addingTimeInterval(2.6),
             nextDueReason: .floor,
-            secondsSinceInput: 3.9,
+            lastInputAt: Date().addingTimeInterval(-4),
             keptCount: 128,
             droppedCount: 341,
             lastDropDistance: 2

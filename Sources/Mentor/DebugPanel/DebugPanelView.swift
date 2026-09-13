@@ -56,11 +56,12 @@ private struct DebugStatusBar: View {
             PermissionChip(title: "Screen", granted: state.permissions.screenRecording)
             PermissionChip(title: "AX", granted: state.permissions.accessibility)
             Divider().frame(height: 16)
-            TimelineView(.periodic(from: .now, by: 0.25)) { context in
+            // One tick a second: finer clocks kept the whole window redrawing at ~10% CPU while idle.
+            TimelineView(.periodic(from: .now, by: 1)) { context in
                 HStack(spacing: 14) {
                     LabeledValue(label: "Last", value: lastCapture(now: context.date))
                     LabeledValue(label: "Next", value: nextCapture(now: context.date))
-                    LabeledValue(label: "Input", value: String(format: "%.1fs ago", state.cadence.secondsSinceInput))
+                    LabeledValue(label: "Input", value: lastInput(now: context.date))
                 }
             }
             Spacer(minLength: 8)
@@ -80,6 +81,11 @@ private struct DebugStatusBar: View {
         guard let at = state.cadence.lastCaptureAt else { return "none yet" }
         let reason = state.cadence.lastCaptureReason.map { " (\($0.label))" } ?? ""
         return Formatting.age(at, now: now) + reason
+    }
+
+    private func lastInput(now: Date) -> String {
+        guard let at = state.cadence.lastInputAt else { return "unknown" }
+        return Formatting.age(at, now: now)
     }
 
     private func nextCapture(now: Date) -> String {

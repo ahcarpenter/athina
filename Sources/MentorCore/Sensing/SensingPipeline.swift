@@ -24,6 +24,7 @@ public actor SensingPipeline {
     private var lastFocus: FocusContext?
     private var lastKept: (hash: PerceptualHash, windowSignature: String, textSignature: String)?
     private var lastPublishedCadence: Date = .distantPast
+    private var lastPublishedSnapshot: CadenceStatus?
 
     public init(settings: SensingSettings, journal: Journal, tracker: FocusTracker) {
         self.settings = settings
@@ -154,9 +155,12 @@ public actor SensingPipeline {
             await runRetentionIfDue(now: now)
 
             let secondsSinceInput = InputActivity.secondsSinceLastInput()
-            cadence.secondsSinceInput = secondsSinceInput
-            if secondsSinceInput < settings.inputPollInterval * 1.5 {
-                scheduler.noteInput(at: now.addingTimeInterval(-secondsSinceInput))
+            // The system counter only says how long ago the last event was, so its timestamp
+            // jitters by milliseconds from poll to poll; a new event moves it by far more.
+            let inputAt = now.addingTimeInterval(-secondsSinceInput)
+            if cadence.lastInputAt.map({ inputAt.timeIntervalSince($0) > 0.25 }) ?? true {
+                cadence.lastInputAt = inputAt
+                scheduler.noteInput(at: inputAt)
             }
             await updateIdle(secondsSinceInput: secondsSinceInput)
 
@@ -243,8 +247,9 @@ public actor SensingPipeline {
         cadence.nextDueAt = next?.at
         cadence.nextDueReason = next?.reason
         cadence.lastCaptureAt = scheduler.lastCaptureAt
-        guard now.timeIntervalSince(lastPublishedCadence) >= 0.2 else { return }
+        guard cadence != lastPublishedSnapshot, now.timeIntervalSince(lastPublishedCadence) >= 0.2 else { return }
         lastPublishedCadence = now
+        lastPublishedSnapshot = cadence
         let snapshot = cadence
         Task { await broadcaster.send(.cadence(snapshot)) }
     }

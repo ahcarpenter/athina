@@ -33,6 +33,9 @@ There is no Xcode project. `Package.swift` defines the targets and
 `Mentor --snapshot <dir>` renders every window with sample data to PNG files
 (light and dark) without starting the pipeline. It is how UI changes get checked
 without a person at the screen; it needs no permissions.
+`open build/Mentor.app --args --open debug` (or `settings`, `permissions`) launches the
+app with that window already open, which is how the live panel gets screenshotted
+from a shell.
 
 ### Code signing
 

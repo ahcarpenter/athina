@@ -300,7 +300,8 @@ public struct CadenceStatus: Equatable, Sendable {
     public var lastCaptureReason: CaptureReason?
     public var nextDueAt: Date?
     public var nextDueReason: CaptureReason?
-    public var secondsSinceInput: TimeInterval
+    /// When the user last pressed a key or moved the mouse, as of the last input poll.
+    public var lastInputAt: Date?
     public var keptCount: Int
     public var droppedCount: Int
     public var lastDropDistance: Int?
@@ -312,7 +313,7 @@ public struct CadenceStatus: Equatable, Sendable {
         lastCaptureReason: CaptureReason? = nil,
         nextDueAt: Date? = nil,
         nextDueReason: CaptureReason? = nil,
-        secondsSinceInput: TimeInterval = 0,
+        lastInputAt: Date? = nil,
         keptCount: Int = 0,
         droppedCount: Int = 0,
         lastDropDistance: Int? = nil,
@@ -323,7 +324,7 @@ public struct CadenceStatus: Equatable, Sendable {
         self.lastCaptureReason = lastCaptureReason
         self.nextDueAt = nextDueAt
         self.nextDueReason = nextDueReason
-        self.secondsSinceInput = secondsSinceInput
+        self.lastInputAt = lastInputAt
         self.keptCount = keptCount
         self.droppedCount = droppedCount
         self.lastDropDistance = lastDropDistance

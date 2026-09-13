@@ -30,7 +30,7 @@ struct SettingsView: View {
                 .tag(Tab.privacy)
         }
         .tabViewStyle(.grouped)
-        .frame(width: 600, height: 560)
+        .frame(minWidth: 600, minHeight: 560)
     }
 }
 

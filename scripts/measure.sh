@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Sample the running Mentor app's CPU and memory with ps for a while.
+# Sample the running Mentor app's CPU and memory with top for a while.
+# Each line is the CPU share over the preceding interval (100 = one core),
+# not a lifetime average, so a launch burst does not colour later samples.
 # Usage: scripts/measure.sh [seconds] [interval]
 set -euo pipefail
 duration="${1:-60}"
@@ -9,23 +11,12 @@ if [ -z "$pid" ]; then
   echo "Mentor is not running (make run)" >&2
   exit 1
 fi
+samples=$((duration / interval))
 echo "pid $pid, sampling every ${interval}s for ${duration}s"
-printf '%-10s %6s %10s\n' "time" "%cpu" "rss"
-samples=0
-total=0
-maxcpu=0
-maxrss=0
-end=$((SECONDS + duration))
-while [ $SECONDS -lt $end ]; do
-  line="$(ps -o %cpu=,rss= -p "$pid" || true)"
-  [ -z "$line" ] && { echo "process exited" >&2; exit 1; }
-  cpu="$(echo "$line" | awk '{print $1}')"
-  rss="$(echo "$line" | awk '{print $2}')"
-  printf '%-10s %6s %7.1f MB\n' "$(date +%H:%M:%S)" "$cpu" "$(echo "$rss / 1024" | bc -l)"
-  total="$(echo "$total + $cpu" | bc -l)"
-  maxcpu="$(echo "if ($cpu > $maxcpu) $cpu else $maxcpu" | bc -l)"
-  [ "$rss" -gt "$maxrss" ] && maxrss="$rss"
-  samples=$((samples + 1))
-  sleep "$interval"
-done
-echo "average cpu $(echo "scale=2; $total / $samples" | bc -l)%  peak cpu ${maxcpu}%  peak rss $((maxrss / 1024)) MB"
+printf '%-10s %6s %10s\n' "time" "%cpu" "mem"
+# top's first sample is a lifetime figure; drop it.
+top -l "$((samples + 1))" -s "$interval" -pid "$pid" -stats pid,cpu,mem 2>/dev/null \
+  | awk -v pid="$pid" '$1 == pid { if (seen++) print strftime("%H:%M:%S"), $2, $3 }' \
+  | tee /dev/stderr \
+  | awk '{ total += $2; if ($2 > max) max = $2; mem = $3; n++ }
+         END { if (n) printf "average cpu %.2f%%  peak cpu %.1f%%  last mem %s over %d samples\n", total / n, max, mem, n }'

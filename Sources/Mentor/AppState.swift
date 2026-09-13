@@ -236,7 +236,7 @@ final class AppState {
         case .event(let journalEvent):
             prepend(.event(journalEvent))
         case .cadence(let status):
-            cadence = status
+            if status != cadence { cadence = status }
         }
     }
 

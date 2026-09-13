@@ -20,14 +20,14 @@ enum Formatting {
 
     static func age(_ date: Date, now: Date) -> String {
         let seconds = now.timeIntervalSince(date)
-        if seconds < 60 { return String(format: "%.1fs ago", max(0, seconds)) }
+        if seconds < 60 { return "\(Int(max(0, seconds)))s ago" }
         if seconds < 3600 { return "\(Int(seconds / 60))m ago" }
         return "\(Int(seconds / 3600))h \(Int(seconds.truncatingRemainder(dividingBy: 3600) / 60))m ago"
     }
 
     static func countdown(to date: Date, now: Date) -> String {
         let seconds = date.timeIntervalSince(now)
-        return seconds <= 0 ? "now" : String(format: "in %.1fs", seconds)
+        return seconds <= 0 ? "now" : "in \(Int(seconds.rounded(.up)))s"
     }
 
     static func duration(_ interval: TimeInterval) -> String {
