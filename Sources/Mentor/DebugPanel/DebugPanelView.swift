@@ -325,13 +325,16 @@ private struct FramePane: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
                 if let observation {
-                    Text(isLive ? "Latest frame" : "ActivityObservation #\(observation.id)")
-                        .font(.headline)
-                    Text("\(Formatting.clockTime(observation.timestamp)) · \(observation.reason.label) · \(observation.frame.width)×\(observation.frame.height)")
-                        .foregroundStyle(.secondary)
-                        .font(.callout)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(isLive ? "Latest frame" : "Observation #\(observation.id)")
+                            .font(.headline)
+                        Text("\(Formatting.clockTime(observation.timestamp)) · \(observation.reason.label) · \(observation.frame.width)×\(observation.frame.height)")
+                            .foregroundStyle(.secondary)
+                            .font(.callout)
+                            .lineLimit(1)
+                    }
                 } else {
                     Text("No frame yet").font(.headline)
                 }
