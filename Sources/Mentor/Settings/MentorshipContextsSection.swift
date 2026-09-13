@@ -13,7 +13,6 @@ import SwiftUI
 struct MentorshipContextsSection: View {
     @Environment(AppState.self) private var state
     @State private var editing: MentorshipContext?
-    @State private var isNew = false
 
     private var contexts: [MentorshipContext] { state.settings.mentor.contexts }
     private var enforcing: Bool { state.settings.mentor.onlyMentorInsideContexts }
@@ -45,14 +44,13 @@ struct MentorshipContextsSection: View {
                     EmptyListNote("None yet. Add a context to say what you want mentoring in.")
                 } else {
                     ForEach(contexts) { context in
-                        ContextRow(context: context) { edit(context) }
+                        ContextRow(context: context) { editing = context }
                         if context.id != contexts.last?.id { Divider() }
                     }
                 }
             } toolbar: {
                 Button {
                     editing = MentorshipContext(name: "")
-                    isNew = true
                 } label: {
                     Image(systemName: "plus").frame(width: 22, height: 20)
                 }
@@ -71,15 +69,10 @@ struct MentorshipContextsSection: View {
             Text("Triage places each moment in one of your contexts as part of the judgement it already makes, so declaring them costs no extra call. To stop an app being looked at at all, exclude it in Settings > Privacy.")
         }
         .sheet(item: $editing) { context in
-            ContextEditor(context: context, isNew: isNew, existing: contexts) { edited in
+            ContextEditor(context: context, existing: contexts) { edited in
                 commit(edited)
             }
         }
-    }
-
-    private func edit(_ context: MentorshipContext) {
-        isNew = false
-        editing = context
     }
 
     private func commit(_ edited: MentorshipContext) {
@@ -134,22 +127,25 @@ private struct ContextRow: View {
 // MARK: - Context editor
 
 /// Edits one context on a local copy: the sheet's Save is what writes it back.
+/// A context is new when the declared list does not hold its id yet, so the
+/// sheet's copy comes from the same data it validates against rather than a
+/// flag set beside the presented item.
 private struct ContextEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft: MentorshipContext
-    private let isNew: Bool
     private let existing: [MentorshipContext]
     private let onSave: (MentorshipContext) -> Void
 
     init(
-        context: MentorshipContext, isNew: Bool, existing: [MentorshipContext],
+        context: MentorshipContext, existing: [MentorshipContext],
         onSave: @escaping (MentorshipContext) -> Void
     ) {
         _draft = State(initialValue: context)
-        self.isNew = isNew
         self.existing = existing
         self.onSave = onSave
     }
+
+    private var isNew: Bool { !existing.contains { $0.id == draft.id } }
 
     private var trimmedName: String {
         draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
