@@ -40,11 +40,6 @@ public actor SensingPipeline {
         await broadcaster.subscribe()
     }
 
-    public var currentMode: SensingMode { mode }
-    public var currentCadence: CadenceStatus { cadence }
-    public var currentFocus: FocusContext? { lastFocus }
-    public var isPaused: Bool { userPaused }
-
     // MARK: Control
 
     public func start() async {
@@ -294,7 +289,6 @@ public actor SensingPipeline {
         guard verdict.keep else {
             cadence.droppedCount += 1
             cadence.lastDropDistance = verdict.distance
-            await broadcaster.send(.frameDropped(distance: verdict.distance ?? 0, at: startedAt))
             return
         }
 

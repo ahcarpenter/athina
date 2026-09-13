@@ -34,10 +34,6 @@ public struct RetentionPolicy: Equatable, Sendable {
         now.addingTimeInterval(-max(textMaxAge, thumbnailMaxAge))
     }
 
-    public var isOverCap: (Int64) -> Bool {
-        { $0 > sizeCapBytes }
-    }
-
     /// Size the journal should be trimmed to once it goes over the cap.
     public var sizeTargetBytes: Int64 {
         Int64(Double(sizeCapBytes) * RetentionPolicy.sizeCapTargetFraction)

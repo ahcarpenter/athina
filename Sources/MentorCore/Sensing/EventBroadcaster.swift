@@ -38,8 +38,6 @@ public actor EventBroadcaster<Element: Sendable> {
     private func remove(_ id: UUID) {
         continuations[id] = nil
     }
-
-    public var subscriberCount: Int { continuations.count }
 }
 
 /// Lets a sleeping loop be woken early. `wait(for:)` returns when signaled or

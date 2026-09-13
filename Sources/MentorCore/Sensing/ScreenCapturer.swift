@@ -31,11 +31,6 @@ public actor ScreenCapturer {
 
     public init() {}
 
-    /// Invalidate cached display information (call when displays change).
-    public func invalidate() {
-        content = nil
-    }
-
     public func capture(windowFrame: CGRect?, maxDimension: Int) async throws -> CapturedFrame {
         let content = try await shareableContent()
         guard let display = ScreenCapturer.display(for: windowFrame, in: content.displays) else {

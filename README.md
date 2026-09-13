@@ -129,9 +129,10 @@ and JSON, OCR text and blocks, frame hash, frame geometry, reason), `thumbnails`
 (JPEG blob per observation, separate so it can expire first), `events`
 (start/stop, app and window switches, idle, pause, exclusion, permissions,
 retention, clear). Retention deletes thumbnails older than `thumbnailRetention`,
-text older than `textRetention`, and then, if the file is still over
-`journalSizeCapBytes`, the oldest thumbnails and finally the oldest
-observations until it fits. "Clear Journal" in settings deletes everything.
+then text and events older than `textRetention`, which settings clamp to at
+least `thumbnailRetention` so text and events never expire before their
+thumbnails, and then, if the file is still over `journalSizeCapBytes`, the
+oldest thumbnails and finally the oldest observations until it fits. "Clear Journal" in settings deletes everything.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
 to defaults so older files keep working.

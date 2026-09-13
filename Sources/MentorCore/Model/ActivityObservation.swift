@@ -338,8 +338,6 @@ public enum SensingEvent: Sendable {
     case observation(ActivityObservation)
     /// The accessibility context changed (app, window, or focused element).
     case focusChanged(FocusContext)
-    /// A frame was captured but dropped as a near-duplicate.
-    case frameDropped(distance: Int, at: Date)
     /// The pipeline mode changed.
     case modeChanged(SensingMode)
     /// An event was journaled.

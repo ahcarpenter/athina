@@ -47,6 +47,15 @@ import Testing
         #expect(decoded.hashDistanceThreshold == PerceptualHash.bitCount)
         #expect(decoded.maxFrameDimension == 320)
     }
+
+    @Test func textRetentionIsAtLeastThumbnailRetention() {
+        var settings = SensingSettings()
+        settings.thumbnailRetention = 6 * 3600
+        settings.textRetention = 3600
+        #expect(settings.validated().textRetention == 6 * 3600)
+        settings.textRetention = 12 * 3600
+        #expect(settings.validated().textRetention == 12 * 3600)
+    }
 }
 
 @Suite struct ExcludedAppsTests {

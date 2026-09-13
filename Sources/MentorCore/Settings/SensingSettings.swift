@@ -120,7 +120,7 @@ public struct SensingSettings: Codable, Equatable, Sendable {
         s.hashDistanceThreshold = s.hashDistanceThreshold.clamped(to: 0...PerceptualHash.bitCount)
         s.thumbnailJPEGQuality = s.thumbnailJPEGQuality.clamped(to: 0.1...1)
         s.thumbnailRetention = s.thumbnailRetention.clamped(to: 60...(365 * 86400))
-        s.textRetention = s.textRetention.clamped(to: 60...(365 * 86400))
+        s.textRetention = max(s.textRetention.clamped(to: 60...(365 * 86400)), s.thumbnailRetention)
         s.journalSizeCapBytes = s.journalSizeCapBytes.clamped(to: (10 * 1024 * 1024)...(100 * 1024 * 1024 * 1024))
         s.retentionInterval = s.retentionInterval.clamped(to: 30...86400)
         s.excludedBundleIDs = ExcludedApps.normalized(s.excludedBundleIDs)

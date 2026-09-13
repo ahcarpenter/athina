@@ -145,6 +145,9 @@ private struct JournalSettings: View {
             Section("Retention") {
                 DurationRow("Keep thumbnails for", value: $state.settings.thumbnailRetention)
                 DurationRow("Keep text and events for", value: $state.settings.textRetention)
+                Text("Text and events are kept at least as long as thumbnails.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 LabeledContent("Size cap") {
                     HStack(spacing: 6) {
                         TextField("", value: $sizeCapMB, format: .number.grouping(.never).precision(.fractionLength(0)))

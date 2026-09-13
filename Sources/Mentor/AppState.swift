@@ -178,10 +178,6 @@ final class AppState {
         journalStats = try? await journal.stats()
     }
 
-    func resetSettingsToDefaults() {
-        settings = SensingSettings()
-    }
-
     /// Loads a journaled observation with its thumbnail, for timeline browsing.
     func loadObservation(id: Int64) async -> (ActivityObservation, NSImage?)? {
         guard let journal else { return nil }
@@ -227,8 +223,6 @@ final class AppState {
             prepend(.observation(slim))
         case .focusChanged(let context):
             focus = context
-        case .frameDropped:
-            break
         case .modeChanged(let newMode):
             mode = newMode
             AppState.log.notice("mode: \(newMode.rawValue, privacy: .public)")

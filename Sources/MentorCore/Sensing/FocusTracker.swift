@@ -82,9 +82,6 @@ public final class FocusTracker {
         detachObserver()
     }
 
-    /// The most recently read context, without touching the AX API.
-    public var latest: FocusContext? { lastContext }
-
     /// Reads the current focus context fresh from the AX API.
     public func readCurrent() -> FocusContext? {
         guard let current else { return nil }
