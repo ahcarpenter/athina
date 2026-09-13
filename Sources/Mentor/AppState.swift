@@ -87,6 +87,8 @@ final class AppState {
     private var resourceTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
     private var toastTask: Task<Void, Never>?
+    private var toastDeadline: Date?
+    private var toastRemaining: TimeInterval?
     private let toast = ToastController()
 
     private init() {
@@ -138,6 +140,9 @@ final class AppState {
         let keyStore = keyStore
         toast.onAction = { [weak self] id, feedback in
             self?.respond(to: id, with: feedback)
+        }
+        toast.onHover = { [weak self] hovering in
+            self?.toastHoverChanged(hovering)
         }
 
         eventTask = Task { [weak self] in
@@ -307,19 +312,18 @@ final class AppState {
     // MARK: Suggestions
 
     /// Records feedback for a suggestion, whether it came from the toast or the
-    /// history window. Expiry is only recorded once and never overwrites an
-    /// answer the user gave: closing an expanded or re-shown toast just closes it.
+    /// history window. A non-answer (expiry or closing the toast) is recorded
+    /// once and never overwrites anything: closing a re-shown toast just closes it.
     func respond(to suggestionID: Int64, with feedback: SuggestionFeedback) {
         let existing = suggestionHistory.first { $0.id == suggestionID }?.feedback
         if activeSuggestion?.id == suggestionID {
-            toastTask?.cancel()
-            toastTask = nil
+            cancelToastExpiry()
             if feedback != .tellMeMore {
                 toast.dismiss()
                 activeSuggestion = nil
             }
         }
-        if feedback == .expired, existing != nil { return }
+        if feedback.isNonAnswer, existing != nil { return }
         if let index = suggestionHistory.firstIndex(where: { $0.id == suggestionID }) {
             suggestionHistory[index].feedback = feedback
             suggestionHistory[index].feedbackAt = Date()
@@ -342,17 +346,18 @@ final class AppState {
                 )
                 settings.mentor.neverRules = SuppressionRules.adding(rule, to: settings.mentor.neverRules)
             }
-        case .tellMeMore, .expired:
+        case .tellMeMore, .expired, .dismissed:
             break
         }
         AppState.log.notice("suggestion \(suggestionID) feedback \(feedback.rawValue, privacy: .public)")
         Task { await mentor?.recordFeedback(suggestionID: suggestionID, feedback: feedback) }
     }
 
-    /// Brings the most recent suggestion back as a toast, for one that was missed.
+    /// Brings the most recent suggestion back as a toast, for one that was
+    /// missed. A toast the user asked for stays until answered or closed.
     func showLastSuggestion() {
         guard let latest = suggestionHistory.first else { return }
-        show(latest)
+        show(latest, autoExpires: false)
     }
 
     private func present(_ suggestion: Suggestion) {
@@ -360,26 +365,51 @@ final class AppState {
         if suggestionHistory.count > AppState.historyLimit {
             suggestionHistory.removeLast(suggestionHistory.count - AppState.historyLimit)
         }
-        show(suggestion)
+        show(suggestion, autoExpires: true)
     }
 
-    private func show(_ suggestion: Suggestion) {
+    private func show(_ suggestion: Suggestion, autoExpires: Bool) {
         if let active = activeSuggestion, active.id != suggestion.id {
             respond(to: active.id, with: .expired)
         }
+        cancelToastExpiry()
         activeSuggestion = suggestion
         toast.show(suggestion, expanded: false)
-        scheduleToastExpiry(for: suggestion.id)
+        if autoExpires {
+            scheduleToastExpiry(for: suggestion.id, after: settings.mentor.toastTimeout)
+        }
     }
 
-    private func scheduleToastExpiry(for suggestionID: Int64) {
+    /// The countdown pauses while the pointer is over the toast and resumes
+    /// with the remaining time when it leaves.
+    private func toastHoverChanged(_ hovering: Bool) {
+        guard let active = activeSuggestion else { return }
+        if hovering {
+            if let deadline = toastDeadline {
+                toastRemaining = max(2, deadline.timeIntervalSinceNow)
+            }
+            cancelToastExpiry()
+        } else if let remaining = toastRemaining {
+            toastRemaining = nil
+            scheduleToastExpiry(for: active.id, after: remaining)
+        }
+    }
+
+    private func scheduleToastExpiry(for suggestionID: Int64, after timeout: TimeInterval) {
         toastTask?.cancel()
-        let timeout = settings.mentor.toastTimeout
+        toastDeadline = Date().addingTimeInterval(timeout)
         toastTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(timeout))
             guard !Task.isCancelled, let self, self.activeSuggestion?.id == suggestionID else { return }
             self.respond(to: suggestionID, with: .expired)
         }
+    }
+
+    private func cancelToastExpiry() {
+        toastTask?.cancel()
+        toastTask = nil
+        toastDeadline = nil
+        toastRemaining = nil
     }
 
     // MARK: Presentation helpers

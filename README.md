@@ -209,8 +209,10 @@ each kept observation it runs, in order:
 5. **Delivery.** A suggestion under `minimumConfidence` or in a snoozed or
    never-for-this category is logged and dropped. Otherwise it is journaled and
    shown as a toast: a floating, non-activating panel under the menu bar that
-   never takes keyboard focus and auto-dismisses after `toastTimeout`. *Tell me
-   more* expands the full explanation in place. *Not now* dismisses and snoozes
+   never takes keyboard focus and auto-dismisses after `toastTimeout` (60 s;
+   the countdown pauses while the pointer is over it). Closing it with the x
+   is journaled as dismissed, a timeout as expired. *Tell me more* expands the
+   full explanation in place and the toast then stays until closed. *Not now* dismisses and snoozes
    that category for that app for `notNowSnooze` (1 h). *Never for this*
    records that the category must never be raised for that app again (the rule
    is listed and removable in Settings > Mentor). Every suggestion and every
@@ -225,7 +227,9 @@ a model's minimum cacheable prefix (512 tokens on Claude Fable 5.1 and Opus 5,
 1024 on Sonnet 5, 4096 on Haiku 4.5), so in practice the mentor prompt is
 served from cache within its five-minute window and the small triage prompt
 is not; the marker stays so a triage model with a lower minimum benefits.
-Menu > Show Last Suggestion brings a missed toast back. The API key is read from the Keychain inside the loop
+Menu > Show Last Suggestion brings a missed toast back; a toast asked for
+that way never expires on its own, and a non-answer never overwrites an
+answer already given. The API key is read from the Keychain inside the loop
 and passed per request; it is never journaled or logged.
 
 ### Spend control

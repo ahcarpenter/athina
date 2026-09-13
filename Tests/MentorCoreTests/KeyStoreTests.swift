@@ -38,6 +38,7 @@ import Testing
         #expect(s.triageMinInterval == 20)
         #expect(s.mentorMinInterval == 120)
         #expect(s.hourlySpendCap == 1)
+        #expect(s.toastTimeout == 60)
         #expect(s.sendThumbnail)
         #expect(s.enabled)
         #expect(ModelCatalog.mentorChoices.map(\.id).contains("claude-opus-5"))

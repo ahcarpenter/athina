@@ -35,8 +35,10 @@ public struct MentorSettings: Codable, Equatable, Sendable {
 
     /// Suggestions under this confidence are logged but not shown.
     public var minimumConfidence = 0.6
-    /// Seconds a toast stays up without interaction.
-    public var toastTimeout: TimeInterval = 20
+    /// Seconds a toast stays up without interaction. The countdown pauses
+    /// while the pointer is over the toast, and a suggestion brought back with
+    /// Show Last Suggestion does not expire at all.
+    public var toastTimeout: TimeInterval = 60
     /// How long "Not now" keeps that category quiet for that app.
     public var notNowSnooze: TimeInterval = 3600
 

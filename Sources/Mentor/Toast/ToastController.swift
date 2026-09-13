@@ -11,6 +11,7 @@ final class ToastController {
     static let margin: CGFloat = 12
 
     var onAction: ((Int64, SuggestionFeedback) -> Void)?
+    var onHover: ((Bool) -> Void)?
 
     private var panel: NSPanel?
     private var hosting: NSHostingView<ToastView>?
@@ -48,10 +49,12 @@ final class ToastController {
         panel.isMovableByWindowBackground = true
         panel.setAccessibilityTitle("Mentor suggestion")
 
-        let view = ToastView(model: model) { [weak self] feedback in
+        let view = ToastView(model: model, onAction: { [weak self] feedback in
             guard let self, let suggestion = self.model.suggestion else { return }
             self.onAction?(suggestion.id, feedback)
-        }
+        }, onHover: { [weak self] hovering in
+            self?.onHover?(hovering)
+        })
         let hosting = NSHostingView(rootView: view)
         hosting.sizingOptions = [.intrinsicContentSize]
         panel.contentView = hosting
@@ -87,6 +90,7 @@ final class ToastModel {
 struct ToastView: View {
     @Bindable var model: ToastModel
     let onAction: (SuggestionFeedback) -> Void
+    var onHover: (Bool) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -103,6 +107,7 @@ struct ToastView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.quaternary))
         .padding(1)
+        .onHover(perform: onHover)
     }
 }
 
@@ -139,6 +144,17 @@ struct ToastContent: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
+                Button {
+                    onAction(.dismissed)
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .help("Close")
+                .accessibilityLabel("Close")
             }
             Text(suggestion.body)
                 .font(.callout)
@@ -166,19 +182,6 @@ struct ToastContent: View {
                     .buttonStyle(.bordered)
                     .help("Stop \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName)")
                 Spacer(minLength: 0)
-                if expanded {
-                    Button {
-                        onAction(.expired)
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 11, weight: .semibold))
-                            .frame(width: 22, height: 22)
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    .help("Dismiss")
-                    .accessibilityLabel("Dismiss")
-                }
             }
             .controlSize(.small)
             .padding(.top, 2)

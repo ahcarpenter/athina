@@ -110,7 +110,7 @@ struct FeedbackPill: View {
         case .tellMeMore: .green
         case .notNow: .orange
         case .never: .red
-        case .expired: .gray
+        case .expired, .dismissed: .gray
         case nil: .accentColor
         }
     }
@@ -159,7 +159,7 @@ private struct SuggestionDetail: View {
                     }
                 }
                 .font(.callout)
-                if suggestion.feedback == nil || suggestion.feedback == .expired || suggestion.feedback == .tellMeMore {
+                if suggestion.feedback == nil || suggestion.feedback?.isNonAnswer == true || suggestion.feedback == .tellMeMore {
                     HStack(spacing: 8) {
                         Button("Not now") { state.respond(to: suggestion.id, with: .notNow) }
                         Button("Never for this") { state.respond(to: suggestion.id, with: .never) }
