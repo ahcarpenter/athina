@@ -280,7 +280,7 @@ public actor SensingPipeline {
             permissionsCheckedAt = .distantPast
             return
         }
-        guard lastFocus?.isExcluded != true else { return }
+        guard lastFocus?.isExcluded != true, await frontmostIsStill(focus) else { return }
 
         guard let hash = FrameImaging.perceptualHash(of: frame.image) else {
             cadence.lastError = "capture: could not hash frame"
@@ -304,6 +304,7 @@ public actor SensingPipeline {
         } catch {
             cadence.lastError = "ocr: \(error)"
         }
+        guard lastFocus?.isExcluded != true, await frontmostIsStill(focus) else { return }
         let jpeg = FrameImaging.jpegData(from: frame.image, quality: settings.thumbnailJPEGQuality)
         let info = FrameInfo(
             hash: hash,
@@ -324,6 +325,11 @@ public actor SensingPipeline {
         cadence.lastCaptureAt = startedAt
         cadence.lastCaptureReason = reason
         await broadcaster.send(.observation(observation))
+    }
+
+    private func frontmostIsStill(_ focus: FocusContext) async -> Bool {
+        guard let front = await tracker.frontmostApplication() else { return false }
+        return front.pid == focus.pid && !settings.isExcluded(bundleID: front.bundleID)
     }
 
     private func journalEvent(_ event: JournalEvent) async {

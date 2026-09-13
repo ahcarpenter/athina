@@ -43,6 +43,7 @@ struct PermissionsView: View {
         .padding(24)
         .frame(width: 560)
         .task {
+            guard !Snapshots.isActive else { return }
             AppState.log.notice("permissions window opened, granted: screen \(state.permissions.screenRecording) accessibility \(state.permissions.accessibility)")
             // Trigger the system prompts once so Mentor appears in both
             // System Settings lists; granting is then a matter of toggles.

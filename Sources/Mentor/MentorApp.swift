@@ -30,7 +30,7 @@ struct MentorApp: App {
                 .environment(state)
         }
         .windowResizability(.contentSize)
-        .defaultLaunchBehavior(state.needsPermissionsOnboarding || LaunchArguments.windowToOpen == WindowID.permissions ? .presented : .suppressed)
+        .defaultLaunchBehavior(!Snapshots.isActive && (state.needsPermissionsOnboarding || LaunchArguments.windowToOpen == WindowID.permissions) ? .presented : .suppressed)
         .restorationBehavior(.disabled)
 
         Window("Mentor Settings", id: WindowID.settings) {

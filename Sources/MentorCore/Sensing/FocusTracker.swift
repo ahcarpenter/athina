@@ -93,6 +93,13 @@ public final class FocusTracker {
         detachObserver()
     }
 
+    /// The frontmost application as NSWorkspace reports it right now, ahead of
+    /// the activation notification and observer attach that update the tracked context.
+    public func frontmostApplication() -> (pid: pid_t, bundleID: String?)? {
+        guard let app = NSWorkspace.shared.frontmostApplication else { return nil }
+        return (app.processIdentifier, app.bundleIdentifier)
+    }
+
     /// Reads the current focus context fresh from the AX API.
     public func readCurrent() -> FocusContext? {
         guard let current else { return nil }

@@ -81,10 +81,16 @@ private struct CadenceSettings: View {
             }
             Section {
                 Button("Restore Defaults") {
-                    var defaults = SensingSettings()
-                    defaults.excludedBundleIDs = state.settings.excludedBundleIDs
-                    defaults.pauseHotKey = state.settings.pauseHotKey
-                    state.settings = defaults
+                    let defaults = SensingSettings()
+                    var restored = state.settings
+                    restored.focusSettleDelay = defaults.focusSettleDelay
+                    restored.inputSettleDelay = defaults.inputSettleDelay
+                    restored.floorInterval = defaults.floorInterval
+                    restored.minCaptureInterval = defaults.minCaptureInterval
+                    restored.idleThreshold = defaults.idleThreshold
+                    restored.inputPollInterval = defaults.inputPollInterval
+                    restored.idlePollInterval = defaults.idlePollInterval
+                    state.settings = restored
                 }
             }
         }

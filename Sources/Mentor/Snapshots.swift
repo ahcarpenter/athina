@@ -14,6 +14,8 @@ enum Snapshots {
         return URL(fileURLWithPath: arguments[index + 1], isDirectory: true)
     }
 
+    static var isActive: Bool { requestedDirectory != nil }
+
     static func render(to directory: URL) async throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let state = AppState.sample()
