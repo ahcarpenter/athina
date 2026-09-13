@@ -142,6 +142,13 @@ enum Fixtures {
         #expect(scheduler.mentorGate(triage: yes, conditions: conditions(spend: 1), now: t0 + 120) == .hold(.spendCapReached(until: t0 + 3600)))
     }
 
+    @Test func observationsThatQueuedBehindALongCallAreDropped() {
+        let scheduler = MentorScheduler(settings: settings)
+        let observation = Fixtures.observation(at: t0)
+        #expect(scheduler.triageGate(for: observation, conditions: conditions(), now: t0 + 29) == .run)
+        #expect(scheduler.triageGate(for: observation, conditions: conditions(), now: t0 + 31) == .hold(.stale(age: 31)))
+    }
+
     @Test func spendCapStopsTriageUntilTheHourRollsOver() {
         let scheduler = MentorScheduler(settings: settings)
         let observation = Fixtures.observation(at: t0)

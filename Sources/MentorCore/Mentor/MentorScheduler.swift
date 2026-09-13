@@ -48,6 +48,8 @@ public struct MentorScheduler: Equatable, Sendable {
         case callInFlight
         case spendCapReached(until: Date)
         case notAChangeMoment(CaptureReason)
+        /// The observation waited in the queue behind a long call and no longer shows the present.
+        case stale(age: TimeInterval)
         case tooSoon(until: Date)
         case nearIdentical(similarity: Double)
 
@@ -63,11 +65,16 @@ public struct MentorScheduler: Equatable, Sendable {
             case .callInFlight: "a call is in flight"
             case .spendCapReached(let until): "spend cap reached until \(until.formatted(date: .omitted, time: .shortened))"
             case .notAChangeMoment(let reason): "not a change moment (\(reason.label))"
+            case .stale(let age): "observation is \(Int(age))s old"
             case .tooSoon(let until): "too soon, next at \(until.formatted(date: .omitted, time: .standard))"
             case .nearIdentical(let similarity): "screen text \(Int((similarity * 100).rounded()))% the same as last triaged"
             }
         }
     }
+
+    /// Observations older than this when they reach the gate are dropped:
+    /// they queued behind a long mentor call and describe a screen that is gone.
+    public static let maxObservationAge: TimeInterval = 30
 
     public enum TriageGate: Equatable, Sendable {
         case run
@@ -111,6 +118,8 @@ public struct MentorScheduler: Equatable, Sendable {
         if let hold = availabilityHold(conditions: conditions) { return .hold(hold) }
         if conditions.callInFlight { return .hold(.callInFlight) }
         guard observation.reason.isChangeMoment else { return .hold(.notAChangeMoment(observation.reason)) }
+        let age = now.timeIntervalSince(observation.timestamp)
+        if age > MentorScheduler.maxObservationAge { return .hold(.stale(age: age)) }
         if let next = nextTriageAllowed(multiplier: conditions.cadenceMultiplier), next > now {
             return .hold(.tooSoon(until: next))
         }
