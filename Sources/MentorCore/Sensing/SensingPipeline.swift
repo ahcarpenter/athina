@@ -204,10 +204,11 @@ public actor SensingPipeline {
         do {
             let result = try await journal.applyRetention(RetentionPolicy(settings: settings), now: now)
             if result.deletedAnything {
-                await journalEvent(JournalEvent(
-                    kind: .retention,
-                    detail: "removed \(result.thumbnailsDeleted) thumbnails, \(result.observationsDeleted) observations, \(result.eventsDeleted) events"
-                ))
+                var detail = "removed \(result.thumbnailsDeleted) thumbnails, \(result.observationsDeleted) observations, \(result.eventsDeleted) events"
+                if result.suggestionsDeleted + result.modelCallsDeleted > 0 {
+                    detail += ", \(result.suggestionsDeleted) suggestions, \(result.modelCallsDeleted) model calls"
+                }
+                await journalEvent(JournalEvent(kind: .retention, detail: detail))
             }
         } catch {
             cadence.lastError = "retention: \(error)"

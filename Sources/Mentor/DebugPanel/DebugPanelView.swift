@@ -3,10 +3,19 @@ import MentorCore
 import SwiftUI
 
 struct DebugPanelView: View {
+    enum SidePage: Hashable {
+        case timeline, calls
+    }
+
     @Environment(AppState.self) private var state
     @State private var showOCRBoxes = true
     @State private var selectedEntryID: String?
     @State private var selected: (observation: ActivityObservation, image: NSImage?)?
+    @State private var sidePage: SidePage
+
+    init(initialSidePage: SidePage = .timeline) {
+        _sidePage = State(initialValue: initialSidePage)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,7 +34,7 @@ struct DebugPanelView: View {
                 )
                 .frame(maxWidth: .infinity)
                 Divider()
-                TimelinePane(selectedID: $selectedEntryID)
+                TimelinePane(selectedID: $selectedEntryID, page: $sidePage)
                     .frame(width: 360)
             }
         }
@@ -65,6 +74,7 @@ private struct DebugStatusBar: View {
                 }
             }
             Spacer(minLength: 8)
+            LabeledValue(label: "Spend", value: "\(Formatting.dollars(state.mentorStatus.spendThisHour)) / \(Formatting.dollars(state.settings.mentor.hourlySpendCap))")
             if let resources = state.resources {
                 LabeledValue(label: "CPU", value: String(format: "%.1f%%", resources.cpuPercent))
                 LabeledValue(label: "Mem", value: Formatting.bytes(resources.footprintBytes))
@@ -197,6 +207,8 @@ private struct NowPane: View {
                     }
                 }
 
+                MentorCard()
+
                 Card(title: "Focused element") {
                     if let focus = state.focus, !focus.isExcluded, focus.focusedRole != nil {
                         Field(label: "Role", value: [focus.focusedRole, focus.focusedSubrole].compactMap { $0 }.joined(separator: " / "))
@@ -300,6 +312,7 @@ struct Card<Content: View>: View {
 private struct Field: View {
     let label: String
     let value: String
+    var lineLimit: Int? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -307,6 +320,7 @@ private struct Field: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 78, alignment: .trailing)
             Text(value)
+                .lineLimit(lineLimit)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -476,32 +490,47 @@ private struct OCRTextList: View {
 // MARK: - Timeline pane
 
 private struct TimelinePane: View {
+    typealias Page = DebugPanelView.SidePage
+
     @Environment(AppState.self) private var state
     @Binding var selectedID: String?
+    @Binding var page: Page
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Timeline")
-                    .font(.headline)
-                Text("\(state.timeline.count) entries")
+            HStack(spacing: 8) {
+                Picker("", selection: $page) {
+                    Text("Timeline").tag(Page.timeline)
+                    Text("Model calls").tag(Page.calls)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .controlSize(.small)
+                .frame(width: 180)
+                Text(page == .timeline ? "\(state.timeline.count) entries" : "\(state.callLog.count) calls")
                     .foregroundStyle(.secondary)
                     .font(.callout)
+                    .monospacedDigit()
                 Spacer()
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             Divider()
-            List(state.timeline, selection: $selectedID) { entry in
-                TimelineRow(entry: entry)
-                    .tag(entry.id)
-                    .listRowSeparator(.visible)
-            }
-            .listStyle(.inset)
-            .overlay {
-                if state.timeline.isEmpty {
-                    ContentUnavailableView("Nothing journaled yet", systemImage: "clock")
+            switch page {
+            case .timeline:
+                List(state.timeline, selection: $selectedID) { entry in
+                    TimelineRow(entry: entry)
+                        .tag(entry.id)
+                        .listRowSeparator(.visible)
                 }
+                .listStyle(.inset)
+                .overlay {
+                    if state.timeline.isEmpty {
+                        ContentUnavailableView("Nothing journaled yet", systemImage: "clock")
+                    }
+                }
+            case .calls:
+                CallLogList(calls: state.callLog)
             }
         }
     }
@@ -569,6 +598,8 @@ private struct TimelineRow: View {
             case .permissionsChanged: "lock.shield"
             case .journalCleared: "trash"
             case .retention: "clock.arrow.circlepath"
+            case .suggested: "lightbulb.fill"
+            case .feedback: "hand.thumbsup"
             }
         }
     }
@@ -581,8 +612,193 @@ private struct TimelineRow: View {
             case .paused, .excluded: .orange
             case .idleStart: .gray
             case .journalCleared: .red
+            case .suggested: .yellow
+            case .feedback: .green
             default: .secondary
             }
+        }
+    }
+}
+
+// MARK: - Mentor card
+
+/// The debug panel's Mentor section: gate decisions, the last call of each
+/// tier, spend and cadence. The call log lives under the timeline.
+private struct MentorCard: View {
+    @Environment(AppState.self) private var state
+
+    var body: some View {
+        Card(title: "Mentor loop") {
+            HStack(spacing: 8) {
+                AvailabilityBadge(availability: state.mentorStatus.availability)
+                if let tier = state.mentorStatus.inFlight {
+                    ProgressView().controlSize(.mini)
+                    Text("\(tier.label) call in flight")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                // Model reasons can run long; four lines keeps spend and cadence in view.
+                VStack(alignment: .leading, spacing: 4) {
+                    Field(label: "Triage gate", value: triageGate(now: context.date), lineLimit: 4)
+                    Field(label: "Last triage", value: describe(state.mentorStatus.lastTriage, now: context.date), lineLimit: 4)
+                    Field(label: "Mentor gate", value: mentorGate(now: context.date), lineLimit: 4)
+                    Field(label: "Last mentor", value: describe(state.mentorStatus.lastMentor, now: context.date), lineLimit: 4)
+                    Field(label: "Spend", value: spend(now: context.date))
+                    Field(label: "Cadence", value: cadence(now: context.date))
+                }
+            }
+        }
+    }
+
+    private func triageGate(now: Date) -> String {
+        guard let gate = state.mentorStatus.lastGate else { return "no observation yet" }
+        let when = Formatting.age(gate.at, now: now)
+        if let hold = gate.hold {
+            return "held \(when): \(hold.label)"
+        }
+        return "ran \(when) on observation #\(gate.observationID)"
+    }
+
+    private func mentorGate(now: Date) -> String {
+        if let hold = state.mentorStatus.lastMentorHold {
+            return "held \(Formatting.age(hold.at, now: now)): \(hold.hold.label)"
+        }
+        if let last = state.mentorStatus.lastMentor {
+            return "ran \(Formatting.age(last.timestamp, now: now))"
+        }
+        return "not reached yet"
+    }
+
+    private func describe(_ record: ModelCallRecord?, now: Date) -> String {
+        guard let record else { return "none yet" }
+        var text = "\(record.outcome.label) \(Formatting.age(record.timestamp, now: now)), \(ModelCatalog.displayName(for: record.model)), "
+        text += "\(Formatting.tokens(record.usage.totalInputTokens)) in (\(Formatting.tokens(record.usage.cacheReadInputTokens)) cached), \(Formatting.tokens(record.usage.outputTokens)) out, "
+        text += "\(Formatting.dollars(record.cost)), \(Formatting.seconds(record.latency))"
+        if let detail = record.detail, !detail.isEmpty { text += "\n\(detail)" }
+        return text
+    }
+
+    private func spend(now: Date) -> String {
+        let status = state.mentorStatus
+        let rollover = Formatting.countdown(to: SpendMeter.nextHourStart(after: now), now: now)
+        return "\(Formatting.dollars(status.spendThisHour)) of \(Formatting.dollars(state.settings.mentor.hourlySpendCap)) this hour over \(status.callsThisHour) calls, hour rolls over \(rollover)"
+    }
+
+    private func cadence(now: Date) -> String {
+        let status = state.mentorStatus
+        var parts = ["\(Formatting.multiplier(status.cadenceMultiplier)) the set intervals"]
+        if let next = status.nextTriageAt {
+            parts.append("triage allowed \(Formatting.countdown(to: next, now: now))")
+        }
+        if let next = status.nextMentorAt {
+            parts.append("mentor allowed \(Formatting.countdown(to: next, now: now))")
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
+private struct AvailabilityBadge: View {
+    let availability: MentorStatus.Availability
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 7, height: 7)
+            Text(availability.label)
+                .font(.caption.weight(.semibold))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 2)
+        .background(color.opacity(0.15), in: Capsule())
+    }
+
+    private var color: Color {
+        switch availability {
+        case .ready: .green
+        case .disabled: .gray
+        case .noAPIKey: .orange
+        case .capReached: .red
+        }
+    }
+}
+
+private struct CallLogList: View {
+    let calls: [ModelCallRecord]
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(calls) { call in
+                    CallLogRow(call: call)
+                    Divider()
+                }
+            }
+        }
+        .overlay {
+            if calls.isEmpty {
+                ContentUnavailableView(
+                    "No model calls yet",
+                    systemImage: "sparkles",
+                    description: Text("Each call appears here with its prompt size, tokens, cost, and latency.")
+                )
+            }
+        }
+    }
+}
+
+private struct CallLogRow: View {
+    let call: ModelCallRecord
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(Formatting.clockTime(call.timestamp))
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 60, alignment: .leading)
+            Text(call.tier.label)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tierColor)
+                .frame(width: 46, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(call.outcome.label)
+                        .font(.callout.weight(.medium))
+                    Text(ModelCatalog.displayName(for: call.model))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Text(metrics)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let detail = call.detail, !detail.isEmpty {
+                    Text(detail)
+                        .font(.caption)
+                        .lineLimit(2)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 5)
+    }
+
+    private var metrics: String {
+        var line = "\(Formatting.tokens(call.usage.totalInputTokens)) in"
+        if call.usage.cacheReadInputTokens > 0 { line += " (\(Formatting.tokens(call.usage.cacheReadInputTokens)) cached)" }
+        line += ", \(Formatting.tokens(call.usage.outputTokens)) out, \(Formatting.dollars(call.cost)), \(Formatting.seconds(call.latency))"
+        var prompt = "prompt \(Formatting.tokens(call.promptCharacters)) chars"
+        if call.imageBytes > 0 { prompt += " + \(Formatting.bytes(Int64(call.imageBytes))) image" }
+        return line + "\n" + prompt
+    }
+
+    private var tierColor: Color {
+        switch call.tier {
+        case .triage: .blue
+        case .mentor: .purple
+        case .test: .secondary
         }
     }
 }
