@@ -218,9 +218,10 @@ each kept observation it runs, in order:
    never-for-this category is logged and dropped. Otherwise it is journaled and
    shown as a toast: a floating, non-activating panel under the menu bar that
    never takes keyboard focus and auto-dismisses after `toastTimeout` (60 s;
-   the countdown pauses while the pointer is over it). Closing it with the x
-   is journaled as dismissed, a timeout or quitting the app with the toast
-   still up as expired. *Tell me more* expands the full explanation above the
+   the countdown pauses while the pointer is over it). Closing it with the x,
+   or a mouse-down in any other window or on the desktop, is journaled as
+   dismissed, a timeout or quitting the app with the toast still up as
+   expired. *Tell me more* expands the full explanation above the
    button bar (scrolling past 300 points) and becomes *Show less*; the three
    buttons stay pinned to the bottom edge in both states, and an expanded
    toast stays until closed. *Not now* dismisses and snoozes that category for
