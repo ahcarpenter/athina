@@ -51,9 +51,9 @@ public enum MentorPrompts {
         let closing = """
         Set context to the name of the one this snapshot belongs to, exactly as written above, or to null \
         when it belongs to none of them. Judge the work, not the app: the same app can be inside one \
-        moment and outside the next. Set context_confidence from 0 to 1 for how sure you are of that \
-        placement. A snapshot outside every context is never shown to the user, so answer null when you \
-        are unsure, and answer worth_a_look on its own merits either way.
+        moment and outside the next. A snapshot outside every context is never shown to the user, so \
+        answer null whenever you are unsure rather than guessing, and answer worth_a_look on its own \
+        merits either way.
         """
         return "\n\n" + opening + "\n\n" + declared + "\n\n" + closing
     }
@@ -91,9 +91,8 @@ public enum MentorPrompts {
                         ["type": "string", "enum": .array(contexts.map { .string($0.name) })],
                     ],
                 ],
-                "context_confidence": ["type": "number"],
             ],
-            "required": ["worth_a_look", "reason", "context", "context_confidence"],
+            "required": ["worth_a_look", "reason", "context"],
             "additionalProperties": false,
         ]
     }
@@ -177,29 +176,26 @@ extension String {
     }
 }
 
-/// What the triage tier returns. The two context fields are asked for only
-/// while mentorship contexts are enforced, so both are optional: a reply
-/// without them leaves the placement unanswered, which counts as outside.
+/// What the triage tier returns. The context field is asked for only while
+/// mentorship contexts are enforced, so it is optional: a reply without it
+/// names no context, which counts as outside.
 public struct TriageVerdict: Codable, Equatable, Sendable {
     public var worthALook: Bool
     public var reason: String
-    /// The declared context this snapshot belongs to, or nil for none of them.
+    /// The declared context this snapshot belongs to, or nil for none of them,
+    /// which is also how the model says it is unsure.
     public var context: String?
-    /// How sure the model is of that placement, 0 to 1.
-    public var contextConfidence: Double?
 
-    public init(worthALook: Bool, reason: String, context: String? = nil, contextConfidence: Double? = nil) {
+    public init(worthALook: Bool, reason: String, context: String? = nil) {
         self.worthALook = worthALook
         self.reason = reason
         self.context = context
-        self.contextConfidence = contextConfidence
     }
 
     private enum CodingKeys: String, CodingKey {
         case worthALook = "worth_a_look"
         case reason
         case context
-        case contextConfidence = "context_confidence"
     }
 }
 

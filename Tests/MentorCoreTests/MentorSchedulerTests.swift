@@ -159,8 +159,8 @@ enum Fixtures {
         return s.validated()
     }
 
-    private func inside(_ name: String, confidence: Double = 0.9) -> ContextPlacement {
-        .inside(ContextMatch(contextID: UUID(), name: name, confidence: confidence))
+    private func inside(_ name: String) -> ContextPlacement {
+        .inside(ContextMatch(contextID: UUID(), name: name))
     }
 
     @Test func enforcingWithNoContextDeclaredHoldsTriageSoNothingIsSpent() {
@@ -178,11 +178,10 @@ enum Fixtures {
 
     @Test func outOfContextNeverReachesTheMentorTierHoweverKeenTriageWas() {
         let scheduler = MentorScheduler(settings: contextSettings(enforcing: true))
-        let yes = TriageVerdict(worthALook: true, reason: "repeated manual steps", context: nil, contextConfidence: 0.9)
+        let yes = TriageVerdict(worthALook: true, reason: "repeated manual steps", context: nil)
         let exclusions: [ContextExclusion] = [
             .noMatch(reason: ""),
-            .belowConfidence(name: "writing Swift", confidence: 0.2),
-            .unanswered,
+            .noMatch(reason: "triage answered \"cooking\", which is not declared"),
             .noContextsDeclared,
         ]
         for exclusion in exclusions {
@@ -194,8 +193,8 @@ enum Fixtures {
 
     @Test func insideAContextStillHasToPassEveryOtherCheck() {
         var scheduler = MentorScheduler(settings: contextSettings(enforcing: true))
-        let yes = TriageVerdict(worthALook: true, reason: "repeated manual steps", context: "writing Swift", contextConfidence: 0.9)
-        let no = TriageVerdict(worthALook: false, reason: "reading", context: "writing Swift", contextConfidence: 0.9)
+        let yes = TriageVerdict(worthALook: true, reason: "repeated manual steps", context: "writing Swift")
+        let no = TriageVerdict(worthALook: false, reason: "reading", context: "writing Swift")
         let placement = inside("writing Swift")
         #expect(scheduler.mentorGate(triage: yes, context: placement, conditions: conditions(), now: t0) == .run)
         #expect(scheduler.mentorGate(triage: no, context: placement, conditions: conditions(), now: t0) == .hold(.triageSaidNo(reason: "reading")))
@@ -206,7 +205,7 @@ enum Fixtures {
 
     @Test func theContextCheckIsMadeBeforeTriagesOwnJudgement() {
         let scheduler = MentorScheduler(settings: contextSettings(enforcing: true))
-        let no = TriageVerdict(worthALook: false, reason: "reading", context: nil, contextConfidence: 0.9)
+        let no = TriageVerdict(worthALook: false, reason: "reading", context: nil)
         #expect(scheduler.mentorGate(
             triage: no, context: .outside(.noMatch(reason: "")), conditions: conditions(), now: t0
         ) == .hold(.outOfContext(.noMatch(reason: ""))))

@@ -71,17 +71,14 @@ public enum ContextPlacement: Equatable, Sendable {
 public struct ContextMatch: Equatable, Sendable {
     public var contextID: UUID
     public var name: String
-    /// The triage model's confidence in that placement.
-    public var confidence: Double
 
-    public init(contextID: UUID, name: String, confidence: Double) {
+    public init(contextID: UUID, name: String) {
         self.contextID = contextID
         self.name = name
-        self.confidence = confidence
     }
 
     public var label: String {
-        "inside \"\(name)\" (\(ContextExclusion.percent(confidence)) confident)"
+        "inside \"\(name)\""
     }
 }
 
@@ -89,26 +86,16 @@ public struct ContextMatch: Equatable, Sendable {
 public enum ContextExclusion: Equatable, Sendable {
     /// The switch is on and no context is declared, so nothing is inside.
     case noContextsDeclared
-    /// Triage placed the activity in none of the declared contexts.
+    /// Triage named none of the declared contexts, which is also how it says
+    /// it is unsure.
     case noMatch(reason: String)
-    /// Triage named a context but was not sure enough.
-    case belowConfidence(name: String, confidence: Double)
-    /// Triage did not answer the context question, so enforcement failed closed.
-    case unanswered
 
     public var label: String {
         switch self {
         case .noContextsDeclared: "no context is declared"
         case .noMatch(let reason):
             reason.isEmpty ? "triage matched no declared context" : reason
-        case .belowConfidence(let name, let confidence):
-            "\"\(name)\" only \(ContextExclusion.percent(confidence)) confident, \(ContextExclusion.percent(ContextRules.confidenceThreshold)) needed"
-        case .unanswered: "triage did not name a context"
         }
-    }
-
-    static func percent(_ value: Double) -> String {
-        "\(Int((value * 100).rounded()))%"
     }
 }
 
@@ -117,10 +104,6 @@ public enum ContextExclusion: Equatable, Sendable {
 /// the settings editor, and the tests all see the same answer.
 public enum ContextRules {
     public static let maxContexts = 12
-    /// Triage's context answer must be at least this confident to count as
-    /// inside. Fixed: the user declares where they want mentoring, not how sure
-    /// the model has to be about it.
-    public static let confidenceThreshold = 0.6
 
     // MARK: Normalizing
 
@@ -172,20 +155,16 @@ public enum ContextRules {
 
     // MARK: Placement
 
-    /// Turns the triage answer into a placement. Anything the model leaves
-    /// unanswered is outside: enforcement fails closed.
+    /// Turns the triage answer into a placement. A name the model did not give,
+    /// or gave and is not declared, is outside: enforcement fails closed.
     public static func placement(triage: TriageVerdict, contexts: [MentorshipContext]) -> ContextPlacement {
         guard !contexts.isEmpty else { return .outside(.noContextsDeclared) }
         guard let name = triage.context, !name.isEmpty else {
-            return .outside(triage.contextConfidence == nil ? .unanswered : .noMatch(reason: ""))
+            return .outside(.noMatch(reason: ""))
         }
         guard let context = context(named: name, in: contexts) else {
             return .outside(.noMatch(reason: "triage answered \"\(name)\", which is not declared"))
         }
-        let confidence = triage.contextConfidence ?? 0
-        guard confidence >= confidenceThreshold else {
-            return .outside(.belowConfidence(name: context.name, confidence: confidence))
-        }
-        return .inside(ContextMatch(contextID: context.id, name: context.name, confidence: confidence))
+        return .inside(ContextMatch(contextID: context.id, name: context.name))
     }
 }

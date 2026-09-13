@@ -195,8 +195,8 @@ each kept observation it runs, in order:
    API key, while another call is in flight, or while the spend cap holds.
 2. **Triage call** on the cheap model (`claude-haiku-4-5-20251001` by default;
    Sonnet 5, Opus 5, and Fable 5.1 are offered too) with structured output:
-   `{"worth_a_look": bool, "reason": string}`, plus `context` and
-   `context_confidence` while mentorship contexts are enforced.
+   `{"worth_a_look": bool, "reason": string}`, plus `context` while
+   mentorship contexts are enforced.
 3. **Mentor gate** (`MentorScheduler.mentorGate`), the single yes-or-no between
    triage and the strong model: the activity is inside a declared mentorship
    context (see below), triage said yes, the spend cap is not reached, and at
@@ -257,13 +257,15 @@ the contexts change nothing.
 
 While it is on, the declared names and descriptions are appended to the triage
 system prompt and triage answers `context` (one of the declared names, or null)
-and `context_confidence` alongside its usual verdict, so placing the moment
-costs no extra call. A moment triage places in no declared context, or names
-with less than 60% confidence (`ContextRules.confidenceThreshold`), never
-reaches the mentor tier and never becomes a suggestion; the triage call is
-logged with the `outOfContext` outcome and the reason. The system prompt is one
-cached block, so editing the list costs a single cache write and every call
-after it reads from cache again.
+alongside its usual verdict, so placing the moment costs no extra call. Null is
+the one way the model declines to place a snapshot, and the prompt tells it to
+answer null whenever it is unsure rather than guessing. A moment triage leaves
+at null never reaches the mentor tier and never becomes a suggestion; the
+triage call is logged with the `outOfContext` outcome and the reason. The
+schema offers only the declared names, so the model cannot answer with a
+context that does not exist. The system prompt is one cached block, so editing
+the list costs a single cache write and every call after it reads from cache
+again.
 
 Up to `ContextRules.maxContexts` (12) contexts may be declared, each with a
 unique name of at most 60 characters and a description of at most 280. The
@@ -277,9 +279,9 @@ To keep an app from being looked at at all, exclude it in Settings > Privacy >
 Excluded apps: while an excluded app is frontmost nothing is captured, so
 nothing about it can reach either tier.
 
-The menu bar menu shows the current verdict ("Context: inside "writing Swift"
-(88% confident)", or why it is out) while it is still about the frontmost app,
-and "Context: not yet judged in <app>" otherwise; the debug panel's Mentor card
+The menu bar menu shows the current verdict (`Context: inside "writing Swift"`,
+or why it is out) while it is still about the frontmost app, and
+`Context: not yet judged in <app>` otherwise; the debug panel's Mentor card
 shows it with the app it was made for and its age, and the model call log marks
 a held call with the `outOfContext` outcome.
 

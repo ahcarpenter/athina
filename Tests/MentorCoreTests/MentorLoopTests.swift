@@ -156,9 +156,9 @@ import Testing
 
     // MARK: Mentorship contexts
 
-    private static func triage(_ worth: Bool, context: String?, confidence: Double) -> String {
+    private static func triage(_ worth: Bool, context: String?) -> String {
         let name = context.map { "\"\($0)\"" } ?? "null"
-        return #"{"worth_a_look": \#(worth), "reason": "Repeated manual runs", "context": \#(name), "context_confidence": \#(confidence)}"#
+        return #"{"worth_a_look": \#(worth), "reason": "Repeated manual runs", "context": \#(name)}"#
     }
 
     private static func enforcing(
@@ -176,7 +176,7 @@ import Testing
             MentorshipContext(name: "drafting documents"),
         ]
         let h = try await Harness(settings: Self.enforcing(contexts: contexts))
-        await h.client.enqueue(json: Self.triage(true, context: "writing Swift", confidence: 0.9))
+        await h.client.enqueue(json: Self.triage(true, context: "writing Swift"))
         await h.client.enqueue(json: Self.suggestion())
         await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
 
@@ -202,7 +202,7 @@ import Testing
 
     @Test func outOfContextStopsAtTriageAndIsRecordedAsSuch() async throws {
         let h = try await Harness(settings: Self.enforcing())
-        await h.client.enqueue(json: Self.triage(true, context: nil, confidence: 0.95))
+        await h.client.enqueue(json: Self.triage(true, context: nil))
         await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
 
         // Triage ran, the mentor tier never did, and nothing was shown.
@@ -217,21 +217,21 @@ import Testing
         #expect(calls.first?.outcome == .outOfContext)
     }
 
-    @Test func aContextBelowTheConfidenceThresholdIsOutOfContext() async throws {
+    @Test func anUndeclaredContextNameIsOutOfContext() async throws {
         let h = try await Harness(settings: Self.enforcing())
-        await h.client.enqueue(json: Self.triage(true, context: "writing Swift", confidence: 0.5))
+        await h.client.enqueue(json: Self.triage(true, context: "cooking"))
         await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
         #expect(await h.client.sent.count == 1)
         let status = await h.loop.currentStatus()
         #expect(status.lastTriage?.outcome == .outOfContext)
         #expect(status.lastMentorHold?.hold == .outOfContext(
-            .belowConfidence(name: "writing Swift", confidence: 0.5)
+            .noMatch(reason: "triage answered \"cooking\", which is not declared")
         ))
     }
 
     @Test func enforcingWithNoContextDeclaredMakesNoModelCallAtAll() async throws {
         let h = try await Harness(settings: Self.enforcing(contexts: []))
-        await h.client.enqueue(json: Self.triage(true, context: nil, confidence: 1))
+        await h.client.enqueue(json: Self.triage(true, context: nil))
         await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 0)
         #expect(await h.client.sent.isEmpty)
         let status = await h.loop.currentStatus()
@@ -241,7 +241,7 @@ import Testing
 
     @Test func beingInsideAContextStillLeavesTriagesOwnJudgementInCharge() async throws {
         let h = try await Harness(settings: Self.enforcing())
-        await h.client.enqueue(json: Self.triage(false, context: "writing Swift", confidence: 1))
+        await h.client.enqueue(json: Self.triage(false, context: "writing Swift"))
         await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
         let status = await h.loop.currentStatus()
         #expect(status.lastTriage?.outcome == .quiet)

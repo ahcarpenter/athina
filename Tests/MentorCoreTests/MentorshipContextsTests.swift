@@ -115,39 +115,35 @@ import Testing
     }
 
     @Test func theSwitchOffMeansContextsGateNothing() {
-        let verdict = TriageVerdict(worthALook: true, reason: "x", context: nil, contextConfidence: 1)
+        let verdict = TriageVerdict(worthALook: true, reason: "x", context: nil)
         #expect(settings(enforcing: false).contextPlacement(triage: verdict) == .notEnforced)
     }
 
-    @Test func aNamedContextAboveTheThresholdIsInside() {
-        let verdict = TriageVerdict(worthALook: true, reason: "x", context: "reading API documentation", contextConfidence: 0.7)
+    @Test func aDeclaredNameIsInside() {
+        let verdict = TriageVerdict(worthALook: true, reason: "x", context: "reading API documentation")
         let placement = settings().contextPlacement(triage: verdict)
         #expect(placement.contextName == "reading API documentation")
-        #expect(placement.label == "inside \"reading API documentation\" (70% confident)")
+        #expect(placement.label == "inside \"reading API documentation\"")
     }
 
-    @Test func aNamedContextBelowTheFixedThresholdIsOutside() {
-        let verdict = TriageVerdict(worthALook: true, reason: "x", context: "reading API documentation", contextConfidence: 0.4)
-        let placement = settings().contextPlacement(triage: verdict)
-        #expect(placement == .outside(.belowConfidence(name: "reading API documentation", confidence: 0.4)))
-        #expect(placement.label.contains("60% needed"))
-    }
-
+    /// Null is how the model says both "none of them" and "I am unsure", and
+    /// both are outside, as is a reply that left the field out entirely.
     @Test func nullAnAbsentAnswerAndAnUndeclaredNameAreAllOutside() {
         let s = settings()
-        let none = TriageVerdict(worthALook: true, reason: "x", context: nil, contextConfidence: 0.9)
+        let none = TriageVerdict(worthALook: true, reason: "x", context: nil)
         #expect(s.contextPlacement(triage: none) == .outside(.noMatch(reason: "")))
-        // A reply that answered neither field: enforcement fails closed.
         let silent = TriageVerdict(worthALook: true, reason: "x")
-        #expect(s.contextPlacement(triage: silent) == .outside(.unanswered))
-        let invented = TriageVerdict(worthALook: true, reason: "x", context: "cooking", contextConfidence: 1)
+        #expect(s.contextPlacement(triage: silent) == .outside(.noMatch(reason: "")))
+        let empty = TriageVerdict(worthALook: true, reason: "x", context: "")
+        #expect(s.contextPlacement(triage: empty) == .outside(.noMatch(reason: "")))
+        let invented = TriageVerdict(worthALook: true, reason: "x", context: "cooking")
         #expect(s.contextPlacement(triage: invented).isOutside)
     }
 
     @Test func anEnforcedButEmptyListPutsEverythingOutside() {
         var s = settings()
         s.contexts = []
-        let verdict = TriageVerdict(worthALook: true, reason: "x", context: "writing Swift", contextConfidence: 1)
+        let verdict = TriageVerdict(worthALook: true, reason: "x", context: "writing Swift")
         #expect(s.contextPlacement(triage: verdict) == .outside(.noContextsDeclared))
     }
 }

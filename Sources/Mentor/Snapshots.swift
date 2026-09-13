@@ -237,7 +237,7 @@ extension AppState {
             lastContext: MentorStatus.ContextRecord(
                 at: now.addingTimeInterval(-52),
                 placement: .inside(ContextMatch(
-                    contextID: SampleSuggestions.contexts[0].id, name: SampleSuggestions.contexts[0].name, confidence: 0.88
+                    contextID: SampleSuggestions.contexts[0].id, name: SampleSuggestions.contexts[0].name
                 )),
                 appName: "Xcode"
             ),

@@ -108,23 +108,20 @@ import Testing
         #expect(category?["enum"] as? [String] == SuggestionCategory.allCases.map(\.rawValue))
     }
 
-    @Test func triageVerdictDecodesWithAndWithoutTheContextFields() throws {
+    @Test func triageVerdictDecodesWithAndWithoutTheContextField() throws {
         let placed = try JSONDecoder().decode(TriageVerdict.self, from: Data(
-            #"{"worth_a_look": true, "reason": "r", "context": "writing Swift", "context_confidence": 0.82}"#.utf8
+            #"{"worth_a_look": true, "reason": "r", "context": "writing Swift"}"#.utf8
         ))
         #expect(placed.context == "writing Swift")
-        #expect(placed.contextConfidence == 0.82)
 
         let none = try JSONDecoder().decode(TriageVerdict.self, from: Data(
-            #"{"worth_a_look": false, "reason": "r", "context": null, "context_confidence": 0.9}"#.utf8
+            #"{"worth_a_look": false, "reason": "r", "context": null}"#.utf8
         ))
         #expect(none.context == nil)
-        #expect(none.contextConfidence == 0.9)
 
         // A reply from before the question was asked still decodes.
         let old = try JSONDecoder().decode(TriageVerdict.self, from: Data(#"{"worth_a_look": true, "reason": "r"}"#.utf8))
         #expect(old.context == nil)
-        #expect(old.contextConfidence == nil)
     }
 
     @Test func theTriageSchemaAsksForTheContextOnlyWhenOneIsDeclared() throws {
@@ -139,7 +136,7 @@ import Testing
             with: AnthropicClient.encoder.encode(MentorPrompts.triageSchema(contexts: contexts))
         ) as? [String: Any])
         #expect(asked["additionalProperties"] as? Bool == false)
-        #expect(asked["required"] as? [String] == ["worth_a_look", "reason", "context", "context_confidence"])
+        #expect(asked["required"] as? [String] == ["worth_a_look", "reason", "context"])
         let context = try #require((asked["properties"] as? [String: Any])?["context"] as? [String: Any])
         let variants = try #require(context["anyOf"] as? [[String: Any]])
         #expect(variants.first?["type"] as? String == "null")
@@ -150,7 +147,7 @@ import Testing
     @Test func theTriageSystemPromptCarriesTheDeclaredContextsUnchangedOtherwise() {
         let bare = MentorPrompts.triageSystem(contexts: [])
         #expect(bare == MentorPrompts.triageBase)
-        #expect(!bare.contains("context_confidence"))
+        #expect(!bare.contains("Set context to"))
 
         let contexts = [
             MentorshipContext(name: "writing Swift", detail: "the Mentor app itself"),
@@ -161,7 +158,7 @@ import Testing
         #expect(withContexts.hasPrefix(bare))
         #expect(withContexts.contains("- \"writing Swift\": the Mentor app itself"))
         #expect(withContexts.contains("- \"drafting documents\""))
-        #expect(withContexts.contains("context_confidence"))
+        #expect(withContexts.contains("answer null whenever you are unsure"))
         #expect(!withContexts.contains("\u{2014}"))
     }
 
