@@ -21,7 +21,8 @@ enum Snapshots {
         let state = AppState.sample()
         let specs: [(name: String, size: CGSize, view: AnyView)] = [
             ("permissions", CGSize(width: 560, height: 520), AnyView(PermissionsView())),
-            ("debug-panel", CGSize(width: 1180, height: 820), AnyView(DebugPanelView())),
+            ("debug-panel", CGSize(width: 1180, height: 760), AnyView(DebugPanelView())),
+            ("debug-panel-calls", CGSize(width: 1180, height: 760), AnyView(DebugPanelView(initialSidePage: .calls))),
             ("settings-mentor", CGSize(width: 600, height: 900), AnyView(SettingsView(initialTab: .mentor))),
             ("settings-cadence", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .cadence))),
             ("settings-frames", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .frames))),
@@ -59,13 +60,32 @@ enum Snapshots {
         hosting.layoutSubtreeIfNeeded()
         window.displayIfNeeded()
 
-        let image = try await captureOwnWindow(window) ?? renderLayerTree(of: hosting)
+        let image = try await captureWithFallback(window: window, hosting: hosting)
         let rep = NSBitmapImageRep(cgImage: image)
         guard let png = rep.representation(using: .png, properties: [:]) else {
             throw SnapshotError.noPNG
         }
         try png.write(to: url)
         window.close()
+    }
+
+    /// ScreenCaptureKit gives the truest picture, but its stream occasionally
+    /// fails to start when many windows are captured back to back. One retry,
+    /// then the layer-tree render, so an unattended run always produces a file.
+    private static func captureWithFallback(window: NSWindow, hosting: NSView) async throws -> CGImage {
+        for attempt in 0..<2 {
+            do {
+                if let image = try await captureOwnWindow(window) { return image }
+                break
+            } catch {
+                if attempt == 0 {
+                    try? await Task.sleep(for: .milliseconds(400))
+                } else {
+                    FileHandle.standardError.write(Data("snapshot: window capture failed twice (\(error.localizedDescription)), rendering the layer tree\n".utf8))
+                }
+            }
+        }
+        return try renderLayerTree(of: hosting)
     }
 
     /// ScreenCaptureKit for the app's own window; nil when the permission is missing.

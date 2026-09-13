@@ -47,9 +47,9 @@ struct MentorSettingsTab: View {
                     help: "The mentor model runs only when triage says something may be worth saying."
                 )
                 NumberRow(
-                    "Skip triage when screen text is", value: $state.settings.mentor.triageSimilarityThreshold,
+                    "Skip triage above similarity", value: $state.settings.mentor.triageSimilarityThreshold,
                     range: 0.5...1, step: 0.05, unit: "",
-                    help: "Fraction of lines shared with the last triaged screen of the same window above which triage is skipped."
+                    help: "Triage is skipped when at least this fraction of the screen's text lines match the last triaged screen of the same window."
                 )
             }
 
@@ -109,8 +109,10 @@ private struct APIKeySection: View {
             LabeledContent("Anthropic API key") {
                 VStack(alignment: .trailing, spacing: 6) {
                     HStack(spacing: 8) {
-                        SecureField("sk-ant-…", text: $draft)
+                        SecureField("", text: $draft, prompt: Text("sk-ant-…"))
+                            .labelsHidden()
                             .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.leading)
                             .frame(width: 260)
                             .onSubmit(save)
                         Button("Save", action: save)
@@ -205,7 +207,7 @@ private struct SpendSection: View {
         Section {
             NumberRow(
                 "Hourly spend cap", value: $state.settings.mentor.hourlySpendCap,
-                range: 0.05...1000, step: 0.25, unit: "$",
+                range: 0.05...1000, step: 0.25, unit: "USD",
                 help: "Both cadences slow as the hour's estimated spend approaches this, and calls stop at it until the clock hour rolls over."
             )
             LabeledContent("This hour") {
