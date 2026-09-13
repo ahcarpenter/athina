@@ -238,11 +238,3 @@ enum Fixtures {
         #expect(TextSimilarity.lineJaccard("a\nb\nc\nd", "a\nb\nc\ne") == 0.6)
     }
 }
-
-extension MentorScheduler.TriageGate {
-    /// Reads better than a full pattern match when only "did it hold" matters.
-    var isHold: Bool {
-        if case .hold = self { return true }
-        return false
-    }
-}

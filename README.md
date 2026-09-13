@@ -353,7 +353,7 @@ recognized text below; selecting an observation in the timeline shows that
 frame instead. Right: a live timeline of observations and events from the
 journal (suggestions and feedback included), or, under Model calls, a scrolling
 log of every API call with prompt size, tokens, cost, latency, outcome, the
-model's reason, and its context verdict. The status bar shows mode, permission state, last and next
+model's reason. The status bar shows mode, permission state, last and next
 capture with reason, seconds since input, spend this hour against the cap, and
 the app's own CPU and memory.
 
