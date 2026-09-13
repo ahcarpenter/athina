@@ -8,18 +8,18 @@ import Testing
 /// mapping can be verified against a drawn frame.
 @Suite struct TextRecognizerTests {
     /// Draws into an exact 800 x 500 pixel bitmap so coordinates are not scaled by a Retina context.
-    private func drawnFrame() -> CapturedFrame? {
+    private func drawnFrame(background: NSColor = .white, foreground: NSColor = .black) -> CapturedFrame? {
         guard let rep = NSBitmapImageRep(
             bitmapDataPlanes: nil, pixelsWide: 800, pixelsHigh: 500, bitsPerSample: 8, samplesPerPixel: 4,
             hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
         ), let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
-        NSColor.white.setFill()
+        background.setFill()
         CGRect(x: 0, y: 0, width: 800, height: 500).fill()
         let attributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 36, weight: .medium),
-            .foregroundColor: NSColor.black,
+            .foregroundColor: foreground,
         ]
         // Bottom-left origin: this line sits near the top of the frame.
         NSAttributedString(string: "Mentor foundation", attributes: attributes).draw(at: CGPoint(x: 60, y: 380))
@@ -49,5 +49,18 @@ import Testing
         #expect(abs(top.screenRect.minY - (50 + top.imageRect.minY * 2)) < 0.01)
         #expect(abs(top.screenRect.width - top.imageRect.width * 2) < 0.01)
         #expect(blocks.allSatisfy { $0.confidence > 0 })
+    }
+
+    /// Terminals and dark-mode editors show light text on a dark background. The default
+    /// recognition level must read them; the fast level returns nothing for such frames.
+    @Test func accurateLevelReadsLightTextOnDarkBackground() async throws {
+        let frame = try #require(drawnFrame(
+            background: NSColor(calibratedRed: 0.11, green: 0.11, blue: 0.16, alpha: 1),
+            foreground: NSColor(calibratedWhite: 0.9, alpha: 1)
+        ))
+        let blocks = try await TextRecognizer().recognize(frame, level: SensingSettings().ocrLevel)
+        let texts = blocks.map(\.text)
+        #expect(texts.contains { $0.localizedCaseInsensitiveContains("Mentor foundation") })
+        #expect(texts.contains { $0.localizedCaseInsensitiveContains("Journal retention") })
     }
 }

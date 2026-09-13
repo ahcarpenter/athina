@@ -6,7 +6,7 @@ Mentor: a macOS menu-bar app (Swift 6, SwiftUI, SwiftPM, no Xcode project) that 
 - UI checks without a person at the screen: `build/Mentor.app/Contents/MacOS/Mentor --snapshot <dir>` renders every window to PNG (see `Sources/Mentor/Snapshots.swift`); needs no permissions.
 - Performance numbers: `make measure` while the app runs.
 - Permissions: Screen Recording and Accessibility are user-granted in System Settings and cannot be granted from a shell; the app degrades to the modes listed in README.md when they are missing. Idle time needs no permission.
-- Signing: no identity on the captain's machine, so `scripts/bundle.sh` signs ad-hoc; macOS may re-prompt for permissions after a rebuild (README.md, "Code signing"). Set `MENTOR_SIGN_IDENTITY` to override.
+- Signing: no identity on the captain's machine, so `scripts/bundle.sh` signs ad-hoc with a bundle-identifier designated requirement so grants survive rebuilds; if the app reports a permission missing that System Settings shows on, the grant is bound to an old build (README.md, "Code signing"). Set `MENTOR_SIGN_IDENTITY` to override.
 - The core type is `ActivityObservation`, not `Observation`: that name collides with Apple's Observation module inside `@Observable` macro expansions.
 - Never use the em dash character anywhere in this repository; use a plain dash.
 

@@ -6,8 +6,10 @@
 # Signing: uses $MENTOR_SIGN_IDENTITY when set, otherwise the first
 # "Apple Development" or "Developer ID Application" identity in the keychain,
 # otherwise an ad-hoc signature ("-"). macOS ties Screen Recording and
-# Accessibility grants to the signing identity; with an ad-hoc signature the
-# grant is tied to the exact binary, so a rebuild can make macOS ask again.
+# Accessibility grants to the app's designated code requirement. An ad-hoc
+# signature's default requirement is the hash of the exact binary, so every
+# rebuild would invalidate the grants; the ad-hoc path therefore sets an
+# explicit requirement on the bundle identifier, which every rebuild satisfies.
 set -euo pipefail
 
 CONFIG="${1:-release}"
@@ -36,9 +38,11 @@ if [ -z "$identity" ]; then
     | grep -E 'Apple Development|Developer ID Application' \
     | head -n1 | sed -E 's/.*"(.*)".*/\1/' || true)"
 fi
+requirement_args=()
 if [ -z "$identity" ]; then
   identity="-"
-  echo "bundle: no code-signing identity found, signing ad-hoc (grants may not survive rebuilds)" >&2
+  requirement_args=(--requirements '=designated => identifier "com.ahcarpenter.mentor"')
+  echo "bundle: no code-signing identity found, signing ad-hoc with a bundle-identifier requirement" >&2
 else
   echo "bundle: signing with \"$identity\"" >&2
 fi
@@ -47,6 +51,7 @@ codesign --force --sign "$identity" \
   --identifier com.ahcarpenter.mentor \
   --entitlements "$ROOT/Resources/Mentor.entitlements" \
   --timestamp=none \
+  "${requirement_args[@]}" \
   "$APP"
 codesign --verify --deep --strict "$APP"
 echo "bundle: $APP"

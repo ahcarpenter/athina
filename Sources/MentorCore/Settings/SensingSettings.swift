@@ -47,8 +47,10 @@ public struct SensingSettings: Codable, Equatable, Sendable {
     public var hashDistanceThreshold: Int = 4
     /// JPEG quality for stored thumbnails, 0...1.
     public var thumbnailJPEGQuality: Double = 0.5
-    /// Vision text recognition level.
-    public var ocrLevel: OCRLevel = .fast
+    /// Vision text recognition level. Accurate by default: the fast level
+    /// finds no text at all in light-on-dark UI such as terminals and dark
+    /// mode editors, at any frame size.
+    public var ocrLevel: OCRLevel = .accurate
 
     // MARK: Journal
 

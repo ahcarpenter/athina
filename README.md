@@ -39,11 +39,25 @@ without a person at the screen; it needs no permissions.
 The bundle script signs with `$MENTOR_SIGN_IDENTITY` if set, otherwise with the
 first Apple Development or Developer ID Application identity in the keychain,
 otherwise ad-hoc. macOS ties Screen Recording and Accessibility grants to the
-signing identity. With an ad-hoc signature the grant is tied to the exact
-binary, so after a rebuild macOS may ask for the permissions again (it keeps
-the app listed in System Settings; toggling it off and on restores the grant).
-A stable bundle identifier (`com.ahcarpenter.mentor`) is used so the entries
-stay recognisable. Installing a development certificate removes the caveat.
+app's designated code requirement, recorded when the grant is made. An ad-hoc
+signature's default requirement is the hash of the exact binary, so a plain
+ad-hoc rebuild silently invalidates both grants: System Settings still shows
+the switches on, toggling them does not help, and the TCC daemon logs
+"Failed to match existing code requirement". The ad-hoc path therefore signs
+with an explicit requirement on the bundle identifier
+(`identifier "com.ahcarpenter.mentor"`), which every rebuild satisfies, so a
+grant made once stays valid. The trade-off is that any ad-hoc binary claiming
+that identifier would inherit the grants, which is acceptable on a development
+machine and is exactly what a development certificate fixes.
+
+If a grant was made against an older build (the app shows a permission as
+missing although System Settings shows it on), remove the stale record and
+grant again:
+
+```sh
+tccutil reset Accessibility com.ahcarpenter.mentor
+tccutil reset ScreenCapture com.ahcarpenter.mentor
+```
 
 ## Permissions
 

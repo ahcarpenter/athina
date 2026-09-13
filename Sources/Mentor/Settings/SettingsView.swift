@@ -119,6 +119,9 @@ private struct FrameSettings: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                Text("Accurate costs a few hundred milliseconds per kept frame. Fast is much cheaper but finds no text in dark interfaces such as terminals.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 NumberRow(
                     "Thumbnail JPEG quality", value: $state.settings.thumbnailJPEGQuality,
                     range: 0.1...1, step: 0.05, unit: ""
