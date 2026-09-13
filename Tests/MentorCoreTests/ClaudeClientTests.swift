@@ -162,6 +162,26 @@ import Testing
         #expect(!withContexts.contains("\u{2014}"))
     }
 
+    /// The declared block is a bullet list the model reads as the whole set of
+    /// contexts, so a detail the editor let the user wrap must not add a line.
+    @Test func aMultiLineDetailStillRendersAsOneBulletPerContext() {
+        var settings = MentorSettings()
+        settings.contexts = [
+            MentorshipContext(name: "writing Swift", detail: "Building Mentor itself.\nSwift, SwiftUI,\n\nand the tests."),
+            MentorshipContext(name: "reading API documentation"),
+        ]
+        let contexts = settings.validated().contexts
+        #expect(contexts.first?.detail == "Building Mentor itself. Swift, SwiftUI, and the tests.")
+
+        let section = MentorPrompts.triageSystem(contexts: contexts)
+            .dropFirst(MentorPrompts.triageBase.count)
+        let bullets = section.split(whereSeparator: \.isNewline).filter { $0.hasPrefix("- ") }
+        #expect(bullets == [
+            "- \"writing Swift\": Building Mentor itself. Swift, SwiftUI, and the tests.",
+            "- \"reading API documentation\"",
+        ])
+    }
+
     @Test func modelTextLosesItsDashes() {
         #expect("prompt vanished \u{2014} press up".withPlainDashes == "prompt vanished - press up")
         #expect("a\u{2014}b and 3\u{2013}4".withPlainDashes == "a - b and 3-4")

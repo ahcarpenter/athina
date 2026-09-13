@@ -29,6 +29,17 @@ import Testing
         #expect(validated.contexts.first?.detail.count == MentorshipContext.maxDetailLength)
     }
 
+    @Test func validationCollapsesInteriorNewlinesInBothFields() {
+        var s = MentorSettings()
+        s.contexts = [MentorshipContext(
+            name: "writing\nSwift", detail: "Building Mentor itself.\nSwift, SwiftUI,\n\nand the tests."
+        )]
+        let validated = s.validated()
+        #expect(validated.contexts.first?.name == "writing Swift")
+        #expect(validated.contexts.first?.detail == "Building Mentor itself. Swift, SwiftUI, and the tests.")
+        #expect(validated.validated() == validated)
+    }
+
     @Test func validationCapsTheNumberOfContexts() {
         var s = MentorSettings()
         s.contexts = (0..<40).map { MentorshipContext(name: "context \($0)") }

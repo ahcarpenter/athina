@@ -54,6 +54,9 @@ public enum MentorPrompts {
         moment and outside the next. A snapshot outside every context is never shown to the user, so \
         answer null whenever you are unsure rather than guessing, and answer worth_a_look on its own \
         merits either way.
+
+        This replaces the reply shape above: reply with JSON only, \
+        {"worth_a_look": boolean, "reason": string, "context": string or null}.
         """
         return "\n\n" + opening + "\n\n" + declared + "\n\n" + closing
     }

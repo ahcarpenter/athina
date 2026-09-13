@@ -465,19 +465,22 @@ final class AppState {
     /// One line for the menu saying where the declared contexts put the
     /// current activity, or nil when contexts have nothing to say: they are
     /// not being enforced. A verdict is only shown while it is still about the
-    /// frontmost app, because it is rewritten only when triage runs and most
-    /// observations hold before that.
+    /// frontmost app and was reached under enforcement, because the record is
+    /// rewritten only when triage runs and most observations hold before that.
     var mentorContextLine: String? {
         let mentor = settings.mentor
         guard mentor.onlyMentorInsideContexts else { return nil }
-        guard let record = mentorStatus.lastContext, record.appName == focus?.appName else {
+        var notJudgedYet: String {
             if mentor.contexts.isEmpty { return "Context: none declared, so nothing is mentored" }
             guard let appName = focus?.appName else { return "Context: not judged yet" }
             return "Context: not yet judged in \(appName)"
         }
+        guard let record = mentorStatus.lastContext, record.appName == focus?.appName else {
+            return notJudgedYet
+        }
         switch record.placement {
         case .notEnforced:
-            return nil
+            return notJudgedYet
         case .inside(let match):
             return "Context: \(match.label)"
         case .outside(let exclusion):

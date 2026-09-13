@@ -115,8 +115,8 @@ public enum ContextRules {
         var out: [MentorshipContext] = []
         for context in contexts {
             var normalizedContext = context
-            normalizedContext.name = trimmedAndCapped(context.name, to: MentorshipContext.maxNameLength)
-            normalizedContext.detail = trimmedAndCapped(context.detail, to: MentorshipContext.maxDetailLength)
+            normalizedContext.name = trimmedAndCapped(singleLine(context.name), to: MentorshipContext.maxNameLength)
+            normalizedContext.detail = trimmedAndCapped(singleLine(context.detail), to: MentorshipContext.maxDetailLength)
             guard !normalizedContext.name.isEmpty else { continue }
             guard seen.insert(normalizedContext.name.lowercased()).inserted else { continue }
             out.append(normalizedContext)
@@ -128,6 +128,12 @@ public enum ContextRules {
     /// What `normalized` keeps of a name or a detail.
     public static func trimmedAndCapped(_ text: String, to limit: Int) -> String {
         String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(limit))
+    }
+
+    /// Interior newlines become single spaces, so one declared context is
+    /// always one line wherever it is rendered, however the editor wrapped it.
+    public static func singleLine(_ text: String) -> String {
+        text.split(whereSeparator: \.isNewline).joined(separator: " ")
     }
 
     /// The editor's as-you-type cap: text within the limit is left exactly as
