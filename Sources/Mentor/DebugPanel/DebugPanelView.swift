@@ -312,6 +312,7 @@ struct Card<Content: View>: View {
 private struct Field: View {
     let label: String
     let value: String
+    var lineLimit: Int? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -319,6 +320,7 @@ private struct Field: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 78, alignment: .trailing)
             Text(value)
+                .lineLimit(lineLimit)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -637,11 +639,12 @@ private struct MentorCard: View {
                 }
             }
             TimelineView(.periodic(from: .now, by: 1)) { context in
+                // Model reasons can run long; four lines keeps spend and cadence in view.
                 VStack(alignment: .leading, spacing: 4) {
-                    Field(label: "Triage gate", value: triageGate(now: context.date))
-                    Field(label: "Last triage", value: describe(state.mentorStatus.lastTriage, now: context.date))
-                    Field(label: "Mentor gate", value: mentorGate(now: context.date))
-                    Field(label: "Last mentor", value: describe(state.mentorStatus.lastMentor, now: context.date))
+                    Field(label: "Triage gate", value: triageGate(now: context.date), lineLimit: 4)
+                    Field(label: "Last triage", value: describe(state.mentorStatus.lastTriage, now: context.date), lineLimit: 4)
+                    Field(label: "Mentor gate", value: mentorGate(now: context.date), lineLimit: 4)
+                    Field(label: "Last mentor", value: describe(state.mentorStatus.lastMentor, now: context.date), lineLimit: 4)
                     Field(label: "Spend", value: spend(now: context.date))
                     Field(label: "Cadence", value: cadence(now: context.date))
                 }
