@@ -288,6 +288,7 @@ public actor MentorLoop {
             )
         )
         let call = await perform(tier: .mentor, request: request, apiKey: apiKey, timeout: MentorLoop.mentorTimeout)
+        let shownAt = Date()
         var record = call.record
         var toShow: Suggestion?
         switch call.result {
@@ -311,7 +312,7 @@ public actor MentorLoop {
                         record.outcome = .suggested
                         record.detail = payload.title
                         toShow = Suggestion(
-                            timestamp: now,
+                            timestamp: shownAt,
                             bundleID: observation.focus.bundleID,
                             appName: observation.focus.appName,
                             windowTitle: observation.focus.windowTitle,
@@ -343,7 +344,7 @@ public actor MentorLoop {
             MentorLoop.log.error("suggestion not journaled: \(String(describing: error), privacy: .public)")
         }
         await journalEvent(JournalEvent(
-            timestamp: now, kind: .suggested, bundleID: stored.bundleID, appName: stored.appName,
+            timestamp: shownAt, kind: .suggested, bundleID: stored.bundleID, appName: stored.appName,
             detail: "\(stored.category.label): \(stored.title)"
         ))
         await broadcaster.send(.suggestion(stored))

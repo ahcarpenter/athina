@@ -349,13 +349,23 @@ final class AppState {
         Task { await mentor?.recordFeedback(suggestionID: suggestionID, feedback: feedback) }
     }
 
+    /// Brings the most recent suggestion back as a toast, for one that was missed.
+    func showLastSuggestion() {
+        guard let latest = suggestionHistory.first else { return }
+        show(latest)
+    }
+
     private func present(_ suggestion: Suggestion) {
-        if let active = activeSuggestion {
-            respond(to: active.id, with: .expired)
-        }
         suggestionHistory.insert(suggestion, at: 0)
         if suggestionHistory.count > AppState.historyLimit {
             suggestionHistory.removeLast(suggestionHistory.count - AppState.historyLimit)
+        }
+        show(suggestion)
+    }
+
+    private func show(_ suggestion: Suggestion) {
+        if let active = activeSuggestion, active.id != suggestion.id {
+            respond(to: active.id, with: .expired)
         }
         activeSuggestion = suggestion
         toast.show(suggestion, expanded: false)

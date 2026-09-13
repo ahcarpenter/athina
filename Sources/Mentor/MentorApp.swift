@@ -133,6 +133,8 @@ struct MenuBarContent: View {
         }
         .disabled(!state.mode.capturesFrames)
         Divider()
+        Button("Show Last Suggestion") { state.showLastSuggestion() }
+            .disabled(state.suggestionHistory.isEmpty)
         Button("Suggestions…") { open(WindowID.history) }
             .keyboardShortcut("h")
         Button("Debug Panel…") { open(WindowID.debug) }

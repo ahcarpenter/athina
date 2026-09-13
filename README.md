@@ -219,9 +219,13 @@ each kept observation it runs, in order:
 
 Both system prompts and both output schemas live in `Prompts.swift` under a
 version number that is stored with every call and suggestion. Each system
-prompt carries a `cache_control` marker, so repeated calls read it from the
-prompt cache; the request encoder sorts keys so the cached prefix is byte
-identical between calls. The API key is read from the Keychain inside the loop
+prompt carries a `cache_control` marker, and the request encoder sorts keys so
+the cached prefix is byte identical between calls. Caching only engages above
+a model's minimum cacheable prefix (512 tokens on Claude Fable 5.1 and Opus 5,
+1024 on Sonnet 5, 4096 on Haiku 4.5), so in practice the mentor prompt is
+served from cache within its five-minute window and the small triage prompt
+is not; the marker stays so a triage model with a lower minimum benefits.
+Menu > Show Last Suggestion brings a missed toast back. The API key is read from the Keychain inside the loop
 and passed per request; it is never journaled or logged.
 
 ### Spend control

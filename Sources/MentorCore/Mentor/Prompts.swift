@@ -4,7 +4,7 @@ import Foundation
 /// log entry can be traced to the exact prompt that produced it. Bump
 /// `version` whenever either prompt or schema changes.
 public enum MentorPrompts {
-    public static let version = 1
+    public static let version = 2
 
     // MARK: Triage
 
@@ -68,7 +68,8 @@ public enum MentorPrompts {
     visible on screen
     - a category the message lists as suppressed for this app
 
-    When you do have a suggestion, write for a busy expert:
+    When you do have a suggestion, write for a busy expert, in plain text with plain hyphens (never an \
+    em dash, never markdown):
     - title: under 60 characters, the gist
     - body: one or two sentences, under 220 characters, the concrete recommendation and why it is better here
     - explanation: the full version in a few short paragraphs; include the exact command, shortcut, \
