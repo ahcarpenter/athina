@@ -34,12 +34,20 @@ struct MentorApp: App {
         .restorationBehavior(.disabled)
 
         Window("Mentor Settings", id: WindowID.settings) {
-            SettingsView()
+            SettingsView(initialTab: LaunchArguments.settingsTab)
                 .environment(state)
         }
         .defaultSize(width: 600, height: 560)
         .windowResizability(.contentMinSize)
         .defaultLaunchBehavior(LaunchArguments.windowToOpen == WindowID.settings ? .presented : .suppressed)
+        .restorationBehavior(.disabled)
+
+        Window("Mentor Suggestions", id: WindowID.history) {
+            HistoryView()
+                .environment(state)
+        }
+        .defaultSize(width: 860, height: 520)
+        .defaultLaunchBehavior(LaunchArguments.windowToOpen == WindowID.history ? .presented : .suppressed)
         .restorationBehavior(.disabled)
     }
 }
@@ -48,16 +56,33 @@ enum WindowID {
     static let debug = "debug"
     static let permissions = "permissions"
     static let settings = "settings"
+    static let history = "history"
 }
 
-/// Developer aids on the command line: `Mentor --open debug|settings|permissions` presents
-/// that window at launch (for example `open build/Mentor.app --args --open debug`),
-/// and `--snapshot <dir>` is handled by `Snapshots`.
+/// Developer aids on the command line: `Mentor --open debug|settings|permissions|history`
+/// presents that window at launch (for example `open build/Mentor.app --args --open debug`),
+/// `--open settings:mentor` opens Settings on that tab, and `--snapshot <dir>` is handled
+/// by `Snapshots`.
 enum LaunchArguments {
-    static var windowToOpen: String? {
+    private static var openArgument: String? {
         let arguments = CommandLine.arguments
         guard let index = arguments.firstIndex(of: "--open"), index + 1 < arguments.count else { return nil }
         return arguments[index + 1]
+    }
+
+    static var windowToOpen: String? {
+        openArgument.map { String($0.split(separator: ":", maxSplits: 1)[0]) }
+    }
+
+    static var settingsTab: SettingsView.Tab {
+        guard let argument = openArgument, argument.hasPrefix("settings:") else { return .mentor }
+        switch argument.dropFirst("settings:".count) {
+        case "frames": return .frames
+        case "journal": return .journal
+        case "privacy": return .privacy
+        case "cadence": return .cadence
+        default: return .mentor
+        }
     }
 }
 
@@ -94,6 +119,7 @@ struct MenuBarContent: View {
 
     var body: some View {
         Text(state.statusLine)
+        Text(state.mentorLine)
         if let resources = state.resources {
             Text(String(format: "%.1f%% CPU · %@", resources.cpuPercent, Formatting.bytes(resources.footprintBytes)))
         }
@@ -107,6 +133,10 @@ struct MenuBarContent: View {
         }
         .disabled(!state.mode.capturesFrames)
         Divider()
+        Button("Show Last Suggestion") { state.showLastSuggestion() }
+            .disabled(state.suggestionHistory.isEmpty)
+        Button("Suggestions…") { open(WindowID.history) }
+            .keyboardShortcut("h")
         Button("Debug Panel…") { open(WindowID.debug) }
             .keyboardShortcut("d")
         Button("Permissions…") { open(WindowID.permissions) }

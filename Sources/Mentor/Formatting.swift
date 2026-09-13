@@ -41,6 +41,30 @@ enum Formatting {
         String(format: "%.0f, %.0f  %.0f × %.0f", rect.origin.x, rect.origin.y, rect.width, rect.height)
     }
 
+    static func dayAndTime(_ date: Date) -> String {
+        date.formatted(Date.FormatStyle().month(.abbreviated).day().hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+    }
+
+    /// Dollars with enough precision for cents on small figures: $0.0042, $0.13, $1.00.
+    static func dollars(_ amount: Double) -> String {
+        if amount == 0 { return "$0.00" }
+        if amount < 0.01 { return String(format: "$%.4f", amount) }
+        if amount < 1 { return String(format: "$%.3f", amount) }
+        return String(format: "$%.2f", amount)
+    }
+
+    static func multiplier(_ value: Double) -> String {
+        value < 10 ? String(format: "%.1fx", value) : String(format: "%.0fx", value)
+    }
+
+    static func tokens(_ count: Int) -> String {
+        count.formatted(.number.grouping(.automatic))
+    }
+
+    static func seconds(_ interval: TimeInterval) -> String {
+        interval < 10 ? String(format: "%.2fs", interval) : String(format: "%.1fs", interval)
+    }
+
     /// A SwiftUI shortcut mirroring the global hotkey, so the menu shows it.
     static func keyboardShortcut(for hotKey: HotKey) -> KeyboardShortcut? {
         let name = HotKey.keyName(for: hotKey.keyCode)

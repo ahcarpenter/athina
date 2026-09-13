@@ -1,0 +1,23 @@
+{
+  "max_tokens": 200,
+  "messages": [
+    {
+      "content": [
+        {"source": {"data": "/9j/4AAQ", "media_type": "image/jpeg", "type": "base64"}, "type": "image"},
+        {"text": "Time: 10:00:00", "type": "text"}
+      ],
+      "role": "user"
+    }
+  ],
+  "model": "claude-fable-5-1",
+  "output_config": {
+    "effort": "medium",
+    "format": {
+      "schema": {"additionalProperties": false, "properties": {"ok": {"type": "boolean"}}, "required": ["ok"], "type": "object"},
+      "type": "json_schema"
+    }
+  },
+  "system": [
+    {"cache_control": {"type": "ephemeral"}, "text": "You are a test.", "type": "text"}
+  ]
+}

@@ -71,6 +71,11 @@ public struct SensingSettings: Codable, Equatable, Sendable {
     /// Global hotkey that toggles pause.
     public var pauseHotKey: HotKey = .defaultPause
 
+    // MARK: Mentor loop
+
+    /// The mentor loop's own section, stored under `mentor` in the same file.
+    public var mentor = MentorSettings()
+
     public init() {}
 
     // MARK: Codable with per-field defaults
@@ -81,6 +86,7 @@ public struct SensingSettings: Codable, Equatable, Sendable {
         case maxFrameDimension, hashDistanceThreshold, thumbnailJPEGQuality, ocrLevel
         case thumbnailRetention, textRetention, journalSizeCapBytes, retentionInterval
         case excludedBundleIDs, pauseHotKey
+        case mentor
     }
 
     public init(from decoder: Decoder) throws {
@@ -103,6 +109,7 @@ public struct SensingSettings: Codable, Equatable, Sendable {
         retentionInterval = try c.decodeIfPresent(TimeInterval.self, forKey: .retentionInterval) ?? d.retentionInterval
         excludedBundleIDs = try c.decodeIfPresent([String].self, forKey: .excludedBundleIDs) ?? d.excludedBundleIDs
         pauseHotKey = try c.decodeIfPresent(HotKey.self, forKey: .pauseHotKey) ?? d.pauseHotKey
+        mentor = try c.decodeIfPresent(MentorSettings.self, forKey: .mentor) ?? d.mentor
         self = validated()
     }
 
@@ -124,6 +131,7 @@ public struct SensingSettings: Codable, Equatable, Sendable {
         s.journalSizeCapBytes = s.journalSizeCapBytes.clamped(to: (10 * 1024 * 1024)...(100 * 1024 * 1024 * 1024))
         s.retentionInterval = s.retentionInterval.clamped(to: 30...86400)
         s.excludedBundleIDs = ExcludedApps.normalized(s.excludedBundleIDs)
+        s.mentor = s.mentor.validated()
         return s
     }
 

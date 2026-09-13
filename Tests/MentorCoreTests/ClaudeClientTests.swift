@@ -1,0 +1,140 @@
+import Foundation
+import Testing
+@testable import MentorCore
+
+@Suite struct ClaudeClientTests {
+    @Test func requestEncodesToTheDocumentedShape() throws {
+        let request = MessagesRequest(
+            model: "claude-fable-5-1",
+            maxTokens: 200,
+            system: [SystemBlock(text: "You are a test.")],
+            messages: [Message(role: .user, content: [
+                .image(mediaType: "image/jpeg", base64: "/9j/4AAQ"),
+                .text("Time: 10:00:00"),
+            ])],
+            outputConfig: OutputConfig(
+                format: OutputFormat(schema: [
+                    "type": "object",
+                    "properties": ["ok": ["type": "boolean"]],
+                    "required": ["ok"],
+                    "additionalProperties": false,
+                ]),
+                effort: .medium
+            )
+        )
+        let encoded = try AnthropicClient.encoder.encode(request)
+        let expected = try Fixtures.data("messages-request")
+        let lhs = try JSONSerialization.jsonObject(with: encoded) as? NSDictionary
+        let rhs = try JSONSerialization.jsonObject(with: expected) as? NSDictionary
+        #expect(lhs == rhs)
+        // Sorted keys keep the bytes stable between calls, which prompt caching needs.
+        #expect(try AnthropicClient.encoder.encode(request) == encoded)
+        #expect(request.promptCharacterCount == "You are a test.".count + "Time: 10:00:00".count)
+        #expect(request.imageByteCount == 6)
+    }
+
+    @Test func effortIsOmittedWhenNil() throws {
+        let request = MessagesRequest(
+            model: "claude-haiku-4-5-20251001", maxTokens: 10, system: [],
+            messages: [Message(role: .user, content: [.text("hi")])],
+            outputConfig: OutputConfig(format: OutputFormat(schema: ["type": "object", "additionalProperties": false]), effort: nil)
+        )
+        let json = String(decoding: try AnthropicClient.encoder.encode(request), as: UTF8.self)
+        #expect(!json.contains("effort"))
+        #expect(json.contains("\"cache_control\"") == false)
+        #expect(json.contains("\"system\":[]"))
+    }
+
+    @Test func responseDecodesUsageAndText() throws {
+        let response = try AnthropicClient.decode(status: 200, body: try Fixtures.data("messages-response"))
+        #expect(response.model == "claude-haiku-4-5-20251001")
+        #expect(response.stopReason == "end_turn")
+        #expect(response.usage == Usage(inputTokens: 412, outputTokens: 29, cacheCreationInputTokens: 0, cacheReadInputTokens: 1187))
+        #expect(response.usage.totalInputTokens == 1599)
+        let verdict = try JSONDecoder().decode(TriageVerdict.self, from: Data(response.text.utf8))
+        #expect(verdict == TriageVerdict(worthALook: true, reason: "Repeated manual test runs in the terminal"))
+    }
+
+    @Test func thinkingBlocksAreSkippedWhenReadingText() throws {
+        let response = try AnthropicClient.decode(status: 200, body: try Fixtures.data("messages-response-thinking"))
+        #expect(response.content.count == 2)
+        let verdict = try JSONDecoder().decode(MentorVerdict.self, from: Data(response.text.utf8))
+        #expect(verdict.suggestion == nil)
+        #expect(verdict.reason == "The user is reading documentation")
+        #expect(response.usage.cacheCreationInputTokens == 760)
+    }
+
+    @Test func refusalIsRecognized() throws {
+        let response = try AnthropicClient.decode(status: 200, body: try Fixtures.data("messages-refusal"))
+        #expect(response.isRefusal)
+        #expect(response.text.isEmpty)
+    }
+
+    @Test func apiErrorsCarryTheServersMessage() throws {
+        #expect(throws: ClaudeClientError.api(status: 401, type: "authentication_error", message: "invalid x-api-key")) {
+            try AnthropicClient.decode(status: 401, body: try Fixtures.data("messages-error"))
+        }
+        #expect(throws: ClaudeClientError.api(status: 502, type: "http_error", message: "<html>bad gateway</html>")) {
+            try AnthropicClient.decode(status: 502, body: Data("<html>bad gateway</html>".utf8))
+        }
+        #expect(throws: ClaudeClientError.self) {
+            try AnthropicClient.decode(status: 200, body: Data("not json".utf8))
+        }
+    }
+
+    @Test func mentorVerdictDecodesASuggestion() throws {
+        let json = """
+        {"reason": "Manual copy between windows", "suggestion": {"title": "Use a snippet", "body": "b", "explanation": "e", "category": "shortcut", "confidence": 0.8}}
+        """
+        let verdict = try JSONDecoder().decode(MentorVerdict.self, from: Data(json.utf8))
+        #expect(verdict.suggestion?.category == .shortcut)
+        #expect(verdict.suggestion?.confidence == 0.8)
+    }
+
+    @Test func schemasAreValidForStructuredOutput() throws {
+        for schema in [MentorPrompts.triageSchema, MentorPrompts.mentorSchema] {
+            let data = try AnthropicClient.encoder.encode(schema)
+            let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect(object["additionalProperties"] as? Bool == false)
+            #expect(object["type"] as? String == "object")
+        }
+        let mentor = try JSONSerialization.jsonObject(with: try AnthropicClient.encoder.encode(MentorPrompts.mentorSchema)) as? [String: Any]
+        let properties = mentor?["properties"] as? [String: Any]
+        let suggestion = properties?["suggestion"] as? [String: Any]
+        let variants = try #require(suggestion?["anyOf"] as? [[String: Any]])
+        #expect(variants.count == 2)
+        let payload = try #require(variants.first { $0["type"] as? String == "object" })
+        let category = (payload["properties"] as? [String: Any])?["category"] as? [String: Any]
+        #expect(category?["enum"] as? [String] == SuggestionCategory.allCases.map(\.rawValue))
+    }
+
+    @Test func modelTextLosesItsDashes() {
+        #expect("prompt vanished \u{2014} press up".withPlainDashes == "prompt vanished - press up")
+        #expect("a\u{2014}b and 3\u{2013}4".withPlainDashes == "a - b and 3-4")
+        #expect("plain - text".withPlainDashes == "plain - text")
+    }
+
+    @Test func jsonValueRoundTripsAndEncodesIntegersPlainly() throws {
+        let value: JSONValue = ["a": 1, "b": 2.5, "c": [true, nil, "x"]]
+        let data = try AnthropicClient.encoder.encode(value)
+        #expect(String(decoding: data, as: UTF8.self) == #"{"a":1,"b":2.5,"c":[true,null,"x"]}"#)
+        #expect(try JSONDecoder().decode(JSONValue.self, from: data) == value)
+    }
+
+    @Test func scriptedClientRecordsRequestsAndAnswersInOrder() async throws {
+        let client = ScriptedClaudeClient()
+        await client.enqueue(json: "{\"a\":1}", model: "m1")
+        await client.enqueue(.failure(.transport("offline")))
+        let request = MessagesRequest(model: "m", maxTokens: 1, system: [], messages: [])
+        let first = try await client.send(request, apiKey: "k", timeout: 1)
+        #expect(first.model == "m1")
+        await #expect(throws: ClaudeClientError.transport("offline")) {
+            try await client.send(request, apiKey: "k", timeout: 1)
+        }
+        await #expect(throws: ClaudeClientError.self) {
+            try await client.send(request, apiKey: "k", timeout: 1)
+        }
+        #expect(await client.sent.count == 3)
+        #expect(await client.sent.first?.apiKey == "k")
+    }
+}

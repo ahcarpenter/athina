@@ -98,6 +98,42 @@ public actor Journal {
                 detail TEXT
             );
             CREATE INDEX IF NOT EXISTS events_timestamp ON events(timestamp);
+            CREATE TABLE IF NOT EXISTS suggestions (
+                id INTEGER PRIMARY KEY,
+                timestamp REAL NOT NULL,
+                bundle_id TEXT,
+                app_name TEXT NOT NULL,
+                window_title TEXT,
+                category TEXT NOT NULL,
+                title TEXT NOT NULL,
+                body TEXT NOT NULL,
+                explanation TEXT NOT NULL,
+                confidence REAL NOT NULL,
+                observation_id INTEGER,
+                model TEXT NOT NULL,
+                prompt_version INTEGER NOT NULL,
+                feedback TEXT,
+                feedback_at REAL
+            );
+            CREATE INDEX IF NOT EXISTS suggestions_timestamp ON suggestions(timestamp);
+            CREATE TABLE IF NOT EXISTS model_calls (
+                id INTEGER PRIMARY KEY,
+                timestamp REAL NOT NULL,
+                tier TEXT NOT NULL,
+                model TEXT NOT NULL,
+                prompt_version INTEGER NOT NULL,
+                prompt_chars INTEGER NOT NULL,
+                image_bytes INTEGER NOT NULL,
+                input_tokens INTEGER NOT NULL,
+                output_tokens INTEGER NOT NULL,
+                cache_write_tokens INTEGER NOT NULL,
+                cache_read_tokens INTEGER NOT NULL,
+                cost REAL NOT NULL,
+                latency REAL NOT NULL,
+                outcome TEXT NOT NULL,
+                detail TEXT
+            );
+            CREATE INDEX IF NOT EXISTS model_calls_timestamp ON model_calls(timestamp);
             """)
     }
 
@@ -165,7 +201,111 @@ public actor Journal {
         return stored
     }
 
+    // MARK: Suggestions and model calls
+
+    /// Stores a shown suggestion. Returns it with its new id.
+    @discardableResult
+    public func record(_ suggestion: Suggestion) throws -> Suggestion {
+        try db.run("""
+            INSERT INTO suggestions (timestamp, bundle_id, app_name, window_title, category, title, body, explanation,
+                confidence, observation_id, model, prompt_version, feedback, feedback_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+                .double(suggestion.timestamp.timeIntervalSince1970),
+                suggestion.bundleID.map(Value.text) ?? .null,
+                .text(suggestion.appName),
+                suggestion.windowTitle.map(Value.text) ?? .null,
+                .text(suggestion.category.rawValue),
+                .text(suggestion.title),
+                .text(suggestion.body),
+                .text(suggestion.explanation),
+                .double(suggestion.confidence),
+                suggestion.observationID.map(Value.int) ?? .null,
+                .text(suggestion.model),
+                .int(Int64(suggestion.promptVersion)),
+                suggestion.feedback.map { Value.text($0.rawValue) } ?? .null,
+                suggestion.feedbackAt.map { Value.double($0.timeIntervalSince1970) } ?? .null,
+            ])
+        var stored = suggestion
+        stored.id = db.lastInsertRowID
+        return stored
+    }
+
+    /// Records what the user did with a suggestion. Nil when the id is unknown.
+    public func updateFeedback(suggestionID: Int64, feedback: SuggestionFeedback, at time: Date) throws -> Suggestion? {
+        try db.run(
+            "UPDATE suggestions SET feedback = ?, feedback_at = ? WHERE id = ?",
+            [.text(feedback.rawValue), .double(time.timeIntervalSince1970), .int(suggestionID)]
+        )
+        return try suggestion(id: suggestionID)
+    }
+
+    public func suggestion(id: Int64) throws -> Suggestion? {
+        try db.query("SELECT \(Journal.suggestionColumns) FROM suggestions WHERE id = ?", [.int(id)]) {
+            Journal.suggestion(from: $0)
+        }.first
+    }
+
+    /// Newest first.
+    public func recentSuggestions(limit: Int) throws -> [Suggestion] {
+        try db.query(
+            "SELECT \(Journal.suggestionColumns) FROM suggestions ORDER BY timestamp DESC, id DESC LIMIT ?",
+            [.int(Int64(limit))]
+        ) { Journal.suggestion(from: $0) }
+    }
+
+    @discardableResult
+    public func record(_ call: ModelCallRecord) throws -> ModelCallRecord {
+        try db.run("""
+            INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars, image_bytes, input_tokens,
+                output_tokens, cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+                .double(call.timestamp.timeIntervalSince1970),
+                .text(call.tier.rawValue),
+                .text(call.model),
+                .int(Int64(call.promptVersion)),
+                .int(Int64(call.promptCharacters)),
+                .int(Int64(call.imageBytes)),
+                .int(Int64(call.usage.inputTokens)),
+                .int(Int64(call.usage.outputTokens)),
+                .int(Int64(call.usage.cacheCreationInputTokens)),
+                .int(Int64(call.usage.cacheReadInputTokens)),
+                .double(call.cost),
+                .double(call.latency),
+                .text(call.outcome.rawValue),
+                call.detail.map(Value.text) ?? .null,
+            ])
+        var stored = call
+        stored.id = db.lastInsertRowID
+        return stored
+    }
+
+    /// Newest first.
+    public func recentModelCalls(limit: Int) throws -> [ModelCallRecord] {
+        try db.query(
+            "SELECT \(Journal.modelCallColumns) FROM model_calls ORDER BY timestamp DESC, id DESC LIMIT ?",
+            [.int(Int64(limit))]
+        ) { Journal.modelCall(from: $0) }
+    }
+
+    /// Calls at or after `since`, oldest first, for seeding the hour's spend.
+    public func modelCalls(since: Date) throws -> [ModelCallRecord] {
+        try db.query(
+            "SELECT \(Journal.modelCallColumns) FROM model_calls WHERE timestamp >= ? ORDER BY timestamp ASC, id ASC",
+            [.double(since.timeIntervalSince1970)]
+        ) { Journal.modelCall(from: $0) }
+    }
+
     // MARK: Reads
+
+    /// The newest `limit` observations at or after `since`, newest first, without thumbnail bytes.
+    public func recentObservations(since: Date, limit: Int) throws -> [ActivityObservation] {
+        try db.query(
+            "SELECT \(Journal.observationColumns) FROM observations WHERE timestamp >= ? ORDER BY timestamp DESC, id DESC LIMIT ?",
+            [.double(since.timeIntervalSince1970), .int(Int64(limit))]
+        ) { try self.observation(from: $0) }
+    }
 
     /// The newest `limit` entries of both kinds, newest first, without thumbnail bytes.
     public func recentEntries(limit: Int) throws -> [JournalEntry] {
@@ -253,7 +393,7 @@ public actor Journal {
     public func clear() throws {
         try db.execute("BEGIN")
         do {
-            try db.execute("DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events;")
+            try db.execute("DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events; DELETE FROM suggestions; DELETE FROM model_calls;")
             try db.execute("COMMIT")
         } catch {
             try? db.execute("ROLLBACK")
@@ -277,6 +417,10 @@ public actor Journal {
         result.observationsDeleted += db.changes
         try db.run("DELETE FROM events WHERE timestamp < ?", [.double(textCutoff)])
         result.eventsDeleted += db.changes
+        try db.run("DELETE FROM suggestions WHERE timestamp < ?", [.double(textCutoff)])
+        result.suggestionsDeleted += db.changes
+        try db.run("DELETE FROM model_calls WHERE timestamp < ?", [.double(textCutoff)])
+        result.modelCallsDeleted += db.changes
 
         try db.execute("PRAGMA incremental_vacuum")
         var used = try usedBytes()
@@ -333,6 +477,58 @@ public actor Journal {
         id, timestamp, focus_json, text_blocks_json, frame_hash, frame_width, frame_height, display_id,
         screen_x, screen_y, screen_w, screen_h, reason
         """
+
+    private static let suggestionColumns = """
+        id, timestamp, bundle_id, app_name, window_title, category, title, body, explanation, confidence,
+        observation_id, model, prompt_version, feedback, feedback_at
+        """
+
+    private static func suggestion(from row: SQLiteConnection.Statement) -> Suggestion {
+        Suggestion(
+            id: row.int(0),
+            timestamp: Date(timeIntervalSince1970: row.double(1)),
+            bundleID: row.text(2),
+            appName: row.text(3) ?? "",
+            windowTitle: row.text(4),
+            category: SuggestionCategory(rawValue: row.text(5) ?? "") ?? .other,
+            title: row.text(6) ?? "",
+            body: row.text(7) ?? "",
+            explanation: row.text(8) ?? "",
+            confidence: row.double(9),
+            observationID: row.isNull(10) ? nil : row.int(10),
+            model: row.text(11) ?? "",
+            promptVersion: Int(row.int(12)),
+            feedback: row.text(13).flatMap(SuggestionFeedback.init(rawValue:)),
+            feedbackAt: row.isNull(14) ? nil : Date(timeIntervalSince1970: row.double(14))
+        )
+    }
+
+    private static let modelCallColumns = """
+        id, timestamp, tier, model, prompt_version, prompt_chars, image_bytes, input_tokens, output_tokens,
+        cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail
+        """
+
+    private static func modelCall(from row: SQLiteConnection.Statement) -> ModelCallRecord {
+        ModelCallRecord(
+            id: row.int(0),
+            timestamp: Date(timeIntervalSince1970: row.double(1)),
+            tier: ModelTier(rawValue: row.text(2) ?? "") ?? .triage,
+            model: row.text(3) ?? "",
+            promptVersion: Int(row.int(4)),
+            promptCharacters: Int(row.int(5)),
+            imageBytes: Int(row.int(6)),
+            usage: Usage(
+                inputTokens: Int(row.int(7)),
+                outputTokens: Int(row.int(8)),
+                cacheCreationInputTokens: Int(row.int(9)),
+                cacheReadInputTokens: Int(row.int(10))
+            ),
+            cost: row.double(11),
+            latency: row.double(12),
+            outcome: ModelCallOutcome(rawValue: row.text(13) ?? "") ?? .error,
+            detail: row.text(14)
+        )
+    }
 
     private func observation(from row: SQLiteConnection.Statement) throws -> ActivityObservation {
         let focus = try decoder.decode(FocusContext.self, from: Data((row.text(2) ?? "{}").utf8))

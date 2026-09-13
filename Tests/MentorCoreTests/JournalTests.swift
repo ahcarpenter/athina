@@ -118,6 +118,8 @@ import Testing
 
     @Test func sizeCapEvictsOldestThumbnailsThenObservations() async throws {
         let journal = try temporaryJournal()
+        // Empty tables and indexes each hold a page, so caps below are relative to that floor.
+        let emptyBytes = try await journal.usedBytes()
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         for i in 0..<40 {
             try await journal.record(makeObservation(at: now - Double(40 - i) * 10, jpegBytes: 20_000))
@@ -142,7 +144,7 @@ import Testing
         #expect(try await journal.thumbnail(observationID: oldest.id) == nil)
 
         // A cap smaller than the text alone forces observation deletion too.
-        let tiny = RetentionPolicy(thumbnailMaxAge: 86400, textMaxAge: 86400, sizeCapBytes: 48_000)
+        let tiny = RetentionPolicy(thumbnailMaxAge: 86400, textMaxAge: 86400, sizeCapBytes: emptyBytes + 30_000)
         let second = try await journal.applyRetention(tiny, now: now)
         #expect(second.observationsDeleted > 0)
         let after = try await journal.stats()

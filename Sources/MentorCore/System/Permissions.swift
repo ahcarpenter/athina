@@ -19,7 +19,7 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
     public var purpose: String {
         switch self {
         case .screenRecording:
-            "Lets Mentor capture the display you are working on at a low, change-driven cadence and read its text on this Mac. Frames stay in the local journal and never leave your machine."
+            "Lets Mentor capture the display you are working on at a low, change-driven cadence and read its text on this Mac. Frames stay in the local journal; only the latest screenshot goes to the mentor model, and Settings > Mentor can turn that off."
         case .accessibility:
             "Lets Mentor read the focused app, window title, and focused element of the app you are using, so it knows what you are working on without guessing from pixels."
         }

@@ -1,0 +1,10 @@
+{
+  "id": "msg_01Refused",
+  "type": "message",
+  "role": "assistant",
+  "model": "claude-fable-5-1",
+  "content": [],
+  "stop_reason": "refusal",
+  "stop_details": {"type": "refusal", "category": "cyber", "explanation": null},
+  "usage": {"input_tokens": 0, "output_tokens": 0}
+}

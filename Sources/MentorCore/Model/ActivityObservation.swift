@@ -237,6 +237,10 @@ public struct JournalEvent: Codable, Equatable, Sendable, Identifiable {
         case permissionsChanged
         case journalCleared
         case retention
+        /// The mentor loop showed a suggestion.
+        case suggested
+        /// The user acted on a suggestion, or it expired.
+        case feedback
 
         public var label: String {
             switch self {
@@ -252,6 +256,8 @@ public struct JournalEvent: Codable, Equatable, Sendable, Identifiable {
             case .permissionsChanged: "Permissions"
             case .journalCleared: "Journal cleared"
             case .retention: "Retention"
+            case .suggested: "Suggestion"
+            case .feedback: "Feedback"
             }
         }
     }
