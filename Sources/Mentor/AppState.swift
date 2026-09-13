@@ -464,14 +464,16 @@ final class AppState {
 
     /// One line for the menu saying where the declared contexts put the
     /// current activity, or nil when contexts have nothing to say: they are
-    /// not being enforced and no always-outside rule has stopped anything.
+    /// not being enforced. A verdict is only shown while it is still about the
+    /// frontmost app, because it is rewritten only when triage runs and most
+    /// observations hold before that.
     var mentorContextLine: String? {
         let mentor = settings.mentor
-        guard let record = mentorStatus.lastContext else {
+        guard let record = mentorStatus.lastContext, record.appName == focus?.appName else {
             guard mentor.onlyMentorInsideContexts else { return nil }
-            return mentor.contexts.isEmpty
-                ? "Context: none declared, so nothing is mentored"
-                : "Context: not judged yet"
+            if mentor.contexts.isEmpty { return "Context: none declared, so nothing is mentored" }
+            guard let appName = focus?.appName else { return "Context: not judged yet" }
+            return "Context: not yet judged in \(appName)"
         }
         switch record.placement {
         case .notEnforced:
@@ -479,9 +481,6 @@ final class AppState {
         case .inside(let match):
             return "Context: \(match.label)"
         case .outside(let exclusion):
-            if case .alwaysOutside = exclusion, !mentor.onlyMentorInsideContexts {
-                return "Context: \(exclusion.label)"
-            }
             guard mentor.onlyMentorInsideContexts else { return nil }
             return "Context: out, \(exclusion.label)"
         }

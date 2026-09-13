@@ -6,8 +6,8 @@ import Foundation
 /// observation is a change moment worth a triage call, and `mentorGate` is the
 /// yes-or-no between triage's verdict and the mentor tier. The declared
 /// mentorship contexts are enforced in these two functions and nowhere else:
-/// an always-outside app or an enforced but empty list holds triage, and an
-/// out-of-context placement holds the mentor tier.
+/// an enforced but empty list holds triage, and an out-of-context placement
+/// holds the mentor tier.
 public struct MentorScheduler: Equatable, Sendable {
     /// What the loop knows about the world when it asks a gate.
     public struct Conditions: Equatable, Sendable {
@@ -50,8 +50,6 @@ public struct MentorScheduler: Equatable, Sendable {
         case callInFlight
         case spendCapReached(until: Date)
         case notAChangeMoment(CaptureReason)
-        /// The app or site is on the always-outside list, so nothing is sent for it.
-        case alwaysOutside(rule: ContextRule)
         /// Contexts are enforced and none is declared, so nowhere is inside.
         case noContextsDeclared
         /// The observation waited in the queue behind a long call and no longer shows the present.
@@ -71,7 +69,6 @@ public struct MentorScheduler: Equatable, Sendable {
             case .callInFlight: "a call is in flight"
             case .spendCapReached(let until): "spend cap reached until \(until.formatted(date: .omitted, time: .shortened))"
             case .notAChangeMoment(let reason): "not a change moment (\(reason.label))"
-            case .alwaysOutside(let rule): "\(rule.label.lowercased()) is always outside, so nothing was sent"
             case .noContextsDeclared: "only mentoring inside declared contexts, and none is declared"
             case .stale(let age): "observation is \(Int(age))s old"
             case .tooSoon(let until): "too soon, next at \(until.formatted(date: .omitted, time: .standard))"
@@ -127,7 +124,7 @@ public struct MentorScheduler: Equatable, Sendable {
     /// Whether this observation is a change moment worth a triage call.
     public func triageGate(for observation: ActivityObservation, conditions: Conditions, now: Date) -> TriageGate {
         if let hold = availabilityHold(conditions: conditions) { return .hold(hold) }
-        if let hold = contextHold(for: observation.focus) { return .hold(hold) }
+        if let hold = contextHold() { return .hold(hold) }
         if conditions.callInFlight { return .hold(.callInFlight) }
         guard observation.reason.isChangeMoment else { return .hold(.notAChangeMoment(observation.reason)) }
         let age = now.timeIntervalSince(observation.timestamp)
@@ -160,13 +157,12 @@ public struct MentorScheduler: Equatable, Sendable {
         return nil
     }
 
-    /// What the declared contexts decide before any call: an always-outside app
-    /// or site is never sent anywhere, and enforcing an empty list means no
-    /// activity can ever be inside, so neither tier should spend anything.
-    public func contextHold(for focus: FocusContext) -> Hold? {
-        if let rule = settings.alwaysOutsideRule(matching: focus) { return .alwaysOutside(rule: rule) }
-        if settings.onlyMentorInsideContexts, settings.contexts.isEmpty { return .noContextsDeclared }
-        return nil
+    /// What the declared contexts decide before any call: enforcing an empty
+    /// list means no activity can ever be inside, so neither tier should spend
+    /// anything.
+    public func contextHold() -> Hold? {
+        guard settings.onlyMentorInsideContexts, settings.contexts.isEmpty else { return nil }
+        return .noContextsDeclared
     }
 
     public mutating func noteTriageStarted(observation: ActivityObservation, now: Date) {

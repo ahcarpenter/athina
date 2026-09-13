@@ -112,7 +112,7 @@ Sources/MentorCore            library, fully testable
                               KeyStore (Keychain and in-memory), JSONValue (schemas)
   Mentor/                     MentorScheduler (pure trigger, debounce, and gate state machine), SpendMeter,
                               SuppressionRules (snooze and never-for-this), MentorshipContexts (declared
-                              contexts, rule matching, placement), ContextBuilder (rolling window, prompt
+                              contexts, normalizing, placement), ContextBuilder (rolling window, prompt
                               text), Prompts (versioned system prompts and output schemas), Suggestion and
                               ModelCallRecord, MentorLoop (orchestration)
   System/                     PermissionProbe, InputActivity (idle seconds), ProcessResources (CPU, memory)
@@ -260,34 +260,29 @@ While it is on, the declared names and descriptions are appended to the triage
 system prompt and triage answers `context` (one of the declared names, or null)
 and `context_confidence` alongside its usual verdict, so placing the moment
 costs no extra call. A moment triage places in no declared context, or names
-with less than "least confidence to count as inside" (60% by default), never
+with less than 60% confidence (`ContextRules.confidenceThreshold`), never
 reaches the mentor tier and never becomes a suggestion; the triage call is
 logged with the `outOfContext` outcome and the reason. The system prompt is one
 cached block, so editing the list costs a single cache write and every call
 after it reads from cache again.
 
-Two kinds of rule settle a moment without asking the model:
+Up to `ContextRules.maxContexts` (12) contexts may be declared, each with a
+unique name; the editor disables Add at the cap and refuses a name another
+context already uses, so nothing saved is dropped on the way in. With the
+switch on and no context declared, nothing is inside anything: no triage call
+is made at all, and the settings section, the menu, and the debug panel all say
+so.
 
-- **Always inside** a context (per context): an app, by bundle identifier or
-  app name, or a site, by a domain in the window title. Matching activity is in
-  that context whatever the model would have said, but still has to pass
-  triage's usual "is this worth saying" judgement.
-- **Always outside** (one list for all contexts): the same two kinds of rule.
-  A match **skips triage entirely**, whether or not the switch is on, so no
-  text from that app or site is ever sent anywhere. It is the cheap, blunt
-  version of Settings > Privacy > Excluded apps, which goes further and stops
-  the app being sensed at all.
-
-Domains match at their boundaries, so a rule for `github.com` matches
-`docs.github.com` but not `notgithub.com`. With the switch on and no context
-declared, nothing is inside anything: no triage call is made at all, and the
-settings section, the menu, and the debug panel all say so.
+To keep an app from being looked at at all, exclude it in Settings > Privacy >
+Excluded apps: while an excluded app is frontmost nothing is captured, so
+nothing about it can reach either tier.
 
 The menu bar menu shows the current verdict ("Context: inside "writing Swift"
-(88% confident)", or why it is out), the debug panel's Mentor card shows it
-with the app it was made for, the model call log shows the decision per call,
-and each suggestion records the context it was raised under, shown in the
-history window.
+(88% confident)", or why it is out) while it is still about the frontmost app,
+and "Context: not yet judged in <app>" otherwise; the debug panel's Mentor card
+shows it with the app it was made for and its age, the model call log shows the
+decision per call, and each suggestion records the context it was raised under,
+shown in the history window.
 
 ### Spend control
 
@@ -322,15 +317,10 @@ panel status bar, and the Mentor card.
 - The API key lives in the login keychain, is passed per request, and is never
   written to the journal, the logs, or the debug panel, which show at most its
   last four characters.
-- **Always-outside apps and sites** (Settings > Mentor) make no model call at
-  all: a matching app or site is held at the triage gate before any request is
-  built, so none of its text, and no thumbnail of it, ever leaves this Mac. The
-  rule applies whether or not "Only mentor inside these contexts" is on. Such
-  an app is still sensed and journaled locally, unlike an excluded app.
 - With **only mentor inside these contexts** on, the declared context names and
   descriptions are part of the triage system prompt, so they do leave the
   machine with every triage call. Nothing else about the contexts is sent: the
-  rules are matched here, not there.
+  placement is decided here from the model's answer, not there.
 - **Excluded apps** (Settings > Privacy) default to Keychain Access, Passwords,
   and common password managers. While one is frontmost Mentor captures no frame,
   reads no window title or element, runs no OCR, and journals only that the app

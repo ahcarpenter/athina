@@ -147,10 +147,6 @@ extension AppState {
         var settings = SensingSettings()
         settings.mentor.onlyMentorInsideContexts = true
         settings.mentor.contexts = SampleSuggestions.contexts
-        settings.mentor.alwaysOutside = [
-            ContextRule(kind: .app, value: "com.apple.MobileSMS"),
-            ContextRule(kind: .site, value: "mail.google.com"),
-        ]
         let state = AppState(sampleWithSettings: settings)
         let now = Date()
         let focus = FocusContext(
@@ -260,13 +256,12 @@ extension AppState {
     }
 }
 
-/// The two mentorship contexts sections on their own, because the Mentor tab
-/// is taller than any window they would otherwise be rendered in.
+/// The mentorship contexts section on its own, because the Mentor tab is
+/// taller than any window it would otherwise be rendered in.
 struct MentorshipContextsPreview: View {
     var body: some View {
         Form {
             MentorshipContextsSection()
-            AlwaysOutsideSection()
         }
         .formStyle(.grouped)
     }
@@ -286,13 +281,12 @@ struct SampleToast: View {
 }
 
 enum SampleSuggestions {
-    /// Two declared contexts, one with an always-inside rule, so the settings
-    /// section and the context readouts have something real to show.
+    /// Two declared contexts, so the settings section and the context readouts
+    /// have something real to show.
     static let contexts = [
         MentorshipContext(
             name: "writing Swift",
-            detail: "Building the Mentor app itself: Swift, SwiftUI, and the tests and build commands around them.",
-            alwaysInside: [ContextRule(kind: .app, value: "com.apple.dt.Xcode")]
+            detail: "Building the Mentor app itself: Swift, SwiftUI, and the tests and build commands around them."
         ),
         MentorshipContext(
             name: "reading API documentation",
@@ -348,7 +342,7 @@ enum SampleSuggestions {
                 promptVersion: MentorPrompts.version, promptCharacters: 14_820, imageBytes: 96_400,
                 usage: Usage(inputTokens: 6_120, outputTokens: 610, cacheCreationInputTokens: 0, cacheReadInputTokens: 730),
                 cost: 0.0920, latency: 9.4, outcome: .suggested, detail: "Read focus once per capture, not per step",
-                context: "inside \"writing Swift\" (app com.apple.dt.xcode is always inside it)"
+                context: "inside \"writing Swift\" (88% confident)"
             ),
             ModelCallRecord(
                 id: 60, timestamp: now.addingTimeInterval(-52), tier: .triage, model: "claude-haiku-4-5-20251001",

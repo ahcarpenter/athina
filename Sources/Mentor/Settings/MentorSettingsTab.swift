@@ -28,7 +28,6 @@ struct MentorSettingsTab: View {
             }
 
             MentorshipContextsSection()
-            AlwaysOutsideSection()
 
             Section("Cadence") {
                 NumberRow(

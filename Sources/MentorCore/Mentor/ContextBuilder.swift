@@ -95,13 +95,10 @@ public enum PromptBuilder {
     public static let eventLimit = 12
 
     /// Text only: app and window, accessibility summary, the OCR text, and a
-    /// compact event summary. `pinnedContext` is the declared context an
-    /// always-inside rule already settled, which the model is told rather than
-    /// asked, so the cached system prompt stays the same for every call.
+    /// compact event summary.
     public static func triageMessage(
         observation: ActivityObservation,
         recentEvents: [JournalEvent],
-        pinnedContext: String? = nil,
         now: Date
     ) -> String {
         var lines: [String] = []
@@ -110,9 +107,6 @@ public enum PromptBuilder {
         lines.append("Window: \(observation.focus.windowTitle ?? "untitled")")
         lines.append("Trigger: \(observation.reason.label)")
         lines.append("Accessibility: \(observation.focus.summary)")
-        if let pinnedContext {
-            lines.append("Context: the user has declared this app or site to be inside \"\(pinnedContext)\", so answer that context with confidence 1.")
-        }
         lines.append("")
         lines.append("Recent events:")
         lines.append(eventSummary(recentEvents, now: now))

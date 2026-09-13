@@ -31,11 +31,6 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     public var onlyMentorInsideContexts = false
     /// The kinds of work the user wants mentoring in, in their own words.
     public var contexts: [MentorshipContext] = []
-    /// Apps and sites Mentor must never look at. These skip triage whether or
-    /// not the switch above is on, so nothing from them is ever sent.
-    public var alwaysOutside: [ContextRule] = []
-    /// Triage's context answer must be at least this confident to count as inside.
-    public var contextConfidence = 0.6
 
     // MARK: Context window
 
@@ -75,7 +70,7 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case enabled, triageModel, mentorModel, triageEffort, mentorEffort
         case triageMinInterval, mentorMinInterval, triageSimilarityThreshold
-        case onlyMentorInsideContexts, contexts, alwaysOutside, contextConfidence
+        case onlyMentorInsideContexts, contexts
         case mentorWindowDuration, mentorWindowTokenBudget, sendThumbnail
         case minimumConfidence, toastTimeout, notNowSnooze
         case hourlySpendCap, prices
@@ -95,8 +90,6 @@ public struct MentorSettings: Codable, Equatable, Sendable {
         triageSimilarityThreshold = try c.decodeIfPresent(Double.self, forKey: .triageSimilarityThreshold) ?? d.triageSimilarityThreshold
         onlyMentorInsideContexts = try c.decodeIfPresent(Bool.self, forKey: .onlyMentorInsideContexts) ?? d.onlyMentorInsideContexts
         contexts = try c.decodeIfPresent([MentorshipContext].self, forKey: .contexts) ?? d.contexts
-        alwaysOutside = try c.decodeIfPresent([ContextRule].self, forKey: .alwaysOutside) ?? d.alwaysOutside
-        contextConfidence = try c.decodeIfPresent(Double.self, forKey: .contextConfidence) ?? d.contextConfidence
         mentorWindowDuration = try c.decodeIfPresent(TimeInterval.self, forKey: .mentorWindowDuration) ?? d.mentorWindowDuration
         mentorWindowTokenBudget = try c.decodeIfPresent(Int.self, forKey: .mentorWindowTokenBudget) ?? d.mentorWindowTokenBudget
         sendThumbnail = try c.decodeIfPresent(Bool.self, forKey: .sendThumbnail) ?? d.sendThumbnail
@@ -119,8 +112,6 @@ public struct MentorSettings: Codable, Equatable, Sendable {
         s.mentorMinInterval = s.mentorMinInterval.clamped(to: 10...7200)
         s.triageSimilarityThreshold = s.triageSimilarityThreshold.clamped(to: 0.5...1)
         s.contexts = ContextRules.normalized(s.contexts)
-        s.alwaysOutside = ContextRules.normalized(s.alwaysOutside)
-        s.contextConfidence = s.contextConfidence.clamped(to: 0...1)
         s.mentorWindowDuration = s.mentorWindowDuration.clamped(to: 30...7200)
         s.mentorWindowTokenBudget = s.mentorWindowTokenBudget.clamped(to: 500...60000)
         s.minimumConfidence = s.minimumConfidence.clamped(to: 0...1)
@@ -149,29 +140,11 @@ public struct MentorSettings: Codable, Equatable, Sendable {
 
     // MARK: Mentorship contexts
 
-    /// The always-outside rule matching this activity, if any. Checked whether
-    /// or not enforcement is on, so an always-outside app never reaches the API.
-    public func alwaysOutsideRule(matching focus: FocusContext) -> ContextRule? {
-        ContextRules.alwaysOutsideRule(matching: focus, rules: alwaysOutside)
-    }
-
-    /// The declared context an always-inside rule puts this activity in, if any.
-    /// Only consulted while enforcing; otherwise the contexts gate nothing.
-    public func pinnedContext(for focus: FocusContext) -> (context: MentorshipContext, rule: ContextRule)? {
-        guard onlyMentorInsideContexts else { return nil }
-        return ContextRules.pinnedContext(for: focus, contexts: contexts)
-    }
-
     /// Where an activity sits relative to the declared contexts, given what
     /// triage answered. `.notEnforced` whenever the switch is off.
-    public func contextPlacement(for focus: FocusContext, triage: TriageVerdict) -> ContextPlacement {
+    public func contextPlacement(triage: TriageVerdict) -> ContextPlacement {
         guard onlyMentorInsideContexts else { return .notEnforced }
-        return ContextRules.placement(
-            triage: triage,
-            pinned: ContextRules.pinnedContext(for: focus, contexts: contexts),
-            contexts: contexts,
-            confidenceThreshold: contextConfidence
-        )
+        return ContextRules.placement(triage: triage, contexts: contexts)
     }
 
     /// Why a category must not be raised for an app right now, if it must not.

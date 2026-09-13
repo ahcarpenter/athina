@@ -3,12 +3,13 @@ import MentorCore
 import SwiftUI
 
 /// Settings > Mentor > Mentorship contexts: the kinds of work the user wants
-/// mentoring in, the switch that makes them a hard boundary, and the apps and
-/// sites that are always inside one or always outside all of them.
+/// mentoring in, and the switch that makes them a hard boundary.
 ///
-/// Every editor works on a local copy and commits on save, because
+/// The editor works on a local copy and commits on save, because
 /// `MentorSettings.validated()` runs on each change and would trim and drop
-/// values while they are still being typed.
+/// values while they are still being typed. It also refuses exactly what
+/// `ContextRules.normalized` would drop - a name past the cap, or one another
+/// context already uses - so saved work never disappears silently.
 struct MentorshipContextsSection: View {
     @Environment(AppState.self) private var state
     @State private var editing: MentorshipContext?
@@ -16,6 +17,7 @@ struct MentorshipContextsSection: View {
 
     private var contexts: [MentorshipContext] { state.settings.mentor.contexts }
     private var enforcing: Bool { state.settings.mentor.onlyMentorInsideContexts }
+    private var atCap: Bool { contexts.count >= ContextRules.maxContexts }
 
     var body: some View {
         @Bindable var state = state
@@ -54,22 +56,22 @@ struct MentorshipContextsSection: View {
                 } label: {
                     Image(systemName: "plus").frame(width: 22, height: 20)
                 }
-                .help("Declare a context")
+                .disabled(atCap)
+                .help(atCap ? "Remove a context to declare another" : "Declare a context")
                 Spacer()
             }
-            NumberRow(
-                "Least confidence to count as inside", value: $state.settings.mentor.contextConfidence,
-                range: 0...1, step: 0.05, unit: "",
-                help: "Triage names the context it thinks you are in and how sure it is. Below this, the moment counts as out of context and nothing is said."
-            )
-            .disabled(!enforcing)
+            if atCap {
+                Text("That is all \(ContextRules.maxContexts) contexts. Remove one to declare another.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         } header: {
             Text("Mentorship contexts")
         } footer: {
-            Text("Triage places each moment in one of your contexts as part of the judgement it already makes, so declaring them costs no extra call. An app or site listed inside a context skips that question; one on the always-outside list below is never sent anywhere at all.")
+            Text("Triage places each moment in one of your contexts as part of the judgement it already makes, so declaring them costs no extra call. To stop an app being looked at at all, exclude it in Settings > Privacy.")
         }
         .sheet(item: $editing) { context in
-            ContextEditor(context: context, isNew: isNew) { edited in
+            ContextEditor(context: context, isNew: isNew, existing: contexts) { edited in
                 commit(edited)
             }
         }
@@ -91,7 +93,7 @@ struct MentorshipContextsSection: View {
     }
 }
 
-/// One declared context: its name, what it covers, and its always-inside rules.
+/// One declared context: its name and what it covers.
 private struct ContextRow: View {
     @Environment(AppState.self) private var state
     let context: MentorshipContext
@@ -112,12 +114,6 @@ private struct ContextRow: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if !context.alwaysInside.isEmpty {
-                    Text("Always inside: " + context.alwaysInside.map(\.value).joined(separator: ", "))
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
             }
             Spacer(minLength: 8)
             Button("Edit", action: onEdit)
@@ -135,25 +131,6 @@ private struct ContextRow: View {
     }
 }
 
-/// The always-outside list: apps and sites Mentor never looks at.
-struct AlwaysOutsideSection: View {
-    @Environment(AppState.self) private var state
-
-    var body: some View {
-        @Bindable var state = state
-        Section {
-            ContextRuleEditor(
-                rules: $state.settings.mentor.alwaysOutside,
-                addLabel: "Never mentor in"
-            )
-        } header: {
-            Text("Always outside")
-        } footer: {
-            Text("Mentor never triages these, whether or not the switch above is on, so no text from them ever leaves this Mac. Apps match the bundle identifier or the app name; sites match a domain in the window title. This is separate from Settings > Privacy, where an excluded app is not even sensed.")
-        }
-    }
-}
-
 // MARK: - Context editor
 
 /// Edits one context on a local copy: the sheet's Save is what writes it back.
@@ -161,16 +138,25 @@ private struct ContextEditor: View {
     @Environment(\.dismiss) private var dismiss
     @State private var draft: MentorshipContext
     private let isNew: Bool
+    private let existing: [MentorshipContext]
     private let onSave: (MentorshipContext) -> Void
 
-    init(context: MentorshipContext, isNew: Bool, onSave: @escaping (MentorshipContext) -> Void) {
+    init(
+        context: MentorshipContext, isNew: Bool, existing: [MentorshipContext],
+        onSave: @escaping (MentorshipContext) -> Void
+    ) {
         _draft = State(initialValue: context)
         self.isNew = isNew
+        self.existing = existing
         self.onSave = onSave
     }
 
     private var trimmedName: String {
         draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var isDuplicate: Bool {
+        ContextRules.isDuplicateName(draft.name, in: existing, excluding: draft.id)
     }
 
     var body: some View {
@@ -190,14 +176,13 @@ private struct ContextEditor: View {
                     )
                     .lineLimit(2...4)
                 } footer: {
-                    Text("A short name in your own words, and optionally a sentence saying what counts. Both go to the triage model, which answers with this name when it places you here.")
-                }
-                Section {
-                    ContextRuleEditor(rules: $draft.alwaysInside, addLabel: "Always inside")
-                } header: {
-                    Text("Always inside this context")
-                } footer: {
-                    Text("Mentor treats these as inside without asking the model. Everything else in this context is judged from what is on screen.")
+                    if isDuplicate {
+                        Label("Another context is already called \"\(trimmedName)\". Give this one a different name.", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text("A short name in your own words, and optionally a sentence saying what counts. Both go to the triage model, which answers with this name when it places you here.")
+                    }
                 }
             }
             .formStyle(.grouped)
@@ -208,173 +193,21 @@ private struct ContextEditor: View {
                     .keyboardShortcut(.cancelAction)
                 Button(isNew ? "Add" : "Save", action: save)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(trimmedName.isEmpty)
+                    .disabled(trimmedName.isEmpty || isDuplicate)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
         }
-        .frame(width: 520, height: 470)
+        .frame(width: 520, height: 300)
     }
 
     private func save() {
-        guard !trimmedName.isEmpty else { return }
+        guard !trimmedName.isEmpty, !isDuplicate else { return }
         var edited = draft
         edited.name = trimmedName
         edited.detail = draft.detail.trimmingCharacters(in: .whitespacesAndNewlines)
         onSave(edited)
         dismiss()
-    }
-}
-
-// MARK: - Rule editing
-
-/// A bordered list of app and site rules with an add row underneath. New rules
-/// are typed into local state and appended on Add, so nothing is normalized
-/// away mid-word.
-private struct ContextRuleEditor: View {
-    @Binding var rules: [ContextRule]
-    let addLabel: String
-
-    @State private var kind: ContextRule.Kind = .app
-    @State private var value = ""
-
-    private var trimmed: String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var isDuplicate: Bool {
-        let normalized = ContextRules.normalized(trimmed, kind: kind).lowercased()
-        return rules.contains { $0.kind == kind && $0.value.lowercased() == normalized }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            BorderedList {
-                if rules.isEmpty {
-                    EmptyListNote("No app or site listed.")
-                } else {
-                    ForEach(rules) { rule in
-                        RuleRow(rule: rule) {
-                            rules.removeAll { $0.id == rule.id }
-                        }
-                        if rule.id != rules.last?.id { Divider() }
-                    }
-                }
-            }
-            HStack(spacing: 8) {
-                Picker("", selection: $kind) {
-                    ForEach(ContextRule.Kind.allCases) { kind in
-                        Text(kind.label).tag(kind)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .help(addLabel)
-                if kind == .app {
-                    RunningAppMenu(existing: rules) { value = $0 }
-                }
-                Spacer(minLength: 0)
-            }
-            HStack(spacing: 8) {
-                // Without labelsHidden a Form lays an empty-label field out in
-                // its trailing column, which leaves it half the width.
-                TextField("", text: $value, prompt: Text(kind.placeholder))
-                    .labelsHidden()
-                    .textFieldStyle(.roundedBorder)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity)
-                    .onSubmit(add)
-                Button("Add", action: add)
-                    .disabled(trimmed.isEmpty || isDuplicate)
-            }
-            .frame(maxWidth: .infinity)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 2)
-    }
-
-    private func add() {
-        guard !trimmed.isEmpty, !isDuplicate else { return }
-        rules.append(ContextRule(kind: kind, value: ContextRules.normalized(trimmed, kind: kind)))
-        value = ""
-    }
-}
-
-private struct RuleRow: View {
-    let rule: ContextRule
-    let onRemove: () -> Void
-
-    var body: some View {
-        HStack(spacing: 8) {
-            if rule.kind == .app {
-                AppRuleIcon(value: rule.value)
-            } else {
-                Image(systemName: "globe")
-                    .foregroundStyle(.secondary)
-                    .frame(width: 18, height: 18)
-            }
-            Text(rule.value)
-                .font(.system(.body, design: .monospaced))
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer(minLength: 8)
-            Text(rule.kind.label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Button(action: onRemove) {
-                Image(systemName: "minus.circle")
-            }
-            .buttonStyle(.borderless)
-            .help("Remove")
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-    }
-}
-
-/// The app's icon when the value is a bundle identifier of an installed app.
-private struct AppRuleIcon: View {
-    let value: String
-
-    var body: some View {
-        Group {
-            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: value) {
-                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable()
-            } else {
-                Image(systemName: "app.dashed").resizable().foregroundStyle(.tertiary)
-            }
-        }
-        .frame(width: 18, height: 18)
-    }
-}
-
-private struct RunningAppMenu: View {
-    let existing: [ContextRule]
-    let onPick: (String) -> Void
-
-    private var runningApps: [(name: String, id: String)] {
-        NSWorkspace.shared.runningApplications
-            .filter { $0.activationPolicy == .regular }
-            .compactMap { app in
-                guard let id = app.bundleIdentifier,
-                      !existing.contains(where: { $0.kind == .app && $0.value.caseInsensitiveCompare(id) == .orderedSame })
-                else { return nil }
-                return (app.localizedName ?? id, id)
-            }
-            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
-    }
-
-    var body: some View {
-        Menu {
-            ForEach(runningApps, id: \.id) { app in
-                Button(app.name) { onPick(app.id) }
-            }
-        } label: {
-            Label("Choose a running app", systemImage: "macwindow.on.rectangle")
-        }
-        .fixedSize()
-        .help("Fill in the bundle identifier of an app that is running now")
     }
 }
 

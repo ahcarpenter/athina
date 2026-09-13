@@ -162,13 +162,11 @@ import Testing
     }
 
     private static func enforcing(
-        contexts: [MentorshipContext] = [MentorshipContext(name: "writing Swift")],
-        alwaysOutside: [ContextRule] = []
+        contexts: [MentorshipContext] = [MentorshipContext(name: "writing Swift")]
     ) -> MentorSettings {
         var settings = MentorSettings()
         settings.onlyMentorInsideContexts = true
         settings.contexts = contexts
-        settings.alwaysOutside = alwaysOutside
         return settings
     }
 
@@ -226,39 +224,15 @@ import Testing
     }
 
     @Test func aContextBelowTheConfidenceThresholdIsOutOfContext() async throws {
-        var settings = Self.enforcing()
-        settings.contextConfidence = 0.8
-        let h = try await Harness(settings: settings)
+        let h = try await Harness(settings: Self.enforcing())
         await h.client.enqueue(json: Self.triage(true, context: "writing Swift", confidence: 0.5))
         await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
         #expect(await h.client.sent.count == 1)
         let status = await h.loop.currentStatus()
         #expect(status.lastTriage?.outcome == .outOfContext)
         #expect(status.lastMentorHold?.hold == .outOfContext(
-            .belowConfidence(name: "writing Swift", confidence: 0.5, threshold: 0.8)
+            .belowConfidence(name: "writing Swift", confidence: 0.5)
         ))
-    }
-
-    @Test func anAlwaysOutsideAppMakesNoModelCallAtAll() async throws {
-        let h = try await Harness(settings: Self.enforcing(
-            alwaysOutside: [ContextRule(kind: .app, value: "com.apple.dt.Xcode")]
-        ))
-        await h.client.enqueue(json: Self.triage(false, context: "writing Swift", confidence: 1))
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 0)
-        #expect(await h.client.sent.isEmpty)
-        #expect(try await h.journal.recentModelCalls(limit: 5).isEmpty)
-        let status = await h.loop.currentStatus()
-        guard case .alwaysOutside(let rule)? = status.lastGate?.hold else {
-            Issue.record("expected an always-outside hold, got \(String(describing: status.lastGate?.hold))")
-            return
-        }
-        #expect(rule.value == "com.apple.dt.Xcode")
-        #expect(status.lastContext?.placement == .outside(.alwaysOutside(rule: rule)))
-
-        // Another app in the same run is triaged as usual.
-        await h.observe(Fixtures.observation(id: 2, at: Date(), app: "Safari", bundleID: "com.apple.Safari"), expectCalls: 1)
-        #expect(await h.client.sent.count == 1)
-        #expect(await h.loop.currentStatus().lastTriage?.tier == .triage)
     }
 
     @Test func enforcingWithNoContextDeclaredMakesNoModelCallAtAll() async throws {
@@ -271,21 +245,11 @@ import Testing
         #expect(status.lastContext?.placement == .outside(.noContextsDeclared))
     }
 
-    @Test func anAlwaysInsideRuleSkipsTheContextQuestionButNotTheJudgement() async throws {
-        let contexts = [MentorshipContext(
-            name: "writing Swift", alwaysInside: [ContextRule(kind: .app, value: "com.apple.dt.Xcode")]
-        )]
-        let h = try await Harness(settings: Self.enforcing(contexts: contexts))
-        // Triage answers no context at all, and still the rule places it inside.
-        await h.client.enqueue(json: Self.triage(false, context: nil, confidence: 1))
+    @Test func beingInsideAContextStillLeavesTriagesOwnJudgementInCharge() async throws {
+        let h = try await Harness(settings: Self.enforcing())
+        await h.client.enqueue(json: Self.triage(false, context: "writing Swift", confidence: 1))
         await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
-        guard case .text(let triageText) = (await h.client.sent.first?.request.messages[0].content.first) else {
-            Issue.record("expected text in the triage message")
-            return
-        }
-        #expect(triageText.contains("inside \"writing Swift\""))
         let status = await h.loop.currentStatus()
-        // Inside, so the normal worth-a-look judgement is what stopped it.
         #expect(status.lastTriage?.outcome == .quiet)
         #expect(status.lastContext?.placement.contextName == "writing Swift")
         #expect(status.lastMentorHold?.hold == .triageSaidNo(reason: "Repeated manual runs"))

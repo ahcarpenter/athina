@@ -146,45 +146,21 @@ enum Fixtures {
 
     private var contexts: [MentorshipContext] {
         [
-            MentorshipContext(name: "writing Swift", alwaysInside: [ContextRule(kind: .app, value: "com.apple.dt.Xcode")]),
+            MentorshipContext(name: "writing Swift"),
             MentorshipContext(name: "reading API documentation"),
         ]
     }
 
-    /// The gate's settings for one combination of the switch and the lists.
-    private func contextSettings(enforcing: Bool, declared: Bool = true, alwaysOutside: [ContextRule] = []) -> MentorSettings {
+    /// The gate's settings for one combination of the switch and the list.
+    private func contextSettings(enforcing: Bool, declared: Bool = true) -> MentorSettings {
         var s = settings
         s.onlyMentorInsideContexts = enforcing
         s.contexts = declared ? contexts : []
-        s.alwaysOutside = alwaysOutside
         return s.validated()
     }
 
     private func inside(_ name: String, confidence: Double = 0.9) -> ContextPlacement {
         .inside(ContextMatch(contextID: UUID(), name: name, confidence: confidence))
-    }
-
-    @Test func anAlwaysOutsideAppSkipsTriageEntirelyWithOrWithoutTheSwitch() {
-        let rule = ContextRule(kind: .app, value: "com.apple.dt.Xcode")
-        let observation = Fixtures.observation(at: t0)
-        for enforcing in [true, false] {
-            let scheduler = MentorScheduler(settings: contextSettings(enforcing: enforcing, alwaysOutside: [rule]))
-            guard case .hold(.alwaysOutside(let held)) = scheduler.triageGate(for: observation, conditions: conditions(), now: t0) else {
-                Issue.record("expected an always-outside hold with the switch \(enforcing ? "on" : "off")")
-                return
-            }
-            #expect(held.value == rule.value)
-        }
-    }
-
-    @Test func anAlwaysOutsideSiteSkipsTriageOnTheWindowTitle() {
-        let scheduler = MentorScheduler(settings: contextSettings(
-            enforcing: true, alwaysOutside: [ContextRule(kind: .site, value: "mail.google.com")]
-        ))
-        let inbox = Fixtures.observation(at: t0, app: "Safari", bundleID: "com.apple.Safari", window: "Inbox - mail.google.com")
-        let docs = Fixtures.observation(id: 2, at: t0, app: "Safari", bundleID: "com.apple.Safari", window: "SCStream - Apple Developer")
-        #expect(scheduler.triageGate(for: inbox, conditions: conditions(), now: t0).isHold)
-        #expect(scheduler.triageGate(for: docs, conditions: conditions(), now: t0) == .run)
     }
 
     @Test func enforcingWithNoContextDeclaredHoldsTriageSoNothingIsSpent() {
@@ -205,7 +181,7 @@ enum Fixtures {
         let yes = TriageVerdict(worthALook: true, reason: "repeated manual steps", context: nil, contextConfidence: 0.9)
         let exclusions: [ContextExclusion] = [
             .noMatch(reason: ""),
-            .belowConfidence(name: "writing Swift", confidence: 0.2, threshold: 0.6),
+            .belowConfidence(name: "writing Swift", confidence: 0.2),
             .unanswered,
             .noContextsDeclared,
         ]

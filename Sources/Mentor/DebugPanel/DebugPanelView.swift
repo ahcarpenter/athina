@@ -666,12 +666,7 @@ private struct MentorCard: View {
     private func contextVerdict(now: Date) -> String {
         let mentor = state.settings.mentor
         guard mentor.onlyMentorInsideContexts else {
-            if let record = state.mentorStatus.lastContext, case .outside(let exclusion) = record.placement,
-               case .alwaysOutside = exclusion {
-                return "not enforced, but \(exclusion.label) (\(Formatting.age(record.at, now: now)), \(record.appName))"
-            }
-            let declared = mentor.contexts.count
-            return "not enforced (\(declared) declared, \(mentor.alwaysOutside.count) always outside)"
+            return "not enforced (\(mentor.contexts.count) declared)"
         }
         guard let record = state.mentorStatus.lastContext else {
             return mentor.contexts.isEmpty

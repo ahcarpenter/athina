@@ -110,15 +110,11 @@ import Testing
         #expect(!summary.contains("started"))
     }
 
-    @Test func theTriageMessageStatesAPinnedContextAndOmitsItOtherwise() {
-        let observation = Fixtures.observation(at: t0)
-        let asked = PromptBuilder.triageMessage(observation: observation, recentEvents: [], now: t0)
+    /// The context question is asked in the cached system prompt, never in the
+    /// per-call message, so the cached prefix is the same for every call.
+    @Test func theTriageMessageNeverCarriesAContextPlacement() {
+        let asked = PromptBuilder.triageMessage(observation: Fixtures.observation(at: t0), recentEvents: [], now: t0)
         #expect(!asked.contains("Context:"))
-        let told = PromptBuilder.triageMessage(
-            observation: observation, recentEvents: [], pinnedContext: "writing Swift", now: t0
-        )
-        #expect(told.contains("inside \"writing Swift\""))
-        #expect(told.contains("confidence 1"))
     }
 
     @Test func theMentorMessageNamesTheContextTheMomentWasPlacedIn() {

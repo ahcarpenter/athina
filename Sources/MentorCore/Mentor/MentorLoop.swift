@@ -180,9 +180,7 @@ public actor MentorLoop {
         switch scheduler.triageGate(for: observation, conditions: conditions(now: now), now: now) {
         case .hold(let hold):
             status.lastGate = MentorStatus.GateRecord(at: now, observationID: observation.id, hold: hold)
-            if case .alwaysOutside(let rule) = hold {
-                noteContext(.outside(.alwaysOutside(rule: rule)), for: observation, at: now)
-            } else if case .noContextsDeclared = hold {
+            if case .noContextsDeclared = hold {
                 noteContext(.outside(.noContextsDeclared), for: observation, at: now)
             }
             await publishStatus()
@@ -230,10 +228,7 @@ public actor MentorLoop {
         let now = Date()
         let events = (try? await journal.recentEvents(limit: MentorLoop.eventLookback)) ?? []
         let contexts = settings.onlyMentorInsideContexts ? settings.contexts : []
-        let pinned = settings.pinnedContext(for: observation.focus)
-        let text = PromptBuilder.triageMessage(
-            observation: observation, recentEvents: events, pinnedContext: pinned?.context.name, now: now
-        )
+        let text = PromptBuilder.triageMessage(observation: observation, recentEvents: events, now: now)
         let model = settings.triageModelInfo
         let request = MessagesRequest(
             model: model.id,
@@ -258,7 +253,7 @@ public actor MentorLoop {
                 record.detail = "the API declined this request"
             } else if var decoded = MentorLoop.decode(TriageVerdict.self, from: response) {
                 decoded.reason = decoded.reason.withPlainDashes
-                let placement = settings.contextPlacement(for: observation.focus, triage: decoded)
+                let placement = settings.contextPlacement(triage: decoded)
                 triaged = (decoded, placement)
                 record.outcome = placement.isOutside ? .outOfContext : (decoded.worthALook ? .candidate : .quiet)
                 record.detail = decoded.reason
