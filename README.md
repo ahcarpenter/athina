@@ -161,16 +161,14 @@ thumbnails, and then, if the file is still over `journalSizeCapBytes`, the
 oldest thumbnails and finally the oldest observations and events until it fits.
 "Clear Journal" in settings deletes everything.
 
-Settings live next to it in `settings.json`; missing or unknown keys fall back
-to defaults so older files keep working.
+The mentor loop adds two tables: `suggestions` (every suggestion shown, with
+the user's feedback) and `model_calls` (one row per API call: tier, model,
+prompt version and size, token counts, estimated cost, latency, outcome, and
+the model's one-line reason; never the prompt text). Both expire with
+`textRetention` and are emptied by Clear Journal.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
-to defaults so older files keep working. The mentor loop adds two tables:
-`suggestions` (every suggestion shown, with the user's feedback) and
-`model_calls` (one row per API call: tier, model, prompt version and size,
-token counts, estimated cost, latency, outcome, and the model's one-line
-reason; never the prompt text). Both expire with `textRetention` and are
-emptied by Clear Journal.
+to defaults so older files keep working.
 
 ### Subscription point
 
@@ -202,11 +200,12 @@ each kept observation it runs, in order:
    call. A later phase adds its declared-contexts check inside this gate.
 4. **Mentor call** on the strong model (`claude-opus-5` at medium effort by
    default; Sonnet 5 and Fable 5.1 are offered too) with a rolling window of
-   recent observations' text (bounded by `mentorWindowDuration` and `mentorWindowTokenBudget`), a
-   compact event summary, the categories currently suppressed for the app,
-   and, when `sendThumbnail` is on, the latest kept thumbnail as an image. The
-   reply is `{"reason": string, "suggestion": null | {title, body, explanation,
-   category, confidence}}`. A null suggestion is the normal outcome.
+   recent observations' text (bounded by `mentorWindowDuration` and
+   `mentorWindowTokenBudget`), a compact event summary, the categories
+   currently suppressed for the app, and, when `sendThumbnail` is on, the
+   latest kept thumbnail as an image. The reply is `{"reason": string,
+   "suggestion": null | {title, body, explanation, category, confidence}}`. A
+   null suggestion is the normal outcome.
 
    Each tier has its own model and effort in Settings > Mentor. Effort (low,
    medium, high, extra high) goes out as `output_config.effort` only to models
@@ -221,15 +220,15 @@ each kept observation it runs, in order:
    never takes keyboard focus and auto-dismisses after `toastTimeout` (60 s;
    the countdown pauses while the pointer is over it). Closing it with the x
    is journaled as dismissed, a timeout or quitting the app with the toast
-   still up as expired. *Tell me more* expands the
-   full explanation above the button bar (scrolling past 300 points) and
-   becomes *Show less*; the three buttons stay pinned to the bottom edge in
-   both states, and an expanded toast stays until closed. *Not now* dismisses and snoozes
-   that category for that app for `notNowSnooze` (1 h). *Never for this*
-   records that the category must never be raised for that app again (the rule
-   is listed and removable in Settings > Mentor). Every suggestion and every
-   answer is journaled, and the history window (menu > Suggestions) lists them
-   with time, app, category, feedback, and full text.
+   still up as expired. *Tell me more* expands the full explanation above the
+   button bar (scrolling past 300 points) and becomes *Show less*; the three
+   buttons stay pinned to the bottom edge in both states, and an expanded
+   toast stays until closed. *Not now* dismisses and snoozes that category for
+   that app for `notNowSnooze` (1 h). *Never for this* records that the
+   category must never be raised for that app again (the rule is listed and
+   removable in Settings > Mentor). Every suggestion and every answer is
+   journaled, and the history window (menu > Suggestions) lists them with
+   time, app, category, feedback, and full text.
 
 Both system prompts and both output schemas live in `Prompts.swift` under a
 version number that is stored with every call and suggestion. Each system

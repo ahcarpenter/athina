@@ -100,7 +100,7 @@ struct ToastView: View {
     @Bindable var model: ToastModel
     let onAction: (SuggestionFeedback) -> Void
     var onHover: (Bool) -> Void = { _ in }
-    var onSizeChange: () -> Void = {}
+    var onSizeChange: @MainActor @Sendable () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
