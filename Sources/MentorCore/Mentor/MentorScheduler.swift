@@ -4,8 +4,10 @@ import Foundation
 ///
 /// Two gates, each a single function: `triageGate` decides whether an
 /// observation is a change moment worth a triage call, and `mentorGate` is the
-/// yes-or-no between triage's verdict and the mentor tier. A later phase adds
-/// its declared-contexts check inside `mentorGate`, nowhere else.
+/// yes-or-no between triage's verdict and the mentor tier. The declared
+/// mentorship contexts are enforced in these two functions and nowhere else:
+/// an enforced but empty list holds triage, and an out-of-context placement
+/// holds the mentor tier.
 public struct MentorScheduler: Equatable, Sendable {
     /// What the loop knows about the world when it asks a gate.
     public struct Conditions: Equatable, Sendable {
@@ -48,6 +50,8 @@ public struct MentorScheduler: Equatable, Sendable {
         case callInFlight
         case spendCapReached(until: Date)
         case notAChangeMoment(CaptureReason)
+        /// Contexts are enforced and none is declared, so nowhere is inside.
+        case noContextsDeclared
         /// The observation waited in the queue behind a long call and no longer shows the present.
         case stale(age: TimeInterval)
         case tooSoon(until: Date)
@@ -65,6 +69,7 @@ public struct MentorScheduler: Equatable, Sendable {
             case .callInFlight: "a call is in flight"
             case .spendCapReached(let until): "spend cap reached until \(until.formatted(date: .omitted, time: .shortened))"
             case .notAChangeMoment(let reason): "not a change moment (\(reason.label))"
+            case .noContextsDeclared: "only mentoring inside declared contexts, and none is declared"
             case .stale(let age): "observation is \(Int(age))s old"
             case .tooSoon(let until): "too soon, next at \(until.formatted(date: .omitted, time: .standard))"
             case .nearIdentical(let similarity): "screen text \(Int((similarity * 100).rounded()))% the same as last triaged"
@@ -83,12 +88,15 @@ public struct MentorScheduler: Equatable, Sendable {
 
     /// Why the mentor tier did not run after triage.
     public enum MentorHold: Equatable, Sendable {
+        /// Triage placed the activity outside every declared context.
+        case outOfContext(ContextExclusion)
         case triageSaidNo(reason: String)
         case tooSoon(until: Date)
         case spendCapReached(until: Date)
 
         public var label: String {
             switch self {
+            case .outOfContext(let exclusion): "outside every declared context (\(exclusion.label))"
             case .triageSaidNo(let reason): "triage passed: \(reason)"
             case .tooSoon(let until): "too soon, next at \(until.formatted(date: .omitted, time: .standard))"
             case .spendCapReached(let until): "spend cap reached until \(until.formatted(date: .omitted, time: .shortened))"
@@ -116,6 +124,7 @@ public struct MentorScheduler: Equatable, Sendable {
     /// Whether this observation is a change moment worth a triage call.
     public func triageGate(for observation: ActivityObservation, conditions: Conditions, now: Date) -> TriageGate {
         if let hold = availabilityHold(conditions: conditions) { return .hold(hold) }
+        if let hold = contextHold() { return .hold(hold) }
         if conditions.callInFlight { return .hold(.callInFlight) }
         guard observation.reason.isChangeMoment else { return .hold(.notAChangeMoment(observation.reason)) }
         let age = now.timeIntervalSince(observation.timestamp)
@@ -148,6 +157,14 @@ public struct MentorScheduler: Equatable, Sendable {
         return nil
     }
 
+    /// What the declared contexts decide before any call: enforcing an empty
+    /// list means no activity can ever be inside, so neither tier should spend
+    /// anything.
+    public func contextHold() -> Hold? {
+        guard settings.onlyMentorInsideContexts, settings.contexts.isEmpty else { return nil }
+        return .noContextsDeclared
+    }
+
     public mutating func noteTriageStarted(observation: ActivityObservation, now: Date) {
         lastTriageAt = now
         lastTriagedWindow = observation.focus.windowSignature
@@ -161,8 +178,12 @@ public struct MentorScheduler: Equatable, Sendable {
 
     // MARK: Mentor gate
 
-    /// The single yes-or-no between triage and the mentor tier.
-    public func mentorGate(triage: TriageVerdict, conditions: Conditions, now: Date) -> MentorGate {
+    /// The single yes-or-no between triage and the mentor tier. The context
+    /// placement is checked first: while the user enforces contexts, an
+    /// activity outside them can never produce a suggestion, whatever else
+    /// triage thought of it.
+    public func mentorGate(triage: TriageVerdict, context: ContextPlacement, conditions: Conditions, now: Date) -> MentorGate {
+        if case .outside(let exclusion) = context { return .hold(.outOfContext(exclusion)) }
         guard triage.worthALook else { return .hold(.triageSaidNo(reason: triage.reason)) }
         if conditions.spendFraction >= 1 { return .hold(.spendCapReached(until: conditions.nextHourStart)) }
         if let next = nextMentorAllowed(multiplier: conditions.cadenceMultiplier), next > now {

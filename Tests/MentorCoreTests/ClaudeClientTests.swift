@@ -92,7 +92,7 @@ import Testing
     }
 
     @Test func schemasAreValidForStructuredOutput() throws {
-        for schema in [MentorPrompts.triageSchema, MentorPrompts.mentorSchema] {
+        for schema in [MentorPrompts.triageSchema(contexts: []), MentorPrompts.mentorSchema] {
             let data = try AnthropicClient.encoder.encode(schema)
             let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
             #expect(object["additionalProperties"] as? Bool == false)
@@ -106,6 +106,80 @@ import Testing
         let payload = try #require(variants.first { $0["type"] as? String == "object" })
         let category = (payload["properties"] as? [String: Any])?["category"] as? [String: Any]
         #expect(category?["enum"] as? [String] == SuggestionCategory.allCases.map(\.rawValue))
+    }
+
+    @Test func triageVerdictDecodesWithAndWithoutTheContextField() throws {
+        let placed = try JSONDecoder().decode(TriageVerdict.self, from: Data(
+            #"{"worth_a_look": true, "reason": "r", "context": "writing Swift"}"#.utf8
+        ))
+        #expect(placed.context == "writing Swift")
+
+        let none = try JSONDecoder().decode(TriageVerdict.self, from: Data(
+            #"{"worth_a_look": false, "reason": "r", "context": null}"#.utf8
+        ))
+        #expect(none.context == nil)
+
+        // A reply from before the question was asked still decodes.
+        let old = try JSONDecoder().decode(TriageVerdict.self, from: Data(#"{"worth_a_look": true, "reason": "r"}"#.utf8))
+        #expect(old.context == nil)
+    }
+
+    @Test func theTriageSchemaAsksForTheContextOnlyWhenOneIsDeclared() throws {
+        let bare = try #require(try JSONSerialization.jsonObject(
+            with: AnthropicClient.encoder.encode(MentorPrompts.triageSchema(contexts: []))
+        ) as? [String: Any])
+        #expect((bare["properties"] as? [String: Any])?["context"] == nil)
+        #expect(bare["required"] as? [String] == ["worth_a_look", "reason"])
+
+        let contexts = [MentorshipContext(name: "writing Swift"), MentorshipContext(name: "drafting documents")]
+        let asked = try #require(try JSONSerialization.jsonObject(
+            with: AnthropicClient.encoder.encode(MentorPrompts.triageSchema(contexts: contexts))
+        ) as? [String: Any])
+        #expect(asked["additionalProperties"] as? Bool == false)
+        #expect(asked["required"] as? [String] == ["worth_a_look", "reason", "context"])
+        let context = try #require((asked["properties"] as? [String: Any])?["context"] as? [String: Any])
+        let variants = try #require(context["anyOf"] as? [[String: Any]])
+        #expect(variants.first?["type"] as? String == "null")
+        // The enum of declared names means the model cannot invent a context.
+        #expect(variants.last?["enum"] as? [String] == ["writing Swift", "drafting documents"])
+    }
+
+    @Test func theTriageSystemPromptCarriesTheDeclaredContextsUnchangedOtherwise() {
+        let bare = MentorPrompts.triageSystem(contexts: [])
+        #expect(bare == MentorPrompts.triageBase)
+        #expect(!bare.contains("Set context to"))
+
+        let contexts = [
+            MentorshipContext(name: "writing Swift", detail: "the Mentor app itself"),
+            MentorshipContext(name: "drafting documents"),
+        ]
+        let withContexts = MentorPrompts.triageSystem(contexts: contexts)
+        // Same prefix, so only the appended section is a new cache write.
+        #expect(withContexts.hasPrefix(bare))
+        #expect(withContexts.contains("- \"writing Swift\": the Mentor app itself"))
+        #expect(withContexts.contains("- \"drafting documents\""))
+        #expect(withContexts.contains("answer null whenever you are unsure"))
+        #expect(!withContexts.contains("\u{2014}"))
+    }
+
+    /// The declared block is a bullet list the model reads as the whole set of
+    /// contexts, so a detail the editor let the user wrap must not add a line.
+    @Test func aMultiLineDetailStillRendersAsOneBulletPerContext() {
+        var settings = MentorSettings()
+        settings.contexts = [
+            MentorshipContext(name: "writing Swift", detail: "Building Mentor itself.\nSwift, SwiftUI,\n\nand the tests."),
+            MentorshipContext(name: "reading API documentation"),
+        ]
+        let contexts = settings.validated().contexts
+        #expect(contexts.first?.detail == "Building Mentor itself. Swift, SwiftUI, and the tests.")
+
+        let section = MentorPrompts.triageSystem(contexts: contexts)
+            .dropFirst(MentorPrompts.triageBase.count)
+        let bullets = section.split(whereSeparator: \.isNewline).filter { $0.hasPrefix("- ") }
+        #expect(bullets == [
+            "- \"writing Swift\": Building Mentor itself. Swift, SwiftUI, and the tests.",
+            "- \"reading API documentation\"",
+        ])
     }
 
     @Test func modelTextLosesItsDashes() {

@@ -120,6 +120,9 @@ struct MenuBarContent: View {
     var body: some View {
         Text(state.statusLine)
         Text(state.mentorLine)
+        if let context = state.mentorContextLine {
+            Text(context)
+        }
         if let resources = state.resources {
             Text(String(format: "%.1f%% CPU · %@", resources.cpuPercent, Formatting.bytes(resources.footprintBytes)))
         }
