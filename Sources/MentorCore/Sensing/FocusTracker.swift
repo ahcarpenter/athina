@@ -40,11 +40,22 @@ public final class FocusTracker {
     }
 
     public func updateExcluded(_ bundleIDs: Set<String>) {
+        guard bundleIDs != excludedBundleIDs else { return }
         excludedBundleIDs = bundleIDs
         if let current, isRunning {
             // Exclusion state may have flipped for the current app: re-evaluate observers.
             attach(to: current, kind: .application)
         }
+    }
+
+    /// Installs or removes the current app's observer when the Accessibility
+    /// grant no longer matches what was in place when the app was attached.
+    public func refreshObserver() {
+        guard let current, isRunning else { return }
+        let excluded = ExcludedApps.matches(bundleID: current.bundleID, excluded: excludedBundleIDs)
+        let wantsObserver = !excluded && AXIsProcessTrusted()
+        guard wantsObserver != (observer != nil) else { return }
+        attach(to: current, kind: .application)
     }
 
     public func start() {

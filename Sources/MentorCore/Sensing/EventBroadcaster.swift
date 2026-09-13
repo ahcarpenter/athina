@@ -45,6 +45,7 @@ public actor EventBroadcaster<Element: Sendable> {
 actor AsyncSignal {
     private var waiter: CheckedContinuation<Void, Never>?
     private var pending = false
+    private var generation = 0
 
     func signal() {
         if let waiter {
@@ -60,13 +61,21 @@ actor AsyncSignal {
             pending = false
             return
         }
+        generation += 1
+        let current = generation
         let timer = Task {
             try? await Task.sleep(for: timeout)
-            self.signal()
+            self.timeOut(generation: current)
         }
         await withCheckedContinuation { continuation in
             waiter = continuation
         }
         timer.cancel()
+    }
+
+    private func timeOut(generation: Int) {
+        guard generation == self.generation, let waiter else { return }
+        self.waiter = nil
+        waiter.resume()
     }
 }

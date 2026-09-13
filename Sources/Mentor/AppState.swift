@@ -16,6 +16,11 @@ final class AppState {
     var settings: SensingSettings {
         didSet {
             guard settings != oldValue else { return }
+            let validated = settings.validated()
+            if settings != validated {
+                settings = validated
+                return
+            }
             scheduleSettingsSave()
             let pipeline = pipeline
             let hotKey = settings.pauseHotKey
@@ -49,6 +54,7 @@ final class AppState {
     let settingsURL = SettingsStore.defaultURL()
 
     private let store: SettingsStore
+    private let isSample: Bool
     private let hotKeys = HotKeyCenter()
     private var journal: Journal?
     private var pipeline: SensingPipeline?
@@ -59,6 +65,7 @@ final class AppState {
 
     private init() {
         store = SettingsStore(url: SettingsStore.defaultURL())
+        isSample = false
         settings = store.load()
         let status = PermissionProbe.current()
         permissions = status
@@ -68,6 +75,7 @@ final class AppState {
     /// A detached state for snapshots and previews: never starts the pipeline.
     init(sampleWithSettings settings: SensingSettings) {
         store = SettingsStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("mentor-sample-settings.json"))
+        isSample = true
         self.settings = settings
         permissions = PermissionStatus(screenRecording: true, accessibility: true)
         needsPermissionsOnboarding = false
@@ -143,6 +151,7 @@ final class AppState {
     }
 
     func refreshPermissions() {
+        guard !isSample else { return }
         let fresh = PermissionProbe.current()
         guard fresh != permissions else { return }
         permissions = fresh
@@ -150,6 +159,7 @@ final class AppState {
     }
 
     func requestPermission(_ permission: Permission) {
+        guard !isSample else { return }
         AppState.log.notice("requesting permission \(permission.rawValue, privacy: .public)")
         PermissionProbe.request(permission)
         Task {

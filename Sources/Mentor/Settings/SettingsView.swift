@@ -500,6 +500,9 @@ private struct DurationRow: View {
             }
         }
         .onAppear(perform: pull)
+        .onChange(of: value) { _, newValue in
+            if newValue != amount * unit.seconds { pull() }
+        }
     }
 
     private func pull() {

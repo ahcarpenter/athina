@@ -184,7 +184,11 @@ public actor SensingPipeline {
         let fresh = PermissionProbe.current()
         if fresh != permissions {
             let hadAny = permissions.anyGranted
+            let accessibilityChanged = fresh.accessibility != permissions.accessibility
             permissions = fresh
+            if accessibilityChanged {
+                Task { await tracker.refreshObserver() }
+            }
             if hadAny || fresh.anyGranted {
                 Task { await journalEvent(JournalEvent(
                     kind: .permissionsChanged,
@@ -259,6 +263,7 @@ public actor SensingPipeline {
         if let fresh = await tracker.readCurrent() {
             focus = fresh
             lastFocus = fresh
+            await broadcaster.send(.focusChanged(fresh))
         } else if let lastFocus {
             focus = lastFocus
         } else {
@@ -275,6 +280,7 @@ public actor SensingPipeline {
             permissionsCheckedAt = .distantPast
             return
         }
+        guard lastFocus?.isExcluded != true else { return }
 
         guard let hash = FrameImaging.perceptualHash(of: frame.image) else {
             cadence.lastError = "capture: could not hash frame"
