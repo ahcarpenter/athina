@@ -2,12 +2,14 @@
 
 Live mentor for macOS: watches what you are doing and offers timely guidance.
 
-This repository holds the **foundation phase**: a menu-bar app that senses what
+Two phases are in place. The **foundation** is a menu-bar app that senses what
 you are doing (accessibility context plus low-cadence screen capture with
 on-device OCR), records it in a local journal, and shows a debug panel with what
-it currently thinks you are doing. It makes **no model calls and no network
-requests**. Suggestions, toasts, callouts, voice, and halt-and-redirect are
-later phases that subscribe to the observation stream this phase provides.
+it currently thinks you are doing. The **mentor loop** subscribes to that
+stream and asks Claude, in two tiers, whether there is a genuinely more helpful
+way to approach what you are doing; when there is, a small toast says so and
+learns from your answer. Callouts, voice, and halt-and-redirect are later
+phases.
 
 ## Requirements
 
@@ -31,11 +33,21 @@ There is no Xcode project. `Package.swift` defines the targets and
 `swift build` and `swift test` work directly too.
 
 `Mentor --snapshot <dir>` renders every window with sample data to PNG files
-(light and dark) without starting the pipeline. It is how UI changes get checked
-without a person at the screen; it needs no permissions.
-`open build/Mentor.app --args --open debug` (or `settings`, `permissions`) launches the
-app with that window already open, which is how the live panel gets screenshotted
-from a shell.
+(light and dark) without starting the pipeline or calling any model. It is how
+UI changes get checked without a person at the screen; it needs no permissions.
+`open build/Mentor.app --args --open debug` (or `settings`, `settings:mentor`,
+`permissions`, `history`) launches the app with that window already open, which
+is how the live panel gets screenshotted from a shell.
+
+### Setup: the Anthropic API key
+
+The mentor loop needs an Anthropic API key. Open Settings > Mentor, paste the
+key, press Save, then Test Connection: it sends one tiny request on the triage
+model and reports the answering model or the API's own error message. The key
+goes into your login keychain (`com.ahcarpenter.mentor` /
+`anthropic-api-key`) and nowhere else; the app only ever shows its last four
+characters. Without a key the loop stays idle and the menu says so. Remove
+deletes the keychain item.
 
 ### Code signing
 
@@ -76,17 +88,18 @@ re-checks every second while open and when the app regains focus.
 | Accessibility | Focused app, window title, focused element role and text, via the AX API | Screen-only mode: frames and OCR only; app identity comes from NSWorkspace |
 
 Idle detection uses `CGEventSource.secondsSinceLastEventType`, which needs no
-permission. Input Monitoring is never requested. Nothing in this phase opens a
-network connection.
+permission. Input Monitoring is never requested. The only network connection
+the app ever opens is to `api.anthropic.com`, from the mentor loop, and only
+when a key is saved (see Privacy model).
 
 ## Architecture
 
 ```
 Sources/MentorCore            library, fully testable
-  Settings/                   SensingSettings (every threshold and cadence), SettingsStore (JSON),
-                              ExcludedApps (defaults and matching), HotKey
+  Settings/                   SensingSettings (every threshold and cadence), MentorSettings (the loop's
+                              section of the same file), SettingsStore (JSON), ExcludedApps, HotKey
   Model/ActivityObservation   FocusContext, FrameInfo, TextBlock, ActivityObservation, JournalEvent,
-                              SensingEvent (the stream later phases consume), SensingMode, CadenceStatus
+                              SensingEvent (the stream the mentor loop consumes), SensingMode, CadenceStatus
   Scheduling/                 CaptureScheduler (pure trigger and cadence state machine),
                               FrameKeepPolicy (near-duplicate drop rule)
   Imaging/                    PerceptualHash (256-bit dHash), FrameImaging (downscale, hash, JPEG)
@@ -94,9 +107,17 @@ Sources/MentorCore            library, fully testable
   Sensing/                    AXActor (run-loop thread for the AX API), FocusTracker (NSWorkspace + AXObserver),
                               ScreenCapturer (ScreenCaptureKit), TextRecognizer (Vision),
                               SensingPipeline (orchestration), EventBroadcaster (fan-out AsyncStream)
+  Claude/                     ClaudeClient (Messages API request and response types, AnthropicClient over
+                              URLSession), ScriptedClaudeClient (mock for tests), ModelCatalog and PriceTable,
+                              KeyStore (Keychain and in-memory), JSONValue (schemas)
+  Mentor/                     MentorScheduler (pure trigger, debounce, and gate state machine), SpendMeter,
+                              SuppressionRules (snooze and never-for-this), ContextBuilder (rolling window,
+                              prompt text), Prompts (versioned system prompts and output schemas),
+                              Suggestion and ModelCallRecord, MentorLoop (orchestration)
   System/                     PermissionProbe, InputActivity (idle seconds), ProcessResources (CPU, memory)
-Sources/Mentor                the app: MenuBarExtra, AppState, windows, HotKeyCenter (Carbon), Snapshots
-Tests/MentorCoreTests         Swift Testing suites for the pure parts
+Sources/Mentor                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
+                              HotKeyCenter (Carbon), Snapshots
+Tests/MentorCoreTests         Swift Testing suites for the pure parts, with JSON fixtures under Fixtures/
 ```
 
 ### Sensing loop
@@ -143,21 +164,108 @@ oldest thumbnails and finally the oldest observations and events until it fits.
 Settings live next to it in `settings.json`; missing or unknown keys fall back
 to defaults so older files keep working.
 
-### Subscription point for later phases
+Settings live next to it in `settings.json`; missing or unknown keys fall back
+to defaults so older files keep working. The mentor loop adds two tables:
+`suggestions` (every suggestion shown, with the user's feedback) and
+`model_calls` (one row per API call: tier, model, prompt version and size,
+token counts, estimated cost, latency, outcome, and the model's one-line
+reason; never the prompt text). Both expire with `textRetention` and are
+emptied by Clear Journal.
+
+### Subscription point
 
 `SensingPipeline.events()` returns an `AsyncStream<SensingEvent>`; every
-subscriber sees every event from the moment it subscribes. The mentor loop will
-consume `.observation(ActivityObservation)` (already journaled, with id) plus
-the focus, mode, and cadence events, and can read history from `Journal`.
+subscriber sees every event from the moment it subscribes. The mentor loop
+consumes `.observation(ActivityObservation)` (already journaled, with id) and
+the mode events, and reads history from `Journal`. Later phases subscribe the
+same way, and to `MentorLoop.events()` for suggestions and feedback.
+
+## Mentor loop
+
+`MentorLoop` is an actor with one consumer task over the sensing stream. For
+each kept observation it runs, in order:
+
+1. **Triage gate** (`MentorScheduler.triageGate`). The triage tier runs only on
+   change moments: a kept observation whose reason is a focus change, settled
+   input, or a manual capture, never a floor-cadence frame. It is debounced to
+   one call per `triageMinInterval` (20 s by default) and skipped when the
+   screen text is near-identical to the last triaged screen of the same window
+   (line-set overlap of at least `triageSimilarityThreshold`, 0.9). Nothing
+   runs while paused, idle, on an excluded app, without permissions, without an
+   API key, while another call is in flight, or while the spend cap holds.
+2. **Triage call** on the cheap model (`claude-haiku-4-5-20251001` by default)
+   with structured output: `{"worth_a_look": bool, "reason": string}`.
+3. **Mentor gate** (`MentorScheduler.mentorGate`), the single yes-or-no between
+   triage and the strong model: triage said yes, the spend cap is not reached,
+   and at least `mentorMinInterval` (2 min) has passed since the last mentor
+   call. A later phase adds its declared-contexts check inside this gate.
+4. **Mentor call** on the strong model (`claude-fable-5-1` by default, or
+   `claude-opus-5` from Settings) with a rolling window of recent observations'
+   text (bounded by `mentorWindowDuration` and `mentorWindowTokenBudget`), a
+   compact event summary, the categories currently suppressed for the app,
+   and, when `sendThumbnail` is on, the latest kept thumbnail as an image. The
+   reply is `{"reason": string, "suggestion": null | {title, body, explanation,
+   category, confidence}}`. A null suggestion is the normal outcome.
+5. **Delivery.** A suggestion under `minimumConfidence` or in a snoozed or
+   never-for-this category is logged and dropped. Otherwise it is journaled and
+   shown as a toast: a floating, non-activating panel under the menu bar that
+   never takes keyboard focus and auto-dismisses after `toastTimeout`. *Tell me
+   more* expands the full explanation in place. *Not now* dismisses and snoozes
+   that category for that app for `notNowSnooze` (1 h). *Never for this*
+   records that the category must never be raised for that app again (the rule
+   is listed and removable in Settings > Mentor). Every suggestion and every
+   answer is journaled, and the history window (menu > Suggestions) lists them
+   with time, app, category, feedback, and full text.
+
+Both system prompts and both output schemas live in `Prompts.swift` under a
+version number that is stored with every call and suggestion. Each system
+prompt carries a `cache_control` marker, so repeated calls read it from the
+prompt cache; the request encoder sorts keys so the cached prefix is byte
+identical between calls. The API key is read from the Keychain inside the loop
+and passed per request; it is never journaled or logged.
+
+### Spend control
+
+Every response's usage fields (`input_tokens`, `output_tokens`,
+`cache_creation_input_tokens`, `cache_read_input_tokens`) are priced with the
+table in Settings > Mentor (dollars per million tokens, defaults checked
+against Anthropic's pricing page on the date shown there, editable) and added
+to a per-clock-hour total. As the total approaches `hourlySpendCap` ($1 by
+default) both minimum intervals stretch by `1 / (1 - spent / cap)`, capped at
+8x: 2x at half the cap, 4x at three quarters. At the cap no call is made until
+the next clock hour. The hour's total is seeded from the journal at launch, so
+relaunching does not reset it. Spend this hour shows in the menu, the debug
+panel status bar, and the Mentor card.
 
 ## Privacy model
 
-- Everything stays on this Mac. There is no network code in the app.
+- Sensing stays on this Mac: the journal, thumbnails, and settings never leave
+  it. The only network peer is `api.anthropic.com`, reached only by the mentor
+  loop, only when an API key is saved and the loop is enabled. No other part
+  of the app has network code.
+- **What leaves the machine.** The triage tier receives text only: the
+  frontmost app and window title, the accessibility summary (focused element
+  role and an excerpt of its text), the OCR text of the latest kept
+  observation (cut at 6000 characters), and a compact summary of recent
+  journal events. The mentor tier receives the rolling window of recent
+  observations' text (app, window, accessibility summary, and OCR text of
+  each, bounded by the window duration and token budget in Settings) and, by
+  default, the latest kept thumbnail as a JPEG image. "Send the latest
+  screenshot to the mentor model" in Settings > Mentor turns the image off, in
+  which case the mentor tier receives text only. Nothing else is sent: no
+  file names, no keystrokes, no earlier thumbnails, no key.
+- The API key lives in the login keychain, is passed per request, and is never
+  written to the journal, the logs, or the debug panel, which show at most its
+  last four characters.
 - **Excluded apps** (Settings > Privacy) default to Keychain Access, Passwords,
   and common password managers. While one is frontmost Mentor captures no frame,
   reads no window title or element, runs no OCR, and journals only that the app
-  was excluded.
-- Secure text fields are never read, even in non-excluded apps.
+  was excluded, so nothing from them can reach either tier.
+- Secure text fields are never read, even in non-excluded apps, so their
+  contents never reach either tier.
+- Model calls are journaled as counts (tokens, cost, latency, outcome) with the
+  model's one-line reason, never with the prompt or the screen text that was
+  sent.
 - **Pause** from the menu or with the global hotkey (default ⌃⌥⌘P) stops all
   sensing; the menu bar icon switches from a filled eye to a crossed eye. Idle
   shows an outlined eye, an excluded app a raised hand, and missing permissions
@@ -169,13 +277,19 @@ the focus, mode, and cadence events, and can read history from `Journal`.
 
 ## Debug panel
 
-Menu bar > Debug Panel. Left: frontmost app, window, focused element (role,
-title, description, text), cadence settings and counters, journal size and path.
-Centre: the latest kept frame with OCR boxes overlaid and the recognized text
-below; selecting an observation in the timeline shows that frame instead. Right:
-a live timeline of observations and events from the journal. The status bar
-shows mode, permission state, last and next capture with reason, seconds since
-input, and the app's own CPU and memory.
+Menu bar > Debug Panel. Left: frontmost app, window, the Mentor loop card
+(availability, the last triage gate decision and its reason, the last triage
+and mentor calls with tokens, cached tokens, estimated cost and latency, spend
+this hour, and the cadence state with the current slowdown), focused element
+(role, title, description, text), cadence settings and counters, journal size
+and path. Centre: the latest kept frame with OCR boxes overlaid and the
+recognized text below; selecting an observation in the timeline shows that
+frame instead. Right: a live timeline of observations and events from the
+journal (suggestions and feedback included), or, under Model calls, a scrolling
+log of every API call with prompt size, tokens, cost, latency, outcome, and the
+model's reason. The status bar shows mode, permission state, last and next
+capture with reason, seconds since input, spend this hour against the cap, and
+the app's own CPU and memory.
 
 ## Continuous integration
 
@@ -183,5 +297,8 @@ input, and the app's own CPU and memory.
 `Mentor --snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the
 macOS 26 SDK this package targets, and uploads the rendered PNGs as the
 `ui-snapshots` artifact. The tests exercise the pure parts (hashing, cadence,
-journal, retention, settings) and Vision OCR on a drawn bitmap, so they need no
-permissions or display.
+journal, retention, settings, the mentor scheduler and gates, spend accounting,
+snooze and never-for-this rules, the rolling window, request and response
+coding against fixture JSON, and the whole loop against a scripted client) and
+Vision OCR on a drawn bitmap, so they need no permissions, display, network,
+or API key.
