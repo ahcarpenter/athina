@@ -139,6 +139,9 @@ public enum ModelCallOutcome: String, Codable, Sendable, CaseIterable {
     case quiet
     /// Triage said the mentor should look.
     case candidate
+    /// Triage placed the activity outside every declared context, so the
+    /// mentor tier was never reached.
+    case outOfContext
     /// The mentor looked and chose silence.
     case nothingToSay
     /// A suggestion was shown.
@@ -160,6 +163,7 @@ public enum ModelCallOutcome: String, Codable, Sendable, CaseIterable {
         switch self {
         case .quiet: "Quiet"
         case .candidate: "Candidate"
+        case .outOfContext: "Out of context"
         case .nothingToSay: "Nothing to say"
         case .suggested: "Suggested"
         case .belowConfidence: "Below confidence"
@@ -250,6 +254,21 @@ public struct MentorStatus: Equatable, Sendable {
         }
     }
 
+    /// The latest verdict on where the user's activity sits relative to the
+    /// declared contexts, and what settled it.
+    public struct ContextRecord: Equatable, Sendable {
+        public var at: Date
+        public var placement: ContextPlacement
+        /// The app the verdict was made for, so a stale readout is recognisable.
+        public var appName: String
+
+        public init(at: Date, placement: ContextPlacement, appName: String) {
+            self.at = at
+            self.placement = placement
+            self.appName = appName
+        }
+    }
+
     public struct MentorHoldRecord: Equatable, Sendable {
         public var at: Date
         public var hold: MentorScheduler.MentorHold
@@ -262,6 +281,7 @@ public struct MentorStatus: Equatable, Sendable {
 
     public var availability: Availability
     public var lastGate: GateRecord?
+    public var lastContext: ContextRecord?
     public var lastTriage: ModelCallRecord?
     public var lastMentorHold: MentorHoldRecord?
     public var lastMentor: ModelCallRecord?
@@ -276,6 +296,7 @@ public struct MentorStatus: Equatable, Sendable {
     public init(
         availability: Availability = .noAPIKey,
         lastGate: GateRecord? = nil,
+        lastContext: ContextRecord? = nil,
         lastTriage: ModelCallRecord? = nil,
         lastMentorHold: MentorHoldRecord? = nil,
         lastMentor: ModelCallRecord? = nil,
@@ -289,6 +310,7 @@ public struct MentorStatus: Equatable, Sendable {
     ) {
         self.availability = availability
         self.lastGate = lastGate
+        self.lastContext = lastContext
         self.lastTriage = lastTriage
         self.lastMentorHold = lastMentorHold
         self.lastMentor = lastMentor

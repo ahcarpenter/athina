@@ -111,9 +111,10 @@ Sources/MentorCore            library, fully testable
                               URLSession), ScriptedClaudeClient (mock for tests), ModelCatalog and PriceTable,
                               KeyStore (Keychain and in-memory), JSONValue (schemas)
   Mentor/                     MentorScheduler (pure trigger, debounce, and gate state machine), SpendMeter,
-                              SuppressionRules (snooze and never-for-this), ContextBuilder (rolling window,
-                              prompt text), Prompts (versioned system prompts and output schemas),
-                              Suggestion and ModelCallRecord, MentorLoop (orchestration)
+                              SuppressionRules (snooze and never-for-this), MentorshipContexts (declared
+                              contexts, normalizing, placement), ContextBuilder (rolling window, prompt
+                              text), Prompts (versioned system prompts and output schemas), Suggestion and
+                              ModelCallRecord, MentorLoop (orchestration)
   System/                     PermissionProbe, InputActivity (idle seconds), ProcessResources (CPU, memory)
 Sources/Mentor                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               HotKeyCenter (Carbon), Snapshots
@@ -164,8 +165,9 @@ oldest thumbnails and finally the oldest observations and events until it fits.
 The mentor loop adds two tables: `suggestions` (every suggestion shown, with
 the user's feedback) and `model_calls` (one row per API call: tier, model,
 prompt version and size, token counts, estimated cost, latency, outcome, and
-the model's one-line reason; never the prompt text). Both expire with
-`textRetention` and are emptied by Clear Journal.
+the model's one-line reason; never the prompt text). A moment held at the
+context boundary is recorded there as the `outOfContext` outcome. Both expire
+with `textRetention` and are emptied by Clear Journal.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
 to defaults so older files keep working.
@@ -193,17 +195,21 @@ each kept observation it runs, in order:
    API key, while another call is in flight, or while the spend cap holds.
 2. **Triage call** on the cheap model (`claude-haiku-4-5-20251001` by default;
    Sonnet 5, Opus 5, and Fable 5.1 are offered too) with structured output:
-   `{"worth_a_look": bool, "reason": string}`.
+   `{"worth_a_look": bool, "reason": string}`, plus `context` while
+   mentorship contexts are enforced.
 3. **Mentor gate** (`MentorScheduler.mentorGate`), the single yes-or-no between
-   triage and the strong model: triage said yes, the spend cap is not reached,
-   and at least `mentorMinInterval` (2 min) has passed since the last mentor
-   call. A later phase adds its declared-contexts check inside this gate.
+   triage and the strong model: the activity is inside a declared mentorship
+   context (see below), triage said yes, the spend cap is not reached, and at
+   least `mentorMinInterval` (2 min) has passed since the last mentor call.
 4. **Mentor call** on the strong model (`claude-opus-5` at medium effort by
    default; Sonnet 5 and Fable 5.1 are offered too) with a rolling window of
    recent observations' text (bounded by `mentorWindowDuration` and
    `mentorWindowTokenBudget`), a compact event summary, the categories
    currently suppressed for the app, and, when `sendThumbnail` is on, the
-   latest kept thumbnail as an image. The reply is `{"reason": string,
+   latest kept thumbnail as an image. While mentorship contexts are enforced
+   the message also names the declared context the moment was placed in, with
+   its description, so the suggestion stays useful for that work. The reply is
+   `{"reason": string,
    "suggestion": null | {title, body, explanation, category, confidence}}`. A
    null suggestion is the normal outcome.
 
@@ -244,6 +250,45 @@ that way never expires on its own, and a non-answer never overwrites an
 answer already given. The API key is read from the Keychain inside the loop
 and passed per request; it is never journaled or logged.
 
+### Mentorship contexts
+
+Settings > Mentor > Mentorship contexts is where you say what you want
+mentoring in, in your own words: a short name such as "building web apps" and
+an optional sentence saying what counts. **Only mentor inside these contexts**
+turns that list into a hard boundary; it is off by default, and while it is off
+the contexts change nothing.
+
+While it is on, the declared names and descriptions are appended to the triage
+system prompt and triage answers `context` (one of the declared names, or null)
+alongside its usual verdict, so placing the moment costs no extra call. Null is
+the one way the model declines to place a snapshot, and the prompt tells it to
+answer null whenever it is unsure rather than guessing. A moment triage leaves
+at null never reaches the mentor tier and never becomes a suggestion; the
+triage call is logged with the `outOfContext` outcome and the reason. The
+schema offers only the declared names, so the model cannot answer with a
+context that does not exist. The declared list is part of the triage system
+prompt's single cached block, so an edit changes that prefix once; whether the
+triage prompt is served from cache at all is the per-model question answered
+above.
+
+Up to `ContextRules.maxContexts` (12) contexts may be declared, each with a
+unique name of at most 60 characters and a description of at most 280. The
+editor disables Add at the cap, refuses a name another context already uses,
+and caps both fields as they are typed with a note at the limit, so nothing
+saved is dropped or cut on the way in. With the switch on and no context
+declared, nothing is inside anything: no triage call is made at all, and the
+settings section, the menu, and the debug panel all say so.
+
+To keep an app from being looked at at all, exclude it in Settings > Privacy >
+Excluded apps: while an excluded app is frontmost nothing is captured, so
+nothing about it can reach either tier.
+
+The menu bar menu shows the current verdict (`Context: inside "writing Swift"`,
+or why it is out) while it is still about the frontmost app, and
+`Context: not yet judged in <app>` otherwise; the debug panel's Mentor card
+shows it with the app it was made for and its age, and the model call log marks
+a held call with the `outOfContext` outcome.
+
 ### Spend control
 
 Every response's usage fields (`input_tokens`, `output_tokens`,
@@ -272,11 +317,20 @@ panel status bar, and the Mentor card.
   each, bounded by the window duration and token budget in Settings) and, by
   default, the latest kept thumbnail as a JPEG image. "Send the latest
   screenshot to the mentor model" in Settings > Mentor turns the image off, in
-  which case the mentor tier receives text only. Nothing else is sent: no
-  file names, no keystrokes, no earlier thumbnails, no key.
+  which case the mentor tier receives text only. While mentorship contexts
+  are enforced, the mentor tier also receives the name and description of the
+  declared context the moment was placed in. Nothing else is sent: no file
+  names, no keystrokes, no earlier thumbnails, no key.
 - The API key lives in the login keychain, is passed per request, and is never
   written to the journal, the logs, or the debug panel, which show at most its
   last four characters.
+- With **only mentor inside these contexts** on, the declared context names and
+  descriptions are part of the triage system prompt, so they do leave the
+  machine with every triage call. When triage places a moment inside one of
+  them, the mentor call carries that one context's name and description so the
+  suggestion stays useful for that work. A moment placed outside never reaches
+  the mentor tier, so no context information is sent for it; the placement
+  itself is decided here from the model's answer, not there.
 - **Excluded apps** (Settings > Privacy) default to Keychain Access, Passwords,
   and common password managers. While one is frontmost Mentor captures no frame,
   reads no window title or element, runs no OCR, and journals only that the app
@@ -298,9 +352,10 @@ panel status bar, and the Mentor card.
 ## Debug panel
 
 Menu bar > Debug Panel. Left: frontmost app, window, the Mentor loop card
-(availability, the last triage gate decision and its reason, the last triage
-and mentor calls with tokens, cached tokens, estimated cost and latency, spend
-this hour, and the cadence state with the current slowdown), focused element
+(availability, the last triage gate decision and its reason, the current
+mentorship context verdict, the last triage and mentor calls with tokens, cached
+tokens, estimated cost and latency, spend this hour, and the cadence state with
+the current slowdown), focused element
 (role, title, description, text), cadence settings and counters, journal size
 and path. Centre: the latest kept frame with OCR boxes overlaid and the
 recognized text below; selecting an observation in the timeline shows that
@@ -317,8 +372,9 @@ the app's own CPU and memory.
 `Mentor --snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the
 macOS 26 SDK this package targets, and uploads the rendered PNGs as the
 `ui-snapshots` artifact. The tests exercise the pure parts (hashing, cadence,
-journal, retention, settings, the mentor scheduler and gates, spend accounting,
-snooze and never-for-this rules, the rolling window, request and response
-coding against fixture JSON, and the whole loop against a scripted client) and
+journal, retention, settings, the mentor scheduler and gates, mentorship context
+rules and placement, spend accounting, snooze and never-for-this rules, the
+rolling window, request and response coding against fixture JSON, and the whole
+loop against a scripted client) and
 Vision OCR on a drawn bitmap, so they need no permissions, display, network,
 or API key.

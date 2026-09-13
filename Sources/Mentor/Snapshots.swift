@@ -23,7 +23,11 @@ enum Snapshots {
             ("permissions", CGSize(width: 560, height: 520), AnyView(PermissionsView())),
             ("debug-panel", CGSize(width: 1180, height: 760), AnyView(DebugPanelView())),
             ("debug-panel-calls", CGSize(width: 1180, height: 760), AnyView(DebugPanelView(initialSidePage: .calls))),
-            ("settings-mentor", CGSize(width: 600, height: 900), AnyView(SettingsView(initialTab: .mentor))),
+            // The Mentor tab is longer than any window macOS will open, so it
+            // renders as tall as a screen allows and its contexts sections get
+            // a render of their own.
+            ("settings-mentor", CGSize(width: 600, height: 1040), AnyView(SettingsView(initialTab: .mentor))),
+            ("settings-mentor-contexts", CGSize(width: 600, height: 800), AnyView(MentorshipContextsPreview())),
             ("settings-cadence", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .cadence))),
             ("settings-frames", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .frames))),
             ("settings-journal", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .journal))),
@@ -140,7 +144,10 @@ enum Snapshots {
 extension AppState {
     /// Realistic data for snapshots and previews. Nothing here touches the pipeline.
     static func sample() -> AppState {
-        let state = AppState(sampleWithSettings: SensingSettings())
+        var settings = SensingSettings()
+        settings.mentor.onlyMentorInsideContexts = true
+        settings.mentor.contexts = SampleSuggestions.contexts
+        let state = AppState(sampleWithSettings: settings)
         let now = Date()
         let focus = FocusContext(
             timestamp: now,
@@ -227,6 +234,13 @@ extension AppState {
         state.mentorStatus = MentorStatus(
             availability: .ready,
             lastGate: MentorStatus.GateRecord(at: now.addingTimeInterval(-2.4), observationID: 128, hold: .tooSoon(until: now.addingTimeInterval(13))),
+            lastContext: MentorStatus.ContextRecord(
+                at: now.addingTimeInterval(-52),
+                placement: .inside(ContextMatch(
+                    contextID: SampleSuggestions.contexts[0].id, name: SampleSuggestions.contexts[0].name
+                )),
+                appName: "Xcode"
+            ),
             lastTriage: state.callLog.first { $0.tier == .triage },
             lastMentorHold: nil,
             lastMentor: state.callLog.first { $0.tier == .mentor },
@@ -239,6 +253,17 @@ extension AppState {
             inFlight: nil
         )
         return state
+    }
+}
+
+/// The mentorship contexts section on its own, because the Mentor tab is
+/// taller than any window it would otherwise be rendered in.
+struct MentorshipContextsPreview: View {
+    var body: some View {
+        Form {
+            MentorshipContextsSection()
+        }
+        .formStyle(.grouped)
     }
 }
 
@@ -256,6 +281,19 @@ struct SampleToast: View {
 }
 
 enum SampleSuggestions {
+    /// Two declared contexts, so the settings section and the context readouts
+    /// have something real to show.
+    static let contexts = [
+        MentorshipContext(
+            name: "writing Swift",
+            detail: "Building the Mentor app itself: Swift, SwiftUI, and the tests and build commands around them."
+        ),
+        MentorshipContext(
+            name: "reading API documentation",
+            detail: "Working out how an Apple or third-party framework behaves before using it."
+        ),
+    ]
+
     static func make(now: Date) -> [Suggestion] {
         [
             Suggestion(
@@ -312,14 +350,17 @@ enum SampleSuggestions {
             ),
         ]
         for i in 0..<14 {
+            // Every third call is a moment outside the declared contexts, the
+            // outcome that keeps the mentor tier out of it.
+            let outside = i % 3 == 1
             let quiet = i % 4 != 2
             calls.append(ModelCallRecord(
                 id: Int64(59 - i), timestamp: now.addingTimeInterval(-80 - Double(i) * 47), tier: .triage, model: "claude-haiku-4-5-20251001",
                 promptVersion: MentorPrompts.version, promptCharacters: 2_100 + i * 130, imageBytes: 0,
                 usage: Usage(inputTokens: 700 + i * 40, outputTokens: 38, cacheCreationInputTokens: i == 13 ? 560 : 0, cacheReadInputTokens: i == 13 ? 0 : 560),
                 cost: 0.0011, latency: 0.9 + Double(i % 3) * 0.2,
-                outcome: quiet ? .quiet : .candidate,
-                detail: quiet ? "Reading documentation, nothing to act on" : "Repeated manual test runs"
+                outcome: outside ? .outOfContext : (quiet ? .quiet : .candidate),
+                detail: outside ? "Booking a flight" : (quiet ? "Reading documentation, nothing to act on" : "Repeated manual test runs")
             ))
         }
         return calls

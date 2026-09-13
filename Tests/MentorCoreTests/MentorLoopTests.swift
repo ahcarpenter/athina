@@ -89,8 +89,8 @@ import Testing
         let request = try #require(sent.first?.request)
         #expect(request.model == "claude-haiku-4-5-20251001")
         #expect(request.system.first?.cacheControl == .ephemeral)
-        #expect(request.system.first?.text == MentorPrompts.triageSystem)
-        #expect(request.outputConfig?.format?.schema == MentorPrompts.triageSchema)
+        #expect(request.system.first?.text == MentorPrompts.triageSystem(contexts: []))
+        #expect(request.outputConfig?.format?.schema == MentorPrompts.triageSchema(contexts: []))
         #expect(request.outputConfig?.effort == nil)
         #expect(request.imageByteCount == 0)
         #expect(sent.first?.apiKey == "sk-ant-test")
@@ -152,6 +152,132 @@ import Testing
         #expect(status.callsThisHour == 2)
         let expectedCost = PriceTable.defaults.cost(of: Usage(inputTokens: 2000, outputTokens: 300, cacheCreationInputTokens: 700, cacheReadInputTokens: 0), model: "claude-opus-5")!
         #expect(abs((status.lastMentor?.cost ?? 0) - expectedCost) < 1e-9)
+    }
+
+    // MARK: Mentorship contexts
+
+    private static func triage(_ worth: Bool, context: String?) -> String {
+        let name = context.map { "\"\($0)\"" } ?? "null"
+        return #"{"worth_a_look": \#(worth), "reason": "Repeated manual runs", "context": \#(name)}"#
+    }
+
+    private static func enforcing(
+        contexts: [MentorshipContext] = [MentorshipContext(name: "writing Swift")]
+    ) -> MentorSettings {
+        var settings = MentorSettings()
+        settings.onlyMentorInsideContexts = true
+        settings.contexts = contexts
+        return settings
+    }
+
+    @Test func declaredContextsRideAlongWithTriageAndOpenTheMentorTier() async throws {
+        let contexts = [
+            MentorshipContext(name: "writing Swift", detail: "the Mentor app itself"),
+            MentorshipContext(name: "drafting documents"),
+        ]
+        let h = try await Harness(settings: Self.enforcing(contexts: contexts))
+        await h.client.enqueue(json: Self.triage(true, context: "writing Swift"))
+        await h.client.enqueue(json: Self.suggestion())
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
+
+        let triage = try #require(await h.client.sent.first?.request)
+        // No extra call: the same triage request carries the question.
+        #expect(await h.client.sent.count == 2)
+        #expect(triage.system.first?.text == MentorPrompts.triageSystem(contexts: contexts))
+        #expect(triage.system.first?.cacheControl == .ephemeral)
+        #expect(triage.system.first?.text.contains("- \"drafting documents\"") == true)
+        #expect(triage.outputConfig?.format?.schema == MentorPrompts.triageSchema(contexts: contexts))
+
+        guard case .text(let mentorText) = (await h.client.sent.last?.request.messages[0].content.last) else {
+            Issue.record("expected text in the mentor message")
+            return
+        }
+        #expect(mentorText.contains("mentored while writing Swift"))
+
+        let status = await h.loop.currentStatus()
+        #expect(status.lastTriage?.outcome == .candidate)
+        #expect(status.lastContext?.placement.contextName == "writing Swift")
+        #expect(status.lastMentor?.outcome == .suggested)
+    }
+
+    @Test func outOfContextStopsAtTriageAndIsRecordedAsSuch() async throws {
+        let h = try await Harness(settings: Self.enforcing())
+        await h.client.enqueue(json: Self.triage(true, context: nil))
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+
+        // Triage ran, the mentor tier never did, and nothing was shown.
+        #expect(await h.client.sent.count == 1)
+        let status = await h.loop.currentStatus()
+        #expect(status.lastTriage?.outcome == .outOfContext)
+        #expect(status.lastMentorHold?.hold == .outOfContext(.noMatch(reason: "")))
+        #expect(status.lastMentor == nil)
+        #expect(try await h.journal.recentSuggestions(limit: 5).isEmpty)
+        let calls = try await h.journal.recentModelCalls(limit: 5)
+        #expect(calls.count == 1)
+        #expect(calls.first?.outcome == .outOfContext)
+    }
+
+    @Test func anUndeclaredContextNameIsOutOfContext() async throws {
+        let h = try await Harness(settings: Self.enforcing())
+        await h.client.enqueue(json: Self.triage(true, context: "cooking"))
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        #expect(await h.client.sent.count == 1)
+        let status = await h.loop.currentStatus()
+        #expect(status.lastTriage?.outcome == .outOfContext)
+        #expect(status.lastMentorHold?.hold == .outOfContext(
+            .noMatch(reason: "triage answered \"cooking\", which is not declared")
+        ))
+    }
+
+    @Test func enforcingWithNoContextDeclaredMakesNoModelCallAtAll() async throws {
+        let h = try await Harness(settings: Self.enforcing(contexts: []))
+        await h.client.enqueue(json: Self.triage(true, context: nil))
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 0)
+        #expect(await h.client.sent.isEmpty)
+        let status = await h.loop.currentStatus()
+        #expect(status.lastGate?.hold == .noContextsDeclared)
+        #expect(status.lastContext?.placement == .outside(.noContextsDeclared))
+    }
+
+    @Test func beingInsideAContextStillLeavesTriagesOwnJudgementInCharge() async throws {
+        let h = try await Harness(settings: Self.enforcing())
+        await h.client.enqueue(json: Self.triage(false, context: "writing Swift"))
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        let status = await h.loop.currentStatus()
+        #expect(status.lastTriage?.outcome == .quiet)
+        #expect(status.lastContext?.placement.contextName == "writing Swift")
+        #expect(status.lastMentorHold?.hold == .triageSaidNo(reason: "Repeated manual runs"))
+    }
+
+    @Test func withTheSwitchOffNothingAboutContextsReachesTheRequestOrTheRecord() async throws {
+        var settings = MentorSettings()
+        settings.contexts = [MentorshipContext(name: "writing Swift")]
+        let h = try await Harness(settings: settings)
+        await h.client.enqueue(json: Self.no)
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        let triage = try #require(await h.client.sent.first?.request)
+        #expect(triage.system.first?.text == MentorPrompts.triageBase)
+        #expect(triage.outputConfig?.format?.schema == MentorPrompts.triageSchema(contexts: []))
+        let status = await h.loop.currentStatus()
+        #expect(status.lastContext?.placement == .notEnforced)
+    }
+
+    @Test func editingTheContextListDropsTheRecordedVerdict() async throws {
+        let settings = Self.enforcing()
+        let h = try await Harness(settings: settings)
+        await h.client.enqueue(json: Self.triage(false, context: "writing Swift"))
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        #expect(await h.loop.currentStatus().lastContext?.placement.contextName == "writing Swift")
+
+        var unrelated = settings
+        unrelated.toastTimeout = 90
+        await h.loop.updateSettings(unrelated)
+        #expect(await h.loop.currentStatus().lastContext?.placement.contextName == "writing Swift")
+
+        var edited = unrelated
+        edited.contexts = [MentorshipContext(name: "drafting documents")]
+        await h.loop.updateSettings(edited)
+        #expect(await h.loop.currentStatus().lastContext == nil)
     }
 
     @Test func perTierEffortReachesEachRequest() async throws {

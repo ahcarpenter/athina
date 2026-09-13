@@ -642,6 +642,7 @@ private struct MentorCard: View {
                 // Model reasons can run long; four lines keeps spend and cadence in view.
                 VStack(alignment: .leading, spacing: 4) {
                     Field(label: "Triage gate", value: triageGate(now: context.date), lineLimit: 4)
+                    Field(label: "Context", value: contextVerdict(now: context.date), lineLimit: 4)
                     Field(label: "Last triage", value: describe(state.mentorStatus.lastTriage, now: context.date), lineLimit: 4)
                     Field(label: "Mentor gate", value: mentorGate(now: context.date), lineLimit: 4)
                     Field(label: "Last mentor", value: describe(state.mentorStatus.lastMentor, now: context.date), lineLimit: 4)
@@ -659,6 +660,32 @@ private struct MentorCard: View {
             return "held \(when): \(hold.label)"
         }
         return "ran \(when) on observation #\(gate.observationID)"
+    }
+
+    /// Where the declared contexts put the latest activity, and what settled it.
+    /// A verdict is shown only when it was recorded under the enforcement state
+    /// in force now and for the app in front now. `lastContext` is not
+    /// recomputed when settings or focus change, so any other record describes a
+    /// moment that has passed; the menu says "not yet judged" for those and this
+    /// says the same rather than presenting a stale verdict as current.
+    private func contextVerdict(now: Date) -> String {
+        let mentor = state.settings.mentor
+        guard mentor.onlyMentorInsideContexts else {
+            return "not enforced (\(mentor.contexts.count) declared)"
+        }
+        var notJudgedYet: String {
+            if mentor.contexts.isEmpty { return "enforced with no context declared, so nothing is mentored" }
+            let enforcing = "enforcing \(mentor.contexts.count) contexts"
+            guard let appName = state.focus?.appName else { return "\(enforcing), not judged yet" }
+            return "\(enforcing), not yet judged in \(appName)"
+        }
+        guard let record = state.mentorStatus.lastContext,
+              record.placement != .notEnforced,
+              record.appName == state.focus?.appName
+        else {
+            return notJudgedYet
+        }
+        return "\(record.placement.label) \(Formatting.age(record.at, now: now)) in \(record.appName)"
     }
 
     private func mentorGate(now: Date) -> String {

@@ -110,6 +110,30 @@ import Testing
         #expect(!summary.contains("started"))
     }
 
+    /// The context question is asked in the cached system prompt, never in the
+    /// per-call message, so the cached prefix is the same for every call.
+    @Test func theTriageMessageNeverCarriesAContextPlacement() {
+        let asked = PromptBuilder.triageMessage(observation: Fixtures.observation(at: t0), recentEvents: [], now: t0)
+        #expect(!asked.contains("Context:"))
+    }
+
+    @Test func theMentorMessageNamesTheContextTheMomentWasPlacedIn() {
+        let latest = Fixtures.observation(at: t0, text: "latest text")
+        let window = RollingWindow.build(observations: [latest], now: t0, duration: 600, tokenBudget: 6000)
+        let context = MentorshipContext(name: "writing Swift", detail: "the Mentor app itself")
+        let message = PromptBuilder.mentorMessage(
+            window: window, latest: latest, recentEvents: [], suppressed: [],
+            includesImage: false, context: context, now: t0
+        )
+        #expect(message.contains("mentored while writing Swift (the Mentor app itself)"))
+        #expect(message.contains("placed in that context"))
+
+        let without = PromptBuilder.mentorMessage(
+            window: window, latest: latest, recentEvents: [], suppressed: [], includesImage: false, now: t0
+        )
+        #expect(!without.contains("placed in that context"))
+    }
+
     @Test func tokenEstimateRoundsUp() {
         #expect(TokenEstimate.tokens(in: "") == 0)
         #expect(TokenEstimate.tokens(in: "abcd") == 1)

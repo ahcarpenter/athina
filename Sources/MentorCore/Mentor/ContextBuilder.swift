@@ -96,7 +96,11 @@ public enum PromptBuilder {
 
     /// Text only: app and window, accessibility summary, the OCR text, and a
     /// compact event summary.
-    public static func triageMessage(observation: ActivityObservation, recentEvents: [JournalEvent], now: Date) -> String {
+    public static func triageMessage(
+        observation: ActivityObservation,
+        recentEvents: [JournalEvent],
+        now: Date
+    ) -> String {
         var lines: [String] = []
         lines.append("Time: \(clock(now))")
         lines.append("App: \(observation.focus.appName)\(observation.focus.bundleID.map { " (\($0))" } ?? "")")
@@ -122,11 +126,17 @@ public enum PromptBuilder {
         recentEvents: [JournalEvent],
         suppressed: [SuggestionCategory],
         includesImage: Bool,
+        context: MentorshipContext? = nil,
         now: Date
     ) -> String {
         var lines: [String] = []
         lines.append("Time: \(clock(now))")
         lines.append("The user is in \(latest.focus.appName), window \"\(latest.focus.windowTitle ?? "untitled")\".")
+        if let context {
+            var line = "The user asked to be mentored while \(context.name)"
+            if !context.detail.isEmpty { line += " (\(context.detail))" }
+            lines.append(line + ", and this moment was placed in that context. Keep the suggestion useful for that work.")
+        }
         if suppressed.isEmpty {
             lines.append("Suppressed categories for this app: none.")
         } else {
