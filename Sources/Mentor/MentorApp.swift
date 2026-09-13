@@ -75,13 +75,13 @@ enum LaunchArguments {
     }
 
     static var settingsTab: SettingsView.Tab {
-        guard let argument = openArgument, argument.hasPrefix("settings:") else { return .cadence }
+        guard let argument = openArgument, argument.hasPrefix("settings:") else { return .mentor }
         switch argument.dropFirst("settings:".count) {
         case "frames": return .frames
         case "journal": return .journal
         case "privacy": return .privacy
-        case "mentor": return .mentor
-        default: return .cadence
+        case "cadence": return .cadence
+        default: return .mentor
         }
     }
 }

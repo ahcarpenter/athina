@@ -10,7 +10,7 @@ struct SettingsView: View {
     @Environment(AppState.self) private var state
     @State private var tab: Tab
 
-    init(initialTab: Tab = .cadence) {
+    init(initialTab: Tab = .mentor) {
         _tab = State(initialValue: initialTab)
     }
 

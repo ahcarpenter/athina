@@ -62,6 +62,7 @@ struct HistoryView: View {
 }
 
 private struct HistoryRow: View {
+    @Environment(AppState.self) private var state
     let suggestion: Suggestion
 
     var body: some View {
@@ -86,23 +87,28 @@ private struct HistoryRow: View {
                 .foregroundStyle(.secondary)
             }
             Spacer(minLength: 4)
-            FeedbackPill(feedback: suggestion.feedback)
+            FeedbackPill(feedback: suggestion.feedback, isShowing: state.activeSuggestion?.id == suggestion.id)
         }
         .padding(.vertical, 3)
     }
 }
 
+/// The feedback recorded for a suggestion, or "Showing" while its toast is up
+/// and nothing has been recorded yet. A suggestion with neither gets no pill.
 struct FeedbackPill: View {
     let feedback: SuggestionFeedback?
+    let isShowing: Bool
 
     var body: some View {
-        Text(feedback?.label ?? "Showing")
-            .font(.caption.weight(.medium))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.16), in: Capsule())
-            .foregroundStyle(color)
-            .fixedSize()
+        if let label = feedback?.label ?? (isShowing ? "Showing" : nil) {
+            Text(label)
+                .font(.caption.weight(.medium))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(color.opacity(0.16), in: Capsule())
+                .foregroundStyle(color)
+                .fixedSize()
+        }
     }
 
     private var color: Color {
@@ -128,7 +134,7 @@ private struct SuggestionDetail: View {
                         Label(suggestion.category.label, systemImage: suggestion.category.symbol)
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.tint)
-                        FeedbackPill(feedback: suggestion.feedback)
+                        FeedbackPill(feedback: suggestion.feedback, isShowing: state.activeSuggestion?.id == suggestion.id)
                         Spacer()
                     }
                     Text(suggestion.title)

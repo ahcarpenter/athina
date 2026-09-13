@@ -6,32 +6,21 @@ public struct ClaudeModel: Equatable, Sendable, Identifiable {
     public var displayName: String
     /// Whether `output_config.effort` is accepted; Haiku 4.5 rejects it.
     public var supportsEffort: Bool
-    /// Prompts shorter than this are never cached, even with a `cache_control` marker.
-    public var minimumCacheableTokens: Int
 
-    public init(id: String, displayName: String, supportsEffort: Bool, minimumCacheableTokens: Int) {
+    public init(id: String, displayName: String, supportsEffort: Bool) {
         self.id = id
         self.displayName = displayName
         self.supportsEffort = supportsEffort
-        self.minimumCacheableTokens = minimumCacheableTokens
     }
 }
 
-/// The models offered in Settings. Ids, capabilities, and cache minimums were
-/// checked against the Anthropic documentation on `PriceTable.defaultCheckedOn`.
+/// The models offered in Settings. Ids and capabilities were checked against
+/// the Anthropic documentation on `PriceTable.defaultCheckedOn`.
 public enum ModelCatalog {
-    public static let haiku45 = ClaudeModel(
-        id: "claude-haiku-4-5-20251001", displayName: "Claude Haiku 4.5", supportsEffort: false, minimumCacheableTokens: 4096
-    )
-    public static let sonnet5 = ClaudeModel(
-        id: "claude-sonnet-5", displayName: "Claude Sonnet 5", supportsEffort: true, minimumCacheableTokens: 1024
-    )
-    public static let opus5 = ClaudeModel(
-        id: "claude-opus-5", displayName: "Claude Opus 5", supportsEffort: true, minimumCacheableTokens: 512
-    )
-    public static let fable51 = ClaudeModel(
-        id: "claude-fable-5-1", displayName: "Claude Fable 5.1", supportsEffort: true, minimumCacheableTokens: 512
-    )
+    public static let haiku45 = ClaudeModel(id: "claude-haiku-4-5-20251001", displayName: "Claude Haiku 4.5", supportsEffort: false)
+    public static let sonnet5 = ClaudeModel(id: "claude-sonnet-5", displayName: "Claude Sonnet 5", supportsEffort: true)
+    public static let opus5 = ClaudeModel(id: "claude-opus-5", displayName: "Claude Opus 5", supportsEffort: true)
+    public static let fable51 = ClaudeModel(id: "claude-fable-5-1", displayName: "Claude Fable 5.1", supportsEffort: true)
 
     public static let all: [ClaudeModel] = [haiku45, sonnet5, opus5, fable51]
     /// Models offered for the triage tier: the cheap default plus every

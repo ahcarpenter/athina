@@ -189,8 +189,9 @@ final class AppState {
     func stop() async {
         resourceTask?.cancel()
         saveTask?.cancel()
-        toastTask?.cancel()
-        toast.dismiss()
+        if let active = activeSuggestion {
+            await respond(to: active.id, with: .expired)?.value
+        }
         try? store.save(settings)
         await mentor?.stop()
         mentorTask?.cancel()
@@ -314,7 +315,9 @@ final class AppState {
     /// Records feedback for a suggestion, whether it came from the toast or the
     /// history window. A non-answer (expiry or closing the toast) is recorded
     /// once and never overwrites anything: closing a re-shown toast just closes it.
-    func respond(to suggestionID: Int64, with feedback: SuggestionFeedback) {
+    /// Returns the task that journals the feedback, or nil when nothing was recorded.
+    @discardableResult
+    func respond(to suggestionID: Int64, with feedback: SuggestionFeedback) -> Task<Void, Never>? {
         let existing = suggestionHistory.first { $0.id == suggestionID }?.feedback
         if activeSuggestion?.id == suggestionID {
             cancelToastExpiry()
@@ -323,7 +326,7 @@ final class AppState {
                 activeSuggestion = nil
             }
         }
-        if feedback.isNonAnswer, existing != nil { return }
+        if feedback.isNonAnswer, existing != nil { return nil }
         if let index = suggestionHistory.firstIndex(where: { $0.id == suggestionID }) {
             suggestionHistory[index].feedback = feedback
             suggestionHistory[index].feedbackAt = Date()
@@ -350,7 +353,7 @@ final class AppState {
             break
         }
         AppState.log.notice("suggestion \(suggestionID) feedback \(feedback.rawValue, privacy: .public)")
-        Task { await mentor?.recordFeedback(suggestionID: suggestionID, feedback: feedback) }
+        return Task { await mentor?.recordFeedback(suggestionID: suggestionID, feedback: feedback) }
     }
 
     /// Brings the most recent suggestion back as a toast, for one that was

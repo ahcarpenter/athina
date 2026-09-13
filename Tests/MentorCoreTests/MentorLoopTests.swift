@@ -292,6 +292,36 @@ import Testing
         #expect(await h.loop.recordFeedback(suggestionID: 9999, feedback: .notNow) == nil)
     }
 
+    /// The history a relaunched app loads must carry the expiry recorded for a
+    /// toast that was still up at quit, not a nil that reads as still showing.
+    @Test func expiryRecordedAtQuitIsInHistoryAfterRelaunch() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mentor-tests-\(UUID().uuidString)")
+        let url = dir.appendingPathComponent("journal.sqlite")
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let id: Int64
+        do {
+            let journal = try Journal(url: url)
+            let (stream, _) = AsyncStream<SensingEvent>.makeStream()
+            let loop = MentorLoop(
+                settings: MentorSettings(), journal: journal, client: ScriptedClaudeClient(),
+                keyStore: InMemoryKeyStore(key: "sk-ant-test"), events: stream
+            )
+            let stored = try await journal.record(Suggestion(
+                timestamp: now, bundleID: "com.a", appName: "A", windowTitle: nil, category: .workflow,
+                title: "T", body: "B", explanation: "E", confidence: 0.8, observationID: nil, model: "m", promptVersion: 1
+            ))
+            id = stored.id
+            #expect(await loop.recordFeedback(suggestionID: id, feedback: .expired, at: now + 30)?.feedback == .expired)
+            await loop.stop()
+        }
+        let relaunched = try Journal(url: url)
+        let history = try await relaunched.recentSuggestions(limit: 10)
+        #expect(history.map(\.id) == [id])
+        #expect(history.first?.feedback == .expired)
+        #expect(history.first?.feedbackAt == now + 30)
+        #expect(try await relaunched.recentEvents(limit: 1).first?.detail == "Expired: T")
+    }
+
     @Test func testConnectionReportsModelOrError() async throws {
         let h = try await Harness()
         await h.client.enqueue(json: "OK", model: "claude-haiku-4-5-20251001")
