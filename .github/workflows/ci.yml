@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-test:
+    # The package targets macOS 26, so it needs the Xcode 26 SDK that the
+    # macos-26 image ships. Older images cannot build it.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode on the runner
+        run: |
+          latest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n1)"
+          echo "Using $latest"
+          sudo xcode-select -s "$latest"
+          swift --version
+      - name: Unit tests
+        run: swift test
+      - name: Build app bundle
+        run: scripts/bundle.sh release
+      - name: Render UI snapshots
+        run: build/Mentor.app/Contents/MacOS/Mentor --snapshot snapshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ui-snapshots
+          path: snapshots
+          if-no-files-found: error
