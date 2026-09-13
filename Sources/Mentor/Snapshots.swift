@@ -302,8 +302,7 @@ enum SampleSuggestions {
                 title: "Read focus once per capture, not per step",
                 body: "performCapture reads the AX context, then re-checks the frontmost app twice more. One read up front plus a pid compare is cheaper and avoids the 250 ms AX timeout on hung apps.",
                 explanation: "Each AXUIElementCopyAttributeValue call can block up to the messaging timeout you set (250 ms) when the target app is busy, and performCapture currently does that work three times: once in readCurrent() and twice in frontmostIsStill().\n\nNSWorkspace.shared.frontmostApplication is a cheap, non-blocking read, so keep the two late checks but compare only the pid, and drop the bundle-id lookup from the second check since the pid already proves it is the same process.\n\nIf you want to keep the exclusion re-check, look the bundle id up from the pid once and cache it for the duration of the capture.",
-                confidence: 0.82, observationID: 128, model: "claude-fable-5-1", promptVersion: MentorPrompts.version,
-                context: "writing Swift"
+                confidence: 0.82, observationID: 128, model: "claude-fable-5-1", promptVersion: MentorPrompts.version
             ),
             Suggestion(
                 id: 3, timestamp: now.addingTimeInterval(-1500), bundleID: "com.github.wez.wezterm", appName: "WezTerm",
@@ -311,7 +310,7 @@ enum SampleSuggestions {
                 title: "swift test --filter runs one suite",
                 body: "You have run the full test suite four times while editing CaptureSchedulerTests. swift test --filter CaptureSchedulerTests runs just that suite in a few seconds.",
                 explanation: "SwiftPM accepts a regular expression after --filter and matches it against \"Suite.test\" names, so `swift test --filter CaptureSchedulerTests` runs every test in that suite and `swift test --filter CaptureSchedulerTests/floorFires` runs one test.\n\nWith Swift Testing you can also mark one test with `.tags` and filter on the tag. The full run is still worth doing before you commit.",
-                confidence: 0.9, observationID: 104, model: "claude-fable-5-1", promptVersion: MentorPrompts.version, context: "writing Swift",
+                confidence: 0.9, observationID: 104, model: "claude-fable-5-1", promptVersion: MentorPrompts.version,
                 feedback: .tellMeMore, feedbackAt: now.addingTimeInterval(-1490)
             ),
             Suggestion(
@@ -320,7 +319,7 @@ enum SampleSuggestions {
                 title: "SCScreenshotManager has a captureImage(in:) variant",
                 body: "The page you are on documents captureImage(contentFilter:configuration:), but the newer captureImage(in: CGRect) skips the filter setup when you only need a display region.",
                 explanation: "SCScreenshotManager.captureImage(in:) takes a rectangle in screen coordinates and captures whatever is on screen there, without building an SCContentFilter first. It is a good fit for a region capture, and it still respects the Screen Recording grant.\n\nThe filter-based call remains the right one when you need to exclude your own windows, which your pipeline does, so this may not apply to the main capture path.",
-                confidence: 0.64, observationID: 71, model: "claude-fable-5-1", promptVersion: MentorPrompts.version, context: "reading API documentation",
+                confidence: 0.64, observationID: 71, model: "claude-fable-5-1", promptVersion: MentorPrompts.version,
                 feedback: .notNow, feedbackAt: now.addingTimeInterval(-5390)
             ),
             Suggestion(
@@ -329,7 +328,7 @@ enum SampleSuggestions {
                 title: "Retention deletes text before checking the size cap",
                 body: "applyRetention runs the age deletes and then the size sweep, so a tiny cap can delete today's text while yesterday's thumbnails survive. Consider sweeping thumbnails first in both passes.",
                 explanation: "The age pass deletes thumbnails older than the thumbnail cutoff, then observations older than the text cutoff. The size pass then deletes the oldest thumbnails, then the oldest observations and events. If the size cap is small enough, the second loop can remove observations from today while thumbnails from earlier today remain, because the thumbnail loop only ran until the target was met.\n\nRunning the thumbnail sweep to exhaustion before touching observations keeps the invariant that text outlives thumbnails.",
-                confidence: 0.71, observationID: 12, model: "claude-opus-5", promptVersion: MentorPrompts.version, context: "writing Swift",
+                confidence: 0.71, observationID: 12, model: "claude-opus-5", promptVersion: MentorPrompts.version,
                 feedback: .never, feedbackAt: now.addingTimeInterval(-7990)
             ),
         ]
@@ -341,15 +340,13 @@ enum SampleSuggestions {
                 id: 61, timestamp: now.addingTimeInterval(-40), tier: .mentor, model: "claude-fable-5-1",
                 promptVersion: MentorPrompts.version, promptCharacters: 14_820, imageBytes: 96_400,
                 usage: Usage(inputTokens: 6_120, outputTokens: 610, cacheCreationInputTokens: 0, cacheReadInputTokens: 730),
-                cost: 0.0920, latency: 9.4, outcome: .suggested, detail: "Read focus once per capture, not per step",
-                context: "inside \"writing Swift\" (88% confident)"
+                cost: 0.0920, latency: 9.4, outcome: .suggested, detail: "Read focus once per capture, not per step"
             ),
             ModelCallRecord(
                 id: 60, timestamp: now.addingTimeInterval(-52), tier: .triage, model: "claude-haiku-4-5-20251001",
                 promptVersion: MentorPrompts.version, promptCharacters: 3_410, imageBytes: 0,
                 usage: Usage(inputTokens: 1_120, outputTokens: 42, cacheCreationInputTokens: 0, cacheReadInputTokens: 560),
-                cost: 0.0014, latency: 1.1, outcome: .candidate, detail: "Three AX reads per capture with a hung-app timeout",
-                context: "inside \"writing Swift\" (88% confident)"
+                cost: 0.0014, latency: 1.1, outcome: .candidate, detail: "Three AX reads per capture with a hung-app timeout"
             ),
         ]
         for i in 0..<14 {
@@ -363,10 +360,7 @@ enum SampleSuggestions {
                 usage: Usage(inputTokens: 700 + i * 40, outputTokens: 38, cacheCreationInputTokens: i == 13 ? 560 : 0, cacheReadInputTokens: i == 13 ? 0 : 560),
                 cost: 0.0011, latency: 0.9 + Double(i % 3) * 0.2,
                 outcome: outside ? .outOfContext : (quiet ? .quiet : .candidate),
-                detail: outside ? "Booking a flight" : (quiet ? "Reading documentation, nothing to act on" : "Repeated manual test runs"),
-                context: outside
-                    ? "outside every context (triage matched no declared context)"
-                    : "inside \"writing Swift\" (\(70 + i)% confident)"
+                detail: outside ? "Booking a flight" : (quiet ? "Reading documentation, nothing to act on" : "Repeated manual test runs")
             ))
         }
         return calls

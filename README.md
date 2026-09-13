@@ -163,12 +163,11 @@ oldest thumbnails and finally the oldest observations and events until it fits.
 "Clear Journal" in settings deletes everything.
 
 The mentor loop adds two tables: `suggestions` (every suggestion shown, with
-the user's feedback and the mentorship context it was raised under) and
-`model_calls` (one row per API call: tier, model, prompt version and size,
-token counts, estimated cost, latency, outcome, the model's one-line reason,
-and the context verdict; never the prompt text). Both `context` columns are
-added to a journal written by an older build when it is opened. Both expire with
-`textRetention` and are emptied by Clear Journal.
+the user's feedback) and `model_calls` (one row per API call: tier, model,
+prompt version and size, token counts, estimated cost, latency, outcome, and
+the model's one-line reason; never the prompt text). A moment held at the
+context boundary is recorded there as the `outOfContext` outcome. Both expire
+with `textRetention` and are emptied by Clear Journal.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
 to defaults so older files keep working.
@@ -267,11 +266,12 @@ cached block, so editing the list costs a single cache write and every call
 after it reads from cache again.
 
 Up to `ContextRules.maxContexts` (12) contexts may be declared, each with a
-unique name; the editor disables Add at the cap and refuses a name another
-context already uses, so nothing saved is dropped on the way in. With the
-switch on and no context declared, nothing is inside anything: no triage call
-is made at all, and the settings section, the menu, and the debug panel all say
-so.
+unique name of at most 60 characters and a description of at most 280. The
+editor disables Add at the cap, refuses a name another context already uses,
+and caps both fields as they are typed with a note at the limit, so nothing
+saved is dropped or cut on the way in. With the switch on and no context
+declared, nothing is inside anything: no triage call is made at all, and the
+settings section, the menu, and the debug panel all say so.
 
 To keep an app from being looked at at all, exclude it in Settings > Privacy >
 Excluded apps: while an excluded app is frontmost nothing is captured, so
@@ -280,9 +280,8 @@ nothing about it can reach either tier.
 The menu bar menu shows the current verdict ("Context: inside "writing Swift"
 (88% confident)", or why it is out) while it is still about the frontmost app,
 and "Context: not yet judged in <app>" otherwise; the debug panel's Mentor card
-shows it with the app it was made for and its age, the model call log shows the
-decision per call, and each suggestion records the context it was raised under,
-shown in the history window.
+shows it with the app it was made for and its age, and the model call log marks
+a held call with the `outOfContext` outcome.
 
 ### Spend control
 

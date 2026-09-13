@@ -112,7 +112,6 @@ public actor Journal {
                 observation_id INTEGER,
                 model TEXT NOT NULL,
                 prompt_version INTEGER NOT NULL,
-                context TEXT,
                 feedback TEXT,
                 feedback_at REAL
             );
@@ -132,22 +131,10 @@ public actor Journal {
                 cost REAL NOT NULL,
                 latency REAL NOT NULL,
                 outcome TEXT NOT NULL,
-                detail TEXT,
-                context TEXT
+                detail TEXT
             );
             CREATE INDEX IF NOT EXISTS model_calls_timestamp ON model_calls(timestamp);
             """)
-        // Journals written before mentorship contexts have the tables above
-        // without their context column; CREATE TABLE IF NOT EXISTS leaves those
-        // alone, so add the column to a file that predates it.
-        try addColumnIfMissing("context", type: "TEXT", table: "suggestions", db)
-        try addColumnIfMissing("context", type: "TEXT", table: "model_calls", db)
-    }
-
-    private static func addColumnIfMissing(_ column: String, type: String, table: String, _ db: SQLiteConnection) throws {
-        let existing = try db.query("PRAGMA table_info(\(table))") { $0.text(1) }
-        guard !existing.contains(where: { $0 == column }) else { return }
-        try db.execute("ALTER TABLE \(table) ADD COLUMN \(column) \(type)")
     }
 
     // MARK: Writes
@@ -221,8 +208,8 @@ public actor Journal {
     public func record(_ suggestion: Suggestion) throws -> Suggestion {
         try db.run("""
             INSERT INTO suggestions (timestamp, bundle_id, app_name, window_title, category, title, body, explanation,
-                confidence, observation_id, model, prompt_version, context, feedback, feedback_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                confidence, observation_id, model, prompt_version, feedback, feedback_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 .double(suggestion.timestamp.timeIntervalSince1970),
                 suggestion.bundleID.map(Value.text) ?? .null,
@@ -236,7 +223,6 @@ public actor Journal {
                 suggestion.observationID.map(Value.int) ?? .null,
                 .text(suggestion.model),
                 .int(Int64(suggestion.promptVersion)),
-                suggestion.context.map(Value.text) ?? .null,
                 suggestion.feedback.map { Value.text($0.rawValue) } ?? .null,
                 suggestion.feedbackAt.map { Value.double($0.timeIntervalSince1970) } ?? .null,
             ])
@@ -272,8 +258,8 @@ public actor Journal {
     public func record(_ call: ModelCallRecord) throws -> ModelCallRecord {
         try db.run("""
             INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars, image_bytes, input_tokens,
-                output_tokens, cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail, context)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                output_tokens, cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 .double(call.timestamp.timeIntervalSince1970),
                 .text(call.tier.rawValue),
@@ -289,7 +275,6 @@ public actor Journal {
                 .double(call.latency),
                 .text(call.outcome.rawValue),
                 call.detail.map(Value.text) ?? .null,
-                call.context.map(Value.text) ?? .null,
             ])
         var stored = call
         stored.id = db.lastInsertRowID
@@ -495,7 +480,7 @@ public actor Journal {
 
     private static let suggestionColumns = """
         id, timestamp, bundle_id, app_name, window_title, category, title, body, explanation, confidence,
-        observation_id, model, prompt_version, context, feedback, feedback_at
+        observation_id, model, prompt_version, feedback, feedback_at
         """
 
     private static func suggestion(from row: SQLiteConnection.Statement) -> Suggestion {
@@ -513,15 +498,14 @@ public actor Journal {
             observationID: row.isNull(10) ? nil : row.int(10),
             model: row.text(11) ?? "",
             promptVersion: Int(row.int(12)),
-            context: row.text(13),
-            feedback: row.text(14).flatMap(SuggestionFeedback.init(rawValue:)),
-            feedbackAt: row.isNull(15) ? nil : Date(timeIntervalSince1970: row.double(15))
+            feedback: row.text(13).flatMap(SuggestionFeedback.init(rawValue:)),
+            feedbackAt: row.isNull(14) ? nil : Date(timeIntervalSince1970: row.double(14))
         )
     }
 
     private static let modelCallColumns = """
         id, timestamp, tier, model, prompt_version, prompt_chars, image_bytes, input_tokens, output_tokens,
-        cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail, context
+        cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail
         """
 
     private static func modelCall(from row: SQLiteConnection.Statement) -> ModelCallRecord {
@@ -542,8 +526,7 @@ public actor Journal {
             cost: row.double(11),
             latency: row.double(12),
             outcome: ModelCallOutcome(rawValue: row.text(13) ?? "") ?? .error,
-            detail: row.text(14),
-            context: row.text(15)
+            detail: row.text(14)
         )
     }
 

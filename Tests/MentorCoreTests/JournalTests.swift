@@ -153,68 +153,6 @@ import Testing
         #expect(after.usedBytes <= tiny.sizeCapBytes)
     }
 
-    @Test func suggestionsAndCallsCarryTheirMentorshipContext() async throws {
-        let journal = try Journal.inMemory()
-        let suggestion = try await journal.record(Suggestion(
-            timestamp: Date(), bundleID: "com.apple.dt.Xcode", appName: "Xcode", windowTitle: "main.swift",
-            category: .shortcut, title: "t", body: "b", explanation: "e", confidence: 0.9,
-            observationID: nil, model: "claude-opus-5", promptVersion: MentorPrompts.version,
-            context: "writing Swift"
-        ))
-        #expect(try await journal.suggestion(id: suggestion.id)?.context == "writing Swift")
-        // Feedback must not lose it.
-        let answered = try await journal.updateFeedback(suggestionID: suggestion.id, feedback: .tellMeMore, at: Date())
-        #expect(answered?.context == "writing Swift")
-
-        try await journal.record(ModelCallRecord(
-            timestamp: Date(), tier: .triage, model: "claude-haiku-4-5-20251001",
-            promptVersion: MentorPrompts.version, promptCharacters: 10, imageBytes: 0, usage: Usage(),
-            cost: 0, latency: 0.1, outcome: .outOfContext, detail: "reading mail",
-            context: "outside every context (triage matched no declared context)"
-        ))
-        let call = try await journal.recentModelCalls(limit: 1).first
-        #expect(call?.outcome == .outOfContext)
-        #expect(call?.context == "outside every context (triage matched no declared context)")
-    }
-
-    /// A journal written before mentorship contexts must gain the column on
-    /// open, not fail every insert against the old table.
-    @Test func aJournalFromBeforeContextsGainsTheColumnOnOpen() async throws {
-        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mentor-tests-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let url = dir.appendingPathComponent("journal.sqlite")
-        let old = try SQLiteConnection(path: url.path)
-        try old.execute("""
-            CREATE TABLE suggestions (
-                id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, bundle_id TEXT, app_name TEXT NOT NULL,
-                window_title TEXT, category TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
-                explanation TEXT NOT NULL, confidence REAL NOT NULL, observation_id INTEGER,
-                model TEXT NOT NULL, prompt_version INTEGER NOT NULL, feedback TEXT, feedback_at REAL
-            );
-            CREATE TABLE model_calls (
-                id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, tier TEXT NOT NULL, model TEXT NOT NULL,
-                prompt_version INTEGER NOT NULL, prompt_chars INTEGER NOT NULL, image_bytes INTEGER NOT NULL,
-                input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cache_write_tokens INTEGER NOT NULL,
-                cache_read_tokens INTEGER NOT NULL, cost REAL NOT NULL, latency REAL NOT NULL,
-                outcome TEXT NOT NULL, detail TEXT
-            );
-            INSERT INTO suggestions (timestamp, app_name, category, title, body, explanation, confidence, model, prompt_version)
-            VALUES (1, 'Xcode', 'shortcut', 'old', 'b', 'e', 0.9, 'claude-opus-5', 3);
-            """)
-
-        let journal = try Journal(url: url)
-        let existing = try await journal.recentSuggestions(limit: 5)
-        #expect(existing.count == 1)
-        #expect(existing.first?.title == "old")
-        #expect(existing.first?.context == nil)
-        let fresh = try await journal.record(Suggestion(
-            timestamp: Date(), bundleID: nil, appName: "Xcode", windowTitle: nil, category: .tool,
-            title: "new", body: "b", explanation: "e", confidence: 0.9, observationID: nil,
-            model: "claude-opus-5", promptVersion: MentorPrompts.version, context: "writing Swift"
-        ))
-        #expect(try await journal.suggestion(id: fresh.id)?.context == "writing Swift")
-    }
-
     @Test func journalPersistsAcrossReopen() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mentor-tests-\(UUID().uuidString)")
         let url = dir.appendingPathComponent("journal.sqlite")

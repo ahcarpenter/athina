@@ -257,7 +257,6 @@ public actor MentorLoop {
                 triaged = (decoded, placement)
                 record.outcome = placement.isOutside ? .outOfContext : (decoded.worthALook ? .candidate : .quiet)
                 record.detail = decoded.reason
-                record.context = settings.onlyMentorInsideContexts ? placement.label : nil
             } else {
                 record.outcome = response.isTruncated ? .truncated : .error
                 record.detail = "could not parse the triage reply"
@@ -310,7 +309,6 @@ public actor MentorLoop {
         let call = await perform(tier: .mentor, request: request, apiKey: apiKey, timeout: MentorLoop.mentorTimeout)
         let shownAt = Date()
         var record = call.record
-        record.context = settings.onlyMentorInsideContexts ? context.label : nil
         var toShow: Suggestion?
         switch call.result {
         case .failure(let error):
@@ -345,8 +343,7 @@ public actor MentorLoop {
                             confidence: payload.confidence,
                             observationID: observation.id == 0 ? nil : observation.id,
                             model: response.model,
-                            promptVersion: MentorPrompts.version,
-                            context: context.contextName
+                            promptVersion: MentorPrompts.version
                         )
                     }
                 } else {

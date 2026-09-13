@@ -159,6 +159,12 @@ private struct ContextEditor: View {
         ContextRules.isDuplicateName(draft.name, in: existing, excluding: draft.id)
     }
 
+    private var nameAtLimit: Bool { trimmedName.count >= MentorshipContext.maxNameLength }
+
+    private var detailAtLimit: Bool {
+        draft.detail.trimmingCharacters(in: .whitespacesAndNewlines).count >= MentorshipContext.maxDetailLength
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(isNew ? "Declare a context" : "Edit context")
@@ -170,11 +176,27 @@ private struct ContextEditor: View {
                 Section {
                     TextField("Name", text: $draft.name, prompt: Text("building web apps"))
                         .onSubmit(save)
+                        .onChange(of: draft.name) { _, typed in
+                            draft.name = ContextRules.capped(typed, to: MentorshipContext.maxNameLength)
+                        }
+                    if nameAtLimit {
+                        Text("That is all \(MentorshipContext.maxNameLength) characters a name can hold.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                     TextField(
                         "What it covers", text: $draft.detail, prompt: Text("Optional. React and TypeScript work in the editor and the browser."),
                         axis: .vertical
                     )
                     .lineLimit(2...4)
+                    .onChange(of: draft.detail) { _, typed in
+                        draft.detail = ContextRules.capped(typed, to: MentorshipContext.maxDetailLength)
+                    }
+                    if detailAtLimit {
+                        Text("That is all \(MentorshipContext.maxDetailLength) characters this description can hold.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 } footer: {
                     if isDuplicate {
                         Label("Another context is already called \"\(trimmedName)\". Give this one a different name.", systemImage: "exclamationmark.triangle.fill")

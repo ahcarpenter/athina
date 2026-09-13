@@ -158,9 +158,6 @@ private struct SuggestionDetail: View {
                     if let title = suggestion.windowTitle, !title.isEmpty {
                         detailRow("Window", title)
                     }
-                    if let context = suggestion.context, !context.isEmpty {
-                        detailRow("Context", context)
-                    }
                     detailRow("Confidence", String(format: "%.0f%%", suggestion.confidence * 100))
                     detailRow("Model", "\(ModelCatalog.displayName(for: suggestion.model)), prompt v\(suggestion.promptVersion)")
                     if let feedback = suggestion.feedback {

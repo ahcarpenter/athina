@@ -132,18 +132,27 @@ public enum ContextRules {
         var out: [MentorshipContext] = []
         for context in contexts {
             var normalizedContext = context
-            normalizedContext.name = String(
-                context.name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(MentorshipContext.maxNameLength)
-            )
-            normalizedContext.detail = String(
-                context.detail.trimmingCharacters(in: .whitespacesAndNewlines).prefix(MentorshipContext.maxDetailLength)
-            )
+            normalizedContext.name = trimmedAndCapped(context.name, to: MentorshipContext.maxNameLength)
+            normalizedContext.detail = trimmedAndCapped(context.detail, to: MentorshipContext.maxDetailLength)
             guard !normalizedContext.name.isEmpty else { continue }
             guard seen.insert(normalizedContext.name.lowercased()).inserted else { continue }
             out.append(normalizedContext)
             if out.count == maxContexts { break }
         }
         return out
+    }
+
+    /// What `normalized` keeps of a name or a detail.
+    public static func trimmedAndCapped(_ text: String, to limit: Int) -> String {
+        String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(limit))
+    }
+
+    /// The editor's as-you-type cap: text within the limit is left exactly as
+    /// typed, and anything longer snaps to what `normalized` would keep, so a
+    /// saved name or detail is never cut after the fact.
+    public static func capped(_ text: String, to limit: Int) -> String {
+        let kept = trimmedAndCapped(text, to: limit)
+        return kept.count == text.trimmingCharacters(in: .whitespacesAndNewlines).count ? text : kept
     }
 
     // MARK: Matching

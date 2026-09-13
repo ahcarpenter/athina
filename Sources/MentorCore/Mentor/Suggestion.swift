@@ -79,9 +79,6 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
     public var observationID: Int64?
     public var model: String
     public var promptVersion: Int
-    /// The declared context this suggestion was raised under, when the user
-    /// was enforcing contexts. Nil when they were not.
-    public var context: String?
     public var feedback: SuggestionFeedback?
     public var feedbackAt: Date?
 
@@ -99,7 +96,6 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
         observationID: Int64?,
         model: String,
         promptVersion: Int,
-        context: String? = nil,
         feedback: SuggestionFeedback? = nil,
         feedbackAt: Date? = nil
     ) {
@@ -116,7 +112,6 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
         self.observationID = observationID
         self.model = model
         self.promptVersion = promptVersion
-        self.context = context
         self.feedback = feedback
         self.feedbackAt = feedbackAt
     }
@@ -197,9 +192,6 @@ public struct ModelCallRecord: Codable, Equatable, Sendable, Identifiable {
     public var outcome: ModelCallOutcome
     /// The model's one-line reason, or the error message.
     public var detail: String?
-    /// Where the declared contexts placed this call's activity, as a label.
-    /// Nil when contexts are not enforced, or for a test call.
-    public var context: String?
 
     public init(
         id: Int64 = 0,
@@ -213,8 +205,7 @@ public struct ModelCallRecord: Codable, Equatable, Sendable, Identifiable {
         cost: Double,
         latency: TimeInterval,
         outcome: ModelCallOutcome,
-        detail: String?,
-        context: String? = nil
+        detail: String?
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -228,7 +219,6 @@ public struct ModelCallRecord: Codable, Equatable, Sendable, Identifiable {
         self.latency = latency
         self.outcome = outcome
         self.detail = detail
-        self.context = context
     }
 }
 

@@ -794,12 +794,6 @@ private struct CallLogRow: View {
                         .lineLimit(2)
                         .textSelection(.enabled)
                 }
-                if let context = call.context, !context.isEmpty {
-                    Label(context, systemImage: "target")
-                        .font(.caption)
-                        .foregroundStyle(call.outcome == .outOfContext ? Color.orange : .secondary)
-                        .lineLimit(2)
-                }
             }
         }
         .padding(.horizontal, 14)

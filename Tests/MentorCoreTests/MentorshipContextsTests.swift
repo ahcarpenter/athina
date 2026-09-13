@@ -58,6 +58,27 @@ import Testing
         #expect(s.validated().contexts.count == existing.count)
     }
 
+    /// What the editor caps as the user types must survive `normalized`
+    /// untouched, so a saved name or detail is never cut after the fact.
+    @Test func theEditorsCapIsWhatValidationWouldHaveKept() {
+        let longName = String(repeating: "a", count: 200)
+        let longDetail = String(repeating: "b", count: 900)
+        let cappedName = ContextRules.capped(longName, to: MentorshipContext.maxNameLength)
+        let cappedDetail = ContextRules.capped(longDetail, to: MentorshipContext.maxDetailLength)
+        #expect(cappedName.count == MentorshipContext.maxNameLength)
+        #expect(cappedDetail.count == MentorshipContext.maxDetailLength)
+
+        var s = MentorSettings()
+        s.contexts = [MentorshipContext(name: cappedName, detail: cappedDetail)]
+        let validated = s.validated()
+        #expect(validated.contexts.first?.name == cappedName)
+        #expect(validated.contexts.first?.detail == cappedDetail)
+
+        // Text already within the limit is left exactly as typed, spaces and all.
+        #expect(ContextRules.capped("writing Swift ", to: MentorshipContext.maxNameLength) == "writing Swift ")
+        #expect(ContextRules.capped("", to: MentorshipContext.maxNameLength) == "")
+    }
+
     @Test func validationKeepsIdentitiesStableSoEditingDoesNotReshuffle() {
         var s = MentorSettings()
         let context = MentorshipContext(name: "writing Swift")

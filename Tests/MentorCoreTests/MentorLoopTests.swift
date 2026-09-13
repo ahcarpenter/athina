@@ -196,13 +196,8 @@ import Testing
 
         let status = await h.loop.currentStatus()
         #expect(status.lastTriage?.outcome == .candidate)
-        #expect(status.lastTriage?.context == "inside \"writing Swift\" (90% confident)")
         #expect(status.lastContext?.placement.contextName == "writing Swift")
         #expect(status.lastMentor?.outcome == .suggested)
-        #expect(status.lastMentor?.context == "inside \"writing Swift\" (90% confident)")
-
-        let suggestion = try #require(try await h.journal.recentSuggestions(limit: 1).first)
-        #expect(suggestion.context == "writing Swift")
     }
 
     @Test func outOfContextStopsAtTriageAndIsRecordedAsSuch() async throws {
@@ -214,7 +209,6 @@ import Testing
         #expect(await h.client.sent.count == 1)
         let status = await h.loop.currentStatus()
         #expect(status.lastTriage?.outcome == .outOfContext)
-        #expect(status.lastTriage?.context == "outside every context (triage matched no declared context)")
         #expect(status.lastMentorHold?.hold == .outOfContext(.noMatch(reason: "")))
         #expect(status.lastMentor == nil)
         #expect(try await h.journal.recentSuggestions(limit: 5).isEmpty)
@@ -265,7 +259,6 @@ import Testing
         #expect(triage.system.first?.text == MentorPrompts.triageBase)
         #expect(triage.outputConfig?.format?.schema == MentorPrompts.triageSchema(contexts: []))
         let status = await h.loop.currentStatus()
-        #expect(status.lastTriage?.context == nil)
         #expect(status.lastContext?.placement == .notEnforced)
     }
 
