@@ -4,7 +4,7 @@ import Foundation
 /// log entry can be traced to the exact prompt that produced it. Bump
 /// `version` whenever either prompt or schema changes.
 public enum MentorPrompts {
-    public static let version = 2
+    public static let version = 3
 
     // MARK: Triage
 
@@ -34,7 +34,7 @@ public enum MentorPrompts {
     - you are unsure. Silence is the default.
 
     Reply with JSON only: {"worth_a_look": boolean, "reason": string}. Keep the reason to one short \
-    sentence naming the concrete sign you saw, or why you passed.
+    sentence in plain text with plain hyphens, naming the concrete sign you saw, or why you passed.
     """
 
     public static let triageSchema: JSONValue = [
@@ -113,6 +113,17 @@ public enum MentorPrompts {
         "required": ["reason", "suggestion"],
         "additionalProperties": false,
     ]
+}
+
+extension String {
+    /// Model text with em and en dashes replaced by a plain dash, so nothing
+    /// the app shows or stores carries one whatever the model does.
+    public var withPlainDashes: String {
+        guard contains("\u{2014}") || contains("\u{2013}") else { return self }
+        return replacingOccurrences(of: " \u{2014} ", with: " - ")
+            .replacingOccurrences(of: "\u{2014}", with: " - ")
+            .replacingOccurrences(of: "\u{2013}", with: "-")
+    }
 }
 
 /// What the triage tier returns.

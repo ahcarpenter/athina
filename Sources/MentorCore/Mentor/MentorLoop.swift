@@ -238,7 +238,7 @@ public actor MentorLoop {
             } else if let decoded = MentorLoop.decode(TriageVerdict.self, from: response) {
                 verdict = decoded
                 record.outcome = decoded.worthALook ? .candidate : .quiet
-                record.detail = decoded.reason
+                record.detail = decoded.reason.withPlainDashes
             } else {
                 record.outcome = response.isTruncated ? .truncated : .error
                 record.detail = "could not parse the triage reply"
@@ -300,7 +300,7 @@ public actor MentorLoop {
                 record.outcome = .refused
                 record.detail = "the API declined this request"
             } else if let verdict = MentorLoop.decode(MentorVerdict.self, from: response) {
-                record.detail = verdict.reason
+                record.detail = verdict.reason.withPlainDashes
                 if let payload = verdict.suggestion {
                     if payload.confidence < settings.minimumConfidence {
                         record.outcome = .belowConfidence
@@ -317,9 +317,9 @@ public actor MentorLoop {
                             appName: observation.focus.appName,
                             windowTitle: observation.focus.windowTitle,
                             category: payload.category,
-                            title: payload.title,
-                            body: payload.body,
-                            explanation: payload.explanation,
+                            title: payload.title.withPlainDashes,
+                            body: payload.body.withPlainDashes,
+                            explanation: payload.explanation.withPlainDashes,
                             confidence: payload.confidence,
                             observationID: observation.id == 0 ? nil : observation.id,
                             model: response.model,

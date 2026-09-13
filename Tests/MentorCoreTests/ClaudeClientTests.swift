@@ -108,6 +108,12 @@ import Testing
         #expect(category?["enum"] as? [String] == SuggestionCategory.allCases.map(\.rawValue))
     }
 
+    @Test func modelTextLosesItsDashes() {
+        #expect("prompt vanished \u{2014} press up".withPlainDashes == "prompt vanished - press up")
+        #expect("a\u{2014}b and 3\u{2013}4".withPlainDashes == "a - b and 3-4")
+        #expect("plain - text".withPlainDashes == "plain - text")
+    }
+
     @Test func jsonValueRoundTripsAndEncodesIntegersPlainly() throws {
         let value: JSONValue = ["a": 1, "b": 2.5, "c": [true, nil, "x"]]
         let data = try AnthropicClient.encoder.encode(value)
