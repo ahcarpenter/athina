@@ -61,9 +61,8 @@ enum WindowID {
 
 /// Developer aids on the command line: `Mentor --open debug|settings|permissions|history`
 /// presents that window at launch (for example `open build/Mentor.app --args --open debug`),
-/// `--open settings:mentor` opens Settings on that tab, `--open toast` brings the last
-/// suggestion back as a toast the way the menu bar item does, and `--snapshot <dir>` is
-/// handled by `Snapshots`.
+/// `--open settings:mentor` opens Settings on that tab, and `--snapshot <dir>` is handled
+/// by `Snapshots`.
 enum LaunchArguments {
     private static var openArgument: String? {
         let arguments = CommandLine.arguments
@@ -74,9 +73,6 @@ enum LaunchArguments {
     static var windowToOpen: String? {
         openArgument.map { String($0.split(separator: ":", maxSplits: 1)[0]) }
     }
-
-    /// `--open toast` shows the last suggestion once the journal has loaded.
-    static var showsToastAtLaunch: Bool { windowToOpen == "toast" }
 
     static var settingsTab: SettingsView.Tab {
         guard let argument = openArgument, argument.hasPrefix("settings:") else { return .mentor }

@@ -38,11 +38,12 @@ final class ToastController {
 
     /// A mouse-down anywhere but the toast dismisses it, the way a macOS
     /// notification banner goes away when you click elsewhere. The global
-    /// monitor sees clicks in other apps and on the desktop; the local one sees
-    /// clicks in Mentor's own windows, and passes every event through so the
-    /// toast's own buttons still work. Only mouse-down is watched, so scrolling,
-    /// typing, and moving the pointer leave the toast alone. Neither monitor
-    /// makes the panel key or activates the app.
+    /// monitor sees clicks in other apps and on the desktop, which carry no
+    /// window of ours; the local one sees clicks in Mentor's own windows and
+    /// passes every event through, so only an event aimed at the toast's own
+    /// panel keeps it up and its buttons still work. Only mouse-down is watched,
+    /// so scrolling, typing, and moving the pointer leave the toast alone.
+    /// Neither monitor makes the panel key or activates the app.
     private func startWatchingForOutsideClicks() {
         guard outsideClickMonitors.isEmpty else { return }
         let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
@@ -65,12 +66,8 @@ final class ToastController {
     }
 
     private func handleClick(_ event: NSEvent) {
-        guard let panel, panel.isVisible, let suggestion = model.suggestion else { return }
-        // An event delivered to one of our windows carries a window-relative
-        // location; one seen by the global monitor has no window and carries
-        // screen coordinates already.
-        let point = event.window.map { $0.convertPoint(toScreen: event.locationInWindow) } ?? event.locationInWindow
-        guard ToastOutsideClick.dismisses(clickAt: point, toastFrame: panel.frame) else { return }
+        guard let panel, panel.isVisible, event.window !== panel else { return }
+        guard let suggestion = model.suggestion else { return }
         onAction?(suggestion.id, .dismissed)
     }
 

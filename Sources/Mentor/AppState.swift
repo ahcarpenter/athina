@@ -184,7 +184,6 @@ final class AppState {
         }
         callLog = (try? await journal.recentModelCalls(limit: AppState.callLogLimit)) ?? []
         suggestionHistory = (try? await journal.recentSuggestions(limit: AppState.historyLimit)) ?? []
-        if LaunchArguments.showsToastAtLaunch { showLastSuggestion() }
     }
 
     func stop() async {
