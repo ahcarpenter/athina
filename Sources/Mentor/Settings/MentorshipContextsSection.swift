@@ -235,38 +235,27 @@ private struct ContextEditor: View {
 
 // MARK: - Shared chrome
 
-/// The bordered, rounded container the settings lists share.
+/// The bordered, rounded container the mentorship contexts list draws, with a
+/// toolbar strip under it.
 struct BorderedList<Content: View, Toolbar: View>: View {
     private let content: Content
     private let toolbar: Toolbar
-    private let hasToolbar: Bool
 
     init(@ViewBuilder content: () -> Content, @ViewBuilder toolbar: () -> Toolbar) {
         self.content = content()
         self.toolbar = toolbar()
-        hasToolbar = true
     }
 
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: 0) { content }
-            if hasToolbar {
-                Divider()
-                HStack(spacing: 0) { toolbar }
-                    .buttonStyle(.borderless)
-                    .padding(.vertical, 2)
-            }
+            Divider()
+            HStack(spacing: 0) { toolbar }
+                .buttonStyle(.borderless)
+                .padding(.vertical, 2)
         }
         .background(.background, in: RoundedRectangle(cornerRadius: 6))
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.quaternary))
-    }
-}
-
-extension BorderedList where Toolbar == EmptyView {
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-        toolbar = EmptyView()
-        hasToolbar = false
     }
 }
 
