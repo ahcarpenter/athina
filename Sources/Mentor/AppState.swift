@@ -1,6 +1,7 @@
 import AppKit
 import MentorCore
 import Observation
+import OSLog
 import SwiftUI
 
 /// Main-actor view of everything the pipeline publishes, plus app-level actions.
@@ -10,6 +11,7 @@ final class AppState {
     static let shared = AppState()
 
     static let timelineLimit = 300
+    private static let log = Logger(subsystem: "com.ahcarpenter.mentor", category: "app")
 
     var settings: SensingSettings {
         didSet {
@@ -18,9 +20,15 @@ final class AppState {
             let pipeline = pipeline
             let hotKey = settings.pauseHotKey
             Task { await pipeline?.updateSettings(settings) }
-            hotKeys.register(hotKey)
+            if hotKey != oldValue.pauseHotKey {
+                hotKeyRegistered = hotKeys.register(hotKey)
+                AppState.log.notice("pause hotkey \(hotKey.displayString, privacy: .public) registered: \(self.hotKeyRegistered)")
+            }
         }
     }
+
+    /// False when the pause hotkey could not be registered (unusable or taken by another app).
+    private(set) var hotKeyRegistered = false
 
     var mode: SensingMode = .stopped
     var permissions: PermissionStatus
@@ -71,15 +79,18 @@ final class AppState {
         guard !isRunning else { return }
         isRunning = true
         hotKeys.onPress = { [weak self] in self?.togglePause() }
-        hotKeys.register(settings.pauseHotKey)
+        hotKeyRegistered = hotKeys.register(settings.pauseHotKey)
+        AppState.log.notice("pause hotkey \(self.settings.pauseHotKey.displayString, privacy: .public) registered: \(self.hotKeyRegistered)")
 
         let journal: Journal
         do {
             journal = try Journal(url: journalURL)
         } catch {
             journalError = "Could not open the journal at \(journalURL.path): \(error)"
+            AppState.log.error("journal unavailable: \(String(describing: error), privacy: .public)")
             return
         }
+        AppState.log.notice("journal open at \(self.journalURL.path, privacy: .public)")
         self.journal = journal
         let tracker = FocusTracker()
         self.tracker = tracker
@@ -123,6 +134,7 @@ final class AppState {
     func togglePause() {
         isPaused.toggle()
         let paused = isPaused
+        AppState.log.notice("pause toggled: \(paused)")
         Task { await pipeline?.setPaused(paused) }
     }
 
@@ -218,6 +230,7 @@ final class AppState {
             break
         case .modeChanged(let newMode):
             mode = newMode
+            AppState.log.notice("mode: \(newMode.rawValue, privacy: .public)")
             refreshPermissions()
         case .event(let journalEvent):
             prepend(.event(journalEvent))

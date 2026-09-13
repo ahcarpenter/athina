@@ -10,9 +10,12 @@ final class HotKeyCenter {
     private var handlerRef: EventHandlerRef?
     private static let signature: OSType = 0x4D4E_5452 // "MNTR"
 
-    func register(_ hotKey: HotKey) {
+    /// Registers the hotkey, replacing any previous one. Returns false when the
+    /// combination is unusable or another app already holds it.
+    @discardableResult
+    func register(_ hotKey: HotKey) -> Bool {
         unregister()
-        guard hotKey.isUsable else { return }
+        guard hotKey.isUsable else { return false }
         installHandlerIfNeeded()
         let id = EventHotKeyID(signature: HotKeyCenter.signature, id: 1)
         var ref: EventHotKeyRef?
@@ -20,9 +23,9 @@ final class HotKeyCenter {
             hotKey.keyCode, HotKeyCenter.carbonModifiers(hotKey.modifiers), id,
             GetApplicationEventTarget(), 0, &ref
         )
-        if status == noErr {
-            hotKeyRef = ref
-        }
+        guard status == noErr else { return false }
+        hotKeyRef = ref
+        return true
     }
 
     func unregister() {

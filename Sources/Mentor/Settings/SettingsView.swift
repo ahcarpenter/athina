@@ -218,7 +218,18 @@ private struct PrivacySettings: View {
         Form {
             Section {
                 LabeledContent("Pause hotkey") {
-                    HotKeyRecorder(hotKey: $state.settings.pauseHotKey)
+                    HStack(spacing: 10) {
+                        if state.isRunning {
+                            Label(
+                                state.hotKeyRegistered ? "Active" : "Not registered",
+                                systemImage: state.hotKeyRegistered ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                            )
+                            .font(.caption)
+                            .foregroundStyle(state.hotKeyRegistered ? Color.green : Color.orange)
+                            .help(state.hotKeyRegistered ? "The hotkey is registered system-wide." : "Another app holds this combination, or it needs a Control, Option, or Command modifier.")
+                        }
+                        HotKeyRecorder(hotKey: $state.settings.pauseHotKey)
+                    }
                 }
             } footer: {
                 Text("Toggles watching from any app. The menu bar icon shows an eye while watching and a crossed eye while paused.")
