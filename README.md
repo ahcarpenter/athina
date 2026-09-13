@@ -65,9 +65,10 @@ tccutil reset ScreenCapture com.ahcarpenter.mentor
 ## Permissions
 
 Mentor asks for two permissions and explains each in a first-run window that
-opens whenever one is missing. The window shows live status, deep-links to the
-matching System Settings pane, and re-checks every second while open and when
-the app regains focus.
+opens whenever one is missing. The window triggers each missing permission's
+system prompt once when it opens, so Mentor appears in both System Settings
+lists, shows live status, deep-links to the matching System Settings pane, and
+re-checks every second while open and when the app regains focus.
 
 | Permission | Used for | Without it |
 | --- | --- | --- |
@@ -120,6 +121,10 @@ within `hashDistanceThreshold` of the previous kept frame **and** neither the
 window nor the focused text changed. Kept frames go through Vision OCR (text
 blocks with bounding boxes in frame pixels and in global display points), are
 JPEG-encoded, written to the journal, and published as `SensingEvent.observation`.
+Because the user can switch apps while the screenshot or OCR is in flight, the
+pipeline asks NSWorkspace for the live frontmost app after each of those steps
+and discards the frame, without OCR or journaling, when that app is not the one
+the frame was captured for or is excluded.
 
 ### Journal
 
@@ -132,7 +137,8 @@ retention, clear). Retention deletes thumbnails older than `thumbnailRetention`,
 then text and events older than `textRetention`, which settings clamp to at
 least `thumbnailRetention` so text and events never expire before their
 thumbnails, and then, if the file is still over `journalSizeCapBytes`, the
-oldest thumbnails and finally the oldest observations until it fits. "Clear Journal" in settings deletes everything.
+oldest thumbnails and finally the oldest observations and events until it fits.
+"Clear Journal" in settings deletes everything.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
 to defaults so older files keep working.
@@ -173,7 +179,9 @@ input, and the app's own CPU and memory.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs `swift build`, `swift test`, and the bundle
-script on GitHub's `macos-26` runner, which ships Xcode 26 and the macOS 26 SDK
-this package targets. The tests exercise only the pure parts (hashing, cadence,
-journal, retention, settings), so they need no permissions or display.
+`.github/workflows/ci.yml` runs `swift test`, the bundle script, and
+`Mentor --snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the
+macOS 26 SDK this package targets, and uploads the rendered PNGs as the
+`ui-snapshots` artifact. The tests exercise the pure parts (hashing, cadence,
+journal, retention, settings) and Vision OCR on a drawn bitmap, so they need no
+permissions or display.

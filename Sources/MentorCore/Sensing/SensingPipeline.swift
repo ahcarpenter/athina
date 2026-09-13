@@ -280,6 +280,9 @@ public actor SensingPipeline {
             permissionsCheckedAt = .distantPast
             return
         }
+        // The user may have switched apps, possibly to an excluded one, while the
+        // screenshot was in flight. `lastFocus` lags behind the activation
+        // notification, so the live frontmost app is checked as well.
         guard lastFocus?.isExcluded != true, await frontmostIsStill(focus) else { return }
 
         guard let hash = FrameImaging.perceptualHash(of: frame.image) else {
@@ -304,6 +307,8 @@ public actor SensingPipeline {
         } catch {
             cadence.lastError = "ocr: \(error)"
         }
+        // Checked again here: OCR can take hundreds of milliseconds, and this is
+        // the last point before the frame and its text become durable.
         guard lastFocus?.isExcluded != true, await frontmostIsStill(focus) else { return }
         let jpeg = FrameImaging.jpegData(from: frame.image, quality: settings.thumbnailJPEGQuality)
         let info = FrameInfo(
