@@ -624,7 +624,7 @@ import Testing
         #expect(await h.loop.currentStatus().understanding?.revision == 1)
     }
 
-    @Test func anExistingUnderstandingGoesToMentorAsItsOwnCachedSystemBlock() async throws {
+    @Test func anExistingUnderstandingGoesToMentorAsItsOwnUncachedSystemBlock() async throws {
         let h = try await Harness(understanding: Self.existing(age: 60))
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.silence, model: "claude-opus-5")
@@ -634,10 +634,10 @@ import Testing
         let mentor = try #require(sent.last?.request)
         #expect(mentor.system.count == 2)
         #expect(mentor.system[0].text == MentorPrompts.mentorSystem)
-        // Its own cache breakpoint: the prompt before it stays cached across
-        // refreshes, and this block stays cached until the next refresh.
+        // The prompt keeps its cache marker; the block after it changes on
+        // every mentor call, so it carries none.
         #expect(mentor.system[0].cacheControl == .ephemeral)
-        #expect(mentor.system[1].cacheControl == .ephemeral)
+        #expect(mentor.system[1].cacheControl == nil)
         #expect(mentor.system[1].text.contains("ship the mentor loop"))
         #expect(mentor.system[1].text.contains("revision 1"))
         guard case .text(let mentorText) = mentor.messages[0].content.last else {

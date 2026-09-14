@@ -218,13 +218,13 @@ import Testing
         #expect(!block.contains("What has happened"))
     }
 
-    @Test func understandingBlockCarriesTheRecordWithItsOwnCacheMarker() {
+    @Test func understandingBlockCarriesTheRecordWithoutACacheMarker() {
         let record = UnderstandingRecord.first(
             content: sample(), at: t0, model: "m", source: .periodic, cost: 0, promptVersion: 4
         )
         let block = MentorPrompts.understandingBlock(record)
         #expect(block.text.contains(record.content.promptBlock))
-        #expect(block.cacheControl == .ephemeral)
+        #expect(block.cacheControl == nil)
     }
 
     @Test func paragraphIsOneCompactLineForTriage() {

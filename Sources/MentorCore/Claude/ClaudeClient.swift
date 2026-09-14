@@ -33,7 +33,8 @@ public struct CacheControl: Codable, Equatable, Sendable {
 }
 
 /// One block of the system prompt. Every Mentor system prompt carries a
-/// cache marker so repeated calls read it from the prompt cache.
+/// cache marker so repeated calls read it from the prompt cache; a block that
+/// changes on every call passes nil.
 public struct SystemBlock: Codable, Equatable, Sendable {
     public var type: String
     public var text: String

@@ -306,17 +306,17 @@ public enum MentorPrompts {
         "additionalProperties": false,
     ]
 
-    /// The standing understanding as its own system block, after the mentor
-    /// prompt. It carries its own cache marker, so the mentor prompt before it
-    /// stays cached across refreshes while this block stays cached until the
-    /// next refresh rewrites it.
+    /// The standing understanding as its own system block after the mentor
+    /// prompt, with no cache marker: every mentor call rewrites the record, so
+    /// the block changes on every call and could never be read from the cache,
+    /// while the prompt before it keeps its own marker and stays cached.
     public static func understandingBlock(_ record: UnderstandingRecord) -> SystemBlock {
         SystemBlock(text: """
         Your standing understanding of this user's work, revision \(record.revision), which you wrote \
         yourself and which replaces nothing you see in the messages below.
 
         \(record.content.promptBlock)
-        """)
+        """, cacheControl: nil)
     }
 
     // MARK: Follow-up

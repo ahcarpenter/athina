@@ -672,17 +672,17 @@ against the hourly spend cap like every other call. At the top of the
 interval's range no separate call is ever made and mentor calls carry the
 record alone.
 
-**How it is used.** The record goes to the mentor tier as a second system
-block after the prompt, each with its own cache marker, so the prompt stays
-cached across refreshes while the block stays cached until the next refresh
-rewrites it. Triage receives the same record as one compact paragraph in its
-user message, enough to notice an action that conflicts with the goal without
-paying for the whole thing. Three suggestion categories judge the current
-action against the inferred goal: `wont_achieve_goal`, `less_efficient`, and
-`unwanted_side_effect`. They are raised only when there is an understanding to
-judge against, they carry the goal they were judged against (shown in the
-history window), and "Never for this" suppresses each one per app exactly like
-every other category.
+**How it is used.** The record goes to the mentor tier as its own uncached
+system block after the cached prompt: every mentor call rewrites it, so the
+block changes on every call and a cache marker on it would never be read,
+while the prompt before it keeps its marker. Triage receives the same record
+as one compact paragraph in its user message, enough to notice an action that
+conflicts with the goal without paying for the whole thing. Three suggestion
+categories judge the current action against the inferred goal:
+`wont_achieve_goal`, `less_efficient`, and `unwanted_side_effect`. They are
+raised only when there is an understanding to judge against, they carry the
+goal they were judged against (shown in the history window), and "Never for
+this" suppresses each one per app exactly like every other category.
 
 **Size and lifetime.** `understandingTokenBudget` (1200 tokens, settable up to
 3000 so a mentor reply keeps room for its thinking and a suggestion beside the
@@ -766,6 +766,8 @@ counted (see Iterating without the network).
   journal on this Mac like everything else, readable in full in the debug
   panel, bounded by its token budget, expiring with the idle gap and at a new
   day, and removable at any time with Reset Understanding or Clear Journal.
+  The menu bar menu shows its strongest goal, clipped, alongside the debug
+  panel and Settings > Mentor, whenever Mentor is on and has a key.
   Both prompts that write it, the mentor prompt and the refresh prompt, tell
   the model to leave out anything private, financial, medical, or personal,
   and anything about other people on screen.

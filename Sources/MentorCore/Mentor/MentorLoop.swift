@@ -439,9 +439,9 @@ public actor MentorLoop {
             screensLeftOut: window.leftOut, now: now
         )))
         let model = settings.mentorModelInfo
-        // The understanding is its own system block after the prompt, with its
-        // own cache marker: the prompt before it stays cached across refreshes,
-        // and the block stays cached until the next refresh rewrites it.
+        // The understanding is its own uncached system block after the cached
+        // prompt: it changes on every mentor call, so a marker on it would only
+        // pay the cache write and never be read.
         var system = [SystemBlock(text: MentorPrompts.mentorSystem)]
         if let understanding {
             system.append(MentorPrompts.understandingBlock(understanding))
