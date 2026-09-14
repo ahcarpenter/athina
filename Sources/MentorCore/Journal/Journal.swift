@@ -135,6 +135,17 @@ public actor Journal {
             );
             CREATE INDEX IF NOT EXISTS model_calls_timestamp ON model_calls(timestamp);
             """)
+        // Columns added after a table shipped: CREATE TABLE IF NOT EXISTS leaves
+        // an existing journal's table alone, so add them here instead.
+        try addColumn("replayed INTEGER NOT NULL DEFAULT 0", named: "replayed", to: "model_calls", db)
+    }
+
+    /// Adds a column to an existing table, once. Nothing happens when the table
+    /// was created with it already.
+    private static func addColumn(_ definition: String, named name: String, to table: String, _ db: SQLiteConnection) throws {
+        let existing = try db.query("PRAGMA table_info(\(table))") { $0.text(1) }
+        guard !existing.contains(name) else { return }
+        try db.execute("ALTER TABLE \(table) ADD COLUMN \(definition)")
     }
 
     // MARK: Writes
@@ -258,8 +269,8 @@ public actor Journal {
     public func record(_ call: ModelCallRecord) throws -> ModelCallRecord {
         try db.run("""
             INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars, image_bytes, input_tokens,
-                output_tokens, cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                output_tokens, cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail, replayed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 .double(call.timestamp.timeIntervalSince1970),
                 .text(call.tier.rawValue),
@@ -275,6 +286,7 @@ public actor Journal {
                 .double(call.latency),
                 .text(call.outcome.rawValue),
                 call.detail.map(Value.text) ?? .null,
+                .int(call.replayed ? 1 : 0),
             ])
         var stored = call
         stored.id = db.lastInsertRowID
@@ -505,7 +517,7 @@ public actor Journal {
 
     private static let modelCallColumns = """
         id, timestamp, tier, model, prompt_version, prompt_chars, image_bytes, input_tokens, output_tokens,
-        cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail
+        cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail, replayed
         """
 
     private static func modelCall(from row: SQLiteConnection.Statement) -> ModelCallRecord {
@@ -526,7 +538,8 @@ public actor Journal {
             cost: row.double(11),
             latency: row.double(12),
             outcome: ModelCallOutcome(rawValue: row.text(13) ?? "") ?? .error,
-            detail: row.text(14)
+            detail: row.text(14),
+            replayed: row.int(15) != 0
         )
     }
 

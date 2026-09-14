@@ -62,6 +62,9 @@ private struct DebugStatusBar: View {
     var body: some View {
         HStack(spacing: 14) {
             ModeBadge(mode: state.mode)
+            if let badge = ClientModeBadge(mode: state.clientMode) {
+                badge
+            }
             PermissionChip(title: "Screen", granted: state.permissions.screenRecording)
             PermissionChip(title: "AX", granted: state.permissions.accessibility)
             Divider().frame(height: 16)
@@ -74,7 +77,12 @@ private struct DebugStatusBar: View {
                 }
             }
             Spacer(minLength: 8)
-            LabeledValue(label: "Spend", value: "\(Formatting.dollars(state.mentorStatus.spendThisHour)) / \(Formatting.dollars(state.settings.mentor.hourlySpendCap))")
+            LabeledValue(
+                label: "Spend",
+                value: state.clientMode.isOffline
+                    ? "none, replay mode"
+                    : "\(Formatting.dollars(state.mentorStatus.spendThisHour)) / \(Formatting.dollars(state.settings.mentor.hourlySpendCap))"
+            )
             if let resources = state.resources {
                 LabeledValue(label: "CPU", value: String(format: "%.1f%%", resources.cpuPercent))
                 LabeledValue(label: "Mem", value: Formatting.bytes(resources.footprintBytes))
@@ -102,6 +110,47 @@ private struct DebugStatusBar: View {
         guard let at = state.cadence.nextDueAt else { return "not scheduled" }
         let reason = state.cadence.nextDueReason.map { " (\($0.label))" } ?? ""
         return Formatting.countdown(to: at, now: now) + reason
+    }
+}
+
+/// Says that model calls are replayed or recorded; nothing for live calls.
+struct ClientModeBadge: View {
+    let title: String
+    let symbol: String
+    let color: Color
+    let help: String
+
+    init?(mode: ModelClientMode) {
+        switch mode {
+        case .live:
+            return nil
+        case .record:
+            title = "Recording"
+            symbol = "record.circle"
+            color = .red
+            help = "Model calls are live and each one is also written to a fixture file"
+        case .replay, .invalid:
+            title = "Replay"
+            symbol = "repeat"
+            color = .teal
+            help = "Model calls are answered from recordings: nothing reaches the network or is billed"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .imageScale(.small)
+                .fontWeight(.bold)
+                .foregroundStyle(color)
+            Text(title)
+                .fontWeight(.semibold)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 3)
+        .background(color.opacity(0.15), in: Capsule())
+        .help(help)
+        .fixedSize()
     }
 }
 
@@ -313,6 +362,7 @@ private struct Field: View {
     let label: String
     let value: String
     var lineLimit: Int? = nil
+    var truncation: Text.TruncationMode = .tail
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -321,6 +371,7 @@ private struct Field: View {
                 .frame(width: 78, alignment: .trailing)
             Text(value)
                 .lineLimit(lineLimit)
+                .truncationMode(truncation)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -631,6 +682,9 @@ private struct MentorCard: View {
         Card(title: "Mentor loop") {
             HStack(spacing: 8) {
                 AvailabilityBadge(availability: state.mentorStatus.availability)
+                if let badge = ClientModeBadge(mode: state.clientMode) {
+                    badge.font(.caption)
+                }
                 if let tier = state.mentorStatus.inFlight {
                     ProgressView().controlSize(.mini)
                     Text("\(tier.label) call in flight")
@@ -641,6 +695,9 @@ private struct MentorCard: View {
             TimelineView(.periodic(from: .now, by: 1)) { context in
                 // Model reasons can run long; four lines keeps spend and cadence in view.
                 VStack(alignment: .leading, spacing: 4) {
+                    ForEach(clientModeFields, id: \.label) { field in
+                        Field(label: field.label, value: field.value, lineLimit: field.lineLimit, truncation: field.truncation)
+                    }
                     Field(label: "Triage gate", value: triageGate(now: context.date), lineLimit: 4)
                     Field(label: "Context", value: contextVerdict(now: context.date), lineLimit: 4)
                     Field(label: "Last triage", value: describe(state.mentorStatus.lastTriage, now: context.date), lineLimit: 4)
@@ -650,6 +707,52 @@ private struct MentorCard: View {
                     Field(label: "Cadence", value: cadence(now: context.date))
                 }
             }
+        }
+    }
+
+    private struct ModeField {
+        var label: String
+        var value: String
+        var lineLimit: Int? = 1
+        var truncation: Text.TruncationMode = .tail
+    }
+
+    /// Where calls go when that is not simply live: one short line each, with
+    /// a long path cut in the middle so both ends stay readable.
+    private var clientModeFields: [ModeField] {
+        switch state.clientMode {
+        case .live:
+            return []
+        case .record(let directory):
+            return [
+                ModeField(label: "Calls", value: "live, each one also recorded"),
+                ModeField(label: "To", value: Formatting.path(directory), truncation: .middle),
+            ]
+        case .invalid(let reason):
+            return [
+                ModeField(label: "Calls", value: "refused, nothing is sent"),
+                ModeField(label: "Why", value: reason, lineLimit: 4),
+            ]
+        case .replay(let directory, _):
+            guard let summary = state.replaySummary else {
+                return [ModeField(label: "Calls", value: "replayed, never sent or billed")]
+            }
+            if let reason = summary.unavailableReason {
+                return [
+                    ModeField(label: "Calls", value: "refused, nothing is sent"),
+                    ModeField(label: "Why", value: reason, lineLimit: 4),
+                ]
+            }
+            var fixtures = "\(summary.total): \(summary.kindsDescription)"
+            if summary.staleCount > 0 {
+                let versions = summary.staleVersions.map { "v\($0)" }.joined(separator: ", ")
+                fixtures += "\n\(summary.staleCount) stale, from prompt \(versions) (now v\(summary.promptVersion)), \(summary.allowStale ? "served anyway" : "refused")"
+            }
+            return [
+                ModeField(label: "Calls", value: "replayed, never sent or billed"),
+                ModeField(label: "Fixtures", value: fixtures, lineLimit: 3),
+                ModeField(label: "From", value: Formatting.path(directory), truncation: .middle),
+            ]
         }
     }
 
@@ -700,14 +803,16 @@ private struct MentorCard: View {
 
     private func describe(_ record: ModelCallRecord?, now: Date) -> String {
         guard let record else { return "none yet" }
-        var text = "\(record.outcome.label) \(Formatting.age(record.timestamp, now: now)), \(ModelCatalog.displayName(for: record.model)), "
+        let model = ModelCatalog.displayName(for: record.model)
+        var text = "\(record.outcome.label) \(Formatting.age(record.timestamp, now: now)), \(record.replayed ? "replay of \(model)" : model), "
         text += "\(Formatting.tokens(record.usage.totalInputTokens)) in (\(Formatting.tokens(record.usage.cacheReadInputTokens)) cached), \(Formatting.tokens(record.usage.outputTokens)) out, "
-        text += "\(Formatting.dollars(record.cost)), \(Formatting.seconds(record.latency))"
+        text += "\(record.replayed ? "not billed" : Formatting.dollars(record.cost)), \(Formatting.seconds(record.latency))"
         if let detail = record.detail, !detail.isEmpty { text += "\n\(detail)" }
         return text
     }
 
     private func spend(now: Date) -> String {
+        guard !state.clientMode.isOffline else { return "nothing billed in replay mode" }
         let status = state.mentorStatus
         let rollover = Formatting.countdown(to: SpendMeter.nextHourStart(after: now), now: now)
         return "\(Formatting.dollars(status.spendThisHour)) of \(Formatting.dollars(state.settings.mentor.hourlySpendCap)) this hour over \(Plural.count(status.callsThisHour, "call", "calls")), hour rolls over \(rollover)"
@@ -779,10 +884,17 @@ private struct CallLogRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Text(Formatting.clockTime(call.timestamp))
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .frame(width: 60, alignment: .leading)
+            // A replay is marked under its time, so the outcome and model
+            // keep the width they have for a live call.
+            VStack(alignment: .leading, spacing: 4) {
+                Text(Formatting.clockTime(call.timestamp))
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                if call.replayed {
+                    ReplayTag()
+                }
+            }
+            .frame(width: 60, alignment: .leading)
             Text(call.tier.label)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(tierColor)
@@ -815,7 +927,7 @@ private struct CallLogRow: View {
     private var metrics: String {
         var line = "\(Formatting.tokens(call.usage.totalInputTokens)) in"
         if call.usage.cacheReadInputTokens > 0 { line += " (\(Formatting.tokens(call.usage.cacheReadInputTokens)) cached)" }
-        line += ", \(Formatting.tokens(call.usage.outputTokens)) out, \(Formatting.dollars(call.cost)), \(Formatting.seconds(call.latency))"
+        line += ", \(Formatting.tokens(call.usage.outputTokens)) out, \(call.replayed ? "not billed" : Formatting.dollars(call.cost)), \(Formatting.seconds(call.latency))"
         var prompt = "prompt \(Formatting.tokens(call.promptCharacters)) chars"
         if call.imageBytes > 0 { prompt += " + \(Formatting.bytes(Int64(call.imageBytes))) image" }
         return line + "\n" + prompt
@@ -827,5 +939,19 @@ private struct CallLogRow: View {
         case .mentor: .purple
         case .test: .secondary
         }
+    }
+}
+
+/// Marks a call answered from a recording.
+private struct ReplayTag: View {
+    var body: some View {
+        Text("Replay")
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.teal)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(Color.teal.opacity(0.15), in: Capsule())
+            .fixedSize()
+            .help("Answered from a recording: never sent and never billed")
     }
 }

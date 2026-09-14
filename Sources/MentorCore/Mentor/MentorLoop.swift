@@ -6,6 +6,10 @@ import OSLog
 ///
 /// Everything that reaches the network passes through `perform`, which is the
 /// only place the API key is read. Prompt text is never journaled or logged.
+///
+/// With a replay client (`ClaudeClient.isReplay`) no key is read at all, every
+/// call is journaled as a replay with zero cost, and none of them counts
+/// toward the hour's spend or its cap.
 public actor MentorLoop {
     public static let triageTimeout: TimeInterval = 30
     public static let mentorTimeout: TimeInterval = 180
@@ -19,6 +23,11 @@ public actor MentorLoop {
     public static let windowLookback = 200
 
     private static let log = Logger(subsystem: "com.ahcarpenter.mentor", category: "mentor")
+
+    /// Stands in for the key while calls are replayed. It is not a secret, the
+    /// replay client ignores it, and it lets every call path run unchanged
+    /// without reading the keychain.
+    public static let replayCredential = "replay-needs-no-key"
 
     public private(set) var settings: MentorSettings
     private let journal: Journal
@@ -387,9 +396,10 @@ public actor MentorLoop {
         inFlight.insert(tier)
         await publishStatus()
         let started = Date()
+        let identity = CallIdentity(kind: tier.rawValue, promptVersion: MentorPrompts.version)
         let result: Result<MessagesResponse, ClaudeClientError>
         do {
-            result = .success(try await client.send(request, apiKey: apiKey, timeout: timeout))
+            result = .success(try await client.send(request, call: identity, apiKey: apiKey, timeout: timeout))
         } catch let error as ClaudeClientError {
             result = .failure(error)
         } catch {
@@ -398,23 +408,26 @@ public actor MentorLoop {
         let latency = Date().timeIntervalSince(started)
         inFlight.remove(tier)
         let usage = (try? result.get().usage) ?? Usage()
+        let replayed = client.isReplay
         let record = ModelCallRecord(
             timestamp: started,
             tier: tier,
             model: request.model,
-            promptVersion: MentorPrompts.version,
+            promptVersion: identity.promptVersion,
             promptCharacters: request.promptCharacterCount,
             imageBytes: request.imageByteCount,
             usage: usage,
-            cost: settings.prices.cost(of: usage, model: request.model) ?? 0,
+            cost: replayed ? 0 : (settings.prices.cost(of: usage, model: request.model) ?? 0),
             latency: latency,
             outcome: .error,
-            detail: nil
+            detail: nil,
+            replayed: replayed
         )
         return CallResult(result: result, record: record)
     }
 
-    /// Journals the call, adds it to the hour's spend, and publishes it.
+    /// Journals the call, adds it to the hour's spend unless it was replayed,
+    /// and publishes it.
     @discardableResult
     private func store(_ record: ModelCallRecord) async -> ModelCallRecord {
         var stored = record
@@ -423,9 +436,11 @@ public actor MentorLoop {
         } catch {
             MentorLoop.log.error("model call not journaled: \(String(describing: error), privacy: .public)")
         }
-        spend.record(cost: record.cost, at: record.timestamp)
+        if !record.replayed {
+            spend.record(cost: record.cost, at: record.timestamp)
+        }
         MentorLoop.log.notice(
-            "\(record.tier.rawValue, privacy: .public) \(record.model, privacy: .public) \(record.outcome.rawValue, privacy: .public) in=\(record.usage.totalInputTokens) cached=\(record.usage.cacheReadInputTokens) out=\(record.usage.outputTokens) cost=\(record.cost, format: .fixed(precision: 4)) latency=\(record.latency, format: .fixed(precision: 2))s"
+            "\(record.tier.rawValue, privacy: .public) \(record.model, privacy: .public) \(record.outcome.rawValue, privacy: .public)\(record.replayed ? " replayed" : "", privacy: .public) in=\(record.usage.totalInputTokens) cached=\(record.usage.cacheReadInputTokens) out=\(record.usage.outputTokens) cost=\(record.cost, format: .fixed(precision: 4)) latency=\(record.latency, format: .fixed(precision: 2))s"
         )
         await broadcaster.send(.call(stored))
         return stored
@@ -464,6 +479,10 @@ public actor MentorLoop {
     }
 
     private func reloadKey() {
+        guard !client.isReplay else {
+            apiKey = MentorLoop.replayCredential
+            return
+        }
         do {
             apiKey = try keyStore.load()
         } catch {
@@ -473,14 +492,19 @@ public actor MentorLoop {
     }
 
     /// Restores this hour's spend and the last call of each tier after a relaunch.
+    /// Replayed calls never count toward spend, and a replaying loop starts
+    /// from none at all: nothing it does is billed, so live spend from other
+    /// runs must not hold it at the cap. The last calls shown are the ones made
+    /// the same way this run makes them, live or replayed.
     private func seedFromJournal() async {
         let now = Date()
-        if let calls = try? await journal.modelCalls(since: SpendMeter.hourStart(of: now)) {
-            for call in calls {
+        if !client.isReplay, let calls = try? await journal.modelCalls(since: SpendMeter.hourStart(of: now)) {
+            for call in calls where !call.replayed {
                 spend.record(cost: call.cost, at: call.timestamp)
             }
         }
-        if let recent = try? await journal.recentModelCalls(limit: 50) {
+        if let journaled = try? await journal.recentModelCalls(limit: 50) {
+            let recent = journaled.filter { $0.replayed == client.isReplay }
             status.lastTriage = recent.first { $0.tier == .triage }
             status.lastMentor = recent.first { $0.tier == .mentor }
         }

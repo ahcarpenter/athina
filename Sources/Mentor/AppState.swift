@@ -74,6 +74,18 @@ final class AppState {
     let journalURL = Journal.defaultURL()
     let settingsURL = SettingsStore.defaultURL()
 
+    // MARK: Model client mode
+
+    /// Live, recording, or replaying, from the launch arguments.
+    let clientMode: ModelClientMode
+    /// What a replay is serving from, once the loop has started.
+    var replaySummary: ReplaySummary?
+    /// Where the app writes recordings when `--record` names no directory.
+    let recordingsURL = CallFixtureFiles.defaultRecordingDirectory()
+    /// Fixture count and bytes in `recordingsURL`, nil when it holds none.
+    var recordingStats: (count: Int, bytes: Int64)?
+    private(set) var recordingsError: String?
+
     private let store: SettingsStore
     private let keyStore: any KeyStore
     private let isSample: Bool
@@ -93,7 +105,10 @@ final class AppState {
 
     private init() {
         store = SettingsStore(url: SettingsStore.defaultURL())
-        keyStore = KeychainKeyStore()
+        clientMode = ModelClientMode(arguments: CommandLine.arguments)
+        // A replay needs no key, so the keychain is never read and its
+        // per-build access prompt never appears.
+        keyStore = clientMode.isOffline ? InMemoryKeyStore() : KeychainKeyStore()
         isSample = false
         settings = store.load()
         let status = PermissionProbe.current()
@@ -103,9 +118,10 @@ final class AppState {
     }
 
     /// A detached state for snapshots and previews: never starts the pipeline.
-    init(sampleWithSettings settings: SensingSettings) {
+    init(sampleWithSettings settings: SensingSettings, clientMode: ModelClientMode = .live) {
         store = SettingsStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("mentor-sample-settings.json"))
-        keyStore = InMemoryKeyStore(key: "sk-ant-sample-key-0000-7Q2x")
+        self.clientMode = clientMode
+        keyStore = clientMode.isOffline ? InMemoryKeyStore() : InMemoryKeyStore(key: "sk-ant-sample-key-0000-7Q2x")
         isSample = true
         self.settings = settings
         permissions = PermissionStatus(screenRecording: true, accessibility: true)
@@ -138,6 +154,10 @@ final class AppState {
         self.pipeline = pipeline
         let mentorSettings = settings.mentor
         let keyStore = keyStore
+        let clientSetup = clientMode.makeClient(prices: settings.mentor.prices)
+        replaySummary = clientSetup.replay
+        AppState.log.notice("model calls: \(self.clientModeLog, privacy: .public)")
+        refreshRecordingStats()
         toast.onAction = { [weak self] id, feedback in
             self?.respond(to: id, with: feedback)
         }
@@ -149,7 +169,7 @@ final class AppState {
             let stream = await pipeline.events()
             let mentorStream = await pipeline.events()
             let mentor = MentorLoop(
-                settings: mentorSettings, journal: journal, client: AnthropicClient(), keyStore: keyStore, events: mentorStream
+                settings: mentorSettings, journal: journal, client: clientSetup.client, keyStore: keyStore, events: mentorStream
             )
             await self?.attach(mentor: mentor, journal: journal)
             await self?.loadInitialTimeline(from: journal)
@@ -260,6 +280,26 @@ final class AppState {
         guard let observation = try? await journal.observation(id: id) else { return nil }
         let jpeg = try? await journal.thumbnail(observationID: id)
         return (observation, jpeg.flatMap(NSImage.init(data:)))
+    }
+
+    // MARK: Recordings
+
+    func refreshRecordingStats() {
+        guard !isSample else { return }
+        recordingStats = CallFixtureFiles.stats(of: recordingsURL)
+    }
+
+    /// Deletes every recording in the app's recordings directory. A recording
+    /// run carries on and starts the directory again with its next call.
+    func clearRecordings() {
+        do {
+            try CallFixtureFiles.clear(recordingsURL)
+            recordingsError = nil
+            AppState.log.notice("recordings cleared")
+        } catch {
+            recordingsError = "Could not clear the recordings: \(error.localizedDescription)"
+        }
+        refreshRecordingStats()
     }
 
     // MARK: API key
@@ -444,8 +484,52 @@ final class AppState {
         }
     }
 
+    /// A short word beside the menu bar icon while calls are not plain live
+    /// ones, so a replay is never mistaken for the real thing.
+    var clientModeBadge: String? {
+        switch clientMode {
+        case .live: nil
+        case .record: "Recording"
+        case .replay, .invalid: "Replay"
+        }
+    }
+
+    /// One line for the menu saying where calls go, or nil when they are live.
+    var clientModeLine: String? {
+        switch clientMode {
+        case .live:
+            return nil
+        case .record(let directory):
+            return "Recording model calls to \(Formatting.path(directory))"
+        case .invalid(let reason):
+            return "Replay unavailable: \(reason)"
+        case .replay:
+            guard let summary = replaySummary else { return "Replay mode" }
+            if let reason = summary.unavailableReason { return "Replay unavailable: \(reason)" }
+            let folder = summary.directory.pathComponents.suffix(2).joined(separator: "/")
+            var line = "Replaying \(Plural.count(summary.total, "recorded call", "recorded calls")) from \(folder)"
+            if summary.staleCount > 0 {
+                line += summary.allowStale ? ", \(summary.staleCount) stale allowed" : ", \(summary.staleCount) stale refused"
+            }
+            return line
+        }
+    }
+
+    /// For the log at launch.
+    private var clientModeLog: String {
+        switch clientMode {
+        case .live: "live"
+        case .record(let directory): "live, recording to \(directory.path)"
+        case .replay(let directory, let allowStale): "replaying from \(directory.path)\(allowStale ? ", stale fixtures allowed" : "")"
+        case .invalid(let reason): "refused: \(reason)"
+        }
+    }
+
     /// One line for the menu: spend this hour against the cap, or why the loop is off.
     var mentorLine: String {
+        if clientMode.isOffline {
+            return settings.mentor.enabled ? "Mentor: replay mode, nothing billed" : "Mentor: off"
+        }
         switch mentorStatus.availability {
         case .ready, .capReached:
             let spend = Formatting.dollars(mentorStatus.spendThisHour)
@@ -522,6 +606,7 @@ final class AppState {
                 suggestionHistory[index] = suggestion
             }
         case .call(let record):
+            if case .record = clientMode { refreshRecordingStats() }
             callLog.insert(record, at: 0)
             if callLog.count > AppState.callLogLimit {
                 callLog.removeLast(callLog.count - AppState.callLogLimit)

@@ -37,6 +37,11 @@ enum Formatting {
         return "\(Int(interval / 86400))d"
     }
 
+    /// A path with the home directory shown as a tilde.
+    static func path(_ url: URL) -> String {
+        (url.path as NSString).abbreviatingWithTildeInPath
+    }
+
     static func rect(_ rect: CGRect) -> String {
         String(format: "%.0f, %.0f  %.0f × %.0f", rect.origin.x, rect.origin.y, rect.width, rect.height)
     }
