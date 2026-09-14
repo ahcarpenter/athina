@@ -241,6 +241,8 @@ public struct JournalEvent: Codable, Equatable, Sendable, Identifiable {
         case suggested
         /// The user acted on a suggestion, or it expired.
         case feedback
+        /// The user said something about a suggestion while holding the talk-back key.
+        case talkBack
 
         public var label: String {
             switch self {
@@ -258,6 +260,7 @@ public struct JournalEvent: Codable, Equatable, Sendable, Identifiable {
             case .retention: "Retention"
             case .suggested: "Suggestion"
             case .feedback: "Feedback"
+            case .talkBack: "Talk back"
             }
         }
     }

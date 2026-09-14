@@ -18,6 +18,8 @@ public actor MentorLoop {
     public static let triageMaxTokens = 200
     /// Mentor replies include adaptive thinking, which counts against this.
     public static let mentorMaxTokens = 6000
+    /// A follow-up answer is a few spoken sentences, plus the same thinking.
+    public static let followUpMaxTokens = 3000
     /// How many journal rows feed the event summaries and the rolling window.
     public static let eventLookback = 40
     public static let windowLookback = 200
@@ -74,7 +76,7 @@ public actor MentorLoop {
 
     public func start() async {
         guard consumeTask == nil else { return }
-        reloadKey()
+        await reloadKey()
         await seedFromJournal()
         await publishStatus()
         consumeTask = Task { [weak self] in
@@ -105,7 +107,7 @@ public actor MentorLoop {
 
     /// Call after the key is saved or removed in Settings.
     public func apiKeyChanged() async {
-        reloadKey()
+        await reloadKey()
         await publishStatus()
     }
 
@@ -132,10 +134,33 @@ public actor MentorLoop {
         return updated
     }
 
+    /// Records that a callout was drawn for a suggestion, or that it was read
+    /// aloud. Returns the suggestion as journaled, or nil when it is unknown.
+    @discardableResult
+    public func noteDelivery(suggestionID: Int64, calloutShown: Bool = false, spoken: Bool = false) async -> Suggestion? {
+        do {
+            return try await journal.updateDelivery(suggestionID: suggestionID, calloutShown: calloutShown, spoken: spoken)
+        } catch {
+            MentorLoop.log.error("delivery not journaled: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    /// Records that a follow-up answer was read aloud.
+    @discardableResult
+    public func noteFollowUpSpoken(id: Int64) async -> FollowUp? {
+        do {
+            return try await journal.markFollowUpSpoken(id: id)
+        } catch {
+            MentorLoop.log.error("follow-up delivery not journaled: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
     /// One tiny request on the triage model. Returns the model that answered,
     /// or the API's own error message. Counted as spend like any other call.
     public func testConnection() async -> Result<String, ClaudeClientError> {
-        reloadKey()
+        await reloadKey()
         guard let apiKey else { return .failure(.transport("no API key saved")) }
         let request = MessagesRequest(
             model: settings.triageModel,
@@ -344,6 +369,10 @@ public actor MentorLoop {
                     } else {
                         record.outcome = .suggested
                         record.detail = title
+                        let region = MentorLoop.region(from: payload.region, frame: observation.frame, sawImage: jpeg != nil)
+                        if payload.region != nil, region == nil {
+                            MentorLoop.log.notice("region dropped: \(jpeg == nil ? "no image was sent" : "outside the frame", privacy: .public)")
+                        }
                         toShow = Suggestion(
                             timestamp: shownAt,
                             bundleID: observation.focus.bundleID,
@@ -356,7 +385,8 @@ public actor MentorLoop {
                             confidence: payload.confidence,
                             observationID: observation.id == 0 ? nil : observation.id,
                             model: response.model,
-                            promptVersion: MentorPrompts.version
+                            promptVersion: MentorPrompts.version,
+                            region: region
                         )
                     }
                 } else {
@@ -381,6 +411,101 @@ public actor MentorLoop {
             detail: "\(stored.category.label): \(stored.title)"
         ))
         await broadcaster.send(.suggestion(stored))
+    }
+
+    /// The spot the model pointed at, kept only when it saw the image and the
+    /// spot lies inside it. Anything else is a guess and is dropped here, so
+    /// the journal never holds a region that cannot be placed.
+    static func region(from raw: MentorVerdict.Payload.Region?, frame: FrameInfo, sawImage: Bool) -> CalloutRegion? {
+        guard let raw, sawImage, CalloutAnchor.screenRect(for: raw.rect, in: frame) != nil else { return nil }
+        return CalloutRegion(rect: raw.rect, note: raw.note.withPlainDashes.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    // MARK: Follow-up
+
+    /// One thing the user said about a suggestion, answered by the mentor
+    /// model at the mentor tier's effort. The exchange is journaled as a
+    /// follow-up row and the call as a model call, counted against the hour's
+    /// spend like every other call. A held question is journaled with the
+    /// reason and never sent.
+    public func askFollowUp(about suggestion: Suggestion, question: String, at now: Date = Date()) async -> FollowUp {
+        var followUp = FollowUp(
+            suggestionID: suggestion.id, timestamp: now, question: question,
+            model: settings.mentorModel, promptVersion: MentorPrompts.version
+        )
+        if case .hold(let hold) = scheduler.followUpGate(conditions: conditions(now: now)) {
+            followUp.error = hold.label
+            return await finish(followUp, about: suggestion)
+        }
+        guard let apiKey else {
+            followUp.error = MentorScheduler.Hold.noAPIKey.label
+            return await finish(followUp, about: suggestion)
+        }
+        let exchange = (try? await journal.followUps(suggestionID: suggestion.id)) ?? []
+        var screenText: String?
+        if let observationID = suggestion.observationID {
+            screenText = try? await journal.observation(id: observationID)?.ocrText
+        }
+        let text = PromptBuilder.followUpMessage(
+            suggestion: suggestion, screenText: screenText, exchange: exchange, question: question, now: now
+        )
+        let model = settings.mentorModelInfo
+        let request = MessagesRequest(
+            model: model.id,
+            maxTokens: MentorLoop.followUpMaxTokens,
+            system: [SystemBlock(text: MentorPrompts.followUpSystem)],
+            messages: [Message(role: .user, content: [.text(text)])],
+            outputConfig: OutputConfig(
+                format: OutputFormat(schema: MentorPrompts.followUpSchema),
+                effort: settings.effort(for: .followUp)
+            )
+        )
+        let call = await perform(tier: .followUp, request: request, apiKey: apiKey, timeout: MentorLoop.mentorTimeout)
+        var record = call.record
+        switch call.result {
+        case .failure(let error):
+            record.outcome = .error
+            record.detail = error.description
+            followUp.error = error.description
+        case .success(let response):
+            followUp.model = response.model
+            if response.isRefusal {
+                record.outcome = .refused
+                record.detail = "the API declined this request"
+                followUp.error = record.detail
+            } else if let reply = MentorLoop.decode(FollowUpReply.self, from: response) {
+                let answer = reply.answer.withPlainDashes.trimmingCharacters(in: .whitespacesAndNewlines)
+                record.outcome = .answered
+                record.detail = String(answer.prefix(160))
+                followUp.answer = answer
+            } else {
+                record.outcome = response.isTruncated ? .truncated : .error
+                record.detail = "could not parse the follow-up reply"
+                followUp.error = record.detail
+            }
+        }
+        await store(record)
+        return await finish(followUp, about: suggestion)
+    }
+
+    /// Journals the exchange and its event, publishes it, and returns it with its id.
+    private func finish(_ followUp: FollowUp, about suggestion: Suggestion) async -> FollowUp {
+        var stored = followUp
+        do {
+            stored = try await journal.record(followUp)
+        } catch {
+            MentorLoop.log.error("follow-up not journaled: \(String(describing: error), privacy: .public)")
+        }
+        let detail = followUp.answer == nil
+            ? "\"\(followUp.question)\" (\(followUp.error ?? "no answer"))"
+            : "\"\(followUp.question)\""
+        await journalEvent(JournalEvent(
+            timestamp: followUp.timestamp, kind: .talkBack, bundleID: suggestion.bundleID, appName: suggestion.appName,
+            detail: detail
+        ))
+        await broadcaster.send(.followUp(stored))
+        await publishStatus()
+        return stored
     }
 
     // MARK: Calls
@@ -480,13 +605,13 @@ public actor MentorLoop {
         await broadcaster.send(.status(status))
     }
 
-    private func reloadKey() {
+    private func reloadKey() async {
         guard !client.isReplay else {
             apiKey = MentorLoop.replayCredential
             return
         }
         do {
-            apiKey = try keyStore.load()
+            apiKey = try await keyStore.loadInBackground()
         } catch {
             apiKey = nil
             MentorLoop.log.error("api key unreadable: \(String(describing: error), privacy: .public)")

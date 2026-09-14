@@ -21,7 +21,7 @@ enum Snapshots {
         let state = AppState.sample()
         let replay = AppState.sampleReplay()
         let specs: [(name: String, size: CGSize, view: AnyView, state: AppState)] = [
-            ("permissions", CGSize(width: 560, height: 520), AnyView(PermissionsView()), state),
+            ("permissions", CGSize(width: 560, height: 760), AnyView(PermissionsView()), state),
             ("debug-panel", CGSize(width: 1180, height: 760), AnyView(DebugPanelView()), state),
             ("debug-panel-calls", CGSize(width: 1180, height: 760), AnyView(DebugPanelView(initialSidePage: .calls)), state),
             // The Mentor tab is longer than any window macOS will open, so it
@@ -29,6 +29,7 @@ enum Snapshots {
             // a render of their own.
             ("settings-mentor", CGSize(width: 600, height: 1040), AnyView(SettingsView(initialTab: .mentor)), state),
             ("settings-mentor-contexts", CGSize(width: 600, height: 800), AnyView(MentorshipContextsPreview()), state),
+            ("settings-mentor-voice", CGSize(width: 600, height: 520), AnyView(VoiceSectionPreview()), state),
             ("settings-cadence", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .cadence)), state),
             ("settings-frames", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .frames)), state),
             ("settings-journal", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .journal)), state),
@@ -36,6 +37,9 @@ enum Snapshots {
             ("history", CGSize(width: 860, height: 520), AnyView(HistoryView(initialSelection: 3)), state),
             ("toast", CGSize(width: ToastController.width + 2, height: 170), AnyView(SampleToast(expanded: false)), state),
             ("toast-expanded", CGSize(width: ToastController.width + 2, height: 420), AnyView(SampleToast(expanded: true)), state),
+            ("toast-listening", CGSize(width: ToastController.width + 2, height: 260), AnyView(SampleToast(expanded: false, talkBack: .listening(partial: "does that work with tags as"))), state),
+            ("toast-answered", CGSize(width: ToastController.width + 2, height: 360), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: Date(), suggestionID: 4))), state),
+            ("callout", CGSize(width: 900, height: 620), AnyView(SampleCallout()), state),
             ("debug-panel-replay", CGSize(width: 1180, height: 760), AnyView(DebugPanelView()), replay),
             ("debug-panel-calls-replay", CGSize(width: 1180, height: 760), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
             ("settings-mentor-replay", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .mentor)), replay),
@@ -168,6 +172,7 @@ extension AppState {
             focusedValueLength: SampleFrame.code.count
         )
         let sampleFrame = SampleFrame.render()
+        state.permissions = PermissionStatus(screenRecording: true, accessibility: false, microphone: true, speechRecognition: false)
         let frame = FrameInfo(
             hash: PerceptualHash(words: [0x1234_5678_9abc_def0, 0x0fed_cba9_8765_4321, 0xaaaa_5555_aaaa_5555, 0x0f0f_f0f0_0f0f_f0f0]),
             width: Int(sampleFrame.image.size.width),
@@ -188,7 +193,6 @@ extension AppState {
         state.latestObservation = observation
         state.latestImage = sampleFrame.image
         state.mode = .watching
-        state.permissions = PermissionStatus(screenRecording: true, accessibility: false)
         state.cadence = CadenceStatus(
             mode: .watching,
             lastCaptureAt: observation.timestamp,
@@ -231,9 +235,22 @@ extension AppState {
         }
         state.timeline = timeline
 
-        let suggestions = SampleSuggestions.make(now: now)
+        var suggestions = SampleSuggestions.make(now: now)
+        // The newest suggestion points at the capture line of the sample frame.
+        if let block = sampleFrame.blocks.first(where: { $0.text.contains("capturer.capture") }) {
+            suggestions[0].region = CalloutRegion(rect: block.imageRect.insetBy(dx: -6, dy: -5), note: "this capture call")
+            suggestions[0].calloutShown = true
+        }
+        suggestions[0].spoken = true
         state.suggestionHistory = suggestions
         state.activeSuggestion = suggestions.first
+        state.followUps = SampleSuggestions.followUps(now: now, suggestionID: 3) + SampleSuggestions.followUps(now: now, suggestionID: 4)
+        state.lastCallout = CalloutRecord(
+            at: now.addingTimeInterval(-38), suggestionID: 4, region: suggestions[0].region ?? CalloutRegion(rect: .zero, note: ""),
+            placement: suggestions[0].region.map { CalloutPlacement(displayID: 1, screenRect: CalloutAnchor.screenRect(for: $0.rect, in: frame) ?? .zero, note: $0.note) },
+            outcome: "shown"
+        )
+        state.lastTranscript = TranscriptRecord(at: now.addingTimeInterval(-20), text: "does that work with tags as well", handling: "asked the mentor")
         state.callLog = SampleSuggestions.calls(now: now)
         state.mentorStatus = MentorStatus(
             availability: .ready,
@@ -310,16 +327,64 @@ struct MentorshipContextsPreview: View {
     }
 }
 
+/// The voice section on its own, for the same reason.
+struct VoiceSectionPreview: View {
+    var body: some View {
+        Form {
+            VoiceSection()
+        }
+        .formStyle(.grouped)
+    }
+}
+
 /// A toast rendered on its own, for snapshots.
 struct SampleToast: View {
     let expanded: Bool
+    var talkBack: TalkBackState = .idle
+    var exchange: [FollowUp] = []
 
     var body: some View {
         let model = ToastModel()
         model.suggestion = SampleSuggestions.make(now: Date()).first
         model.expanded = expanded
-        return ToastView(model: model, onAction: { _ in })
-            .padding(0)
+        model.talkBack = talkBack
+        model.exchange = exchange
+        model.talkBackKey = "⌃⌥⌘T"
+        // The panel sizes itself to the toast's ideal height; a fixed-size
+        // snapshot gets the same by letting the toast hug its content.
+        return VStack(spacing: 0) {
+            ToastView(model: model, onAction: { _ in })
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// The sample frame with a callout drawn over the line the newest sample
+/// suggestion points at, scaled the way the frame is.
+struct SampleCallout: View {
+    var body: some View {
+        let sample = SampleFrame.render()
+        let block = sample.blocks.first { $0.text.contains("capturer.capture") }
+        GeometryReader { geometry in
+            let frameSize = sample.image.size
+            let scale = min(geometry.size.width / frameSize.width, geometry.size.height / frameSize.height)
+            let fitted = CGSize(width: (frameSize.width * scale).rounded(.down), height: (frameSize.height * scale).rounded(.down))
+            ZStack(alignment: .topLeading) {
+                Image(nsImage: sample.image)
+                    .resizable()
+                    .interpolation(.high)
+                    .frame(width: fitted.width, height: fitted.height)
+                if let block {
+                    let spot = block.imageRect.insetBy(dx: -6, dy: -5).applying(CGAffineTransform(scaleX: scale, y: scale))
+                    let layout = CalloutLayout(screenRect: spot, display: CGRect(origin: .zero, size: fitted))
+                    CalloutView(box: layout.box, note: "this capture call", noteBelow: layout.noteBelow, size: layout.windowRect.size)
+                        .offset(x: layout.windowRect.minX, y: layout.windowRect.minY)
+                }
+            }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+        }
+        .background(Color(nsColor: .underPageBackgroundColor))
     }
 }
 
@@ -377,8 +442,46 @@ enum SampleSuggestions {
         ]
     }
 
+    /// A short exchange about a suggestion, for the toast and the history.
+    static func followUps(now: Date, suggestionID: Int64) -> [FollowUp] {
+        switch suggestionID {
+        case 4:
+            return [
+                FollowUp(
+                    id: 7, suggestionID: 4, timestamp: now.addingTimeInterval(-20),
+                    question: "does that work with tags as well",
+                    answer: "Yes. Tag the tests you care about with a Tag you declare once, then run swift test --filter with the tag name in the same way; the suite name filter and the tag filter both narrow the run to seconds.",
+                    model: "claude-fable-5-1", promptVersion: MentorPrompts.version, spoken: true
+                ),
+            ]
+        case 3:
+            return [
+                FollowUp(
+                    id: 5, suggestionID: 3, timestamp: now.addingTimeInterval(-1480),
+                    question: "which file is that in",
+                    answer: "The four full runs were in the terminal window titled zsh - mentor; the suite you were editing is Tests/MentorCoreTests/CaptureSchedulerTests.swift, so swift test --filter CaptureSchedulerTests is the command.",
+                    model: "claude-fable-5-1", promptVersion: MentorPrompts.version
+                ),
+                FollowUp(
+                    id: 6, suggestionID: 3, timestamp: now.addingTimeInterval(-1470),
+                    question: "and can I run just one test",
+                    answer: nil, error: "spend cap reached until 15:00",
+                    model: "claude-fable-5-1", promptVersion: MentorPrompts.version
+                ),
+            ]
+        default:
+            return []
+        }
+    }
+
     static func calls(now: Date) -> [ModelCallRecord] {
         var calls: [ModelCallRecord] = [
+            ModelCallRecord(
+                id: 62, timestamp: now.addingTimeInterval(-20), tier: .followUp, model: "claude-fable-5-1",
+                promptVersion: MentorPrompts.version, promptCharacters: 3_960, imageBytes: 0,
+                usage: Usage(inputTokens: 1_240, outputTokens: 160, cacheCreationInputTokens: 0, cacheReadInputTokens: 410),
+                cost: 0.0212, latency: 4.1, outcome: .answered, detail: "Yes. Tag the tests you care about with a Tag you declare once, then run swift test --filter with the tag name"
+            ),
             ModelCallRecord(
                 id: 61, timestamp: now.addingTimeInterval(-40), tier: .mentor, model: "claude-fable-5-1",
                 promptVersion: MentorPrompts.version, promptCharacters: 14_820, imageBytes: 96_400,

@@ -1,14 +1,15 @@
+import CoreGraphics
 import Foundation
 
 /// The system prompts and output schemas for both tiers, versioned so a call
 /// log entry can be traced to the exact prompt that produced it. Bump
 /// `version` whenever either prompt or schema changes.
 public enum MentorPrompts {
-    public static let version = 4
+    public static let version = 5
 
     // MARK: Triage
 
-    static let triageBase = """
+    public static let triageBase = """
     You are the triage stage of Mentor, a macOS app that watches what its user is doing and, rarely, \
     offers a live suggestion the way an expert sitting beside them would. You do not write suggestions. \
     You decide whether the stronger mentor model should look at this moment at all.
@@ -132,10 +133,17 @@ public enum MentorPrompts {
     problem), correctness (a likely mistake or bug in what they are writing), risk (something that could \
     cause harm, loss, or a security problem), or other
     - confidence: your probability from 0 to 1 that the user would find this worth the interruption
+    - region: usually null. Fill it only when the suggestion is about one specific spot that is visible \
+    in the attached screenshot and pointing at it helps: the exact line, button, field, or panel. Give x, \
+    y, width, and height in the pixel coordinates of that screenshot (origin at its top-left corner; the \
+    message states its size in pixels), covering just that spot with a little margin, and a note of at \
+    most eight words to show beside it, such as "this flag" or "the failing assertion". Leave region null \
+    when no screenshot is attached, when the suggestion is about the work as a whole, or when you are not \
+    sure exactly where the spot is: a box on the wrong thing is worse than no box.
 
     Reply with JSON only, matching the schema: {"reason": string, "suggestion": null or {title, body, \
-    explanation, category, confidence}}. The reason is one sentence for the log: what you noticed, or why \
-    you stayed silent. When you have enough information to decide, decide; do not narrate alternatives.
+    explanation, category, confidence, region}}. The reason is one sentence for the log: what you noticed, \
+    or why you stayed silent. When you have enough information to decide, decide; do not narrate alternatives.
     """
 
     public static let mentorSchema: JSONValue = [
@@ -156,8 +164,9 @@ public enum MentorPrompts {
                                 "enum": .array(SuggestionCategory.allCases.map { .string($0.rawValue) }),
                             ],
                             "confidence": ["type": "number"],
+                            "region": regionSchema,
                         ],
-                        "required": ["title", "body", "explanation", "category", "confidence"],
+                        "required": ["title", "body", "explanation", "category", "confidence", "region"],
                         "additionalProperties": false,
                     ],
                 ],
@@ -166,6 +175,65 @@ public enum MentorPrompts {
         "required": ["reason", "suggestion"],
         "additionalProperties": false,
     ]
+
+    /// The optional spot a suggestion points at, in the pixels of the frame
+    /// the model saw. Null is the normal answer.
+    static let regionSchema: JSONValue = [
+        "anyOf": [
+            ["type": "null"],
+            [
+                "type": "object",
+                "properties": [
+                    "x": ["type": "number"],
+                    "y": ["type": "number"],
+                    "width": ["type": "number"],
+                    "height": ["type": "number"],
+                    "note": ["type": "string"],
+                ],
+                "required": ["x", "y", "width", "height", "note"],
+                "additionalProperties": false,
+            ],
+        ],
+    ]
+
+    // MARK: Follow-up
+
+    /// The mentor tier answering something the user said about a suggestion
+    /// while holding the talk-back key. The answer is read aloud and shown in
+    /// the toast, so it is short prose, never a list.
+    public static let followUpSystem = """
+    You are Mentor, a live mentor for someone working at their Mac. A moment ago you made the suggestion \
+    described in the message, and the user has now said something about it, transcribed on their Mac while \
+    they held a talk-back key. Answer as the same expert who made the suggestion.
+
+    Answer directly, in plain text with plain hyphens (never an em dash, never markdown): two to five short \
+    sentences that will be read aloud and shown in a small panel, so no lists, headings, or code fences; \
+    give an exact command, shortcut, setting, or line of code inline when one answers the question. The \
+    transcript may carry recognition errors; read it charitably and answer the most likely meaning rather \
+    than asking for clarification. If the user pushes back, say plainly whether they are right. If they \
+    ask about something beyond the suggestion and the screen it was made from, say what you can and admit \
+    what you cannot see.
+
+    Reply with JSON only: {"answer": string}.
+    """
+
+    public static let followUpSchema: JSONValue = [
+        "type": "object",
+        "properties": [
+            "answer": ["type": "string"],
+        ],
+        "required": ["answer"],
+        "additionalProperties": false,
+    ]
+}
+
+/// What the mentor tier returns to a follow-up question.
+public struct FollowUpReply: Codable, Equatable, Sendable {
+    public var answer: String
+
+    public init(answer: String) {
+        self.answer = answer
+    }
 }
 
 extension String {
@@ -205,18 +273,43 @@ public struct TriageVerdict: Codable, Equatable, Sendable {
 /// What the mentor tier returns.
 public struct MentorVerdict: Codable, Equatable, Sendable {
     public struct Payload: Codable, Equatable, Sendable {
+        /// The spot the suggestion is about, in the pixels of the frame the
+        /// model saw. Decodes from `"region": null` and from a reply with no
+        /// region field at all, so older prompt versions still parse.
+        public struct Region: Codable, Equatable, Sendable {
+            public var x: Double
+            public var y: Double
+            public var width: Double
+            public var height: Double
+            public var note: String
+
+            public init(x: Double, y: Double, width: Double, height: Double, note: String) {
+                self.x = x
+                self.y = y
+                self.width = width
+                self.height = height
+                self.note = note
+            }
+
+            public var rect: CGRect {
+                CGRect(x: x, y: y, width: width, height: height)
+            }
+        }
+
         public var title: String
         public var body: String
         public var explanation: String
         public var category: SuggestionCategory
         public var confidence: Double
+        public var region: Region?
 
-        public init(title: String, body: String, explanation: String, category: SuggestionCategory, confidence: Double) {
+        public init(title: String, body: String, explanation: String, category: SuggestionCategory, confidence: Double, region: Region? = nil) {
             self.title = title
             self.body = body
             self.explanation = explanation
             self.category = category
             self.confidence = confidence
+            self.region = region
         }
     }
 

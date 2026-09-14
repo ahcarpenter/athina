@@ -52,6 +52,15 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     /// How long "Not now" keeps that category quiet for that app.
     public var notNowSnooze: TimeInterval = 3600
 
+    // MARK: Callouts and voice
+
+    /// Draw a callout on screen when a suggestion points at one spot.
+    public var showCallouts = true
+    /// Read each delivered suggestion aloud with the system voice.
+    public var speakSuggestions = false
+    /// Held to talk back to the current suggestion. Nil until one is recorded.
+    public var pushToTalkHotKey: HotKey?
+
     // MARK: Spend
 
     /// Dollars per clock hour. Cadence slows as spend approaches it; calls stop at it.
@@ -73,6 +82,7 @@ public struct MentorSettings: Codable, Equatable, Sendable {
         case onlyMentorInsideContexts, contexts
         case mentorWindowDuration, mentorWindowTokenBudget, sendThumbnail
         case minimumConfidence, toastTimeout, notNowSnooze
+        case showCallouts, speakSuggestions, pushToTalkHotKey
         case hourlySpendCap, prices
         case neverRules, snoozes
     }
@@ -96,6 +106,9 @@ public struct MentorSettings: Codable, Equatable, Sendable {
         minimumConfidence = try c.decodeIfPresent(Double.self, forKey: .minimumConfidence) ?? d.minimumConfidence
         toastTimeout = try c.decodeIfPresent(TimeInterval.self, forKey: .toastTimeout) ?? d.toastTimeout
         notNowSnooze = try c.decodeIfPresent(TimeInterval.self, forKey: .notNowSnooze) ?? d.notNowSnooze
+        showCallouts = try c.decodeIfPresent(Bool.self, forKey: .showCallouts) ?? d.showCallouts
+        speakSuggestions = try c.decodeIfPresent(Bool.self, forKey: .speakSuggestions) ?? d.speakSuggestions
+        pushToTalkHotKey = try c.decodeIfPresent(HotKey.self, forKey: .pushToTalkHotKey)
         hourlySpendCap = try c.decodeIfPresent(Double.self, forKey: .hourlySpendCap) ?? d.hourlySpendCap
         prices = try c.decodeIfPresent(PriceTable.self, forKey: .prices) ?? d.prices
         neverRules = try c.decodeIfPresent([NeverRule].self, forKey: .neverRules) ?? d.neverRules
@@ -117,6 +130,7 @@ public struct MentorSettings: Codable, Equatable, Sendable {
         s.minimumConfidence = s.minimumConfidence.clamped(to: 0...1)
         s.toastTimeout = s.toastTimeout.clamped(to: 5...600)
         s.notNowSnooze = s.notNowSnooze.clamped(to: 60...(7 * 86400))
+        if let key = s.pushToTalkHotKey, !key.isUsable { s.pushToTalkHotKey = nil }
         s.hourlySpendCap = s.hourlySpendCap.clamped(to: 0.05...1000)
         s.prices = s.prices.validated()
         var seen = Set<String>()
@@ -133,7 +147,7 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     public func effort(for tier: ModelTier) -> Effort? {
         switch tier {
         case .triage: triageModelInfo.supportsEffort ? triageEffort : nil
-        case .mentor: mentorModelInfo.supportsEffort ? mentorEffort : nil
+        case .mentor, .followUp: mentorModelInfo.supportsEffort ? mentorEffort : nil
         case .test: nil
         }
     }

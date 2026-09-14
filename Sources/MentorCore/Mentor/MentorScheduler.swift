@@ -109,6 +109,13 @@ public struct MentorScheduler: Equatable, Sendable {
         case hold(MentorHold)
     }
 
+    /// Whether a follow-up question may go to the mentor tier. A held
+    /// question is journaled with the reason and never sent.
+    public enum FollowUpGate: Equatable, Sendable {
+        case run
+        case hold(Hold)
+    }
+
     public var settings: MentorSettings
     public private(set) var lastTriageAt: Date?
     public private(set) var lastTriagedWindow: String?
@@ -194,6 +201,17 @@ public struct MentorScheduler: Equatable, Sendable {
 
     public mutating func noteMentorStarted(now: Date) {
         lastMentorAt = now
+    }
+
+    // MARK: Follow-up gate
+
+    /// The user asked, so there is no debounce and no context question: only
+    /// what blocks every tier (off, paused, idle, excluded, no key, the spend
+    /// cap) and a call already in flight hold it.
+    public func followUpGate(conditions: Conditions) -> FollowUpGate {
+        if let hold = availabilityHold(conditions: conditions) { return .hold(hold) }
+        if conditions.callInFlight { return .hold(.callInFlight) }
+        return .run
     }
 
     public func nextMentorAllowed(multiplier: Double) -> Date? {

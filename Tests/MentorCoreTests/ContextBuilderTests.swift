@@ -83,7 +83,7 @@ import Testing
             window: window, latest: latest, recentEvents: [], suppressed: [.shortcut, .tool], includesImage: true, now: t0
         )
         #expect(message.contains("Suppressed categories for this app (do not raise these): shortcut, tool."))
-        #expect(message.contains("The attached image is the latest screen."))
+        #expect(message.contains("The attached image is the latest screen, 1280 by 800 pixels; a region, if you give one, is in those pixels."))
         #expect(message.contains("| \"a.swift\" | focus change\n"))
         #expect(message.contains("| \"b.swift\" | focus change | latest\n"))
         let olderIndex = message.range(of: "older text")!.lowerBound

@@ -84,12 +84,105 @@ struct MentorSettingsTab: View {
                     range: 5...600, step: 5, unit: "s"
                 )
                 DurationRow("Not now snoozes for", value: $state.settings.mentor.notNowSnooze)
+                Toggle(isOn: $state.settings.mentor.showCallouts) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Show callouts on screen")
+                        Text("When a suggestion is about one spot on screen, a box and a short note are drawn around it, above the app. It goes away with the toast, and never while the window has moved or lost focus.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
 
+            VoiceSection()
             SpendSection()
             NeverRulesSection()
         }
         .formStyle(.grouped)
+    }
+}
+
+// MARK: - Voice
+
+/// Speaking suggestions and talking back: the switch, the hotkey, and what
+/// the two need on this Mac.
+struct VoiceSection: View {
+    @Environment(AppState.self) private var state
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        @Bindable var state = state
+        Section {
+            Toggle(isOn: $state.settings.mentor.speakSuggestions) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Speak suggestions")
+                    Text("Reads each new suggestion aloud with the system voice, on this Mac. The speaker button on a toast plays one again. Nothing is spoken while Mentor is paused, idle, or on an excluded app.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            LabeledContent {
+                HStack(spacing: 10) {
+                    if state.isRunning, state.settings.mentor.pushToTalkHotKey != nil {
+                        Label(
+                            state.pushToTalkRegistered ? "Active" : "Not registered",
+                            systemImage: state.pushToTalkRegistered ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+                        )
+                        .font(.caption)
+                        .foregroundStyle(state.pushToTalkRegistered ? Color.green : Color.orange)
+                        .help(state.pushToTalkRegistered ? "The hotkey is registered system-wide." : "Another app holds this combination.")
+                    }
+                    HotKeyRecorder(
+                        hotKey: $state.settings.mentor.pushToTalkHotKey,
+                        conflicts: [state.settings.pauseHotKey],
+                        conflictNote: "That is the pause hotkey."
+                    )
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Talk-back hotkey")
+                    Text("Hold it to speak; release to send.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            LabeledContent("On-device recognition") {
+                switch state.speechAvailability {
+                case .available(let locale):
+                    Label("Available for \(locale)", systemImage: "checkmark.circle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.green)
+                case .unavailable(let reason):
+                    Label(reason, systemImage: "xmark.circle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .multilineTextAlignment(.trailing)
+                }
+            }
+            LabeledContent("Permissions") {
+                HStack(spacing: 8) {
+                    ForEach(Permission.optional) { permission in
+                        HStack(spacing: 4) {
+                            Text(permission.title)
+                                .font(.callout)
+                            StatusPill(granted: state.permissions.isGranted(permission))
+                        }
+                    }
+                    Button("Permissions…") {
+                        NSApp.activate()
+                        openWindow(id: WindowID.permissions)
+                    }
+                    .controlSize(.small)
+                }
+            }
+        } header: {
+            Text("Voice")
+        } footer: {
+            Text("Hold the hotkey and speak. \"Tell me more\", \"not now\", and \"never for this\" answer the toast; anything else goes to the mentor model as one follow-up question, on the mentor model and effort above, and the answer comes back in the toast, spoken when Speak suggestions is on. Audio and transcripts stay on this Mac; only the words you spoke, the suggestion, and the recognized text of the screen it was made from go to the model.")
+        }
     }
 }
 

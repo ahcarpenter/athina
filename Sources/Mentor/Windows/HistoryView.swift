@@ -82,6 +82,7 @@ private struct HistoryRow: View {
                         .lineLimit(1)
                     Text("·")
                     Text(suggestion.category.label)
+                    DeliveryMarks(suggestion: suggestion, talkedBack: state.followUps.contains { $0.suggestionID == suggestion.id })
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -90,6 +91,36 @@ private struct HistoryRow: View {
             FeedbackPill(feedback: suggestion.feedback, isShowing: state.activeSuggestion?.id == suggestion.id)
         }
         .padding(.vertical, 3)
+    }
+}
+
+/// Small marks for how a suggestion was delivered: a callout drawn, read
+/// aloud, talked back to.
+private struct DeliveryMarks: View {
+    let suggestion: Suggestion
+    let talkedBack: Bool
+
+    var body: some View {
+        if suggestion.calloutShown || suggestion.spoken || talkedBack {
+            HStack(spacing: 5) {
+                if suggestion.calloutShown {
+                    Image(systemName: "rectangle.dashed")
+                        .help("A callout was drawn on screen")
+                        .accessibilityLabel("Callout shown")
+                }
+                if suggestion.spoken {
+                    Image(systemName: "speaker.wave.2")
+                        .help("Read aloud")
+                        .accessibilityLabel("Spoken")
+                }
+                if talkedBack {
+                    Image(systemName: "mic")
+                        .help("Talked back to")
+                        .accessibilityLabel("Talked back to")
+                }
+            }
+            .foregroundStyle(.tertiary)
+        }
     }
 }
 
@@ -163,8 +194,33 @@ private struct SuggestionDetail: View {
                     if let feedback = suggestion.feedback {
                         detailRow("Feedback", feedback.label + (suggestion.feedbackAt.map { " at \(Formatting.dayAndTime($0))" } ?? ""))
                     }
+                    if let region = suggestion.region {
+                        detailRow("Callout", "\(suggestion.calloutShown ? "Shown" : "Not shown"): \"\(region.note)\" at \(Formatting.rect(region.rect)) px of the frame")
+                    } else {
+                        detailRow("Callout", "None: the suggestion did not point at one spot")
+                    }
+                    detailRow("Spoken", suggestion.spoken ? "Yes" : "No")
                 }
                 .font(.callout)
+                let exchange = state.exchange(for: suggestion.id)
+                if !exchange.isEmpty {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Talk back")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        ForEach(exchange) { entry in
+                            VStack(alignment: .leading, spacing: 4) {
+                                exchangeLine("You", entry.question, at: entry.timestamp)
+                                if let answer = entry.answer {
+                                    exchangeLine("Mentor", answer + (entry.spoken ? " (spoken)" : ""), at: nil)
+                                } else {
+                                    exchangeLine("Mentor", "No answer: \(entry.error ?? "unknown error").", at: nil)
+                                }
+                            }
+                        }
+                    }
+                }
                 if suggestion.feedback == nil || suggestion.feedback?.isNonAnswer == true || suggestion.feedback == .tellMeMore {
                     HStack(spacing: 8) {
                         Button("Not now") { state.respond(to: suggestion.id, with: .notNow) }
@@ -176,6 +232,26 @@ private struct SuggestionDetail: View {
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func exchangeLine(_ speaker: String, _ text: String, at time: Date?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(speaker)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 48, alignment: .trailing)
+            Text(text)
+                .font(.callout)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            if let time {
+                Spacer(minLength: 8)
+                Text(Formatting.dayAndTime(time))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+            }
         }
     }
 

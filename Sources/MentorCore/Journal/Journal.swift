@@ -114,9 +114,25 @@ public actor Journal {
                 model TEXT NOT NULL,
                 prompt_version INTEGER NOT NULL,
                 feedback TEXT,
-                feedback_at REAL
+                feedback_at REAL,
+                region_json TEXT,
+                callout_shown INTEGER NOT NULL DEFAULT 0,
+                spoken INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS suggestions_timestamp ON suggestions(timestamp);
+            CREATE TABLE IF NOT EXISTS follow_ups (
+                id INTEGER PRIMARY KEY,
+                suggestion_id INTEGER NOT NULL,
+                timestamp REAL NOT NULL,
+                question TEXT NOT NULL,
+                answer TEXT,
+                error TEXT,
+                model TEXT NOT NULL,
+                prompt_version INTEGER NOT NULL,
+                spoken INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS follow_ups_timestamp ON follow_ups(timestamp);
+            CREATE INDEX IF NOT EXISTS follow_ups_suggestion ON follow_ups(suggestion_id);
             CREATE TABLE IF NOT EXISTS model_calls (
                 id INTEGER PRIMARY KEY,
                 timestamp REAL NOT NULL,
@@ -139,6 +155,9 @@ public actor Journal {
         // Columns added after a table shipped: CREATE TABLE IF NOT EXISTS leaves
         // an existing journal's table alone, so add them here instead.
         try addColumn("replayed INTEGER NOT NULL DEFAULT 0", named: "replayed", to: "model_calls", db)
+        try addColumn("region_json TEXT", named: "region_json", to: "suggestions", db)
+        try addColumn("callout_shown INTEGER NOT NULL DEFAULT 0", named: "callout_shown", to: "suggestions", db)
+        try addColumn("spoken INTEGER NOT NULL DEFAULT 0", named: "spoken", to: "suggestions", db)
     }
 
     /// Adds a column to an existing table, once. Nothing happens when the table
@@ -218,10 +237,11 @@ public actor Journal {
     /// Stores a shown suggestion. Returns it with its new id.
     @discardableResult
     public func record(_ suggestion: Suggestion) throws -> Suggestion {
+        let regionJSON = try suggestion.region.map { String(decoding: try encoder.encode($0), as: UTF8.self) }
         try db.run("""
             INSERT INTO suggestions (timestamp, bundle_id, app_name, window_title, category, title, body, explanation,
-                confidence, observation_id, model, prompt_version, feedback, feedback_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                confidence, observation_id, model, prompt_version, feedback, feedback_at, region_json, callout_shown, spoken)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 .double(suggestion.timestamp.timeIntervalSince1970),
                 suggestion.bundleID.map(Value.text) ?? .null,
@@ -237,6 +257,9 @@ public actor Journal {
                 .int(Int64(suggestion.promptVersion)),
                 suggestion.feedback.map { Value.text($0.rawValue) } ?? .null,
                 suggestion.feedbackAt.map { Value.double($0.timeIntervalSince1970) } ?? .null,
+                regionJSON.map(Value.text) ?? .null,
+                .int(suggestion.calloutShown ? 1 : 0),
+                .int(suggestion.spoken ? 1 : 0),
             ])
         var stored = suggestion
         stored.id = db.lastInsertRowID
@@ -250,6 +273,63 @@ public actor Journal {
             [.text(feedback.rawValue), .double(time.timeIntervalSince1970), .int(suggestionID)]
         )
         return try suggestion(id: suggestionID)
+    }
+
+    /// Records that a callout was drawn or the suggestion was spoken. Either
+    /// flag only ever turns on. Nil when the id is unknown.
+    public func updateDelivery(suggestionID: Int64, calloutShown: Bool, spoken: Bool) throws -> Suggestion? {
+        try db.run(
+            "UPDATE suggestions SET callout_shown = MAX(callout_shown, ?), spoken = MAX(spoken, ?) WHERE id = ?",
+            [.int(calloutShown ? 1 : 0), .int(spoken ? 1 : 0), .int(suggestionID)]
+        )
+        return try suggestion(id: suggestionID)
+    }
+
+    // MARK: Follow-ups
+
+    /// Stores one talk-back exchange. Returns it with its new id.
+    @discardableResult
+    public func record(_ followUp: FollowUp) throws -> FollowUp {
+        try db.run("""
+            INSERT INTO follow_ups (suggestion_id, timestamp, question, answer, error, model, prompt_version, spoken)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+                .int(followUp.suggestionID),
+                .double(followUp.timestamp.timeIntervalSince1970),
+                .text(followUp.question),
+                followUp.answer.map(Value.text) ?? .null,
+                followUp.error.map(Value.text) ?? .null,
+                .text(followUp.model),
+                .int(Int64(followUp.promptVersion)),
+                .int(followUp.spoken ? 1 : 0),
+            ])
+        var stored = followUp
+        stored.id = db.lastInsertRowID
+        return stored
+    }
+
+    /// Records that an answer was read aloud. Nil when the id is unknown.
+    public func markFollowUpSpoken(id: Int64) throws -> FollowUp? {
+        try db.run("UPDATE follow_ups SET spoken = 1 WHERE id = ?", [.int(id)])
+        return try db.query("SELECT \(Journal.followUpColumns) FROM follow_ups WHERE id = ?", [.int(id)]) {
+            Journal.followUp(from: $0)
+        }.first
+    }
+
+    /// The exchange about one suggestion, oldest first.
+    public func followUps(suggestionID: Int64) throws -> [FollowUp] {
+        try db.query(
+            "SELECT \(Journal.followUpColumns) FROM follow_ups WHERE suggestion_id = ? ORDER BY timestamp ASC, id ASC",
+            [.int(suggestionID)]
+        ) { Journal.followUp(from: $0) }
+    }
+
+    /// Newest first, across every suggestion.
+    public func recentFollowUps(limit: Int) throws -> [FollowUp] {
+        try db.query(
+            "SELECT \(Journal.followUpColumns) FROM follow_ups ORDER BY timestamp DESC, id DESC LIMIT ?",
+            [.int(Int64(limit))]
+        ) { Journal.followUp(from: $0) }
     }
 
     public func suggestion(id: Int64) throws -> Suggestion? {
@@ -406,7 +486,7 @@ public actor Journal {
     public func clear() throws {
         try db.execute("BEGIN")
         do {
-            try db.execute("DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events; DELETE FROM suggestions; DELETE FROM model_calls;")
+            try db.execute("DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events; DELETE FROM suggestions; DELETE FROM follow_ups; DELETE FROM model_calls;")
             try db.execute("COMMIT")
         } catch {
             try? db.execute("ROLLBACK")
@@ -432,6 +512,8 @@ public actor Journal {
         result.eventsDeleted += db.changes
         try db.run("DELETE FROM suggestions WHERE timestamp < ?", [.double(textCutoff)])
         result.suggestionsDeleted += db.changes
+        try db.run("DELETE FROM follow_ups WHERE timestamp < ?", [.double(textCutoff)])
+        result.followUpsDeleted += db.changes
         try db.run("DELETE FROM model_calls WHERE timestamp < ?", [.double(textCutoff)])
         result.modelCallsDeleted += db.changes
 
@@ -493,11 +575,30 @@ public actor Journal {
 
     private static let suggestionColumns = """
         id, timestamp, bundle_id, app_name, window_title, category, title, body, explanation, confidence,
-        observation_id, model, prompt_version, feedback, feedback_at
+        observation_id, model, prompt_version, feedback, feedback_at, region_json, callout_shown, spoken
         """
 
+    private static let followUpColumns = """
+        id, suggestion_id, timestamp, question, answer, error, model, prompt_version, spoken
+        """
+
+    private static func followUp(from row: SQLiteConnection.Statement) -> FollowUp {
+        FollowUp(
+            id: row.int(0),
+            suggestionID: row.int(1),
+            timestamp: Date(timeIntervalSince1970: row.double(2)),
+            question: row.text(3) ?? "",
+            answer: row.text(4),
+            error: row.text(5),
+            model: row.text(6) ?? "",
+            promptVersion: Int(row.int(7)),
+            spoken: row.int(8) != 0
+        )
+    }
+
     private static func suggestion(from row: SQLiteConnection.Statement) -> Suggestion {
-        Suggestion(
+        let region = row.text(15).flatMap { try? JSONDecoder().decode(CalloutRegion.self, from: Data($0.utf8)) }
+        return Suggestion(
             id: row.int(0),
             timestamp: Date(timeIntervalSince1970: row.double(1)),
             bundleID: row.text(2),
@@ -512,7 +613,10 @@ public actor Journal {
             model: row.text(11) ?? "",
             promptVersion: Int(row.int(12)),
             feedback: row.text(13).flatMap(SuggestionFeedback.init(rawValue:)),
-            feedbackAt: row.isNull(14) ? nil : Date(timeIntervalSince1970: row.double(14))
+            feedbackAt: row.isNull(14) ? nil : Date(timeIntervalSince1970: row.double(14)),
+            region: region,
+            calloutShown: row.int(16) != 0,
+            spoken: row.int(17) != 0
         )
     }
 

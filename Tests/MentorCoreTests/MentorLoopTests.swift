@@ -5,7 +5,7 @@ import Testing
 /// Drives `MentorLoop` end to end with a scripted client: sensing events in,
 /// model calls out, suggestions and journal rows as the result.
 @Suite struct MentorLoopTests {
-    private struct Harness {
+    struct Harness {
         let journal: Journal
         let client: ScriptedClaudeClient
         let keyStore: InMemoryKeyStore

@@ -652,6 +652,7 @@ private struct TimelineRow: View {
             case .retention: "clock.arrow.circlepath"
             case .suggested: "lightbulb.fill"
             case .feedback: "hand.thumbsup"
+            case .talkBack: "mic"
             }
         }
     }
@@ -666,6 +667,7 @@ private struct TimelineRow: View {
             case .journalCleared: .red
             case .suggested: .yellow
             case .feedback: .green
+            case .talkBack: .teal
             default: .secondary
             }
         }
@@ -706,6 +708,8 @@ private struct MentorCard: View {
                     Field(label: "Last mentor", value: describe(state.mentorStatus.lastMentor, now: context.date), lineLimit: 4)
                     Field(label: "Spend", value: spend(now: context.date))
                     Field(label: "Cadence", value: cadence(now: context.date))
+                    Field(label: "Callout", value: callout(now: context.date), lineLimit: 4)
+                    Field(label: "Transcript", value: transcript(now: context.date), lineLimit: 4)
                 }
             }
         }
@@ -760,6 +764,29 @@ private struct MentorCard: View {
                 ModeField(label: "Fixtures", value: fixtures, lineLimit: 3),
                 ModeField(label: "From", value: Formatting.path(directory), truncation: .middle),
             ]
+        }
+    }
+
+    /// The last callout decision with both coordinate spaces: the frame
+    /// pixels the model answered in and the screen points it mapped to.
+    private func callout(now: Date) -> String {
+        guard let record = state.lastCallout else { return "none yet" }
+        var text = "\(record.outcome) \(Formatting.age(record.at, now: now)), \"\(record.region.note)\"\nframe \(Formatting.rect(record.region.rect)) px"
+        if let placement = record.placement {
+            text += "\nscreen \(Formatting.rect(placement.screenRect)) pt on display \(placement.displayID)"
+        }
+        return text
+    }
+
+    private func transcript(now: Date) -> String {
+        switch state.talkBack {
+        case .listening(let partial):
+            return partial.isEmpty ? "listening…" : "listening: \"\(partial)\""
+        case .thinking(let question):
+            return "asking the mentor: \"\(question)\""
+        case .idle:
+            guard let record = state.lastTranscript else { return "none yet" }
+            return "\"\(record.text)\" \(Formatting.age(record.at, now: now)), \(record.handling)"
         }
     }
 
@@ -947,6 +974,7 @@ private struct CallLogRow: View {
         switch call.tier {
         case .triage: .blue
         case .mentor: .purple
+        case .followUp: .teal
         case .test: .secondary
         }
     }
