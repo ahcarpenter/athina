@@ -62,7 +62,7 @@ private struct DebugStatusBar: View {
     var body: some View {
         HStack(spacing: 14) {
             ModeBadge(mode: state.mode)
-            if let badge = ClientModeBadge(mode: state.clientMode) {
+            if let badge = ClientModeBadge(mode: state.clientMode, recordingUnavailableReason: state.recordingUnavailableReason) {
                 badge
             }
             PermissionChip(title: "Screen", granted: state.permissions.screenRecording)
@@ -120,7 +120,7 @@ struct ClientModeBadge: View {
     let color: Color
     let help: String
 
-    init?(mode: ModelClientMode) {
+    init?(mode: ModelClientMode, recordingUnavailableReason: String?) {
         switch mode {
         case .live:
             return nil
@@ -128,7 +128,8 @@ struct ClientModeBadge: View {
             title = "Recording"
             symbol = "record.circle"
             color = .red
-            help = "Model calls are live and each one is also written to a fixture file"
+            help = recordingUnavailableReason.map { "Recording is unavailable, so every model call is refused and nothing is sent: \($0)" }
+                ?? "Model calls are live and each one is also written to a fixture file"
         case .replay, .invalid:
             title = "Replay"
             symbol = "repeat"
@@ -682,7 +683,7 @@ private struct MentorCard: View {
         Card(title: "Mentor loop") {
             HStack(spacing: 8) {
                 AvailabilityBadge(availability: state.mentorStatus.availability)
-                if let badge = ClientModeBadge(mode: state.clientMode) {
+                if let badge = ClientModeBadge(mode: state.clientMode, recordingUnavailableReason: state.recordingUnavailableReason) {
                     badge.font(.caption)
                 }
                 if let tier = state.mentorStatus.inFlight {

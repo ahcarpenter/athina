@@ -88,10 +88,11 @@ public enum ModelClientMode: Equatable, Sendable {
         public var recordingUnavailableReason: String?
     }
 
-    /// Builds the client. A replay whose fixtures cannot be loaded, a
-    /// recording whose directory cannot be written, and an invalid command
-    /// line get a client that refuses every call with the reason, so the
-    /// problem shows up in the call log and nothing goes live.
+    /// Builds the client. A replay whose fixtures cannot be loaded and an
+    /// invalid command line get a replay client that refuses every call with
+    /// the reason; a recording whose directory cannot be written gets a
+    /// `RefusingClaudeClient`, which is not a replay. Either way the problem
+    /// shows up in the call log and nothing goes live.
     public func makeClient(
         prices: PriceTable,
         latency: ReplayClaudeClient.Latency = .recorded,
@@ -106,7 +107,7 @@ public enum ModelClientMode: Equatable, Sendable {
                 try CallFixtureFiles.checkWritable(directory)
             } catch {
                 let reason = "cannot record to \(directory.path): \(error.localizedDescription)"
-                return Setup(client: ReplayClaudeClient.unavailable(reason), replay: nil, recordingUnavailableReason: reason)
+                return Setup(client: RefusingClaudeClient(reason: reason), replay: nil, recordingUnavailableReason: reason)
             }
             return Setup(client: RecordingClaudeClient(wrapping: live(), directory: directory, prices: prices), replay: nil)
         case .replay(let directory, let allowStale):

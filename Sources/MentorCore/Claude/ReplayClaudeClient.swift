@@ -107,7 +107,7 @@ public actor ReplayClaudeClient: ClaudeClient {
     }
 
     public static func staleMessage(fixture: String, recorded: Int, current: Int) -> String {
-        "fixture \(fixture) is stale: recorded with prompt version \(recorded), the current prompt version is \(current). Replay it anyway with \(ModelClientMode.allowStaleFlag) (make run-replay ALLOW_STALE=1). Recording it again belongs to the live quality round, not to making a check pass."
+        "fixture \(fixture) is stale: recorded with prompt version \(recorded), the current prompt version is \(current). Record it again live with make record, for the committed fixtures in the same change that bumped the version. To replay it anyway while iterating on prompts locally, use \(ModelClientMode.allowStaleFlag) (make run-replay ALLOW_STALE=1)."
     }
 
     /// What the loaded set holds, for the menu and the debug panel.

@@ -133,6 +133,29 @@ import Testing
         #expect(keys.loadCount == 0)
     }
 
+    /// A recording that cannot write refuses its calls, but it is not a
+    /// replay: without a key the loop waits for one, and with a key each
+    /// refused call is journaled as a live error that cost nothing.
+    @Test func aRefusedRecordingIsNotAReplay() async throws {
+        let client = RefusingClaudeClient(reason: "cannot record to /recordings: permission denied")
+        #expect(!client.isReplay)
+
+        let keyless = await Harness(journal: try Journal.inMemory(), client: client, keyStore: InMemoryKeyStore())
+        #expect(await keyless.loop.currentStatus().availability == .noAPIKey)
+        #expect(await keyless.loop.hasAPIKey == false)
+        await keyless.loop.stop()
+
+        let journal = try Journal.inMemory()
+        let h = await Harness(journal: journal, client: client, keyStore: InMemoryKeyStore(key: "sk-ant-test"))
+        #expect(await h.loop.currentStatus().availability == .ready)
+        #expect(await h.loop.testConnection() == .failure(.notSent(client.reason)))
+        let call = try #require(try await journal.recentModelCalls(limit: 1).first)
+        #expect(!call.replayed)
+        #expect(call.outcome == .error)
+        #expect(call.cost == 0)
+        #expect(call.detail == ClaudeClientError.notSent(client.reason).description)
+    }
+
     @Test func theReplayedFlagSurvivesTheJournal() async throws {
         let journal = try Journal.inMemory()
         let stored = try await journal.record(ModelCallRecord(
@@ -172,9 +195,9 @@ import Testing
 
     // MARK: Isolation from the live files
 
-    /// A replay keeps its own journal and settings, starting from the
-    /// defaults, so a whole replayed session, down to a Never for this, leaves
-    /// the live files exactly as they were.
+    /// A replay starts from the live settings and saves only to its own
+    /// journal and settings file, so a whole replayed session, down to a Never
+    /// for this, leaves the live files exactly as they were.
     @Test func aReplaySessionLeavesTheLiveJournalAndSettingsByteIdentical() async throws {
         let support = FileManager.default.temporaryDirectory.appendingPathComponent("mentor-support-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: support) }
@@ -280,30 +303,60 @@ import Testing
         try #require(Bundle.module.url(forResource: "Replay", withExtension: nil, subdirectory: "Fixtures"))
     }
 
-    /// What `make fixture-status` reports: each committed fixture recorded
-    /// with another prompt version, and each tier with no fixture. Neither
-    /// fails a run. The loop tests replay stale fixtures as they are, and the
-    /// set is recorded again in the deliberate live quality round, never to
-    /// make CI pass, so a set that is not current is a known issue.
-    @Test func theCommittedFixtureStatus() throws {
-        let loaded = try CallFixtureFiles.load(from: try Self.committedFixturesDirectory())
-        let current = MentorPrompts.version
+    /// Fails the run, naming each fixture recorded with another prompt version
+    /// than `current` and each tier with no fixture, unless the set is
+    /// current. Returns whether it is.
+    @discardableResult
+    static func expectCurrent(_ loaded: [(name: String, fixture: CallFixture)], current: Int = MentorPrompts.version) -> Bool {
         let stale = loaded.filter { $0.fixture.identity.promptVersion != current }.map { entry in
             "\(entry.name) is stale: recorded with prompt version \(entry.fixture.identity.promptVersion), the current prompt version is \(current)"
         }
         let kinds = Set(loaded.map(\.fixture.identity.kind))
         let uncovered = ModelTier.allCases.map(\.rawValue).filter { !kinds.contains($0) }.map { "tier \($0) has no fixture" }
         let findings = stale + uncovered
-        guard !findings.isEmpty else {
-            print("The committed fixtures are current: \(Plural.count(loaded.count, "fixture", "fixtures")) recorded with prompt version \(current), and every tier has one.")
-            return
-        }
+        guard !findings.isEmpty else { return true }
         let report = [
-            "The committed fixtures are not current. The loop tests replay them as they are; they are recorded again in the live quality round, never to make CI pass.",
+            "The committed fixtures are not current. Re-record them live with make record in this same change, as README.md, The committed fixtures, describes:",
         ] + findings.map { "- \($0)" }
-        withKnownIssue {
-            Issue.record(Comment(rawValue: report.joined(separator: "\n")))
+        Issue.record(Comment(rawValue: report.joined(separator: "\n")))
+        return false
+    }
+
+    /// What `make fixture-status` runs. When a prompt or schema change bumps
+    /// the prompt version, or a call kind is added, the committed set is
+    /// recorded again live in the same change, so this passes.
+    @Test func theCommittedFixturesAreCurrent() throws {
+        let loaded = try CallFixtureFiles.load(from: try Self.committedFixturesDirectory())
+        if Self.expectCurrent(loaded) {
+            print("The committed fixtures are current: \(Plural.count(loaded.count, "fixture", "fixtures")) recorded with prompt version \(MentorPrompts.version), and every tier has one.")
         }
+    }
+
+    /// The check fails a run on a stale or incomplete set, naming the stale
+    /// fixture with both versions and the tier with no fixture, and passes a
+    /// current, complete one.
+    @Test func aStaleOrIncompleteFixtureSetFailsTheCheck() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("mentor-stale-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try CallFixtureFiles.write(CallFixtureTests.fixture(kind: ModelTier.triage.rawValue, promptVersion: MentorPrompts.version - 1), to: directory, redacting: "")
+        try CallFixtureFiles.write(CallFixtureTests.fixture(kind: ModelTier.mentor.rawValue), to: directory, redacting: "")
+        let loaded = try CallFixtureFiles.load(from: directory)
+        let staleName = try #require(loaded.first { $0.fixture.identity.kind == ModelTier.triage.rawValue }).name
+
+        withKnownIssue {
+            #expect(!Self.expectCurrent(loaded))
+        } matching: { issue in
+            let text = issue.comments.map(\.rawValue).joined(separator: "\n")
+            return text.contains("- \(staleName) is stale: recorded with prompt version \(MentorPrompts.version - 1), the current prompt version is \(MentorPrompts.version)")
+                && text.contains("- tier \(ModelTier.test.rawValue) has no fixture")
+                && !text.contains("tier \(ModelTier.mentor.rawValue) has no fixture")
+                && text.contains("make record")
+        }
+
+        let complete = ModelTier.allCases.map { tier in
+            (name: "\(tier.rawValue).json", fixture: CallFixtureTests.fixture(kind: tier.rawValue))
+        }
+        #expect(Self.expectCurrent(complete))
     }
 
     @Test func theCommittedFixturesCarryEveryPathAndHoldNoKey() throws {
@@ -331,11 +384,11 @@ import Testing
 
     /// Every triage recording in turn, on the loop the app runs: a candidate
     /// reaches the mentor recording next in line, a shown suggestion takes
-    /// feedback, and after the last recording the first answers again. Stale
-    /// fixtures are replayed as they are, so a prompt bump keeps this coverage.
+    /// feedback, and after the last recording the first answers again. The
+    /// replay is strict, as the app's is: a stale fixture is refused.
     @Test func theCommittedFixturesDriveTheWholeLoop() async throws {
         let directory = try Self.committedFixturesDirectory()
-        let client = try ReplayClaudeClient.load(from: directory, allowStale: true)
+        let client = try ReplayClaudeClient.load(from: directory, allowStale: false)
         let journal = try Journal.inMemory()
         let settings = MentorSettings()
         let triageEntries = client.entries.filter { $0.fixture.identity.kind == ModelTier.triage.rawValue }

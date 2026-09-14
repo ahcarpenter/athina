@@ -68,6 +68,7 @@ import Testing
         .transport("The request timed out."),
         .badResponse("not json"),
         .replay("no recorded mentor call to replay"),
+        .notSent("cannot record to /recordings: permission denied"),
     ])
     func everyErrorRoundTrips(error: ClaudeClientError) throws {
         let fixture = Self.fixture(kind: "triage", result: .failure(error))

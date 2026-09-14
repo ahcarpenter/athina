@@ -123,6 +123,7 @@ import Testing
         #expect(message.contains("current prompt version is \(MentorPrompts.version)"))
         #expect(message.contains(ModelClientMode.allowStaleFlag))
         #expect(message.contains("ALLOW_STALE=1"))
+        #expect(message.contains("make record"))
         await #expect(throws: ClaudeClientError.replay(message)) {
             try await strict.send(Self.unrelatedRequest, call: Self.identity("mentor"), apiKey: "", timeout: 1)
         }
@@ -269,7 +270,8 @@ import Testing
     }
 
     /// A recording that could write nothing must spend nothing: every call is
-    /// refused with the reason and the live client never sees one.
+    /// refused with the reason and the live client never sees one. The
+    /// refusing client is not a replay.
     @Test(arguments: ["existing", "existing/missing"])
     func aRecordingThatCannotWriteRefusesEveryCall(subpath: String) async throws {
         let parent = temporaryDirectory()
@@ -287,7 +289,8 @@ import Testing
         let setup = ModelClientMode.record(directory: directory).makeClient(prices: .defaults, live: { inner })
         let reason = try #require(setup.recordingUnavailableReason)
         #expect(reason.hasPrefix("cannot record to \(directory.path): "))
-        await #expect(throws: ClaudeClientError.replay(reason)) {
+        #expect(!setup.client.isReplay)
+        await #expect(throws: ClaudeClientError.notSent(reason)) {
             try await setup.client.send(Self.unrelatedRequest, call: Self.identity("triage"), apiKey: CallFixtureTests.realisticKey, timeout: 1)
         }
         #expect(await inner.sent.isEmpty)

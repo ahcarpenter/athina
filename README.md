@@ -26,7 +26,7 @@ make run              # builds, quits a running copy, and launches the app
 make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend
 make record           # the same, live, writing every model call to a fixture file (spends API credits)
 make clear-recordings # deletes the app's own recordings directory
-make fixture-status   # reports whether the committed fixtures are current, never failing, with no network
+make fixture-status   # checks that the committed fixtures are current (fails when not), with no network
 make test             # runs the unit tests (swift test), the loop included, with no network
 make measure          # samples the running app's CPU and memory for 60 seconds
 ```
@@ -84,12 +84,13 @@ tccutil reset ScreenCapture com.ahcarpenter.mentor
 
 ## Iterating without the network
 
-Working on Mentor never needs a live call to Anthropic. The app, its tests, and
-every verification run use **replay**: each model call is answered from a
-recorded fixture, with no network, no API key, and no spend. Replay is the
-default way to exercise the app, including the end-to-end checks a change gets
-before it ships. Live calls are for two deliberate occasions only: recording
-fixtures, and the separate live check of the models' answers.
+Working on Mentor needs no live call to Anthropic to build, test, or verify.
+The app, its tests, and every verification run use **replay**: each model call
+is answered from a recorded fixture, with no network, no API key, and no spend.
+Replay is the default way to exercise the app, including the end-to-end checks
+a change gets before it ships. Live calls are for two deliberate occasions
+only: recording fixtures, including re-recording the committed set when a
+change makes it stale, and the separate live check of the models' answers.
 
 ### Replay
 
@@ -143,10 +144,12 @@ back to live calls.
 **Stale fixtures.** Each fixture carries the `MentorPrompts.version` it was
 recorded with. A fixture whose version differs from the current one is stale:
 on its turn the app refuses it with a message naming the file and both
-versions, and the call is logged as an error. While iterating on prompts, pass
-`--allow-stale-fixtures` (`make run-replay ALLOW_STALE=1`) to serve stale
-fixtures anyway. The tests replay the committed set as it is, stale or not, so
-bumping the prompt version never fails CI (see The committed fixtures).
+versions, and the call is logged as an error. The tests replay the committed
+set just as strictly and fail on a stale fixture, so a change that bumps the
+prompt version re-records the committed set live in the same change (see The
+committed fixtures). `--allow-stale-fixtures` (`make run-replay ALLOW_STALE=1`)
+serves stale fixtures anyway, and is only for replaying locally while
+iterating on prompts.
 
 ### Record
 
@@ -170,9 +173,10 @@ the working directory (which is `/` for an app started with `open`);
 the app creates the directory and writes and removes a probe file there; if
 that fails, every call is refused with the reason, which shows in the menu,
 the Mentor card, and the call log, so a recording that could write nothing
-never spends anything. The menu bar shows **Recording** beside the eye while
-it runs. `make clear-recordings` deletes the
-app's own recordings directory, `~/Library/Application Support/mentor/recordings`.
+never spends anything. Those refused calls are journaled as live errors that
+cost nothing, not as replays. The menu bar shows **Recording** beside the eye
+while it runs. `make clear-recordings` deletes the app's own recordings
+directory, `~/Library/Application Support/mentor/recordings`.
 
 Any call the loop makes through its single call path (`MentorLoop.perform`) is
 recorded under its tier's raw value and replayed by that name, and neither
@@ -192,14 +196,16 @@ lead to, the suggestion, its feedback, the journal rows, zero spend, and the
 cycle starting over. The same tests fail when a file carries anything shaped
 like a key, or an em dash.
 
-A stale fixture, or a tier with no fixture, never fails them. The loop tests
-replay stale fixtures as they are, so their coverage survives a prompt bump,
-and the run reports each stale fixture with both prompt versions, and each tier
-with no fixture, as a known issue. `make fixture-status` prints that report on
-its own, with no network.
+They also fail when the set is not current: a fixture recorded with another
+prompt version than `MentorPrompts.version`, or a tier with no fixture, fails
+`swift test` with a message naming each stale fixture with both versions and
+each tier with no fixture. The loop replay is strict, as the app's is.
+`make fixture-status` runs that check on its own, with no network.
 
-Recording the set again spends API credits, so it happens in the deliberate
-live quality round, never to make CI pass:
+So when a prompt or schema change bumps the prompt version, or a new call kind
+is added, re-record the committed set live in the same change so the tests
+pass. It is a deliberate `make record` session of a few cents, on a staged
+scenario and an empty journal:
 
 1. Quit Mentor and move the journal aside (keep it to put back). Triage and
    mentor requests carry recent journal events and screens, so a recording made
@@ -208,11 +214,12 @@ live quality round, never to make CI pass:
    documents in the fixture directory's `scenario/` folder work), and add every
    other running app to Settings > Privacy > Excluded apps.
 3. Run `make record RECORD_DIR=recordings`, drive it through a moment worth a
-   look that yields a shown suggestion, a quiet moment, and a Test Connection,
-   then quit.
-4. Read every file, text and screenshot, copy the ones you keep into the
-   fixture directory, delete the rest, put the journal and settings back, and
-   run `make fixture-status` and `swift test`.
+   look that yields a shown suggestion, a quiet moment, a Test Connection, and
+   one call of every other kind, then quit.
+4. Read every file, text and screenshot, replace the fixture directory's
+   recordings with the ones you keep, update its README, delete the rest, put
+   the journal and settings back, and run `make fixture-status` and
+   `swift test`.
 
 `ScriptedClaudeClient` stays for unit tests that need one exact hand-written
 answer, such as a refusal, an unparseable reply, or a slow call.
@@ -542,5 +549,7 @@ gates, mentorship context rules and placement, spend accounting, snooze and
 never-for-this rules, the rolling window, request and response coding against
 fixture JSON, recording, redaction, replay matching and stale refusal, launch
 flags, a replay's separate files, the whole loop against a scripted client, and
-the whole loop against the committed replay fixtures) and Vision OCR on a drawn bitmap, so they need no
-permissions, display, network, or API key.
+the whole loop against the committed replay fixtures, replayed strictly) and
+Vision OCR on a drawn bitmap, so they need no permissions, display, network, or
+API key. A committed fixture that is stale, or a tier with no committed
+fixture, fails the run (see The committed fixtures).

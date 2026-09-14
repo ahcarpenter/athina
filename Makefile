@@ -3,7 +3,7 @@ CONFIG ?= release
 REPLAY_DIR ?= Tests/MentorCoreTests/Fixtures/Replay
 ## Where `make record` writes: the app's recordings directory unless given
 RECORD_DIR ?=
-## Set to 1 to replay fixtures recorded with an older prompt version
+## Set to 1 to replay fixtures recorded with an older prompt version, only while iterating on prompts locally
 ALLOW_STALE ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/mentor/recordings
@@ -40,11 +40,11 @@ record: build
 clear-recordings:
 	rm -rf "$(RECORDINGS)"
 
-## Report whether the committed fixtures are current: each fixture recorded with
-## another prompt version, and each tier with no fixture. Never fails on either,
-## and makes no network call.
+## Check that the committed fixtures are current: fails naming each fixture
+## recorded with another prompt version and each tier with no fixture (the same
+## check `make test` runs). Makes no network call.
 fixture-status:
-	swift test --filter theCommittedFixtureStatus
+	swift test --filter theCommittedFixturesAreCurrent
 
 ## Run the unit tests
 test:

@@ -280,6 +280,8 @@ public enum ClaudeClientError: Error, Equatable, CustomStringConvertible, Sendab
     /// A replay client had no recorded answer it may serve, and why. Nothing
     /// was sent anywhere.
     case replay(String)
+    /// A live client would not send the call, and why. Nothing was sent.
+    case notSent(String)
 
     public var description: String {
         switch self {
@@ -287,6 +289,7 @@ public enum ClaudeClientError: Error, Equatable, CustomStringConvertible, Sendab
         case .transport(let message): "network: \(message)"
         case .badResponse(let message): "bad response: \(message)"
         case .replay(let message): "replay: \(message)"
+        case .notSent(let message): "not sent: \(message)"
         }
     }
 }
@@ -311,6 +314,7 @@ extension ClaudeClientError: Codable {
         case "transport": self = .transport(message)
         case "badResponse": self = .badResponse(message)
         case "replay": self = .replay(message)
+        case "notSent": self = .notSent(message)
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .kind, in: container, debugDescription: "unknown error kind \(other)")
         }
@@ -332,6 +336,9 @@ extension ClaudeClientError: Codable {
             try container.encode(message, forKey: .message)
         case .replay(let message):
             try container.encode("replay", forKey: .kind)
+            try container.encode(message, forKey: .message)
+        case .notSent(let message):
+            try container.encode("notSent", forKey: .kind)
             try container.encode(message, forKey: .message)
         }
     }

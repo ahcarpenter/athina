@@ -58,3 +58,19 @@ public actor RecordingClaudeClient: ClaudeClient {
         return try result.get()
     }
 }
+
+/// Sends nothing and refuses every call with one reason, for a recording whose
+/// directory cannot be written. It is not a replay: the loop reads the key as
+/// for any live launch, and each refused call is journaled as a live error
+/// that cost nothing.
+public struct RefusingClaudeClient: ClaudeClient {
+    public let reason: String
+
+    public init(reason: String) {
+        self.reason = reason
+    }
+
+    public func send(_ request: MessagesRequest, call: CallIdentity, apiKey: String, timeout: TimeInterval) async throws -> MessagesResponse {
+        throw ClaudeClientError.notSent(reason)
+    }
+}
