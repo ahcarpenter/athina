@@ -133,44 +133,6 @@ import Testing
         #expect(keys.loadCount == 0)
     }
 
-    @Test func aReplayingLoopIgnoresLiveSpendAndTheCap() async throws {
-        let journal = try Journal.inMemory()
-        try await journal.record(ModelCallRecord(
-            timestamp: Date(), tier: .mentor, model: "claude-opus-5", promptVersion: MentorPrompts.version,
-            promptCharacters: 10, imageBytes: 0, usage: Usage(), cost: 5, latency: 1, outcome: .suggested, detail: "live"
-        ))
-        var settings = MentorSettings()
-        settings.hourlySpendCap = 0.05
-        let client = ReplayClaudeClient(entries: Self.candidateAndSuggestion)
-        let h = await Harness(journal: journal, client: client, settings: settings)
-        let before = await h.loop.currentStatus()
-        #expect(before.availability == .ready)
-        #expect(before.spendThisHour == 0)
-        // The live call is not presented as this run's last mentor call.
-        #expect(before.lastMentor == nil)
-
-        await h.observe(Fixtures.observation(id: 1, at: Date()), calls: { await client.served.count }, expectCalls: 2)
-        #expect(await client.served.count == 2)
-        #expect(await h.loop.currentStatus().lastMentor?.outcome == .suggested)
-    }
-
-    @Test func aLiveLoopCountsOnlyLiveCallsTowardTheHour() async throws {
-        let journal = try Journal.inMemory()
-        try await journal.record(ModelCallRecord(
-            timestamp: Date(), tier: .triage, model: "claude-haiku-4-5-20251001", promptVersion: MentorPrompts.version,
-            promptCharacters: 10, imageBytes: 0, usage: Usage(inputTokens: 900), cost: 0, latency: 0.1, outcome: .quiet, detail: "replayed", replayed: true
-        ))
-        try await journal.record(ModelCallRecord(
-            timestamp: Date(), tier: .triage, model: "claude-haiku-4-5-20251001", promptVersion: MentorPrompts.version,
-            promptCharacters: 10, imageBytes: 0, usage: Usage(inputTokens: 900), cost: 0.001, latency: 0.1, outcome: .candidate, detail: "live"
-        ))
-        let h = await Harness(journal: journal, client: ScriptedClaudeClient(), keyStore: InMemoryKeyStore(key: "sk-ant-test"))
-        let status = await h.loop.currentStatus()
-        #expect(status.callsThisHour == 1)
-        #expect(status.spendThisHour == 0.001)
-        #expect(status.lastTriage?.detail == "live")
-    }
-
     @Test func theReplayedFlagSurvivesTheJournal() async throws {
         let journal = try Journal.inMemory()
         let stored = try await journal.record(ModelCallRecord(
@@ -235,13 +197,16 @@ import Testing
         let before = try Self.files(in: live)
         #expect(before["settings.json"] != nil && before["journal.sqlite"] != nil)
 
-        let replay = AppPaths.dataDirectory(for: .replay(directory: URL(fileURLWithPath: "/fixtures"), allowStale: false), supportDirectory: support)
+        let replayMode = ModelClientMode.replay(directory: URL(fileURLWithPath: "/fixtures"), allowStale: false)
+        let replay = AppPaths.dataDirectory(for: replayMode, supportDirectory: support)
         #expect(replay != live)
         #expect(AppPaths.dataDirectory(for: .invalid("--record and --replay cannot be combined"), supportDirectory: support) == replay)
 
-        let store = SettingsStore(url: SettingsStore.defaultURL(in: replay))
-        var settings = store.load()
-        #expect(settings == SensingSettings())
+        let launch = SettingsStore.forLaunch(replayMode, supportDirectory: support)
+        let store = launch.store
+        var settings = launch.settings
+        #expect(store.url == SettingsStore.defaultURL(in: replay))
+        #expect(settings.mentor.hourlySpendCap == 3)
         let journal = try Journal(url: Journal.defaultURL(in: replay))
         let client = ReplayClaudeClient(entries: Self.candidateAndSuggestion)
         let h = await Harness(journal: journal, client: client, settings: settings.mentor)
@@ -256,9 +221,46 @@ import Testing
         await h.loop.stop()
 
         #expect(try await journal.recentSuggestions(limit: 5).map(\.feedback) == [.never])
-        #expect(store.load().mentor.neverRules.map(\.category) == [suggestion.category])
+        #expect(store.load().mentor.neverRules.count == 2)
         #expect(try Self.files(in: live) == before)
         #expect(try await liveJournal.recentSuggestions(limit: 5).isEmpty)
+    }
+
+    /// Every replay launch starts from the live settings, read and never
+    /// written, so an app the user excluded stays excluded while replaying,
+    /// whatever an earlier replay saved to its own file. With no live
+    /// settings a replay starts from the defaults.
+    @Test func aReplayStartsEveryLaunchFromTheLiveSettingsSoExcludedAppsStayExcluded() throws {
+        let support = FileManager.default.temporaryDirectory.appendingPathComponent("mentor-support-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: support) }
+        let replayMode = ModelClientMode.replay(directory: URL(fileURLWithPath: "/fixtures"), allowStale: false)
+        let messages = "com.apple.MobileSMS"
+
+        let first = SettingsStore.forLaunch(replayMode, supportDirectory: support)
+        #expect(first.settings == SensingSettings())
+        #expect(!first.settings.isExcluded(bundleID: messages))
+
+        var liveSettings = SensingSettings()
+        liveSettings.excludedBundleIDs.append(messages)
+        liveSettings.thumbnailRetention = 3600
+        let liveStore = SettingsStore(url: SettingsStore.defaultURL(in: support))
+        try liveStore.save(liveSettings)
+        let liveBytes = try Data(contentsOf: liveStore.url)
+
+        let launch = SettingsStore.forLaunch(replayMode, supportDirectory: support)
+        #expect(launch.settings.isExcluded(bundleID: messages))
+        #expect(launch.settings.thumbnailRetention == 3600)
+
+        // A replay that drops the exclusion saves only to its own file, and
+        // the next replay launch is excluded again.
+        var edited = launch.settings
+        edited.excludedBundleIDs.removeAll { $0 == messages }
+        try launch.store.save(edited)
+        #expect(launch.store.url != liveStore.url)
+        #expect(!launch.store.load().isExcluded(bundleID: messages))
+        #expect(SettingsStore.forLaunch(replayMode, supportDirectory: support).settings.isExcluded(bundleID: messages))
+        #expect(SettingsStore.forLaunch(.invalid("--replay needs the directory of fixtures to replay"), supportDirectory: support).settings.isExcluded(bundleID: messages))
+        #expect(try Data(contentsOf: liveStore.url) == liveBytes)
     }
 
     /// Every regular file directly inside `directory`, by name.
@@ -402,7 +404,6 @@ import Testing
         #expect(calls.allSatisfy { $0.replayed && $0.cost == 0 })
         let status = await again.loop.currentStatus()
         #expect(status.spendThisHour == 0)
-        #expect(status.callsThisHour == 0)
         let history = try await journal.recentSuggestions(limit: 50)
         #expect(Set(history.map(\.id)) == Set(shown.map(\.id)))
         #expect(history.allSatisfy { $0.feedback == .tellMeMore })

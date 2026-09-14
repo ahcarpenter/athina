@@ -121,6 +121,8 @@ import Testing
         #expect(message.contains("20260101T000000.000Z-mentor-old.json"))
         #expect(message.contains("prompt version \(MentorPrompts.version - 1)"))
         #expect(message.contains("current prompt version is \(MentorPrompts.version)"))
+        #expect(message.contains(ModelClientMode.allowStaleFlag))
+        #expect(message.contains("ALLOW_STALE=1"))
         await #expect(throws: ClaudeClientError.replay(message)) {
             try await strict.send(Self.unrelatedRequest, call: Self.identity("mentor"), apiKey: "", timeout: 1)
         }
@@ -202,6 +204,8 @@ import Testing
         (["--record"], .record(directory: URL(fileURLWithPath: "/default", isDirectory: true))),
         (["--record", "--open", "debug"], .record(directory: URL(fileURLWithPath: "/default", isDirectory: true))),
         (["--record", "/tmp/rec"], .record(directory: URL(fileURLWithPath: "/tmp/rec", isDirectory: true))),
+        (["--record", "round-2", "--open", "debug"], .record(directory: URL(fileURLWithPath: "/default/round-2", isDirectory: true))),
+        (["--record", "./a/../b"], .record(directory: URL(fileURLWithPath: "/default/b", isDirectory: true))),
         (["--replay"], .invalid("--replay needs the directory of fixtures to replay")),
         (["--replay", "--open", "debug"], .invalid("--replay needs the directory of fixtures to replay")),
         (["--record", "--replay", "/fixtures"], .invalid("--record and --replay cannot be combined")),
@@ -216,6 +220,8 @@ import Testing
     @Test func aRelativeOrTildePathIsMadeAbsolute() {
         let home = ModelClientMode(arguments: ["Mentor", "--replay", "~/fixtures"])
         #expect(home == .replay(directory: URL(fileURLWithPath: NSHomeDirectory() + "/fixtures", isDirectory: true).standardizedFileURL, allowStale: false))
+        let recordHome = ModelClientMode(arguments: ["Mentor", "--record", "~/rec"], defaultRecordingDirectory: URL(fileURLWithPath: "/default", isDirectory: true))
+        #expect(recordHome == .record(directory: URL(fileURLWithPath: NSHomeDirectory() + "/rec", isDirectory: true).standardizedFileURL))
         guard case .replay(let relative, _) = ModelClientMode(arguments: ["Mentor", "--replay", "Fixtures/Replay"]) else {
             Issue.record("expected a replay")
             return
@@ -239,6 +245,7 @@ import Testing
         let recorder = try #require(recording.client as? RecordingClaudeClient)
         #expect(recorder.directory == directory)
         #expect(!recorder.isReplay)
+        #expect(recording.recordingUnavailableReason == nil)
         #expect(!ModelClientMode.record(directory: directory).isOffline)
 
         let replaying = ModelClientMode.replay(directory: directory, allowStale: true).makeClient(prices: .defaults, latency: .immediate, live: live)
@@ -259,5 +266,31 @@ import Testing
         #expect((invalid.client as? ReplayClaudeClient)?.unavailableReason == "--record and --replay cannot be combined")
         #expect(invalid.client.isReplay)
         #expect(ModelClientMode.invalid("x").isOffline)
+    }
+
+    /// A recording that could write nothing must spend nothing: every call is
+    /// refused with the reason and the live client never sees one.
+    @Test(arguments: ["existing", "existing/missing"])
+    func aRecordingThatCannotWriteRefusesEveryCall(subpath: String) async throws {
+        let parent = temporaryDirectory()
+        let manager = FileManager.default
+        defer {
+            try? manager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: parent.appendingPathComponent("existing").path)
+            try? manager.removeItem(at: parent)
+        }
+        try manager.createDirectory(at: parent.appendingPathComponent("existing"), withIntermediateDirectories: true)
+        try manager.setAttributes([.posixPermissions: 0o500], ofItemAtPath: parent.appendingPathComponent("existing").path)
+        let directory = parent.appendingPathComponent(subpath, isDirectory: true)
+        let inner = ScriptedClaudeClient()
+        await inner.enqueue(json: "{}")
+
+        let setup = ModelClientMode.record(directory: directory).makeClient(prices: .defaults, live: { inner })
+        let reason = try #require(setup.recordingUnavailableReason)
+        #expect(reason.hasPrefix("cannot record to \(directory.path): "))
+        await #expect(throws: ClaudeClientError.replay(reason)) {
+            try await setup.client.send(Self.unrelatedRequest, call: Self.identity("triage"), apiKey: CallFixtureTests.realisticKey, timeout: 1)
+        }
+        #expect(await inner.sent.isEmpty)
+        #expect(try manager.contentsOfDirectory(atPath: parent.appendingPathComponent("existing").path).isEmpty)
     }
 }

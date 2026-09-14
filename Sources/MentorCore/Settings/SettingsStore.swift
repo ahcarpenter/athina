@@ -14,6 +14,17 @@ public struct SettingsStore: Sendable {
         directory.appendingPathComponent("settings.json")
     }
 
+    /// The store a launch in `mode` saves to, in its data directory
+    /// (`AppPaths.dataDirectory(for:)`), and the settings it starts from.
+    /// Every launch starts from the live settings file, which a replay reads
+    /// and never writes, or from the defaults when there is none: a replay
+    /// keeps the user's excluded apps, retention, and sensing choices, and
+    /// what it changes is saved only to its own file.
+    public static func forLaunch(_ mode: ModelClientMode, supportDirectory: URL = AppPaths.supportDirectory()) -> (store: SettingsStore, settings: SensingSettings) {
+        let store = SettingsStore(url: defaultURL(in: AppPaths.dataDirectory(for: mode, supportDirectory: supportDirectory)))
+        return (store, SettingsStore(url: defaultURL(in: supportDirectory)).load())
+    }
+
     /// Returns defaults when the file is missing or unreadable, so a corrupt
     /// file never prevents the app from starting.
     public func load() -> SensingSettings {
@@ -46,9 +57,9 @@ public enum AppPaths {
 
     /// Where the journal and settings live for a launch in `mode`. A replay,
     /// and a replay that was refused, keeps its own in `replay` inside the
-    /// support directory, starting from the default settings, so nothing it
-    /// does reaches the live journal, the live settings, or later live prompts.
-    /// Live and recording launches use the support directory itself.
+    /// support directory, so nothing it does reaches the live journal, the
+    /// live settings, or later live prompts. Live and recording launches use
+    /// the support directory itself.
     public static func dataDirectory(for mode: ModelClientMode, supportDirectory: URL = supportDirectory()) -> URL {
         mode.isOffline ? supportDirectory.appendingPathComponent("replay", isDirectory: true) : supportDirectory
     }

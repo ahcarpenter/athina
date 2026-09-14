@@ -172,6 +172,17 @@ public enum CallFixtureFiles {
         return "\(formatter.string(from: fixture.recordedAt))-\(kind)-\(suffix).json"
     }
 
+    /// Creates `directory` (mode 0700 when missing) and proves a fixture can
+    /// be written there by writing and removing a probe file. Throws when
+    /// either fails.
+    public static func checkWritable(_ directory: URL) throws {
+        let manager = FileManager.default
+        try manager.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let probe = directory.appendingPathComponent(".write-probe-\(UUID().uuidString)")
+        try Data().write(to: probe)
+        try manager.removeItem(at: probe)
+    }
+
     /// Writes one fixture into `directory` (created with mode 0700 when
     /// missing) as a file only the user can read. Returns its URL.
     @discardableResult

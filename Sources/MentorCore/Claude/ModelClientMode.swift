@@ -4,7 +4,11 @@ import Foundation
 ///
 /// - no flag: live, to api.anthropic.com
 /// - `--record [<dir>]`: live, and every call is also written to `<dir>`
-///   (default `CallFixtureFiles.defaultRecordingDirectory()`)
+///   (default `CallFixtureFiles.defaultRecordingDirectory()`). A relative
+///   `<dir>` is taken inside that directory, never against the working
+///   directory, which is `/` for an app started with `open`. When the
+///   directory cannot be created or written, every call is refused with the
+///   reason and nothing goes live.
 /// - `--replay <dir>`: answered from the fixtures in `<dir>`, with no network,
 ///   no key, and no spend; `--allow-stale-fixtures` also serves fixtures
 ///   recorded with another prompt version
@@ -47,7 +51,10 @@ public enum ModelClientMode: Equatable, Sendable {
                 self = .invalid("\(ModelClientMode.allowStaleFlag) applies only to \(ModelClientMode.replayFlag)")
                 return
             }
-            self = .record(directory: value(after: record).map(ModelClientMode.url(forPath:)) ?? defaultRecordingDirectory)
+            self = .record(
+                directory: value(after: record).map { ModelClientMode.url(forPath: $0, relativeTo: defaultRecordingDirectory) }
+                    ?? defaultRecordingDirectory
+            )
         case (nil, nil):
             self = allowStale
                 ? .invalid("\(ModelClientMode.allowStaleFlag) applies only to \(ModelClientMode.replayFlag)")
@@ -55,9 +62,14 @@ public enum ModelClientMode: Equatable, Sendable {
         }
     }
 
-    /// Tilde-expanded and made absolute against the current directory.
-    static func url(forPath path: String) -> URL {
-        URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true).standardizedFileURL
+    /// Tilde-expanded and made absolute: a relative path is taken inside
+    /// `base`, or against the current directory when there is none.
+    static func url(forPath path: String, relativeTo base: URL? = nil) -> URL {
+        let expanded = (path as NSString).expandingTildeInPath
+        guard let base, !expanded.hasPrefix("/") else {
+            return URL(fileURLWithPath: expanded, isDirectory: true).standardizedFileURL
+        }
+        return base.appendingPathComponent(expanded, isDirectory: true).standardizedFileURL
     }
 
     /// True when no call made in this mode can reach the network or bill.
@@ -72,11 +84,14 @@ public enum ModelClientMode: Equatable, Sendable {
     public struct Setup: Sendable {
         public var client: any ClaudeClient
         public var replay: ReplaySummary?
+        /// Why a recording cannot be written, when that is the case.
+        public var recordingUnavailableReason: String?
     }
 
-    /// Builds the client. A replay whose fixtures cannot be loaded, and an
-    /// invalid command line, get a client that refuses every call with the
-    /// reason, so the problem shows up in the call log and nothing goes live.
+    /// Builds the client. A replay whose fixtures cannot be loaded, a
+    /// recording whose directory cannot be written, and an invalid command
+    /// line get a client that refuses every call with the reason, so the
+    /// problem shows up in the call log and nothing goes live.
     public func makeClient(
         prices: PriceTable,
         latency: ReplayClaudeClient.Latency = .recorded,
@@ -87,6 +102,12 @@ public enum ModelClientMode: Equatable, Sendable {
         case .live:
             return Setup(client: live(), replay: nil)
         case .record(let directory):
+            do {
+                try CallFixtureFiles.checkWritable(directory)
+            } catch {
+                let reason = "cannot record to \(directory.path): \(error.localizedDescription)"
+                return Setup(client: ReplayClaudeClient.unavailable(reason), replay: nil, recordingUnavailableReason: reason)
+            }
             return Setup(client: RecordingClaudeClient(wrapping: live(), directory: directory, prices: prices), replay: nil)
         case .replay(let directory, let allowStale):
             let client: ReplayClaudeClient

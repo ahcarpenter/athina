@@ -111,14 +111,17 @@ recorded latency, so the in-flight states look the way they do live. Suggestions
 from replayed answers become toasts, take feedback, and land in the history like
 live ones. Test Connection replays the recorded test call.
 
-**A replay runs against its own files.** A replay, and a replay that was
-refused, keeps its journal and settings in
-`~/Library/Application Support/mentor/replay` rather than beside the live ones,
-and its settings start from the defaults, not from a copy of the live settings.
+**A replay runs against an isolated copy seeded from your live settings.** A
+replay, and a replay that was refused, keeps its journal and settings in
+`~/Library/Application Support/mentor/replay` rather than beside the live ones.
+Every replay launch starts from your live settings, read and never written (or
+from the defaults when there are none), so the apps you excluded stay
+excluded, and your retention and sensing choices hold, exactly as you set them.
 Nothing a replay does, a suggestion and its feedback, a Not now or Never for
 this, a changed setting, reaches the live journal, the live settings, or the
-prompts of a later live run. Delete that directory to start a replay from the
-defaults again. `--record` is a real session and uses the live files.
+prompts of a later live run; a setting changed during a replay lasts until the
+app quits. Delete that directory to clear the replay journal. `--record` is a
+real session and uses the live files.
 
 Nothing about a replay can be mistaken for a live call:
 
@@ -130,8 +133,7 @@ Nothing about a replay can be mistaken for a live call:
 - every replayed call is journaled in `model_calls` with `replayed = 1` and a
   cost of zero; its token counts are the recorded ones;
 - replayed calls never count toward the hour's spend or the cap, and a
-  replaying app starts its hour at zero, so live spend from another run cannot
-  hold it at the cap.
+  replay's own journal holds no live spend, so none can hold it at the cap.
 
 If the fixtures cannot be loaded, or the command line is contradictory (for
 example `--record` with `--replay`), every call is refused with the reason,
@@ -161,8 +163,15 @@ was sent (system blocks, messages with the screenshot, output format, effort),
 the response as Mentor decodes it or the error, usage, latency, and the
 estimated cost. The key is never written: the recorder redacts it, and anything
 shaped like an Anthropic key, from the text before writing. Files are created
-with mode 0600, in a directory created with mode 0700. The menu bar shows
-**Recording** beside the eye while it runs. `make clear-recordings` deletes the
+with mode 0600, in a directory created with mode 0700. A relative
+`--record <dir>` is taken inside the app's recordings directory, never against
+the working directory (which is `/` for an app started with `open`);
+`make record RECORD_DIR=...` passes an absolute path. Before the first call
+the app creates the directory and writes and removes a probe file there; if
+that fails, every call is refused with the reason, which shows in the menu,
+the Mentor card, and the call log, so a recording that could write nothing
+never spends anything. The menu bar shows **Recording** beside the eye while
+it runs. `make clear-recordings` deletes the
 app's own recordings directory, `~/Library/Application Support/mentor/recordings`.
 
 Any call the loop makes through its single call path (`MentorLoop.perform`) is
@@ -308,7 +317,8 @@ with `textRetention` and are emptied by Clear Journal.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
 to defaults so older files keep working. A replay keeps both files in a
-`replay` directory of its own (see Iterating without the network).
+`replay` directory of its own and starts from the live settings (see Iterating
+without the network).
 
 ### Subscription point
 
@@ -486,8 +496,9 @@ counted (see Iterating without the network).
   given, mode 0700, files 0600). The API key is never written, and any
   Anthropic key visible in the screen text is redacted, though not inside the
   screenshot. `make clear-recordings` deletes them; Clear Journal does not. A
-  replay (`--replay`) sends nothing anywhere and keeps its own journal and
-  settings.
+  replay (`--replay`) sends nothing anywhere, keeps its own journal and
+  settings, and starts from the live settings, so excluded apps stay excluded
+  while replaying.
 - **Committed fixtures** carry only staged, synthetic screen content, recorded
   for the purpose, never the captain's or any user's real work. Every recording
   is read, text and screenshot, before it is committed.

@@ -107,7 +107,7 @@ public actor ReplayClaudeClient: ClaudeClient {
     }
 
     public static func staleMessage(fixture: String, recorded: Int, current: Int) -> String {
-        "fixture \(fixture) is stale: recorded with prompt version \(recorded), the current prompt version is \(current). Record it again, or allow stale fixtures while iterating on prompts."
+        "fixture \(fixture) is stale: recorded with prompt version \(recorded), the current prompt version is \(current). Replay it anyway with \(ModelClientMode.allowStaleFlag) (make run-replay ALLOW_STALE=1). Recording it again belongs to the live quality round, not to making a check pass."
     }
 
     /// What the loaded set holds, for the menu and the debug panel.

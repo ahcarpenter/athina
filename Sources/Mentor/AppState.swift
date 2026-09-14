@@ -81,6 +81,9 @@ final class AppState {
     let clientMode: ModelClientMode
     /// What a replay is serving from, once the loop has started.
     var replaySummary: ReplaySummary?
+    /// Why a recording cannot be written, once the loop has started; every
+    /// call is refused while it is set.
+    var recordingUnavailableReason: String?
 
     private let store: SettingsStore
     private let keyStore: any KeyStore
@@ -101,15 +104,15 @@ final class AppState {
 
     private init() {
         clientMode = ModelClientMode(arguments: CommandLine.arguments)
-        let dataDirectory = AppPaths.dataDirectory(for: clientMode)
-        journalURL = Journal.defaultURL(in: dataDirectory)
-        settingsURL = SettingsStore.defaultURL(in: dataDirectory)
-        store = SettingsStore(url: settingsURL)
+        journalURL = Journal.defaultURL(in: AppPaths.dataDirectory(for: clientMode))
+        let launch = SettingsStore.forLaunch(clientMode)
+        store = launch.store
+        settingsURL = launch.store.url
         // Neither a replay nor a snapshot render needs a key, so neither reads
         // the keychain, and its per-build access prompt never blocks them.
         keyStore = clientMode.isOffline || Snapshots.isActive ? InMemoryKeyStore() : KeychainKeyStore()
         isSample = false
-        settings = store.load()
+        settings = launch.settings
         let status = PermissionProbe.current()
         permissions = status
         needsPermissionsOnboarding = !status.allGranted
@@ -158,6 +161,7 @@ final class AppState {
         let keyStore = keyStore
         let clientSetup = clientMode.makeClient(prices: settings.mentor.prices)
         replaySummary = clientSetup.replay
+        recordingUnavailableReason = clientSetup.recordingUnavailableReason
         AppState.log.notice("model calls: \(self.clientModeLog, privacy: .public)")
         toast.onAction = { [weak self] id, feedback in
             self?.respond(to: id, with: feedback)
@@ -481,6 +485,7 @@ final class AppState {
         case .live:
             return nil
         case .record(let directory):
+            if let reason = recordingUnavailableReason { return "Recording unavailable: \(reason)" }
             return "Recording model calls to \(Formatting.path(directory))"
         case .invalid(let reason):
             return "Replay unavailable: \(reason)"
@@ -500,7 +505,8 @@ final class AppState {
     private var clientModeLog: String {
         switch clientMode {
         case .live: "live"
-        case .record(let directory): "live, recording to \(directory.path)"
+        case .record(let directory):
+            recordingUnavailableReason.map { "refused: \($0)" } ?? "live, recording to \(directory.path)"
         case .replay(let directory, let allowStale): "replaying from \(directory.path)\(allowStale ? ", stale fixtures allowed" : "")"
         case .invalid(let reason): "refused: \(reason)"
         }

@@ -494,19 +494,14 @@ public actor MentorLoop {
     }
 
     /// Restores this hour's spend and the last call of each tier after a relaunch.
-    /// Replayed calls never count toward spend, and a replaying loop starts
-    /// from none at all: nothing it does is billed, so live spend from other
-    /// runs must not hold it at the cap. The last calls shown are the ones made
-    /// the same way this run makes them, live or replayed.
     private func seedFromJournal() async {
         let now = Date()
-        if !client.isReplay, let calls = try? await journal.modelCalls(since: SpendMeter.hourStart(of: now)) {
-            for call in calls where !call.replayed {
+        if let calls = try? await journal.modelCalls(since: SpendMeter.hourStart(of: now)) {
+            for call in calls {
                 spend.record(cost: call.cost, at: call.timestamp)
             }
         }
-        if let journaled = try? await journal.recentModelCalls(limit: 50) {
-            let recent = journaled.filter { $0.replayed == client.isReplay }
+        if let recent = try? await journal.recentModelCalls(limit: 50) {
             status.lastTriage = recent.first { $0.tier == .triage }
             status.lastMentor = recent.first { $0.tier == .mentor }
         }

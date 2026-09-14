@@ -724,6 +724,12 @@ private struct MentorCard: View {
         case .live:
             return []
         case .record(let directory):
+            if let reason = state.recordingUnavailableReason {
+                return [
+                    ModeField(label: "Calls", value: "refused, nothing is sent"),
+                    ModeField(label: "Why", value: reason, lineLimit: 4),
+                ]
+            }
             return [
                 ModeField(label: "Calls", value: "live, each one also recorded"),
                 ModeField(label: "To", value: Formatting.path(directory), truncation: .middle),
