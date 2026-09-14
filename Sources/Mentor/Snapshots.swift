@@ -19,28 +19,32 @@ enum Snapshots {
     static func render(to directory: URL) async throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let state = AppState.sample()
-        let specs: [(name: String, size: CGSize, view: AnyView)] = [
-            ("permissions", CGSize(width: 560, height: 520), AnyView(PermissionsView())),
-            ("debug-panel", CGSize(width: 1180, height: 760), AnyView(DebugPanelView())),
-            ("debug-panel-calls", CGSize(width: 1180, height: 760), AnyView(DebugPanelView(initialSidePage: .calls))),
+        let replay = AppState.sampleReplay()
+        let specs: [(name: String, size: CGSize, view: AnyView, state: AppState)] = [
+            ("permissions", CGSize(width: 560, height: 520), AnyView(PermissionsView()), state),
+            ("debug-panel", CGSize(width: 1180, height: 760), AnyView(DebugPanelView()), state),
+            ("debug-panel-calls", CGSize(width: 1180, height: 760), AnyView(DebugPanelView(initialSidePage: .calls)), state),
             // The Mentor tab is longer than any window macOS will open, so it
             // renders as tall as a screen allows and its contexts sections get
             // a render of their own.
-            ("settings-mentor", CGSize(width: 600, height: 1040), AnyView(SettingsView(initialTab: .mentor))),
-            ("settings-mentor-contexts", CGSize(width: 600, height: 800), AnyView(MentorshipContextsPreview())),
-            ("settings-cadence", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .cadence))),
-            ("settings-frames", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .frames))),
-            ("settings-journal", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .journal))),
-            ("settings-privacy", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .privacy))),
-            ("history", CGSize(width: 860, height: 520), AnyView(HistoryView(initialSelection: 3))),
-            ("toast", CGSize(width: ToastController.width + 2, height: 170), AnyView(SampleToast(expanded: false))),
-            ("toast-expanded", CGSize(width: ToastController.width + 2, height: 420), AnyView(SampleToast(expanded: true))),
+            ("settings-mentor", CGSize(width: 600, height: 1040), AnyView(SettingsView(initialTab: .mentor)), state),
+            ("settings-mentor-contexts", CGSize(width: 600, height: 800), AnyView(MentorshipContextsPreview()), state),
+            ("settings-cadence", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .cadence)), state),
+            ("settings-frames", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .frames)), state),
+            ("settings-journal", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .journal)), state),
+            ("settings-privacy", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .privacy)), state),
+            ("history", CGSize(width: 860, height: 520), AnyView(HistoryView(initialSelection: 3)), state),
+            ("toast", CGSize(width: ToastController.width + 2, height: 170), AnyView(SampleToast(expanded: false)), state),
+            ("toast-expanded", CGSize(width: ToastController.width + 2, height: 420), AnyView(SampleToast(expanded: true)), state),
+            ("debug-panel-replay", CGSize(width: 1180, height: 760), AnyView(DebugPanelView()), replay),
+            ("debug-panel-calls-replay", CGSize(width: 1180, height: 760), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
+            ("settings-mentor-replay", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .mentor)), replay),
         ]
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             for spec in specs {
                 let suffix = appearance == .aqua ? "light" : "dark"
                 let url = directory.appendingPathComponent("\(spec.name)-\(suffix).png")
-                try await render(spec.view.environment(state), size: spec.size, appearance: appearance, to: url)
+                try await render(spec.view.environment(spec.state), size: spec.size, appearance: appearance, to: url)
             }
         }
     }
@@ -252,6 +256,45 @@ extension AppState {
             nextMentorAt: now.addingTimeInterval(97),
             inFlight: nil
         )
+        return state
+    }
+}
+
+extension AppState {
+    /// The sample in replay mode: every call in the log answered from the
+    /// committed fixtures and nothing billed.
+    static func sampleReplay() -> AppState {
+        let live = sample()
+        let directory = URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent("workspace/mentor/Tests/MentorCoreTests/Fixtures/Replay", isDirectory: true)
+        let state = AppState(sampleWithSettings: live.settings, clientMode: .replay(directory: directory, allowStale: false))
+        state.focus = live.focus
+        state.latestObservation = live.latestObservation
+        state.latestImage = live.latestImage
+        state.mode = live.mode
+        state.permissions = PermissionStatus(screenRecording: true, accessibility: true)
+        state.cadence = live.cadence
+        state.resources = live.resources
+        state.journalStats = live.journalStats
+        state.timeline = live.timeline
+        state.suggestionHistory = live.suggestionHistory
+        state.activeSuggestion = live.activeSuggestion
+        state.replaySummary = ReplaySummary(
+            directory: directory, countsByKind: ["triage": 5, "mentor": 3, "test": 1], promptVersion: MentorPrompts.version
+        )
+        state.callLog = live.callLog.map { call in
+            var replayed = call
+            replayed.replayed = true
+            replayed.cost = 0
+            return replayed
+        }
+        var status = live.mentorStatus
+        status.lastTriage = state.callLog.first { $0.tier == .triage }
+        status.lastMentor = state.callLog.first { $0.tier == .mentor }
+        status.spendThisHour = 0
+        status.callsThisHour = 0
+        status.cadenceMultiplier = 1
+        state.mentorStatus = status
         return state
     }
 }

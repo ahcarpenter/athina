@@ -1,10 +1,14 @@
 import Foundation
 
-/// A `ClaudeClient` that answers from a queue and records every request, so
-/// the loop can be exercised without the network.
+/// A `ClaudeClient` that answers from a queue of hand-written responses and
+/// records every request, so a test can drive one exact branch of the loop:
+/// an error, a refusal, a reply that does not parse, a slow call. Responses are
+/// served in the order they were queued, whatever kind of call asks. Recorded
+/// responses are served by `ReplayClaudeClient` instead.
 public actor ScriptedClaudeClient: ClaudeClient {
     public struct Sent: Sendable {
         public var request: MessagesRequest
+        public var call: CallIdentity
         public var apiKey: String
         public var timeout: TimeInterval
     }
@@ -33,8 +37,8 @@ public actor ScriptedClaudeClient: ClaudeClient {
         self.delay = delay
     }
 
-    public func send(_ request: MessagesRequest, apiKey: String, timeout: TimeInterval) async throws -> MessagesResponse {
-        sent.append(Sent(request: request, apiKey: apiKey, timeout: timeout))
+    public func send(_ request: MessagesRequest, call: CallIdentity, apiKey: String, timeout: TimeInterval) async throws -> MessagesResponse {
+        sent.append(Sent(request: request, call: call, apiKey: apiKey, timeout: timeout))
         if delay > .zero {
             try? await Task.sleep(for: delay)
         }

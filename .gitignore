@@ -5,3 +5,6 @@ build/
 .swiftpm/
 .DS_Store
 .lavish/
+# Recorded model calls hold whole requests, screen text and screenshots included.
+# The app records outside the repository; this keeps `make record RECORD_DIR=recordings` out of git.
+recordings/

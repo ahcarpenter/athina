@@ -10,7 +10,11 @@ struct MentorSettingsTab: View {
     var body: some View {
         @Bindable var state = state
         Form {
-            APIKeySection()
+            if state.clientMode.isOffline {
+                ReplayConnectionSection()
+            } else {
+                APIKeySection()
+            }
 
             Section("Models") {
                 Toggle("Enable the mentor loop", isOn: $state.settings.mentor.enabled)
@@ -232,6 +236,57 @@ private struct APIKeySection: View {
     }
 }
 
+/// Stands in for the key section while calls are replayed: there is no key to
+/// save, and Test Connection replays a recorded test call.
+private struct ReplayConnectionSection: View {
+    @Environment(AppState.self) private var state
+    @State private var testing = false
+    @State private var testResult: Result<String, ClaudeClientError>?
+
+    var body: some View {
+        Section {
+            LabeledContent("Model calls") {
+                Text(state.clientModeLine ?? "Replay mode")
+                    .multilineTextAlignment(.trailing)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Button("Test Connection", action: test)
+                    .disabled(testing)
+                if let testResult {
+                    switch testResult {
+                    case .success(let model):
+                        Label("Replayed, \(ModelCatalog.displayName(for: model)) answered when recorded", systemImage: "repeat.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.teal)
+                    case .failure(let error):
+                        Label(error.description, systemImage: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer()
+            }
+        } header: {
+            Text("Anthropic")
+        } footer: {
+            Text("Mentor was launched to replay recorded calls, so every call is answered from fixture files. No key is read, nothing is sent to api.anthropic.com, and nothing is billed. Launch it without --replay to use the saved key.")
+        }
+    }
+
+    private func test() {
+        testing = true
+        testResult = nil
+        Task {
+            testResult = await state.testConnection()
+            testing = false
+        }
+    }
+}
+
 // MARK: - Spend
 
 private struct SpendSection: View {
@@ -246,8 +301,12 @@ private struct SpendSection: View {
                 help: "Both cadences slow as the hour's estimated spend approaches this, and calls stop at it until the clock hour rolls over."
             )
             LabeledContent("This hour") {
-                Text("\(Formatting.dollars(state.mentorStatus.spendThisHour)) over \(Plural.count(state.mentorStatus.callsThisHour, "call", "calls")), cadence \(Formatting.multiplier(state.mentorStatus.cadenceMultiplier))")
-                    .monospacedDigit()
+                if state.clientMode.isOffline {
+                    Text("Nothing billed: calls are replayed")
+                } else {
+                    Text("\(Formatting.dollars(state.mentorStatus.spendThisHour)) over \(Plural.count(state.mentorStatus.callsThisHour, "call", "calls")), cadence \(Formatting.multiplier(state.mentorStatus.cadenceMultiplier))")
+                        .monospacedDigit()
+                }
             }
             PriceTableEditor(table: $state.settings.mentor.prices)
         } header: {
