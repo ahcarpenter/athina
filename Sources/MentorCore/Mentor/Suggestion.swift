@@ -192,6 +192,10 @@ public struct ModelCallRecord: Codable, Equatable, Sendable, Identifiable {
     public var outcome: ModelCallOutcome
     /// The model's one-line reason, or the error message.
     public var detail: String?
+    /// Answered from a recording, not the network: never billed, never counted
+    /// against the hourly cap, and shown as a replay wherever calls are listed.
+    /// The usage is the recorded call's; the cost is zero.
+    public var replayed: Bool
 
     public init(
         id: Int64 = 0,
@@ -205,7 +209,8 @@ public struct ModelCallRecord: Codable, Equatable, Sendable, Identifiable {
         cost: Double,
         latency: TimeInterval,
         outcome: ModelCallOutcome,
-        detail: String?
+        detail: String?,
+        replayed: Bool = false
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -219,6 +224,7 @@ public struct ModelCallRecord: Codable, Equatable, Sendable, Identifiable {
         self.latency = latency
         self.outcome = outcome
         self.detail = detail
+        self.replayed = replayed
     }
 }
 

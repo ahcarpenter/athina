@@ -71,8 +71,19 @@ final class AppState {
 
     /// Whether the permissions window should open at launch.
     let needsPermissionsOnboarding: Bool
-    let journalURL = Journal.defaultURL()
-    let settingsURL = SettingsStore.defaultURL()
+    /// The live files, or a replay's own (`AppPaths.dataDirectory(for:)`).
+    let journalURL: URL
+    let settingsURL: URL
+
+    // MARK: Model client mode
+
+    /// Live, recording, or replaying, from the launch arguments.
+    let clientMode: ModelClientMode
+    /// What a replay is serving from, once the loop has started.
+    var replaySummary: ReplaySummary?
+    /// Why a recording cannot be written, once the loop has started; every
+    /// call is refused while it is set.
+    var recordingUnavailableReason: String?
 
     private let store: SettingsStore
     private let keyStore: any KeyStore
@@ -92,10 +103,16 @@ final class AppState {
     private let toast = ToastController()
 
     private init() {
-        store = SettingsStore(url: SettingsStore.defaultURL())
-        keyStore = KeychainKeyStore()
+        clientMode = ModelClientMode(arguments: CommandLine.arguments)
+        journalURL = Journal.defaultURL(in: AppPaths.dataDirectory(for: clientMode))
+        let launch = SettingsStore.forLaunch(clientMode)
+        store = launch.store
+        settingsURL = launch.store.url
+        // Neither a replay nor a snapshot render needs a key, so neither reads
+        // the keychain, and its per-build access prompt never blocks them.
+        keyStore = clientMode.isOffline || Snapshots.isActive ? InMemoryKeyStore() : KeychainKeyStore()
         isSample = false
-        settings = store.load()
+        settings = launch.settings
         let status = PermissionProbe.current()
         permissions = status
         needsPermissionsOnboarding = !status.allGranted
@@ -103,9 +120,13 @@ final class AppState {
     }
 
     /// A detached state for snapshots and previews: never starts the pipeline.
-    init(sampleWithSettings settings: SensingSettings) {
+    init(sampleWithSettings settings: SensingSettings, clientMode: ModelClientMode = .live) {
         store = SettingsStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("mentor-sample-settings.json"))
-        keyStore = InMemoryKeyStore(key: "sk-ant-sample-key-0000-7Q2x")
+        self.clientMode = clientMode
+        let dataDirectory = AppPaths.dataDirectory(for: clientMode)
+        journalURL = Journal.defaultURL(in: dataDirectory)
+        settingsURL = SettingsStore.defaultURL(in: dataDirectory)
+        keyStore = clientMode.isOffline ? InMemoryKeyStore() : InMemoryKeyStore(key: "sk-ant-sample-key-0000-7Q2x")
         isSample = true
         self.settings = settings
         permissions = PermissionStatus(screenRecording: true, accessibility: true)
@@ -138,6 +159,10 @@ final class AppState {
         self.pipeline = pipeline
         let mentorSettings = settings.mentor
         let keyStore = keyStore
+        let clientSetup = clientMode.makeClient(prices: settings.mentor.prices)
+        replaySummary = clientSetup.replay
+        recordingUnavailableReason = clientSetup.recordingUnavailableReason
+        AppState.log.notice("model calls: \(self.clientModeLog, privacy: .public)")
         toast.onAction = { [weak self] id, feedback in
             self?.respond(to: id, with: feedback)
         }
@@ -149,7 +174,7 @@ final class AppState {
             let stream = await pipeline.events()
             let mentorStream = await pipeline.events()
             let mentor = MentorLoop(
-                settings: mentorSettings, journal: journal, client: AnthropicClient(), keyStore: keyStore, events: mentorStream
+                settings: mentorSettings, journal: journal, client: clientSetup.client, keyStore: keyStore, events: mentorStream
             )
             await self?.attach(mentor: mentor, journal: journal)
             await self?.loadInitialTimeline(from: journal)
@@ -444,8 +469,54 @@ final class AppState {
         }
     }
 
+    /// A short word beside the menu bar icon while calls are not plain live
+    /// ones, so a replay is never mistaken for the real thing.
+    var clientModeBadge: String? {
+        switch clientMode {
+        case .live: nil
+        case .record: "Recording"
+        case .replay, .invalid: "Replay"
+        }
+    }
+
+    /// One line for the menu saying where calls go, or nil when they are live.
+    var clientModeLine: String? {
+        switch clientMode {
+        case .live:
+            return nil
+        case .record(let directory):
+            if let reason = recordingUnavailableReason { return "Recording unavailable: \(reason)" }
+            return "Recording model calls to \(Formatting.path(directory))"
+        case .invalid(let reason):
+            return "Replay unavailable: \(reason)"
+        case .replay:
+            guard let summary = replaySummary else { return "Replay mode" }
+            if let reason = summary.unavailableReason { return "Replay unavailable: \(reason)" }
+            let folder = summary.directory.pathComponents.suffix(2).joined(separator: "/")
+            var line = "Replaying \(Plural.count(summary.total, "recorded call", "recorded calls")) from \(folder)"
+            if summary.staleCount > 0 {
+                line += summary.allowStale ? ", \(summary.staleCount) stale allowed" : ", \(summary.staleCount) stale refused"
+            }
+            return line
+        }
+    }
+
+    /// For the log at launch.
+    private var clientModeLog: String {
+        switch clientMode {
+        case .live: "live"
+        case .record(let directory):
+            recordingUnavailableReason.map { "refused: \($0)" } ?? "live, recording to \(directory.path)"
+        case .replay(let directory, let allowStale): "replaying from \(directory.path)\(allowStale ? ", stale fixtures allowed" : "")"
+        case .invalid(let reason): "refused: \(reason)"
+        }
+    }
+
     /// One line for the menu: spend this hour against the cap, or why the loop is off.
     var mentorLine: String {
+        if clientMode.isOffline {
+            return settings.mentor.enabled ? "Mentor: replay mode, nothing billed" : "Mentor: off"
+        }
         switch mentorStatus.availability {
         case .ready, .capReached:
             let spend = Formatting.dollars(mentorStatus.spendThisHour)

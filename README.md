@@ -21,10 +21,14 @@ phases.
 ## Build, run, test
 
 ```sh
-make build   # builds build/Mentor.app from the SwiftPM binary
-make run     # builds, quits a running copy, and launches the app
-make test    # runs the unit tests (swift test)
-make measure # samples the running app's CPU and memory for 60 seconds
+make build            # builds build/Mentor.app from the SwiftPM binary
+make run              # builds, quits a running copy, and launches the app
+make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend
+make record           # the same, live, writing every model call to a fixture file (spends API credits)
+make clear-recordings # deletes the app's own recordings directory
+make fixture-status   # checks that the committed fixtures are current (fails when not), with no network
+make test             # runs the unit tests (swift test), the loop included, with no network
+make measure          # samples the running app's CPU and memory for 60 seconds
 ```
 
 There is no Xcode project. `Package.swift` defines the targets and
@@ -34,10 +38,13 @@ There is no Xcode project. `Package.swift` defines the targets and
 
 `Mentor --snapshot <dir>` renders every window with sample data to PNG files
 (light and dark) without starting the pipeline or calling any model. It is how
-UI changes get checked without a person at the screen; it needs no permissions.
+UI changes get checked without a person at the screen; it needs no permissions
+and never reads the keychain. Replay mode has renders of its own.
 `open build/Mentor.app --args --open debug` (or `settings`, `settings:mentor`,
 `permissions`, `history`) launches the app with that window already open, which
-is how the live panel gets screenshotted from a shell.
+is how the live panel gets screenshotted from a shell. `--replay <dir>` and
+`--record [<dir>]` choose where model calls go; see Iterating without the
+network.
 
 ### Setup: the Anthropic API key
 
@@ -47,7 +54,8 @@ model and reports the answering model or the API's own error message. The key
 goes into your login keychain (`com.ahcarpenter.mentor` /
 `anthropic-api-key`) and nowhere else; the app only ever shows its last four
 characters. Without a key the loop stays idle and the menu says so. Remove
-deletes the keychain item.
+deletes the keychain item. A replay needs no key, and the app never reads the
+keychain while replaying.
 
 ### Code signing
 
@@ -73,6 +81,148 @@ grant again:
 tccutil reset Accessibility com.ahcarpenter.mentor
 tccutil reset ScreenCapture com.ahcarpenter.mentor
 ```
+
+## Iterating without the network
+
+Working on Mentor needs no live call to Anthropic to build, test, or verify.
+The app, its tests, and every verification run use **replay**: each model call
+is answered from a recorded fixture, with no network, no API key, and no spend.
+Replay is the default way to exercise the app, including the end-to-end checks
+a change gets before it ships. Live calls are for two deliberate occasions
+only: recording fixtures, including re-recording the committed set when a
+change makes it stale, and the separate live check of the models' answers.
+
+### Replay
+
+```sh
+make run-replay                                   # the committed fixtures
+make run-replay REPLAY_DIR=~/Library/Application\ Support/mentor/recordings
+make run-replay ALLOW_STALE=1                     # also serve stale fixtures, see below
+open build/Mentor.app --args --replay <dir> --open debug
+```
+
+The whole product runs as it does live. Sensing watches the real screen, the
+triage and mentor gates decide as usual, and each call they allow is answered
+from `<dir>` by `ReplayClaudeClient`. It matches a call on its kind (the tier:
+`triage`, `mentor`, `test`, and any kind added later), never on the request
+bytes, which differ on every run. The fixtures of a kind are served in file-name
+order, then from the first again, so a long session keeps working and the same
+sequence of calls always gets the same answers. Each answer arrives after the
+recorded latency, so the in-flight states look the way they do live. Suggestions
+from replayed answers become toasts, take feedback, and land in the history like
+live ones. Test Connection replays the recorded test call.
+
+**A replay runs against an isolated copy seeded from your live settings.** A
+replay, and a replay that was refused, keeps its journal and settings in
+`~/Library/Application Support/mentor/replay` rather than beside the live ones.
+Every replay launch starts from your live settings, read and never written (or
+from the defaults when there are none), so the apps you excluded stay
+excluded, and your retention and sensing choices hold, exactly as you set them.
+Nothing a replay does, a suggestion and its feedback, a Not now or Never for
+this, a changed setting, reaches the live journal, the live settings, or the
+prompts of a later live run; a setting changed during a replay lasts until the
+app quits. Delete that directory to clear the replay journal. `--record` is a
+real session and uses the live files.
+
+Nothing about a replay can be mistaken for a live call:
+
+- the menu bar shows **Replay** beside the eye, and the menu says where the
+  answers come from and that nothing is billed;
+- the debug panel's status bar and Mentor card carry a Replay badge, the card
+  lists the fixtures by kind with their directory, and every replayed row in
+  the model call log is tagged Replay and shows "not billed";
+- every replayed call is journaled in `model_calls` with `replayed = 1` and a
+  cost of zero; its token counts are the recorded ones;
+- replayed calls never count toward the hour's spend or the cap, and a
+  replay's own journal holds no live spend, so none can hold it at the cap.
+
+If the fixtures cannot be loaded, or the command line is contradictory (for
+example `--record` with `--replay`), every call is refused with the reason,
+which shows in the menu, the Mentor card, and the call log. The app never falls
+back to live calls.
+
+**Stale fixtures.** Each fixture carries the `MentorPrompts.version` it was
+recorded with. A fixture whose version differs from the current one is stale:
+on its turn the app refuses it with a message naming the file and both
+versions, and the call is logged as an error. The tests replay the committed
+set just as strictly and fail on a stale fixture, so a change that bumps the
+prompt version re-records the committed set live in the same change (see The
+committed fixtures). `--allow-stale-fixtures` (`make run-replay ALLOW_STALE=1`)
+serves stale fixtures anyway, and is only for replaying locally while
+iterating on prompts.
+
+### Record
+
+```sh
+make record                          # into ~/Library/Application Support/mentor/recordings
+make record RECORD_DIR=recordings    # into ./recordings, which git ignores
+```
+
+`--record` runs live, with the saved key and real spend, and
+`RecordingClaudeClient` writes each call to its own JSON file named
+`<UTC time>-<kind>-<id>.json`. A file holds the fixture format version, the
+call's kind and prompt version, the time, the model, the request exactly as it
+was sent (system blocks, messages with the screenshot, output format, effort),
+the response as Mentor decodes it or the error, usage, latency, and the
+estimated cost. The key is never written: the recorder redacts it, and anything
+shaped like an Anthropic key, from the text before writing. Files are created
+with mode 0600, in a directory created with mode 0700. A relative
+`--record <dir>` is taken inside the app's recordings directory, never against
+the working directory (which is `/` for an app started with `open`);
+`make record RECORD_DIR=...` passes an absolute path. Before the first call
+the app creates the directory and writes and removes a probe file there; if
+that fails, every call is refused with the reason, which shows in the menu,
+the Mentor card, and the call log, so a recording that could write nothing
+never spends anything. Those refused calls are journaled as live errors that
+cost nothing, not as replays. The menu bar shows **Recording** beside the eye
+while it runs. `make clear-recordings` deletes the app's own recordings
+directory, `~/Library/Application Support/mentor/recordings`.
+
+Any call the loop makes through its single call path (`MentorLoop.perform`) is
+recorded under its tier's raw value and replayed by that name, and neither
+client knows the list of kinds. The calls later phases add, the periodic
+understanding refresh (tier `understanding`) and the follow-up question about a
+suggestion (tier `followUp`), are therefore recordable and replayable without
+any change to either client: they need only a fixture of their kind in the
+replay directory, and a replay without one refuses that kind of call by name.
+
+### The committed fixtures
+
+`Tests/MentorCoreTests/Fixtures/Replay` is a small set recorded live from a
+staged, synthetic scenario (see its README), never from anyone's real work, on
+the cheapest models that exercise every call kind. `ReplayLoopTests` runs the
+whole loop against it: every triage fixture in turn, the mentor calls they
+lead to, the suggestion, its feedback, the journal rows, zero spend, and the
+cycle starting over. The same tests fail when a file carries anything shaped
+like a key, or an em dash.
+
+They also fail when the set is not current: a fixture recorded with another
+prompt version than `MentorPrompts.version`, or a tier with no fixture, fails
+`swift test` with a message naming each stale fixture with both versions and
+each tier with no fixture. The loop replay is strict, as the app's is.
+`make fixture-status` runs that check on its own, with no network.
+
+So when a prompt or schema change bumps the prompt version, or a new call kind
+is added, re-record the committed set live in the same change so the tests
+pass. It is a deliberate `make record` session of a few cents, on a staged
+scenario and an empty journal:
+
+1. Quit Mentor and move the journal aside (keep it to put back). Triage and
+   mentor requests carry recent journal events and screens, so a recording made
+   on a lived-in journal carries that history too.
+2. Stage a synthetic scenario in real windows that fill the display (the
+   documents in the fixture directory's `scenario/` folder work), and add every
+   other running app to Settings > Privacy > Excluded apps.
+3. Run `make record RECORD_DIR=recordings`, drive it through a moment worth a
+   look that yields a shown suggestion, a quiet moment, a Test Connection, and
+   one call of every other kind, then quit.
+4. Read every file, text and screenshot, replace the fixture directory's
+   recordings with the ones you keep, update its README, delete the rest, put
+   the journal and settings back, and run `make fixture-status` and
+   `swift test`.
+
+`ScriptedClaudeClient` stays for unit tests that need one exact hand-written
+answer, such as a refusal, an unparseable reply, or a slow call.
 
 ## Permissions
 
@@ -107,8 +257,10 @@ Sources/MentorCore            library, fully testable
   Sensing/                    AXActor (run-loop thread for the AX API), FocusTracker (NSWorkspace + AXObserver),
                               ScreenCapturer (ScreenCaptureKit), TextRecognizer (Vision),
                               SensingPipeline (orchestration), EventBroadcaster (fan-out AsyncStream)
-  Claude/                     ClaudeClient (Messages API request and response types, AnthropicClient over
-                              URLSession), ScriptedClaudeClient (mock for tests), ModelCatalog and PriceTable,
+  Claude/                     ClaudeClient (Messages API request and response types, CallIdentity, AnthropicClient
+                              over URLSession), CallFixture (recorded call format and files), RecordingClaudeClient,
+                              ReplayClaudeClient, ModelClientMode (live, record, or replay from the command line),
+                              ScriptedClaudeClient (hand-written answers for tests), ModelCatalog and PriceTable,
                               KeyStore (Keychain and in-memory), JSONValue (schemas)
   Mentor/                     MentorScheduler (pure trigger, debounce, and gate state machine), SpendMeter,
                               SuppressionRules (snooze and never-for-this), MentorshipContexts (declared
@@ -165,12 +317,15 @@ oldest thumbnails and finally the oldest observations and events until it fits.
 The mentor loop adds two tables: `suggestions` (every suggestion shown, with
 the user's feedback) and `model_calls` (one row per API call: tier, model,
 prompt version and size, token counts, estimated cost, latency, outcome, and
-the model's one-line reason; never the prompt text). A moment held at the
-context boundary is recorded there as the `outOfContext` outcome. Both expire
+the model's one-line reason, and whether it was replayed; never the prompt
+text). A moment held at the context boundary is recorded there as the
+`outOfContext` outcome. Both expire
 with `textRetention` and are emptied by Clear Journal.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
-to defaults so older files keep working.
+to defaults so older files keep working. A replay keeps both files in a
+`replay` directory of its own and starts from the live settings (see Iterating
+without the network).
 
 ### Subscription point
 
@@ -300,7 +455,8 @@ default) both minimum intervals stretch by `1 / (1 - spent / cap)`, capped at
 8x: 2x at half the cap, 4x at three quarters. At the cap no call is made until
 the next clock hour. The hour's total is seeded from the journal at launch, so
 relaunching does not reset it. Spend this hour shows in the menu, the debug
-panel status bar, and the Mentor card.
+panel status bar, and the Mentor card. Replayed calls cost nothing and are never
+counted (see Iterating without the network).
 
 ## Privacy model
 
@@ -340,6 +496,19 @@ panel status bar, and the Mentor card.
 - Model calls are journaled as counts (tokens, cost, latency, outcome) with the
   model's one-line reason, never with the prompt or the screen text that was
   sent.
+- **Recordings** are the one exception, and only when the app is launched with
+  `--record`: each call's whole request, screen text and screenshot included,
+  and its answer are written to a file on this Mac
+  (`~/Library/Application Support/mentor/recordings` unless another directory is
+  given, mode 0700, files 0600). The API key is never written, and any
+  Anthropic key visible in the screen text is redacted, though not inside the
+  screenshot. `make clear-recordings` deletes them; Clear Journal does not. A
+  replay (`--replay`) sends nothing anywhere, keeps its own journal and
+  settings, and starts from the live settings, so excluded apps stay excluded
+  while replaying.
+- **Committed fixtures** carry only staged, synthetic screen content, recorded
+  for the purpose, never the captain's or any user's real work. Every recording
+  is read, text and screenshot, before it is committed.
 - **Pause** from the menu or with the global hotkey (default ⌃⌥⌘P) stops all
   sensing; the menu bar icon switches from a filled eye to a crossed eye. Idle
   shows an outlined eye, an excluded app a raised hand, and missing permissions
@@ -364,17 +533,23 @@ journal (suggestions and feedback included), or, under Model calls, a scrolling
 log of every API call with prompt size, tokens, cost, latency, outcome, and the
 model's reason. The status bar shows mode, permission state, last and next
 capture with reason, seconds since input, spend this hour against the cap, and
-the app's own CPU and memory.
+the app's own CPU and memory. While calls are replayed or recorded, the status
+bar and the Mentor card carry a Replay or Recording badge, the card says where
+calls go (for a replay, the fixtures by kind and their directory, and any stale
+ones), and each replayed call in the log is tagged Replay and not billed.
 
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs `swift test`, the bundle script, and
 `Mentor --snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the
-macOS 26 SDK this package targets, and uploads the rendered PNGs as the
-`ui-snapshots` artifact. The tests exercise the pure parts (hashing, cadence,
-journal, retention, settings, the mentor scheduler and gates, mentorship context
-rules and placement, spend accounting, snooze and never-for-this rules, the
-rolling window, request and response coding against fixture JSON, and the whole
-loop against a scripted client) and
-Vision OCR on a drawn bitmap, so they need no permissions, display, network,
-or API key.
+macOS 26 SDK this package targets, and uploads the rendered PNGs, replay-mode
+renders included, as the `ui-snapshots` artifact. The tests exercise the pure
+parts (hashing, cadence, journal, retention, settings, the mentor scheduler and
+gates, mentorship context rules and placement, spend accounting, snooze and
+never-for-this rules, the rolling window, request and response coding against
+fixture JSON, recording, redaction, replay matching and stale refusal, launch
+flags, a replay's separate files, the whole loop against a scripted client, and
+the whole loop against the committed replay fixtures, replayed strictly) and
+Vision OCR on a drawn bitmap, so they need no permissions, display, network, or
+API key. A committed fixture that is stale, or a tier with no committed
+fixture, fails the run (see The committed fixtures).

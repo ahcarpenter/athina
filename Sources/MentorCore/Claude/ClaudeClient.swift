@@ -219,8 +219,9 @@ public struct Usage: Codable, Equatable, Sendable {
 }
 
 /// A response content block. Only text blocks matter to Mentor; thinking
-/// blocks and any future kinds decode to their type and are ignored.
-public struct ResponseBlock: Decodable, Equatable, Sendable {
+/// blocks and any future kinds decode to their type and are ignored. Encodable
+/// so a recorded call can store the response it replays.
+public struct ResponseBlock: Codable, Equatable, Sendable {
     public var type: String
     public var text: String?
 
@@ -230,7 +231,7 @@ public struct ResponseBlock: Decodable, Equatable, Sendable {
     }
 }
 
-public struct MessagesResponse: Decodable, Equatable, Sendable {
+public struct MessagesResponse: Codable, Equatable, Sendable {
     public var id: String
     public var model: String
     public var stopReason: String?
@@ -276,21 +277,103 @@ public enum ClaudeClientError: Error, Equatable, CustomStringConvertible, Sendab
     case transport(String)
     /// A 200 whose body could not be decoded.
     case badResponse(String)
+    /// A replay client had no recorded answer it may serve, and why. Nothing
+    /// was sent anywhere.
+    case replay(String)
+    /// A live client would not send the call, and why. Nothing was sent.
+    case notSent(String)
 
     public var description: String {
         switch self {
         case .api(let status, let type, let message): "\(type) (HTTP \(status)): \(message)"
         case .transport(let message): "network: \(message)"
         case .badResponse(let message): "bad response: \(message)"
+        case .replay(let message): "replay: \(message)"
+        case .notSent(let message): "not sent: \(message)"
+        }
+    }
+}
+
+/// Recorded errors are stored as `{"kind": ..., "message": ...}`, with the
+/// status and type too for an API error.
+extension ClaudeClientError: Codable {
+    private enum CodingKeys: String, CodingKey {
+        case kind, status, type, message
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let message = try container.decode(String.self, forKey: .message)
+        switch try container.decode(String.self, forKey: .kind) {
+        case "api":
+            self = .api(
+                status: try container.decode(Int.self, forKey: .status),
+                type: try container.decode(String.self, forKey: .type),
+                message: message
+            )
+        case "transport": self = .transport(message)
+        case "badResponse": self = .badResponse(message)
+        case "replay": self = .replay(message)
+        case "notSent": self = .notSent(message)
+        case let other:
+            throw DecodingError.dataCorruptedError(forKey: .kind, in: container, debugDescription: "unknown error kind \(other)")
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .api(let status, let type, let message):
+            try container.encode("api", forKey: .kind)
+            try container.encode(status, forKey: .status)
+            try container.encode(type, forKey: .type)
+            try container.encode(message, forKey: .message)
+        case .transport(let message):
+            try container.encode("transport", forKey: .kind)
+            try container.encode(message, forKey: .message)
+        case .badResponse(let message):
+            try container.encode("badResponse", forKey: .kind)
+            try container.encode(message, forKey: .message)
+        case .replay(let message):
+            try container.encode("replay", forKey: .kind)
+            try container.encode(message, forKey: .message)
+        case .notSent(let message):
+            try container.encode("notSent", forKey: .kind)
+            try container.encode(message, forKey: .message)
         }
     }
 }
 
 // MARK: - Client
 
+/// Which kind of call a request is and which prompt version built it. The loop
+/// passes it with every request, so recording and replay can file and find a
+/// call without reading its bytes, which differ on every run. It is opaque to
+/// them: a new kind of call needs no change in either.
+public struct CallIdentity: Codable, Hashable, Sendable {
+    /// The kind of call: the raw value of the tier that made it, such as
+    /// `triage` or `mentor`.
+    public var kind: String
+    /// The prompt version the request was built with.
+    public var promptVersion: Int
+
+    public init(kind: String, promptVersion: Int) {
+        self.kind = kind
+        self.promptVersion = promptVersion
+    }
+}
+
 /// Sends one Messages API request. The API key is passed per call and never stored.
 public protocol ClaudeClient: Sendable {
-    func send(_ request: MessagesRequest, apiKey: String, timeout: TimeInterval) async throws -> MessagesResponse
+    /// True when calls are answered from recordings: nothing reaches the
+    /// network, nothing is billed, and no key is needed.
+    var isReplay: Bool { get }
+
+    func send(_ request: MessagesRequest, call: CallIdentity, apiKey: String, timeout: TimeInterval) async throws -> MessagesResponse
+}
+
+extension ClaudeClient {
+    public var isReplay: Bool { false }
 }
 
 /// The Anthropic Messages API over URLSession. The only host Mentor ever talks to.
@@ -319,7 +402,7 @@ public struct AnthropicClient: ClaudeClient {
         return encoder
     }()
 
-    public func send(_ request: MessagesRequest, apiKey: String, timeout: TimeInterval) async throws -> MessagesResponse {
+    public func send(_ request: MessagesRequest, call: CallIdentity, apiKey: String, timeout: TimeInterval) async throws -> MessagesResponse {
         var urlRequest = URLRequest(url: AnthropicClient.endpoint)
         urlRequest.httpMethod = "POST"
         urlRequest.timeoutInterval = timeout

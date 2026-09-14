@@ -12,8 +12,18 @@ struct MentorApp: App {
             MenuBarContent()
                 .environment(state)
         } label: {
-            Image(systemName: state.menuBarSymbol)
-                .accessibilityLabel(state.statusLine)
+            // While calls are replayed or recorded, a word beside the icon says
+            // so, so a replay is never mistaken for a live call.
+            if let badge = state.clientModeBadge {
+                HStack(spacing: 3) {
+                    Image(systemName: state.menuBarSymbol)
+                    Text(badge)
+                }
+                .accessibilityLabel("\(badge), \(state.statusLine)")
+            } else {
+                Image(systemName: state.menuBarSymbol)
+                    .accessibilityLabel(state.statusLine)
+            }
         }
         .menuBarExtraStyle(.menu)
 
@@ -61,8 +71,9 @@ enum WindowID {
 
 /// Developer aids on the command line: `Mentor --open debug|settings|permissions|history`
 /// presents that window at launch (for example `open build/Mentor.app --args --open debug`),
-/// `--open settings:mentor` opens Settings on that tab, and `--snapshot <dir>` is handled
-/// by `Snapshots`.
+/// `--open settings:mentor` opens Settings on that tab, `--snapshot <dir>` is handled
+/// by `Snapshots`, and `--replay <dir>`, `--allow-stale-fixtures`, and `--record [<dir>]`
+/// choose where model calls go (`ModelClientMode`).
 enum LaunchArguments {
     private static var openArgument: String? {
         let arguments = CommandLine.arguments
@@ -119,6 +130,9 @@ struct MenuBarContent: View {
 
     var body: some View {
         Text(state.statusLine)
+        if let line = state.clientModeLine {
+            Text(line)
+        }
         Text(state.mentorLine)
         if let context = state.mentorContextLine {
             Text(context)
