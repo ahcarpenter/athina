@@ -120,7 +120,7 @@ open build/Mentor.app --args --replay <dir> --open debug
 The whole product runs as it does live. Sensing watches the real screen, the
 triage and mentor gates decide as usual, and each call they allow is answered
 from `<dir>` by `ReplayClaudeClient`. It matches a call on its kind (the tier:
-`triage`, `mentor`, `test`, and any kind added later), never on the request
+`triage`, `mentor`, `understanding`, `followUp`, `test`, and any kind added later), never on the request
 bytes, which differ on every run. The fixtures of a kind are served in file-name
 order, then from the first again, so a long session keeps working and the same
 sequence of calls always gets the same answers. Each answer arrives after the
@@ -196,11 +196,13 @@ directory, `~/Library/Application Support/mentor/recordings`.
 
 Any call the loop makes through its single call path (`MentorLoop.perform`) is
 recorded under its tier's raw value and replayed by that name, and neither
-client knows the list of kinds. The calls later phases add, the periodic
-understanding refresh (tier `understanding`) and the follow-up question about a
-suggestion (tier `followUp`), are therefore recordable and replayable without
-any change to either client: they need only a fixture of their kind in the
-replay directory, and a replay without one refuses that kind of call by name.
+client knows the list of kinds. The periodic understanding refresh (tier
+`understanding`, see Standing understanding) and the follow-up question about a
+suggestion (tier `followUp`) are recorded and replayed that way with no change
+to either client, and so is any call a later phase adds: each needs only a
+fixture of its kind in the replay directory, and a replay without one refuses
+that kind of call by name. A replayed refresh becomes the next revision like a
+live one, and its cost, like every replayed call's, is zero.
 
 ### The committed fixtures
 
@@ -208,12 +210,13 @@ replay directory, and a replay without one refuses that kind of call by name.
 staged, synthetic scenario (see its README), never from anyone's real work, on
 the cheapest models whose answers are worth replaying for every call kind (its
 README names them). `ReplayLoopTests` runs the whole loop against it: every
-triage fixture in turn, the mentor calls they lead to, the suggestion, its
-feedback, the journal rows, zero spend, and the cycle starting over.
-`ReplayInterventionTests` replays the mentor reply's region into a placed
-callout and the recorded follow-up answer. The same tests fail when a file
-carries anything shaped like a key, or an em dash, and when the set has no
-shown suggestion with a region or no follow-up answer.
+triage fixture in turn, the mentor calls they lead to, the understanding each
+mentor reply rewrites, the suggestion, its feedback, the journal rows, zero
+spend, and the cycle starting over, and a periodic refresh answered by the
+understanding fixture. `ReplayInterventionTests` replays the mentor reply's
+region into a placed callout and the recorded follow-up answer. The same tests
+fail when a file carries anything shaped like a key, or an em dash, and when the
+set has no shown suggestion with a region or no follow-up answer.
 
 They also fail when the set is not current: a fixture recorded with another
 prompt version than `MentorPrompts.version`, or a tier with no fixture, fails
@@ -238,7 +241,13 @@ scenario and an empty journal:
    Connection, and one call of every other kind, then quit. Drive it without
    keystrokes (TextEdit scripting and accessibility actions), so no other app
    takes the front and reaches a request's event history; raise the idle
-   threshold for the session so sensing does not stop behind it.
+   threshold for the session so sensing does not stop behind it. For the
+   `understanding` kind, set Settings > Mentor > Refresh at most every to its
+   lowest value before recording and leave the scenario in front for that whole
+   interval after the last mentor call; setting Settings > Cadence > Idle after
+   above the interval keeps the loop watching with no input. Add Mentor itself
+   to the excluded apps, so opening Settings for Test Connection is never
+   captured.
 4. Read every file, text and screenshot, and every reply for quality (a model
    can fill a required field with an empty string), replace the fixture directory's
    recordings with the ones you keep, update its README, delete the rest, put

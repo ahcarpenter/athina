@@ -168,9 +168,10 @@ struct UnderstandingCard: View {
         guard let record = state.mentorStatus.lastRefresh else {
             return "no refresh call yet; mentor calls have carried it"
         }
-        var text = "\(record.outcome.label) \(Formatting.age(record.timestamp, now: now)), \(ModelCatalog.displayName(for: record.model)), "
+        let model = ModelCatalog.displayName(for: record.model)
+        var text = "\(record.outcome.label) \(Formatting.age(record.timestamp, now: now)), \(record.replayed ? "replay of \(model)" : model), "
         text += "\(Formatting.tokens(record.usage.totalInputTokens)) in, \(Formatting.tokens(record.usage.outputTokens)) out, "
-        text += "\(Formatting.dollars(record.cost)), \(Formatting.seconds(record.latency))"
+        text += "\(record.replayed ? Formatting.unbroken("not billed") : Formatting.dollars(record.cost)), \(Formatting.seconds(record.latency))"
         if let detail = record.detail, !detail.isEmpty { text += "\n\(detail)" }
         return text
     }

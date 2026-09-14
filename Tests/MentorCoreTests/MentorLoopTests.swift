@@ -112,7 +112,7 @@ import Testing
 
     /// A calendar in which this instant is noon, so a record written any test
     /// age ago is still on today's date whatever the wall clock says.
-    private static var middayCalendar: Calendar {
+    static var middayCalendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         let secondsIntoUTCDay = Int(Date().timeIntervalSince1970) % 86400
         calendar.timeZone = TimeZone(secondsFromGMT: 43200 - secondsIntoUTCDay) ?? .current
