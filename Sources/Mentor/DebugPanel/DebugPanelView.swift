@@ -216,7 +216,7 @@ private struct NowPane: View {
                         if let description = focus.focusedDescription, !description.isEmpty { Field(label: "Description", value: description) }
                         if let value = focus.focusedValue, !value.isEmpty {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("Value · \(focus.focusedValueLength ?? value.count) chars")
+                                Text("Value · \(Plural.count(focus.focusedValueLength ?? value.count, "char", "chars"))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 ScrollView {
@@ -449,7 +449,7 @@ private struct OCRTextList: View {
             HStack {
                 Text("Recognized text")
                     .font(.subheadline.weight(.semibold))
-                Text("\(blocks.count) blocks")
+                Text(Plural.count(blocks.count, "block", "blocks"))
                     .foregroundStyle(.secondary)
                     .font(.subheadline)
                 Spacer()
@@ -507,7 +507,7 @@ private struct TimelinePane: View {
                 .labelsHidden()
                 .controlSize(.small)
                 .frame(width: 180)
-                Text(page == .timeline ? "\(state.timeline.count) entries" : "\(state.callLog.count) calls")
+                Text(page == .timeline ? Plural.count(state.timeline.count, "entry", "entries") : Plural.count(state.callLog.count, "call", "calls"))
                     .foregroundStyle(.secondary)
                     .font(.callout)
                     .monospacedDigit()
@@ -675,7 +675,7 @@ private struct MentorCard: View {
         }
         var notJudgedYet: String {
             if mentor.contexts.isEmpty { return "enforced with no context declared, so nothing is mentored" }
-            let enforcing = "enforcing \(mentor.contexts.count) contexts"
+            let enforcing = "enforcing \(Plural.count(mentor.contexts.count, "context", "contexts"))"
             guard let appName = state.focus?.appName else { return "\(enforcing), not judged yet" }
             return "\(enforcing), not yet judged in \(appName)"
         }
@@ -710,7 +710,7 @@ private struct MentorCard: View {
     private func spend(now: Date) -> String {
         let status = state.mentorStatus
         let rollover = Formatting.countdown(to: SpendMeter.nextHourStart(after: now), now: now)
-        return "\(Formatting.dollars(status.spendThisHour)) of \(Formatting.dollars(state.settings.mentor.hourlySpendCap)) this hour over \(status.callsThisHour) calls, hour rolls over \(rollover)"
+        return "\(Formatting.dollars(status.spendThisHour)) of \(Formatting.dollars(state.settings.mentor.hourlySpendCap)) this hour over \(Plural.count(status.callsThisHour, "call", "calls")), hour rolls over \(rollover)"
     }
 
     private func cadence(now: Date) -> String {
