@@ -412,7 +412,9 @@ public actor MentorLoop {
         let record = ModelCallRecord(
             timestamp: started,
             tier: tier,
-            model: request.model,
+            // A replayed answer came from whichever model was recorded, not
+            // necessarily the one the settings ask for now.
+            model: replayed ? ((try? result.get().model) ?? request.model) : request.model,
             promptVersion: identity.promptVersion,
             promptCharacters: request.promptCharacterCount,
             imageBytes: request.imageByteCount,

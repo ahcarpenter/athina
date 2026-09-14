@@ -133,10 +133,14 @@ public enum CallFixtureFiles {
     }()
 
     /// The fixture as JSON with `apiKey`, and anything shaped like an Anthropic
-    /// key, replaced by the redaction marker.
+    /// key, replaced by the redaction marker. An em dash, which window titles
+    /// and model text can carry, is written as its JSON escape: it decodes to
+    /// the same text, and the file never holds the character this repository
+    /// does not use.
     public static func encode(_ fixture: CallFixture, redacting apiKey: String) throws -> Data {
         var text = String(decoding: try encoder.encode(fixture), as: UTF8.self)
         text = redact(text, apiKey: apiKey)
+        text = text.replacingOccurrences(of: "\u{2014}", with: "\\u2014")
         return Data(text.utf8)
     }
 

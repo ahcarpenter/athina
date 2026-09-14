@@ -115,6 +115,15 @@ import Testing
         #expect(!untouched.contains(CallFixtureFiles.redactionMarker))
     }
 
+    @Test func anEmDashIsWrittenAsItsEscapeAndReadBackAsItself() throws {
+        let fixture = Self.fixture(request: Self.request(text: "Window: photo-renames.txt \u{2014} Edited"))
+        let data = try CallFixtureFiles.encode(fixture, redacting: "")
+        let text = String(decoding: data, as: UTF8.self)
+        #expect(!text.contains("\u{2014}"))
+        #expect(text.contains(#"photo-renames.txt \u2014 Edited"#))
+        #expect(try CallFixtureFiles.decoder.decode(CallFixture.self, from: data) == fixture)
+    }
+
     @Test func fileNamesSortByRecordingTimeAndNameTheKind() {
         let early = Self.fixture(kind: "triage", at: Date(timeIntervalSince1970: 1_789_000_000.25))
         let late = Self.fixture(kind: "follow up", at: Date(timeIntervalSince1970: 1_789_000_000.5))

@@ -78,6 +78,8 @@ import Testing
 
     // MARK: Journaling and spend
 
+    private let settingsMentorModel = MentorSettings().mentorModel
+
     @Test func replayedCallsAreJournaledAsReplaysAndNeverBilled() async throws {
         let journal = try Journal.inMemory()
         let client = ReplayClaudeClient(entries: Self.candidateAndSuggestion)
@@ -95,6 +97,9 @@ import Testing
         #expect(status.lastTriage?.outcome == .candidate)
         #expect(status.lastMentor?.outcome == .suggested)
         #expect(status.lastMentor?.replayed == true)
+        // The log names the model that gave the recorded answer, not the one the settings ask for.
+        #expect(status.lastMentor?.model == "claude-sonnet-5")
+        #expect(settingsMentorModel != "claude-sonnet-5")
         #expect(status.spendThisHour == 0)
         #expect(status.callsThisHour == 0)
         #expect(status.cadenceMultiplier == 1)
@@ -234,6 +239,7 @@ import Testing
         for entry in loaded {
             let text = try String(contentsOf: directory.appendingPathComponent(entry.name), encoding: .utf8)
             #expect(!text.contains("sk-ant-"), "\(entry.name) must not carry a key")
+            #expect(!text.contains("\u{2014}"), "\(entry.name) must not carry an em dash")
         }
     }
 
@@ -251,7 +257,11 @@ import Testing
 
         var nextMentor = 0
         var shown: [Suggestion] = []
-        for (index, entry) in triageEntries.enumerated() {
+        var lastHarness: Harness?
+        // Every triage recording, then the first again: past the last
+        // recording the cycle starts over.
+        let walk = Array(triageEntries.enumerated()) + [(triageEntries.count, triageEntries[0])]
+        for (index, entry) in walk {
             // A fresh loop per moment, on one journal and one client, so the
             // debounce never holds a moment and the cycle carries on.
             let h = await Harness(journal: journal, client: client, settings: settings)
@@ -291,18 +301,11 @@ import Testing
             } else {
                 #expect(status.lastMentorHold?.hold == .triageSaidNo(reason: verdict.reason.withPlainDashes))
             }
-            await h.loop.stop()
+            if let previous = lastHarness { await previous.loop.stop() }
+            lastHarness = h
         }
         #expect(!shown.isEmpty, "the committed fixtures must show at least one suggestion")
-
-        // Past the last recording the cycle starts again.
-        let again = await Harness(journal: journal, client: client, settings: settings)
-        let before = await client.served.count
-        await again.observe(
-            Fixtures.observation(id: 999, at: Date(), window: "again", text: "again"),
-            calls: { await client.served.count }, expectCalls: before + 1
-        )
-        #expect(await client.served[before].fixtureName == triageEntries[0].name)
+        let again = try #require(lastHarness)
 
         // Test Connection replays the recorded test call.
         let testEntry = try #require(client.entries.first { $0.fixture.identity.kind == ModelTier.test.rawValue })
