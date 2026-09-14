@@ -134,7 +134,7 @@ import Testing
         #expect(earlyName < lateName)
     }
 
-    @Test func writtenFixturesArePrivateLoadInNameOrderAndClear() throws {
+    @Test func writtenFixturesArePrivateAndLoadInNameOrder() throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let second = try CallFixtureFiles.write(Self.fixture(kind: "mentor", at: Date(timeIntervalSince1970: 1_789_000_002)), to: directory, redacting: Self.realisticKey)
@@ -149,15 +149,6 @@ import Testing
         let loaded = try CallFixtureFiles.load(from: directory)
         #expect(loaded.map(\.name) == [first.lastPathComponent, second.lastPathComponent])
         #expect(loaded.map(\.fixture.identity.kind) == ["triage", "mentor"])
-
-        let stats = try #require(CallFixtureFiles.stats(of: directory))
-        #expect(stats.count == 2)
-        #expect(stats.bytes > 0)
-
-        try CallFixtureFiles.clear(directory)
-        #expect(!FileManager.default.fileExists(atPath: directory.path))
-        #expect(CallFixtureFiles.stats(of: directory) == nil)
-        try CallFixtureFiles.clear(directory)
     }
 
     @Test func anUnreadableFixtureIsNamed() throws {

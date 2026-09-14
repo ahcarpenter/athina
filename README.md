@@ -21,12 +21,14 @@ phases.
 ## Build, run, test
 
 ```sh
-make build      # builds build/Mentor.app from the SwiftPM binary
-make run        # builds, quits a running copy, and launches the app
-make run-replay # the same, answering every model call from recorded fixtures: no network, no key, no spend
-make record     # the same, live, writing every model call to a fixture file (spends API credits)
-make test       # runs the unit tests (swift test), the loop included, with no network
-make measure    # samples the running app's CPU and memory for 60 seconds
+make build            # builds build/Mentor.app from the SwiftPM binary
+make run              # builds, quits a running copy, and launches the app
+make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend
+make record           # the same, live, writing every model call to a fixture file (spends API credits)
+make clear-recordings # deletes the app's own recordings directory
+make fixture-status   # reports whether the committed fixtures are current, never failing, with no network
+make test             # runs the unit tests (swift test), the loop included, with no network
+make measure          # samples the running app's CPU and memory for 60 seconds
 ```
 
 There is no Xcode project. `Package.swift` defines the targets and
@@ -109,6 +111,15 @@ recorded latency, so the in-flight states look the way they do live. Suggestions
 from replayed answers become toasts, take feedback, and land in the history like
 live ones. Test Connection replays the recorded test call.
 
+**A replay runs against its own files.** A replay, and a replay that was
+refused, keeps its journal and settings in
+`~/Library/Application Support/mentor/replay` rather than beside the live ones,
+and its settings start from the defaults, not from a copy of the live settings.
+Nothing a replay does, a suggestion and its feedback, a Not now or Never for
+this, a changed setting, reaches the live journal, the live settings, or the
+prompts of a later live run. Delete that directory to start a replay from the
+defaults again. `--record` is a real session and uses the live files.
+
 Nothing about a replay can be mistaken for a live call:
 
 - the menu bar shows **Replay** beside the eye, and the menu says where the
@@ -129,12 +140,11 @@ back to live calls.
 
 **Stale fixtures.** Each fixture carries the `MentorPrompts.version` it was
 recorded with. A fixture whose version differs from the current one is stale:
-on its turn it is refused with a message naming the file and both versions,
-and the call is logged as an error. While iterating on prompts, pass
+on its turn the app refuses it with a message naming the file and both
+versions, and the call is logged as an error. While iterating on prompts, pass
 `--allow-stale-fixtures` (`make run-replay ALLOW_STALE=1`) to serve stale
-fixtures anyway, and run the tests with `MENTOR_ALLOW_STALE_FIXTURES=1 swift
-test`. Bumping the prompt version therefore means recording the committed set
-again before the change ships.
+fixtures anyway. The tests replay the committed set as it is, stale or not, so
+bumping the prompt version never fails CI (see The committed fixtures).
 
 ### Record
 
@@ -151,9 +161,9 @@ was sent (system blocks, messages with the screenshot, output format, effort),
 the response as Mentor decodes it or the error, usage, latency, and the
 estimated cost. The key is never written: the recorder redacts it, and anything
 shaped like an Anthropic key, from the text before writing. Files are created
-with mode 0600 in a 0700 directory. The menu bar shows **Recording** beside the
-eye while it runs. Settings > Journal lists the recordings in the app's own
-directory and deletes them with Clear Recordings.
+with mode 0600, in a directory created with mode 0700. The menu bar shows
+**Recording** beside the eye while it runs. `make clear-recordings` deletes the
+app's own recordings directory, `~/Library/Application Support/mentor/recordings`.
 
 Any call the loop makes through its single call path (`MentorLoop.perform`) is
 recorded under its tier's raw value and replayed by that name, and neither
@@ -170,10 +180,17 @@ staged, synthetic scenario (see its README), never from anyone's real work, on
 the cheapest models that exercise every call kind. `ReplayLoopTests` runs the
 whole loop against it: every triage fixture in turn, the mentor calls they
 lead to, the suggestion, its feedback, the journal rows, zero spend, and the
-cycle starting over. The same tests fail when a fixture is stale, when a call
-kind has no fixture, or when a file carries anything shaped like a key.
+cycle starting over. The same tests fail when a file carries anything shaped
+like a key, or an em dash.
 
-To record the set again, for instance after a prompt change:
+A stale fixture, or a tier with no fixture, never fails them. The loop tests
+replay stale fixtures as they are, so their coverage survives a prompt bump,
+and the run reports each stale fixture with both prompt versions, and each tier
+with no fixture, as a known issue. `make fixture-status` prints that report on
+its own, with no network.
+
+Recording the set again spends API credits, so it happens in the deliberate
+live quality round, never to make CI pass:
 
 1. Quit Mentor and move the journal aside (keep it to put back). Triage and
    mentor requests carry recent journal events and screens, so a recording made
@@ -186,7 +203,7 @@ To record the set again, for instance after a prompt change:
    then quit.
 4. Read every file, text and screenshot, copy the ones you keep into the
    fixture directory, delete the rest, put the journal and settings back, and
-   run `swift test`.
+   run `make fixture-status` and `swift test`.
 
 `ScriptedClaudeClient` stays for unit tests that need one exact hand-written
 answer, such as a refusal, an unparseable reply, or a slow call.
@@ -290,7 +307,8 @@ text). A moment held at the context boundary is recorded there as the
 with `textRetention` and are emptied by Clear Journal.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
-to defaults so older files keep working.
+to defaults so older files keep working. A replay keeps both files in a
+`replay` directory of its own (see Iterating without the network).
 
 ### Subscription point
 
@@ -467,8 +485,9 @@ counted (see Iterating without the network).
   (`~/Library/Application Support/mentor/recordings` unless another directory is
   given, mode 0700, files 0600). The API key is never written, and any
   Anthropic key visible in the screen text is redacted, though not inside the
-  screenshot. Settings > Journal > Clear Recordings deletes them; Clear Journal
-  does not. A replay (`--replay`) sends nothing anywhere.
+  screenshot. `make clear-recordings` deletes them; Clear Journal does not. A
+  replay (`--replay`) sends nothing anywhere and keeps its own journal and
+  settings.
 - **Committed fixtures** carry only staged, synthetic screen content, recorded
   for the purpose, never the captain's or any user's real work. Every recording
   is read, text and screenshot, before it is committed.
@@ -511,6 +530,6 @@ parts (hashing, cadence, journal, retention, settings, the mentor scheduler and
 gates, mentorship context rules and placement, spend accounting, snooze and
 never-for-this rules, the rolling window, request and response coding against
 fixture JSON, recording, redaction, replay matching and stale refusal, launch
-flags, the whole loop against a scripted client, and the whole loop against the
-committed replay fixtures) and Vision OCR on a drawn bitmap, so they need no
+flags, a replay's separate files, the whole loop against a scripted client, and
+the whole loop against the committed replay fixtures) and Vision OCR on a drawn bitmap, so they need no
 permissions, display, network, or API key.

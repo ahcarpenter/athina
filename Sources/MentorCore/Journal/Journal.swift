@@ -28,9 +28,10 @@ public actor Journal {
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
 
-    /// `~/Library/Application Support/mentor/journal.sqlite`
-    public static func defaultURL() -> URL {
-        AppPaths.supportDirectory().appendingPathComponent("journal.sqlite")
+    /// `~/Library/Application Support/mentor/journal.sqlite`, or the same file
+    /// in another data directory (see `AppPaths.dataDirectory(for:)`).
+    public static func defaultURL(in directory: URL = AppPaths.supportDirectory()) -> URL {
+        directory.appendingPathComponent("journal.sqlite")
     }
 
     /// Opens (creating if needed) the journal file at `url`.

@@ -69,16 +69,6 @@ import Testing
         }
     }
 
-    @Test func recordingAReplayRecordsAReplay() async throws {
-        let directory = temporaryDirectory()
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let replay = ReplayClaudeClient(entries: [Self.entry("t", kind: "triage", result: .success(Self.response("{}")))])
-        let recorder = RecordingClaudeClient(wrapping: replay, directory: directory, prices: .defaults)
-        #expect(recorder.isReplay)
-        _ = try await recorder.send(Self.unrelatedRequest, call: Self.identity("triage"), apiKey: MentorLoop.replayCredential, timeout: 1)
-        #expect(try CallFixtureFiles.load(from: directory).first?.fixture.cost == 0)
-    }
-
     // MARK: Replay
 
     @Test func callsAreMatchedByKindAndCycleInOrder() async throws {

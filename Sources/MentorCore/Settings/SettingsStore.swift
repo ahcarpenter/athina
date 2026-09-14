@@ -8,9 +8,10 @@ public struct SettingsStore: Sendable {
         self.url = url
     }
 
-    /// `~/Library/Application Support/mentor/settings.json`
-    public static func defaultURL() -> URL {
-        AppPaths.supportDirectory().appendingPathComponent("settings.json")
+    /// `~/Library/Application Support/mentor/settings.json`, or the same file
+    /// in another data directory (see `AppPaths.dataDirectory(for:)`).
+    public static func defaultURL(in directory: URL = AppPaths.supportDirectory()) -> URL {
+        directory.appendingPathComponent("settings.json")
     }
 
     /// Returns defaults when the file is missing or unreadable, so a corrupt
@@ -41,5 +42,14 @@ public enum AppPaths {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
         return base.appendingPathComponent("mentor", isDirectory: true)
+    }
+
+    /// Where the journal and settings live for a launch in `mode`. A replay,
+    /// and a replay that was refused, keeps its own in `replay` inside the
+    /// support directory, starting from the default settings, so nothing it
+    /// does reaches the live journal, the live settings, or later live prompts.
+    /// Live and recording launches use the support directory itself.
+    public static func dataDirectory(for mode: ModelClientMode, supportDirectory: URL = supportDirectory()) -> URL {
+        mode.isOffline ? supportDirectory.appendingPathComponent("replay", isDirectory: true) : supportDirectory
     }
 }

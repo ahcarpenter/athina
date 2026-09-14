@@ -146,16 +146,7 @@ private struct FrameSettings: View {
 private struct JournalSettings: View {
     @Environment(AppState.self) private var state
     @State private var confirmClear = false
-    @State private var confirmClearRecordings = false
     @State private var sizeCapMB: Double = 0
-
-    /// Recordings are a developer tool: the section appears only once there
-    /// are some, or while the app is recording into its own directory.
-    private var showsRecordings: Bool {
-        if state.recordingStats != nil { return true }
-        if case .record(let directory) = state.clientMode { return directory.standardizedFileURL == state.recordingsURL.standardizedFileURL }
-        return false
-    }
 
     var body: some View {
         @Bindable var state = state
@@ -203,56 +194,8 @@ private struct JournalSettings: View {
                     }
                 }
             }
-            if showsRecordings {
-                Section {
-                    LabeledContent("Location") {
-                        Text(state.recordingsURL.path)
-                            .textSelection(.enabled)
-                            .multilineTextAlignment(.trailing)
-                    }
-                    LabeledContent("Contents") {
-                        if let stats = state.recordingStats {
-                            Text("\(Plural.count(stats.count, "recorded call", "recorded calls")), \(Formatting.bytes(stats.bytes))")
-                                .monospacedDigit()
-                        } else {
-                            Text("None yet")
-                        }
-                    }
-                    if let error = state.recordingsError {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundStyle(.red)
-                    }
-                    HStack {
-                        Button("Reveal in Finder") {
-                            NSWorkspace.shared.activateFileViewerSelecting([state.recordingsURL])
-                        }
-                        .disabled(state.recordingStats == nil)
-                        Spacer()
-                        Button("Clear Recordings…", role: .destructive) {
-                            confirmClearRecordings = true
-                        }
-                        .disabled(state.recordingStats == nil)
-                    }
-                } header: {
-                    Text("Recorded model calls")
-                } footer: {
-                    Text("Written by Mentor --record. Each file holds a whole request, including the screen text and screenshot it sent, and the answer. They stay on this Mac and are not part of the journal.")
-                }
-            }
         }
         .formStyle(.grouped)
-        .confirmationDialog(
-            "Clear the recorded model calls?",
-            isPresented: $confirmClearRecordings,
-            titleVisibility: .visible
-        ) {
-            Button("Clear Recordings", role: .destructive) {
-                state.clearRecordings()
-            }
-        } message: {
-            Text("\(Plural.count(state.recordingStats?.count ?? 0, "recorded call is", "recorded calls are")) deleted from this Mac. This cannot be undone.")
-        }
         .confirmationDialog(
             "Clear the activity journal?",
             isPresented: $confirmClear,
@@ -267,7 +210,6 @@ private struct JournalSettings: View {
         .task {
             sizeCapMB = Double(state.settings.journalSizeCapBytes / (1024 * 1024))
             await state.refreshJournalStats()
-            state.refreshRecordingStats()
         }
     }
 

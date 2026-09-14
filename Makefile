@@ -5,8 +5,10 @@ REPLAY_DIR ?= Tests/MentorCoreTests/Fixtures/Replay
 RECORD_DIR ?=
 ## Set to 1 to replay fixtures recorded with an older prompt version
 ALLOW_STALE ?=
+## The app's own recordings directory, where `make record` writes by default
+RECORDINGS := $(HOME)/Library/Application Support/mentor/recordings
 
-.PHONY: build run run-replay record test clean measure
+.PHONY: build run run-replay record clear-recordings fixture-status test clean measure
 
 ## Build the .app bundle into build/Mentor.app
 build:
@@ -18,17 +20,31 @@ run: build
 	open build/Mentor.app
 
 ## Build and launch the app answering every model call from recorded fixtures:
-## no network, no API key, no spend (see README, "Iterating without the network")
+## no network, no API key, no spend (see README, "Iterating without the network").
+## A leading ~ in REPLAY_DIR or RECORD_DIR is expanded here, because zsh leaves it after `=`.
 run-replay: build
 	@pkill -x Mentor 2>/dev/null || true
-	@test -d "$(REPLAY_DIR)" || { echo "run-replay: no fixture directory at $(REPLAY_DIR)" >&2; exit 1; }
-	open build/Mentor.app --args --replay "$$(cd "$(REPLAY_DIR)" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures)
+	@dir="$(REPLAY_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
+	test -d "$$dir" || { echo "run-replay: no fixture directory at $$dir" >&2; exit 1; }; \
+	open build/Mentor.app --args --replay "$$(cd "$$dir" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures)
 
 ## Build and launch the app live, writing every model call to a fixture file.
 ## This spends API credits: use it only to record fixtures on purpose.
 record: build
 	@pkill -x Mentor 2>/dev/null || true
-	open build/Mentor.app --args --record $(if $(RECORD_DIR),"$$(mkdir -p "$(RECORD_DIR)" && cd "$(RECORD_DIR)" && pwd)")
+	@dir="$(RECORD_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
+	if [ -n "$$dir" ]; then mkdir -p -m 700 "$$dir" && dir="$$(cd "$$dir" && pwd)" || exit 1; fi; \
+	open build/Mentor.app --args --record $${dir:+"$$dir"}
+
+## Delete the app's own recordings directory and every recorded call in it
+clear-recordings:
+	rm -rf "$(RECORDINGS)"
+
+## Report whether the committed fixtures are current: each fixture recorded with
+## another prompt version, and each tier with no fixture. Never fails on either,
+## and makes no network call.
+fixture-status:
+	swift test --filter theCommittedFixtureStatus
 
 ## Run the unit tests
 test:

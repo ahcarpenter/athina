@@ -23,9 +23,6 @@ public actor RecordingClaudeClient: ClaudeClient {
         self.prices = prices
     }
 
-    /// Recording a replay records a replay.
-    public nonisolated var isReplay: Bool { inner.isReplay }
-
     public func send(_ request: MessagesRequest, call: CallIdentity, apiKey: String, timeout: TimeInterval) async throws -> MessagesResponse {
         let started = Date()
         let clock = ContinuousClock.now
@@ -48,7 +45,7 @@ public actor RecordingClaudeClient: ClaudeClient {
             request: request,
             result: result,
             latency: Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18,
-            cost: inner.isReplay ? 0 : (prices.cost(of: usage, model: request.model) ?? 0)
+            cost: prices.cost(of: usage, model: request.model) ?? 0
         )
         do {
             let url = try CallFixtureFiles.write(fixture, to: directory, redacting: apiKey)

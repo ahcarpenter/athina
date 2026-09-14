@@ -18,7 +18,7 @@ public struct CallFixture: Equatable, Sendable {
     public var result: Result<MessagesResponse, ClaudeClientError>
     /// Seconds the call took when it was recorded.
     public var latency: TimeInterval
-    /// Estimated dollars when it was recorded; zero when it was itself a replay.
+    /// Estimated dollars when it was recorded.
     public var cost: Double
 
     public init(
@@ -204,26 +204,6 @@ public enum CallFixtureFiles {
         }
     }
 
-    /// How many fixtures a directory holds and their total size, or nil when
-    /// it holds none.
-    public static func stats(of directory: URL) -> (count: Int, bytes: Int64)? {
-        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return nil }
-        var count = 0
-        var bytes: Int64 = 0
-        for name in names where name.hasSuffix(".json") {
-            count += 1
-            let attributes = try? FileManager.default.attributesOfItem(atPath: directory.appendingPathComponent(name).path)
-            bytes += (attributes?[.size] as? NSNumber)?.int64Value ?? 0
-        }
-        return count == 0 ? nil : (count, bytes)
-    }
-
-    /// Deletes the recordings directory and everything in it. The recorder
-    /// creates it again on its next call.
-    public static func clear(_ directory: URL) throws {
-        guard FileManager.default.fileExists(atPath: directory.path) else { return }
-        try FileManager.default.removeItem(at: directory)
-    }
 }
 
 /// Why a directory of fixtures could not be replayed.

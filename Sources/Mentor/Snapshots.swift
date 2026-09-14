@@ -39,7 +39,6 @@ enum Snapshots {
             ("debug-panel-replay", CGSize(width: 1180, height: 760), AnyView(DebugPanelView()), replay),
             ("debug-panel-calls-replay", CGSize(width: 1180, height: 760), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
             ("settings-mentor-replay", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .mentor)), replay),
-            ("settings-journal-recordings", CGSize(width: 600, height: 760), AnyView(SettingsView(initialTab: .journal)), replay),
         ]
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             for spec in specs {
@@ -263,7 +262,7 @@ extension AppState {
 
 extension AppState {
     /// The sample in replay mode: every call in the log answered from the
-    /// committed fixtures, nothing billed, and some recordings on disk.
+    /// committed fixtures and nothing billed.
     static func sampleReplay() -> AppState {
         let live = sample()
         let directory = URL(fileURLWithPath: NSHomeDirectory())
@@ -283,7 +282,6 @@ extension AppState {
         state.replaySummary = ReplaySummary(
             directory: directory, countsByKind: ["triage": 5, "mentor": 3, "test": 1], promptVersion: MentorPrompts.version
         )
-        state.recordingStats = (count: 14, bytes: 1_730_000)
         state.callLog = live.callLog.map { call in
             var replayed = call
             replayed.replayed = true

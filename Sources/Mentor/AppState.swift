@@ -71,8 +71,9 @@ final class AppState {
 
     /// Whether the permissions window should open at launch.
     let needsPermissionsOnboarding: Bool
-    let journalURL = Journal.defaultURL()
-    let settingsURL = SettingsStore.defaultURL()
+    /// The live files, or a replay's own (`AppPaths.dataDirectory(for:)`).
+    let journalURL: URL
+    let settingsURL: URL
 
     // MARK: Model client mode
 
@@ -80,11 +81,6 @@ final class AppState {
     let clientMode: ModelClientMode
     /// What a replay is serving from, once the loop has started.
     var replaySummary: ReplaySummary?
-    /// Where the app writes recordings when `--record` names no directory.
-    let recordingsURL = CallFixtureFiles.defaultRecordingDirectory()
-    /// Fixture count and bytes in `recordingsURL`, nil when it holds none.
-    var recordingStats: (count: Int, bytes: Int64)?
-    private(set) var recordingsError: String?
 
     private let store: SettingsStore
     private let keyStore: any KeyStore
@@ -104,8 +100,11 @@ final class AppState {
     private let toast = ToastController()
 
     private init() {
-        store = SettingsStore(url: SettingsStore.defaultURL())
         clientMode = ModelClientMode(arguments: CommandLine.arguments)
+        let dataDirectory = AppPaths.dataDirectory(for: clientMode)
+        journalURL = Journal.defaultURL(in: dataDirectory)
+        settingsURL = SettingsStore.defaultURL(in: dataDirectory)
+        store = SettingsStore(url: settingsURL)
         // Neither a replay nor a snapshot render needs a key, so neither reads
         // the keychain, and its per-build access prompt never blocks them.
         keyStore = clientMode.isOffline || Snapshots.isActive ? InMemoryKeyStore() : KeychainKeyStore()
@@ -121,6 +120,9 @@ final class AppState {
     init(sampleWithSettings settings: SensingSettings, clientMode: ModelClientMode = .live) {
         store = SettingsStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("mentor-sample-settings.json"))
         self.clientMode = clientMode
+        let dataDirectory = AppPaths.dataDirectory(for: clientMode)
+        journalURL = Journal.defaultURL(in: dataDirectory)
+        settingsURL = SettingsStore.defaultURL(in: dataDirectory)
         keyStore = clientMode.isOffline ? InMemoryKeyStore() : InMemoryKeyStore(key: "sk-ant-sample-key-0000-7Q2x")
         isSample = true
         self.settings = settings
@@ -157,7 +159,6 @@ final class AppState {
         let clientSetup = clientMode.makeClient(prices: settings.mentor.prices)
         replaySummary = clientSetup.replay
         AppState.log.notice("model calls: \(self.clientModeLog, privacy: .public)")
-        refreshRecordingStats()
         toast.onAction = { [weak self] id, feedback in
             self?.respond(to: id, with: feedback)
         }
@@ -280,26 +281,6 @@ final class AppState {
         guard let observation = try? await journal.observation(id: id) else { return nil }
         let jpeg = try? await journal.thumbnail(observationID: id)
         return (observation, jpeg.flatMap(NSImage.init(data:)))
-    }
-
-    // MARK: Recordings
-
-    func refreshRecordingStats() {
-        guard !isSample else { return }
-        recordingStats = CallFixtureFiles.stats(of: recordingsURL)
-    }
-
-    /// Deletes every recording in the app's recordings directory. A recording
-    /// run carries on and starts the directory again with its next call.
-    func clearRecordings() {
-        do {
-            try CallFixtureFiles.clear(recordingsURL)
-            recordingsError = nil
-            AppState.log.notice("recordings cleared")
-        } catch {
-            recordingsError = "Could not clear the recordings: \(error.localizedDescription)"
-        }
-        refreshRecordingStats()
     }
 
     // MARK: API key
@@ -606,7 +587,6 @@ final class AppState {
                 suggestionHistory[index] = suggestion
             }
         case .call(let record):
-            if case .record = clientMode { refreshRecordingStats() }
             callLog.insert(record, at: 0)
             if callLog.count > AppState.callLogLimit {
                 callLog.removeLast(callLog.count - AppState.callLogLimit)
