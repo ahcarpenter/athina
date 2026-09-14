@@ -806,7 +806,7 @@ private struct MentorCard: View {
         let model = ModelCatalog.displayName(for: record.model)
         var text = "\(record.outcome.label) \(Formatting.age(record.timestamp, now: now)), \(record.replayed ? "replay of \(model)" : model), "
         text += "\(Formatting.tokens(record.usage.totalInputTokens)) in (\(Formatting.tokens(record.usage.cacheReadInputTokens)) cached), \(Formatting.tokens(record.usage.outputTokens)) out, "
-        text += "\(record.replayed ? "not billed" : Formatting.dollars(record.cost)), \(Formatting.seconds(record.latency))"
+        text += "\(record.replayed ? Formatting.unbroken("not billed") : Formatting.dollars(record.cost)), \(Formatting.seconds(record.latency))"
         if let detail = record.detail, !detail.isEmpty { text += "\n\(detail)" }
         return text
     }
@@ -924,12 +924,15 @@ private struct CallLogRow: View {
         .padding(.vertical, 5)
     }
 
+    /// Each number stays on the line with its unit, and "not billed" stays whole,
+    /// wherever the narrow column wraps.
     private var metrics: String {
-        var line = "\(Formatting.tokens(call.usage.totalInputTokens)) in"
-        if call.usage.cacheReadInputTokens > 0 { line += " (\(Formatting.tokens(call.usage.cacheReadInputTokens)) cached)" }
-        line += ", \(Formatting.tokens(call.usage.outputTokens)) out, \(call.replayed ? "not billed" : Formatting.dollars(call.cost)), \(Formatting.seconds(call.latency))"
-        var prompt = "prompt \(Formatting.tokens(call.promptCharacters)) chars"
-        if call.imageBytes > 0 { prompt += " + \(Formatting.bytes(Int64(call.imageBytes))) image" }
+        var line = Formatting.unbroken("\(Formatting.tokens(call.usage.totalInputTokens)) in")
+        if call.usage.cacheReadInputTokens > 0 { line += " (" + Formatting.unbroken("\(Formatting.tokens(call.usage.cacheReadInputTokens)) cached") + ")" }
+        line += ", " + Formatting.unbroken("\(Formatting.tokens(call.usage.outputTokens)) out")
+        line += ", \(call.replayed ? Formatting.unbroken("not billed") : Formatting.dollars(call.cost)), \(Formatting.seconds(call.latency))"
+        var prompt = "prompt " + Formatting.unbroken("\(Formatting.tokens(call.promptCharacters)) chars")
+        if call.imageBytes > 0 { prompt += " + " + Formatting.unbroken("\(Formatting.bytes(Int64(call.imageBytes))) image") }
         return line + "\n" + prompt
     }
 

@@ -106,9 +106,9 @@ final class AppState {
     private init() {
         store = SettingsStore(url: SettingsStore.defaultURL())
         clientMode = ModelClientMode(arguments: CommandLine.arguments)
-        // A replay needs no key, so the keychain is never read and its
-        // per-build access prompt never appears.
-        keyStore = clientMode.isOffline ? InMemoryKeyStore() : KeychainKeyStore()
+        // Neither a replay nor a snapshot render needs a key, so neither reads
+        // the keychain, and its per-build access prompt never blocks them.
+        keyStore = clientMode.isOffline || Snapshots.isActive ? InMemoryKeyStore() : KeychainKeyStore()
         isSample = false
         settings = store.load()
         let status = PermissionProbe.current()

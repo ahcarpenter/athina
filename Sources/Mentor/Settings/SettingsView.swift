@@ -251,7 +251,7 @@ private struct JournalSettings: View {
                 state.clearRecordings()
             }
         } message: {
-            Text("Every recording in \(Formatting.path(state.recordingsURL)) is deleted. This cannot be undone.")
+            Text("\(Plural.count(state.recordingStats?.count ?? 0, "recorded call is", "recorded calls are")) deleted from this Mac. This cannot be undone.")
         }
         .confirmationDialog(
             "Clear the activity journal?",

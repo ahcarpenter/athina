@@ -36,7 +36,8 @@ There is no Xcode project. `Package.swift` defines the targets and
 
 `Mentor --snapshot <dir>` renders every window with sample data to PNG files
 (light and dark) without starting the pipeline or calling any model. It is how
-UI changes get checked without a person at the screen; it needs no permissions.
+UI changes get checked without a person at the screen; it needs no permissions
+and never reads the keychain. Replay mode has renders of its own.
 `open build/Mentor.app --args --open debug` (or `settings`, `settings:mentor`,
 `permissions`, `history`) launches the app with that window already open, which
 is how the live panel gets screenshotted from a shell. `--replay <dir>` and
@@ -172,12 +173,20 @@ lead to, the suggestion, its feedback, the journal rows, zero spend, and the
 cycle starting over. The same tests fail when a fixture is stale, when a call
 kind has no fixture, or when a file carries anything shaped like a key.
 
-To record the set again, for instance after a prompt change: stage a synthetic
-scenario of your own in a real window that fills the display, run `make record
-RECORD_DIR=recordings`, drive it through a quiet moment, a moment worth a look
-that yields a shown suggestion, and a Test Connection, then quit. Read every
-file, text and screenshot, before copying the ones you keep into the fixture
-directory, delete the recordings, and run `swift test`.
+To record the set again, for instance after a prompt change:
+
+1. Quit Mentor and move the journal aside (keep it to put back). Triage and
+   mentor requests carry recent journal events and screens, so a recording made
+   on a lived-in journal carries that history too.
+2. Stage a synthetic scenario in real windows that fill the display (the
+   documents in the fixture directory's `scenario/` folder work), and add every
+   other running app to Settings > Privacy > Excluded apps.
+3. Run `make record RECORD_DIR=recordings`, drive it through a moment worth a
+   look that yields a shown suggestion, a quiet moment, and a Test Connection,
+   then quit.
+4. Read every file, text and screenshot, copy the ones you keep into the
+   fixture directory, delete the rest, put the journal and settings back, and
+   run `swift test`.
 
 `ScriptedClaudeClient` stays for unit tests that need one exact hand-written
 answer, such as a refusal, an unparseable reply, or a slow call.

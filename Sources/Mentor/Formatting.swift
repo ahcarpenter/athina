@@ -37,6 +37,12 @@ enum Formatting {
         return "\(Int(interval / 86400))d"
     }
 
+    /// The text with its spaces made non-breaking, so a wrapping label never
+    /// splits a number from its unit or a short phrase in two.
+    static func unbroken(_ text: String) -> String {
+        text.replacingOccurrences(of: " ", with: "\u{00A0}")
+    }
+
     /// A path with the home directory shown as a tilde.
     static func path(_ url: URL) -> String {
         (url.path as NSString).abbreviatingWithTildeInPath
