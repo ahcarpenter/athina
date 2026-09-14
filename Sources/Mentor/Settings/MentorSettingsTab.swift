@@ -246,7 +246,7 @@ private struct SpendSection: View {
                 help: "Both cadences slow as the hour's estimated spend approaches this, and calls stop at it until the clock hour rolls over."
             )
             LabeledContent("This hour") {
-                Text("\(Formatting.dollars(state.mentorStatus.spendThisHour)) over \(state.mentorStatus.callsThisHour) calls, cadence \(Formatting.multiplier(state.mentorStatus.cadenceMultiplier))")
+                Text("\(Formatting.dollars(state.mentorStatus.spendThisHour)) over \(Plural.count(state.mentorStatus.callsThisHour, "call", "calls")), cadence \(Formatting.multiplier(state.mentorStatus.cadenceMultiplier))")
                     .monospacedDigit()
             }
             PriceTableEditor(table: $state.settings.mentor.prices)
