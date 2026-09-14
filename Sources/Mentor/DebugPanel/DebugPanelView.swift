@@ -712,6 +712,7 @@ private struct MentorCard: View {
                     Field(label: "Transcript", value: transcript(now: context.date), lineLimit: 4)
                 }
             }
+            TalkBackField()
         }
     }
 
@@ -862,6 +863,42 @@ private struct MentorCard: View {
             parts.append("mentor allowed \(Formatting.countdown(to: next, now: now))")
         }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// Typed words down the push-to-talk path: a transcript that is one of the
+/// toast's answers answers it, anything else is a follow-up question. For
+/// checking talk-back, and recording a follow-up, without a microphone.
+private struct TalkBackField: View {
+    @Environment(AppState.self) private var state
+    @State private var text = ""
+
+    private var canSend: Bool {
+        state.canTalkBackTyped && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("Talk back")
+                .foregroundStyle(.secondary)
+                .frame(width: 78, alignment: .trailing)
+            TextField("Type what you would say", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(send)
+                .accessibilityLabel("Talk back")
+            Button("Send", action: send)
+                .disabled(!canSend)
+        }
+        .font(.callout)
+        .controlSize(.small)
+        .padding(.top, 2)
+        .help("Sends these words the way releasing the talk-back key sends what you said, to the toast that is up or the last suggestion.")
+    }
+
+    private func send() {
+        guard canSend else { return }
+        state.talkBack(typed: text)
+        text = ""
     }
 }
 

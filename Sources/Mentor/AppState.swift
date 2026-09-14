@@ -750,16 +750,7 @@ final class AppState {
             toast.showNote("Mentor is \(mode.label.lowercased()), so it is not listening.")
             return
         }
-        let suggestion: Suggestion
-        if let active = activeSuggestion {
-            suggestion = active
-        } else {
-            suggestion = suggestionHistory[0]
-            show(suggestion, autoExpires: false)
-        }
-        // An exchange keeps the toast up until it is closed, like expanding it.
-        cancelToastExpiry()
-        speech.stop()
+        guard let suggestion = suggestionToTalkTo() else { return }
         do {
             try listener.start { [weak self] partial in
                 guard let self, case .listening = self.talkBack else { return }
@@ -777,6 +768,42 @@ final class AppState {
             guard !Task.isCancelled, let self, case .listening = self.talkBack else { return }
             self.pushToTalkReleased()
         }
+    }
+
+    /// The suggestion a reply is about: the toast that is up, or the most
+    /// recent suggestion brought back as a toast that stays until it is
+    /// closed. An exchange keeps the toast up, like expanding it, so its
+    /// countdown stops, and anything being spoken stops. Nil, with a note,
+    /// when Mentor has not made a suggestion yet.
+    private func suggestionToTalkTo() -> Suggestion? {
+        let suggestion: Suggestion
+        if let active = activeSuggestion {
+            suggestion = active
+        } else if let latest = suggestionHistory.first {
+            suggestion = latest
+            show(latest, autoExpires: false)
+        } else {
+            toast.showNote("Nothing to reply to yet: Mentor has not made a suggestion.")
+            return nil
+        }
+        cancelToastExpiry()
+        speech.stop()
+        return suggestion
+    }
+
+    /// Whether the debug panel's Talk back field may send now.
+    var canTalkBackTyped: Bool {
+        talkBack == .idle && (activeSuggestion != nil || !suggestionHistory.isEmpty)
+    }
+
+    /// The debug panel's Talk back field: typed words take the path a released
+    /// key does, from transcript matching to the follow-up call, the answer in
+    /// the toast, and speech. It is how the follow-up path is checked, and a
+    /// follow-up fixture recorded, on a Mac without a microphone grant.
+    func talkBack(typed text: String) {
+        guard canTalkBackTyped, let suggestion = suggestionToTalkTo() else { return }
+        AppState.log.notice("typed talk-back for suggestion \(suggestion.id)")
+        Task { await act(on: text, for: suggestion) }
     }
 
     /// The key came up: finish the transcript and act on it.
@@ -807,6 +834,13 @@ final class AppState {
             setTalkBack(.idle)
             return
         }
+        await act(on: text, for: suggestion)
+    }
+
+    /// What a transcript, heard or typed, does: one of the toast's answers, or
+    /// one follow-up question whose answer lands in the toast and is spoken
+    /// when Speak suggestions is on.
+    private func act(on text: String?, for suggestion: Suggestion) async {
         guard let text, let match = TranscriptMatcher.match(text) else {
             lastTranscript = TranscriptRecord(at: Date(), text: text ?? "", handling: "nothing heard")
             setTalkBack(.idle)

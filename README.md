@@ -538,6 +538,12 @@ talk to. The history window shows the full exchange under each suggestion,
 and the debug panel's Mentor card shows the last transcript and what was done
 with it.
 
+The Mentor card also has a **Talk back** field. Words typed there and sent take
+exactly the path a released key does, from transcript matching to the
+follow-up call, the answer in the toast, and speech, so the whole path can be
+checked, in a replay or while recording a follow-up fixture, on a Mac where
+Microphone and Speech Recognition are not granted.
+
 ### Mentorship contexts
 
 Settings > Mentor > Mentorship contexts is where you say what you want
@@ -601,8 +607,9 @@ counted (see Iterating without the network).
   while the talk-back key is held, and only the system's on-device recognizer
   ever hears it; audio is never stored. Spoken suggestions are synthesized
   here. The one exception is deliberate: a transcript you spoke while holding
-  the key, when it is not one of the toast's answers, is sent to the mentor
-  tier as your follow-up question, together with the suggestion it is about,
+  the key (or typed into the debug panel's Talk back field), when it is not
+  one of the toast's answers, is sent to the mentor tier as your follow-up
+  question, together with the suggestion it is about,
   the earlier questions and answers on that suggestion, and the recognized
   text of the screen the suggestion was made from. Transcripts are journaled
   locally with the answers so the history window can show the exchange.

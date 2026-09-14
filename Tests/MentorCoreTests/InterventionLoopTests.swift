@@ -196,3 +196,133 @@ import Testing
         #expect(await h.loop.noteDelivery(suggestionID: 404, spoken: true) == nil)
     }
 }
+
+/// The committed replay fixtures carry this phase's two new paths: a mentor
+/// reply whose region places a callout, and a follow-up answer. Both run
+/// through the loop the app runs, from recordings, with no network and no spend.
+@Suite struct ReplayInterventionTests {
+    /// The frame size the recorded mentor request told the model about.
+    static func recordedFrameSize(of request: MessagesRequest) -> (width: Int, height: Int)? {
+        for message in request.messages {
+            for block in message.content {
+                guard case .text(let text) = block,
+                      let match = text.firstMatch(of: /latest screen, (\d+) by (\d+) pixels/),
+                      let width = Int(match.1), let height = Int(match.2)
+                else { continue }
+                return (width, height)
+            }
+        }
+        return nil
+    }
+
+    private struct RegionFixture {
+        var triage: ReplayClaudeClient.Entry
+        var mentor: ReplayClaudeClient.Entry
+        var payload: MentorVerdict.Payload
+        var region: MentorVerdict.Payload.Region
+        var frame: (width: Int, height: Int)
+    }
+
+    /// The first shown mentor recording with a region, the triage recording
+    /// that sent a moment to the mentor, and the frame the region is in.
+    private static func regionFixture(in entries: [ReplayClaudeClient.Entry]) throws -> RegionFixture {
+        let triage = try #require(entries.first { entry in
+            entry.fixture.identity.kind == ModelTier.triage.rawValue
+                && ((try? entry.fixture.result.get()).flatMap { MentorLoop.decode(TriageVerdict.self, from: $0) }?.worthALook ?? false)
+        }, "a triage recording must send a moment to the mentor")
+        for entry in entries where entry.fixture.identity.kind == ModelTier.mentor.rawValue {
+            guard let response = try? entry.fixture.result.get(),
+                  let verdict = MentorLoop.decode(MentorVerdict.self, from: response),
+                  let payload = verdict.suggestion, payload.confidence >= MentorSettings().minimumConfidence,
+                  let region = payload.region,
+                  let frame = recordedFrameSize(of: entry.fixture.request)
+            else { continue }
+            return RegionFixture(triage: triage, mentor: entry, payload: payload, region: region, frame: frame)
+        }
+        Issue.record("a shown mentor recording must carry a region, recorded from a request that states its frame size")
+        throw CancellationError()
+    }
+
+    @Test func theCommittedFixturesCarryARegionInsideItsFrameAndAFollowUpAnswer() throws {
+        let client = try ReplayClaudeClient.load(from: try ReplayLoopTests.committedFixturesDirectory())
+        let fixture = try Self.regionFixture(in: client.entries)
+        let frame = FrameInfo(
+            hash: PerceptualHash(words: [0, 0, 0, 0]), width: fixture.frame.width, height: fixture.frame.height,
+            displayID: 1, screenRect: CGRect(x: 0, y: 0, width: 1728, height: 1117), jpeg: nil
+        )
+        #expect(CalloutAnchor.screenRect(for: fixture.region.rect, in: frame) != nil, "the recorded region must lie inside the recorded frame")
+        #expect(!fixture.region.note.trimmingCharacters(in: .whitespaces).isEmpty)
+
+        let answers = client.entries.filter { $0.fixture.identity.kind == ModelTier.followUp.rawValue }.compactMap { entry in
+            (try? entry.fixture.result.get()).flatMap { MentorLoop.decode(FollowUpReply.self, from: $0) }
+        }
+        #expect(answers.contains { !$0.answer.isEmpty }, "a follow-up recording must carry an answer")
+    }
+
+    @Test func aReplayedRegionPlacesACalloutAndAReplayedFollowUpIsAnswered() async throws {
+        let committed = try ReplayClaudeClient.load(from: try ReplayLoopTests.committedFixturesDirectory())
+        let fixture = try Self.regionFixture(in: committed.entries)
+        let followUps = committed.entries.filter { $0.fixture.identity.kind == ModelTier.followUp.rawValue }
+        let recordedAnswer = try #require(followUps.first.flatMap { (try? $0.fixture.result.get()).flatMap { MentorLoop.decode(FollowUpReply.self, from: $0) } })
+        // Only what this path needs, in the order it needs it.
+        let client = ReplayClaudeClient(entries: [fixture.triage, fixture.mentor] + followUps)
+
+        let journal = try Journal.inMemory()
+        let (stream, input) = AsyncStream<SensingEvent>.makeStream()
+        let loop = MentorLoop(settings: MentorSettings(), journal: journal, client: client, keyStore: InMemoryKeyStore(), events: stream)
+        let output = await loop.events()
+        await loop.start()
+        input.yield(.modeChanged(.watching))
+
+        // A screen like the recorded one: the display the frame shows, the
+        // window filling it, and the screenshot sent to the mentor tier.
+        let display = CGRect(x: 0, y: 0, width: 1728, height: 1117)
+        var observation = try await journal.record(Fixtures.observation(at: Date(), jpeg: Data(repeating: 1, count: 64)))
+        observation.frame.width = fixture.frame.width
+        observation.frame.height = fixture.frame.height
+        observation.frame.screenRect = display
+        observation.focus.windowFrame = display
+        input.yield(.observation(observation))
+
+        let shown = await withTaskGroup(of: Suggestion?.self) { group in
+            group.addTask {
+                for await event in output {
+                    if case .suggestion(let suggestion) = event { return suggestion }
+                }
+                return nil
+            }
+            group.addTask {
+                try? await Task.sleep(for: .seconds(5))
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        let suggestion = try #require(shown)
+        let expectedRegion = CalloutRegion(rect: fixture.region.rect, note: fixture.region.note.withPlainDashes.trimmingCharacters(in: .whitespacesAndNewlines))
+        #expect(suggestion.title == fixture.payload.title.withPlainDashes)
+        #expect(suggestion.region == expectedRegion)
+        #expect(try await journal.suggestion(id: suggestion.id)?.region == expectedRegion)
+
+        // The replayed region places a callout on this screen exactly where it maps.
+        let live = CalloutAnchor.Live(frontmostPID: observation.focus.pid, focus: observation.focus, displays: [DisplayBounds(id: 1, bounds: display)], now: Date())
+        let placement = try CalloutAnchor.resolve(expectedRegion, for: observation, live: live).get()
+        #expect(placement.screenRect == CalloutAnchor.screenRect(for: expectedRegion.rect, in: observation.frame))
+        #expect(placement.note == expectedRegion.note)
+
+        // A follow-up about it is answered from the recording, journaled as a replay, and never billed.
+        let followUp = await loop.askFollowUp(about: suggestion, question: "which line do you mean")
+        #expect(followUp.answer == recordedAnswer.answer.withPlainDashes.trimmingCharacters(in: .whitespacesAndNewlines))
+        #expect(followUp.error == nil)
+        let call = try #require(try await journal.recentModelCalls(limit: 1).first)
+        #expect(call.tier == .followUp)
+        #expect(call.outcome == .answered)
+        #expect(call.replayed)
+        #expect(call.cost == 0)
+        #expect(await client.served.map(\.call.kind) == ["triage", "mentor", "followUp"])
+        #expect(await loop.currentStatus().spendThisHour == 0)
+        #expect(try await journal.followUps(suggestionID: suggestion.id) == [followUp])
+        await loop.stop()
+    }
+}
