@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Subscribes to the sensing stream, runs the two Claude tiers behind
+/// Subscribes to the sensing stream, runs the three Claude tiers behind
 /// `MentorScheduler`'s gates, accounts spend, and publishes suggestions.
 ///
 /// Everything that reaches the network passes through `perform`, which is the

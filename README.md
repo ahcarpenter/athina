@@ -422,10 +422,11 @@ each kept observation it runs, in order:
    sent.
 
 5. **Delivery.** A suggestion under `minimumConfidence`, in a snoozed or
-   never-for-this category, or with an empty title or body is logged and
-   dropped. Otherwise it is journaled and
-   shown as a toast: a floating, non-activating panel under the menu bar that
-   never takes keyboard focus and auto-dismisses after `toastTimeout` (60 s;
+   never-for-this category, with an empty title or body, or in a goal category
+   with no goal to judge against (see Standing understanding) is logged and
+   dropped. Otherwise it is journaled and shown as a toast: a floating,
+   non-activating panel under the menu bar that never takes keyboard focus and
+   auto-dismisses after `toastTimeout` (60 s;
    the countdown pauses while the pointer is over it). Closing it with the x,
    or a mouse-down in any other window or on the desktop, is journaled as
    dismissed, a timeout or quitting the app with the toast still up as
@@ -439,10 +440,11 @@ each kept observation it runs, in order:
    journaled, and the history window (menu > Suggestions) lists them with
    time, app, category, feedback, and full text.
 
-Both system prompts and both output schemas live in `Prompts.swift` under a
-version number that is stored with every call and suggestion. Each system
-prompt carries a `cache_control` marker, and the request encoder sorts keys so
-the cached prefix is byte identical between calls. Caching only engages above
+The system prompts and output schemas of every tier live in
+`Prompts.swift` under a version number that is stored with every call and
+suggestion. Each system prompt carries a `cache_control` marker, and the
+request encoder sorts keys so the cached prefix is byte identical between
+calls. Caching only engages above
 a model's minimum cacheable prefix (512 tokens on Claude Fable 5.1 and Opus 5,
 1024 on Sonnet 5, 4096 on Haiku 4.5), so in practice the mentor prompt is
 served from cache within its five-minute window and the small triage prompt
@@ -621,7 +623,7 @@ settings section, the menu, and the debug panel all say so.
 
 To keep an app from being looked at at all, exclude it in Settings > Privacy >
 Excluded apps: while an excluded app is frontmost nothing is captured, so
-nothing about it can reach either tier.
+nothing about it can reach any tier.
 
 The menu bar menu shows the current verdict (`Context: inside "writing Swift"`,
 or why it is out) while it is still about the frontmost app, and
@@ -718,9 +720,9 @@ Every response's usage fields (`input_tokens`, `output_tokens`,
 table in Settings > Mentor (dollars per million tokens, defaults checked
 against Anthropic's pricing page on the date shown there, editable) and added
 to a per-clock-hour total. As the total approaches `hourlySpendCap` ($1 by
-default) both minimum intervals stretch by `1 / (1 - spent / cap)`, capped at
-8x: 2x at half the cap, 4x at three quarters. At the cap no call is made until
-the next clock hour. The hour's total is seeded from the journal at launch, so
+default) both minimum intervals and the refresh interval stretch by
+`1 / (1 - spent / cap)`, capped at 8x: 2x at half the cap, 4x at three
+quarters. At the cap no call is made until the next clock hour. The hour's total is seeded from the journal at launch, so
 relaunching does not reset it. Spend this hour shows in the menu, the debug
 panel status bar, and the Mentor card. Replayed calls cost nothing and are never
 counted (see Iterating without the network).
@@ -755,11 +757,11 @@ counted (see Iterating without the network).
   which case the mentor tier receives text only. While mentorship contexts
   are enforced, the mentor tier also receives the name and description of the
   declared context the moment was placed in. The understanding refresh tier
-  receives the current record, the screens since it was last written (the
-  oldest left out, and said so, when they exceed the window's token budget),
-  the event summary, and the titles and categories of recent suggestions with
-  the user's answers; never an image. All three tiers also receive the
-  standing understanding itself, which is the model's own prose about the
+  receives the current record, every screen journaled since its last write
+  read the journal (the oldest left out, and said so, when they exceed the
+  window's token budget), the event summary, and the app, title, and category
+  of recent suggestions with the user's answers; never an image. The triage,
+  mentor, and refresh tiers also receive the standing understanding itself, which is the model's own prose about the
   work, never raw screen text. Nothing else is sent: no file names, no
   keystrokes, no earlier thumbnails, no key.
 - **The understanding is model-written prose about the work**, kept in the
@@ -784,9 +786,9 @@ counted (see Iterating without the network).
 - **Excluded apps** (Settings > Privacy) default to Keychain Access, Passwords,
   and common password managers. While one is frontmost Mentor captures no frame,
   reads no window title or element, runs no OCR, and journals only that the app
-  was excluded, so nothing from them can reach either tier.
+  was excluded, so nothing from them can reach any tier.
 - Secure text fields are never read, even in non-excluded apps, so their
-  contents never reach either tier.
+  contents never reach any tier.
 - Model calls are journaled as counts (tokens, cost, latency, outcome) with the
   model's one-line reason, or the first line of a follow-up answer, never with
   the prompt or the screen text that was sent.

@@ -171,7 +171,7 @@ public struct MentorScheduler: Equatable, Sendable {
         return .run
     }
 
-    /// Everything that blocks both tiers regardless of the observation.
+    /// Everything that blocks every tier regardless of the observation.
     public func availabilityHold(conditions: Conditions) -> Hold? {
         guard settings.enabled else { return .disabled }
         switch conditions.mode {
@@ -188,7 +188,7 @@ public struct MentorScheduler: Equatable, Sendable {
     }
 
     /// What the declared contexts decide before any call: enforcing an empty
-    /// list means no activity can ever be inside, so neither tier should spend
+    /// list means no activity can ever be inside, so no tier should spend
     /// anything.
     public func contextHold() -> Hold? {
         guard settings.onlyMentorInsideContexts, settings.contexts.isEmpty else { return nil }
@@ -320,7 +320,7 @@ public struct MentorScheduler: Equatable, Sendable {
         if let hold = contextHold() { return .hold(.unavailable(hold)) }
         if let hold = placementHold(context) { return .hold(hold) }
         if conditions.callInFlight { return .hold(.callInFlight) }
-        guard let periodStart, let lastActivityAt else { return .hold(.noNewActivity) }
+        guard let periodStart, lastActivityAt != nil else { return .hold(.noNewActivity) }
         if let next = nextRefreshAllowed(after: periodStart, multiplier: conditions.cadenceMultiplier),
            next > now {
             return .hold(.notDue(until: next))

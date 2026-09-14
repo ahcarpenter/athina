@@ -133,12 +133,12 @@ public enum RollingWindow {
     }
 }
 
-/// Renders the user messages for both tiers. Only text from the journal is
+/// Renders the user messages for every tier. Only text from the journal is
 /// used; the thumbnail is attached separately by the loop when enabled.
 public enum PromptBuilder {
     /// OCR text sent to triage is cut here so a dense screen stays cheap.
     public static let triageTextLimit = 6000
-    /// Events older than this are left out of both summaries.
+    /// Events older than this are left out of every event summary.
     public static let eventWindow: TimeInterval = 600
     public static let eventLimit = 12
 

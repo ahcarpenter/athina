@@ -1,9 +1,9 @@
 import CoreGraphics
 import Foundation
 
-/// The system prompts and output schemas for both tiers, versioned so a call
+/// The system prompts and output schemas for every tier, versioned so a call
 /// log entry can be traced to the exact prompt that produced it. Bump
-/// `version` whenever either prompt or schema changes.
+/// `version` whenever any prompt or schema changes.
 public enum MentorPrompts {
     public static let version = 10
 

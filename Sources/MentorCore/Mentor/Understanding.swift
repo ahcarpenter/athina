@@ -135,8 +135,7 @@ public struct Understanding: Codable, Equatable, Sendable {
 
     // MARK: Rendering
 
-    /// The full record as the mentor tier sees it, as a stable block that stays
-    /// byte identical until the next refresh so it is served from the cache.
+    /// The full record as the mentor and refresh tiers see it.
     public var promptBlock: String {
         var lines: [String] = []
         if goals.isEmpty {
