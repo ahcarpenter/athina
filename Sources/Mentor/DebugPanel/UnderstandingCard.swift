@@ -153,7 +153,8 @@ struct UnderstandingCard: View {
             }
             parts.append("every \(Formatting.duration(mentor.understandingRefreshInterval)) of active use")
         }
-        if let hold = status.lastRefreshHold {
+        // The off position is already the first part; repeating it as a hold says nothing new.
+        if let hold = status.lastRefreshHold, hold.hold != .periodicRefreshOff {
             parts.append("held \(Formatting.age(hold.at, now: now)): \(hold.hold.label)")
         }
         if let record {

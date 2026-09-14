@@ -171,16 +171,17 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     public var mentorModelInfo: ClaudeModel { ModelCatalog.model(id: mentorModel) ?? ModelCatalog.opus5 }
     public var understandingModelInfo: ClaudeModel { ModelCatalog.model(id: understandingModel) ?? ModelCatalog.opus5 }
 
-    /// Settable range for the refresh interval. At the top no periodic refresh
-    /// ever comes due within a day's work, so only mentor calls refresh.
+    /// Settable range for the refresh interval. The top is the off position:
+    /// no periodic refresh ever comes due, so only mentor calls refresh.
     public static let refreshIntervalRange: ClosedRange<TimeInterval> = 300...43200
 
     /// Settable range for the token budget. The top leaves a mentor reply room
     /// for its thinking and a suggestion beside the record it carries.
     public static let understandingTokenBudgetRange: ClosedRange<Int> = 200...3000
 
-    /// True when the refresh interval is at the top of its range, where the
-    /// periodic refresh is effectively off and mentor calls carry it alone.
+    /// True when the refresh interval is at the top of its range, where
+    /// `MentorScheduler.refreshGate` always holds and mentor calls carry the
+    /// record alone.
     public var periodicRefreshIsOff: Bool {
         understandingRefreshInterval >= MentorSettings.refreshIntervalRange.upperBound
     }

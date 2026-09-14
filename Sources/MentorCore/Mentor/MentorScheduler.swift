@@ -269,6 +269,9 @@ public struct MentorScheduler: Equatable, Sendable {
         /// Contexts are enforced and triage has not placed the frontmost app
         /// since it came to the front, so nothing says the work is inside one.
         case notPlacedInAContext
+        /// The refresh interval is at the top of its range, so no refresh call
+        /// is ever made and only mentor calls rewrite the record.
+        case periodicRefreshOff
         case callInFlight
         /// A mentor call or an earlier refresh already rewrote the record
         /// recently enough.
@@ -281,6 +284,7 @@ public struct MentorScheduler: Equatable, Sendable {
             case .unavailable(let hold): hold.label
             case .outOfContext(let exclusion): "outside every declared context (\(exclusion.label))"
             case .notPlacedInAContext: "not yet placed in a declared context"
+            case .periodicRefreshOff: "periodic refresh is off, mentor calls carry the record"
             case .callInFlight: "a call is in flight"
             case .notDue(let until): "not due, next at \(until.formatted(date: .omitted, time: .standard))"
             case .noNewActivity: "nothing observed yet"
@@ -303,7 +307,9 @@ public struct MentorScheduler: Equatable, Sendable {
     /// first observation of a session never buys a call of its own, and no
     /// period at all means nothing is due. A refresh attempt starts the
     /// interval over whatever came of it, like the other tiers' minimum
-    /// intervals, so a failed call is not retried on every observation.
+    /// intervals, so a failed call is not retried on every observation. At the
+    /// top of the interval's range it always holds, however long the period
+    /// has run, so only mentor calls ever write the record.
     ///
     /// `context` is triage's latest placement of the frontmost app, or nil
     /// when it has not placed that app. While contexts are enforced the record
@@ -319,6 +325,7 @@ public struct MentorScheduler: Equatable, Sendable {
         if let hold = availabilityHold(conditions: conditions) { return .hold(.unavailable(hold)) }
         if let hold = contextHold() { return .hold(.unavailable(hold)) }
         if let hold = placementHold(context) { return .hold(hold) }
+        if settings.periodicRefreshIsOff { return .hold(.periodicRefreshOff) }
         if conditions.callInFlight { return .hold(.callInFlight) }
         guard let periodStart, lastActivityAt != nil else { return .hold(.noNewActivity) }
         if let next = nextRefreshAllowed(after: periodStart, multiplier: conditions.cadenceMultiplier),
@@ -347,8 +354,9 @@ public struct MentorScheduler: Equatable, Sendable {
 
     /// When the next refresh call may start: a whole interval after the period
     /// began or after the last attempt, whichever is later. Nil before any
-    /// activity or attempt at all.
+    /// activity or attempt at all, and while the periodic refresh is off.
     public func nextRefreshAllowed(after periodStart: Date?, multiplier: Double) -> Date? {
+        guard !settings.periodicRefreshIsOff else { return nil }
         let start = [periodStart, lastRefreshAt].compactMap { $0 }.max()
         return start?.addingTimeInterval(settings.understandingRefreshInterval * max(1, multiplier))
     }

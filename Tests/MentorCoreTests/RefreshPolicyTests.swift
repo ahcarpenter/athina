@@ -257,17 +257,63 @@ import Testing
 
     // MARK: The off position
 
-    @Test func theTopOfTheRangeMeansOnlyMentorCallsEverRefresh() {
+    private var offSettings: MentorSettings {
         var never = settings
         never.understandingRefreshInterval = MentorSettings.refreshIntervalRange.upperBound
-        let scheduler = MentorScheduler(settings: never)
-        #expect(never.periodicRefreshIsOff)
+        return never
+    }
+
+    @Test func theTopOfTheRangeMeansOnlyMentorCallsEverRefresh() {
+        let scheduler = MentorScheduler(settings: offSettings)
+        #expect(offSettings.periodicRefreshIsOff)
         // Half a day of active use later, still nothing due.
-        let now = t0.addingTimeInterval(43200 - 1)
-        guard case .hold(.notDue) = gate(scheduler, conditions: conditions(), now: now) else {
-            Issue.record("expected the refresh to stay held at the top of the range")
-            return
-        }
+        #expect(gate(scheduler, conditions: conditions(), now: t0.addingTimeInterval(43200 - 1))
+            == .hold(.periodicRefreshOff))
+        #expect(scheduler.nextRefreshAllowed(after: t0, multiplier: 1) == nil)
+    }
+
+    /// Off means off, not a very long interval: once a whole top-of-range
+    /// interval has run, with or without a record behind the period, no
+    /// refresh call comes due.
+    @Test(arguments: [43200.0, 43200.0 + 86400])
+    func theTopOfTheRangeHoldsHoweverLongThePeriodHasRun(elapsed: TimeInterval) {
+        let scheduler = MentorScheduler(settings: offSettings)
+        let now = t0.addingTimeInterval(elapsed)
+        // A record's last write, or the run's first observation, started the period.
+        #expect(gate(scheduler, conditions: conditions(), periodStart: t0, now: now) == .hold(.periodicRefreshOff))
+        // No period has begun at all.
+        #expect(scheduler.refreshGate(
+            conditions: conditions(), context: .notEnforced, periodStart: nil,
+            lastActivityAt: now.addingTimeInterval(-1), now: now
+        ) == .hold(.periodicRefreshOff))
+    }
+
+    /// Only the top itself is off: one second below it still comes due after
+    /// its interval, so the 43199 s case above holds because it is off.
+    @Test func justBelowTheTopOfTheRangeStillRefreshes() {
+        var almost = settings
+        almost.understandingRefreshInterval = MentorSettings.refreshIntervalRange.upperBound - 1
+        let scheduler = MentorScheduler(settings: almost)
+        #expect(!almost.periodicRefreshIsOff)
+        #expect(gate(scheduler, conditions: conditions(), now: t0.addingTimeInterval(43200 - 1)) == .run(since: t0))
+    }
+
+    /// A reason that holds every tier, or the context boundary, still says
+    /// why while the periodic refresh is off.
+    @Test func theOffPositionIsCheckedAfterTheAvailabilityAndContextHolds() {
+        let now = t0.addingTimeInterval(43200)
+        let scheduler = MentorScheduler(settings: offSettings)
+        #expect(gate(scheduler, conditions: conditions(mode: .paused), now: now) == .hold(.unavailable(.paused)))
+        #expect(gate(scheduler, conditions: conditions(mode: .idle), now: now) == .hold(.unavailable(.idle)))
+        #expect(gate(scheduler, conditions: conditions(inFlight: true), now: now) == .hold(.periodicRefreshOff))
+        var enforcing = offSettings
+        enforcing.onlyMentorInsideContexts = true
+        enforcing.contexts = [Self.declared]
+        let bounded = MentorScheduler(settings: enforcing)
+        #expect(gate(bounded, conditions: conditions(), context: .outside(.noMatch(reason: "")), now: now)
+            == .hold(.outOfContext(.noMatch(reason: ""))))
+        #expect(gate(bounded, conditions: conditions(), context: nil, now: now) == .hold(.notPlacedInAContext))
+        #expect(gate(bounded, conditions: conditions(), context: Self.inside, now: now) == .hold(.periodicRefreshOff))
     }
 
     @Test func settingsClampTheIntervalIntoItsRange() {
