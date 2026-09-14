@@ -27,7 +27,7 @@ struct UnderstandingCard: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Divider()
-                    Field(label: "Refresh", value: refresh(now: context.date), lineLimit: 4)
+                    Field(label: "Refresh", value: refresh(now: context.date), lineLimit: 6)
                     Field(label: "Last call", value: lastCall(now: context.date), lineLimit: 4)
                     resetButton
                 }
