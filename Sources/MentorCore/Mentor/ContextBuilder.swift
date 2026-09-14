@@ -79,11 +79,30 @@ public enum RollingWindow {
         tokenBudget: Int,
         maxEntries: Int = 40
     ) -> [Entry] {
+        fill(observations: observations, now: now, duration: duration, tokenBudget: tokenBudget, maxEntries: maxEntries).entries
+    }
+
+    /// `build`, and how many observations inside the window were left out for
+    /// the budget or the entry cap (a near-duplicate collapsing into the kept
+    /// newer one is not left out). With `countingAfter`, only those with a
+    /// greater id are counted.
+    public static func fill(
+        observations: [ActivityObservation],
+        now: Date,
+        duration: TimeInterval,
+        tokenBudget: Int,
+        maxEntries: Int = 40,
+        countingAfter cursor: Int64? = nil
+    ) -> (entries: [Entry], leftOut: Int) {
         let cutoff = now.addingTimeInterval(-duration)
         let ordered = observations
             .filter { !$0.focus.isExcluded }
             .sorted { $0.timestamp != $1.timestamp ? $0.timestamp > $1.timestamp : $0.id > $1.id }
-        guard let newest = ordered.first else { return [] }
+        guard let newest = ordered.first else { return ([], 0) }
+        let older = Array(ordered.dropFirst().prefix { $0.timestamp >= cutoff })
+        func leftOut(from index: Int) -> Int {
+            older[index...].filter { row in cursor.map { row.id > $0 } ?? true }.count
+        }
 
         var remaining = tokenBudget
         var entries: [Entry] = []
@@ -92,13 +111,13 @@ public enum RollingWindow {
         if newestTokens > remaining {
             let cut = String(newestText.prefix(max(0, remaining * TokenEstimate.charactersPerToken)))
             entries.append(Entry(observation: newest, text: cut, truncated: true))
-            return entries
+            return (entries, leftOut(from: 0))
         }
         entries.append(Entry(observation: newest, text: newestText, truncated: false))
         remaining -= newestTokens
 
-        for observation in ordered.dropFirst() {
-            guard observation.timestamp >= cutoff, entries.count < maxEntries else { break }
+        for (index, observation) in older.enumerated() {
+            guard entries.count < maxEntries else { return (entries.reversed(), leftOut(from: index)) }
             let text = observation.ocrText
             if let last = entries.last,
                last.appName == observation.focus.appName, last.windowTitle == observation.focus.windowTitle,
@@ -106,11 +125,11 @@ public enum RollingWindow {
                 continue
             }
             let tokens = TokenEstimate.tokens(in: text) + 24
-            guard tokens <= remaining else { break }
+            guard tokens <= remaining else { return (entries.reversed(), leftOut(from: index)) }
             entries.append(Entry(observation: observation, text: text, truncated: false))
             remaining -= tokens
         }
-        return entries.reversed()
+        return (entries.reversed(), 0)
     }
 }
 
@@ -123,11 +142,12 @@ public enum PromptBuilder {
     public static let eventWindow: TimeInterval = 600
     public static let eventLimit = 12
 
-    /// Text only: app and window, accessibility summary, the OCR text, and a
-    /// compact event summary.
+    /// Text only: app and window, accessibility summary, the standing
+    /// understanding as one paragraph, the OCR text, and a compact event summary.
     public static func triageMessage(
         observation: ActivityObservation,
         recentEvents: [JournalEvent],
+        understanding: Understanding? = nil,
         now: Date
     ) -> String {
         var lines: [String] = []
@@ -136,6 +156,12 @@ public enum PromptBuilder {
         lines.append("Window: \(observation.focus.windowTitle ?? "untitled")")
         lines.append("Trigger: \(observation.reason.label)")
         lines.append("Accessibility: \(observation.focus.summary)")
+        lines.append("")
+        if let understanding, !understanding.isEmpty {
+            lines.append("Standing understanding: \(understanding.paragraph)")
+        } else {
+            lines.append("Standing understanding: none yet, so judge this snapshot on its own.")
+        }
         lines.append("")
         lines.append("Recent events:")
         lines.append(eventSummary(recentEvents, now: now))
@@ -156,6 +182,9 @@ public enum PromptBuilder {
         suppressed: [SuggestionCategory],
         includesImage: Bool,
         context: MentorshipContext? = nil,
+        hasUnderstanding: Bool = false,
+        understandingTokenBudget: Int = MentorSettings().understandingTokenBudget,
+        screensLeftOut: Int = 0,
         now: Date
     ) -> String {
         var lines: [String] = []
@@ -171,6 +200,12 @@ public enum PromptBuilder {
         } else {
             lines.append("Suppressed categories for this app (do not raise these): \(suppressed.map(\.rawValue).joined(separator: ", ")).")
         }
+        if hasUnderstanding {
+            lines.append("Your standing understanding is the block above the messages. Judge what they are doing now against it, and rewrite it in updated_understanding.")
+        } else {
+            lines.append("There is no standing understanding yet, so do not raise the three goal categories; write the first one in updated_understanding.")
+        }
+        lines.append("Keep updated_understanding within about \(understandingTokenBudget) tokens.")
         if includesImage {
             lines.append("The attached image is the latest screen, \(latest.frame.width) by \(latest.frame.height) pixels; a region, if you give one, is in those pixels.")
         } else {
@@ -181,10 +216,28 @@ public enum PromptBuilder {
         lines.append(eventSummary(recentEvents, now: now))
         lines.append("")
         lines.append("Recent screens, oldest first. Each entry: time, app, window, trigger, accessibility focus, then recognized text.")
+        if screensLeftOut > 0 { lines.append(leftOutLine(screensLeftOut)) }
+        appendWindow(&lines, window: window, markLatest: true)
+        return lines.joined(separator: "\n")
+    }
+
+    /// How many screens in the period the window's budget left out, and that
+    /// nothing else covers them.
+    static func leftOutLine(_ count: Int) -> String {
+        let noun = count == 1 ? "screen" : "screens"
+        return "\(count) older \(noun) from this period did not fit the token budget: left out and not summarized anywhere."
+    }
+
+    /// The rolling window rendered oldest first, one block per entry.
+    static func appendWindow(_ lines: inout [String], window: [RollingWindow.Entry], markLatest: Bool) {
+        guard !window.isEmpty else {
+            lines.append("")
+            lines.append("(no screens recorded)")
+            return
+        }
         for (index, entry) in window.enumerated() {
-            let isLatest = index == window.count - 1
             var header = "--- \(clock(entry.timestamp)) | \(entry.appName) | \"\(entry.windowTitle ?? "untitled")\" | \(entry.reason.label)"
-            if isLatest { header += " | latest" }
+            if markLatest, index == window.count - 1 { header += " | latest" }
             lines.append("")
             lines.append(header)
             lines.append("focus: \(entry.focusSummary)")
@@ -192,6 +245,41 @@ public enum PromptBuilder {
             lines.append(entry.text.isEmpty ? "(no text recognized)" : entry.text)
             if entry.truncated { lines.append("(text cut to fit the budget)") }
         }
+    }
+
+    /// The refresh tier's message: the record as it stands, recent suggestions
+    /// and events, then the screens since it was last written. Text only; no
+    /// screenshot is ever attached to a refresh, because summarising does not
+    /// need one.
+    public static func understandingMessage(
+        current: UnderstandingRecord?,
+        window: [RollingWindow.Entry],
+        recentEvents: [JournalEvent],
+        recentSuggestions: [Suggestion],
+        tokenBudget: Int,
+        screensLeftOut: Int,
+        now: Date
+    ) -> String {
+        var lines: [String] = []
+        lines.append("Time: \(clock(now))")
+        lines.append("Token budget for the new record: about \(tokenBudget) tokens.")
+        lines.append("")
+        if let current, !current.content.isEmpty {
+            lines.append("The record as it stands, written \(age(current.updatedAt, now: now)) as revision \(current.revision):")
+            lines.append(current.content.promptBlock)
+        } else {
+            lines.append("There is no record yet. Write the first one from what follows.")
+        }
+        lines.append("")
+        lines.append("Suggestions Mentor has shown, newest first, with the user's answer:")
+        lines.append(suggestionSummary(recentSuggestions, now: now))
+        lines.append("")
+        lines.append("Events in the last \(Int(eventWindow / 60)) minutes, at most \(eventLimit), newest last:")
+        lines.append(eventSummary(recentEvents, now: now))
+        lines.append("")
+        lines.append("Screens since then, oldest first. Each entry: time, app, window, trigger, accessibility focus, then recognized text.")
+        if screensLeftOut > 0 { lines.append(leftOutLine(screensLeftOut)) }
+        appendWindow(&lines, window: window, markLatest: false)
         return lines.joined(separator: "\n")
     }
 
@@ -234,6 +322,15 @@ public enum PromptBuilder {
         lines.append("")
         lines.append("The user now says, spoken and transcribed on their Mac: \"\(question)\"")
         return lines.joined(separator: "\n")
+    }
+
+    /// What Mentor has already said and how the user answered.
+    public static func suggestionSummary(_ suggestions: [Suggestion], now: Date) -> String {
+        guard !suggestions.isEmpty else { return "- none shown yet" }
+        return suggestions.prefix(eventLimit).map { suggestion in
+            let answer = suggestion.feedback?.label.lowercased() ?? "no answer yet"
+            return "- \(age(suggestion.timestamp, now: now)) in \(suggestion.appName): [\(suggestion.category.rawValue)] \(suggestion.title) (\(answer))"
+        }.joined(separator: "\n")
     }
 
     /// The most recent events inside `eventWindow`, newest last, one per line.

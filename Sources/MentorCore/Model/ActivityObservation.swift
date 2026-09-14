@@ -243,6 +243,9 @@ public struct JournalEvent: Codable, Equatable, Sendable, Identifiable {
         case feedback
         /// The user said something about a suggestion while holding the talk-back key.
         case talkBack
+        /// The standing understanding expired or was reset. Refreshes are not
+        /// journaled here; they are in the model call log.
+        case understanding
 
         public var label: String {
             switch self {
@@ -261,6 +264,7 @@ public struct JournalEvent: Codable, Equatable, Sendable, Identifiable {
             case .suggested: "Suggestion"
             case .feedback: "Feedback"
             case .talkBack: "Talk back"
+            case .understanding: "Understanding"
             }
         }
     }

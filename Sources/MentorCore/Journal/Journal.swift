@@ -110,6 +110,7 @@ public actor Journal {
                 body TEXT NOT NULL,
                 explanation TEXT NOT NULL,
                 confidence REAL NOT NULL,
+                judged_goal TEXT,
                 observation_id INTEGER,
                 model TEXT NOT NULL,
                 prompt_version INTEGER NOT NULL,
@@ -131,6 +132,21 @@ public actor Journal {
             );
             CREATE INDEX IF NOT EXISTS follow_ups_timestamp ON follow_ups(timestamp);
             CREATE INDEX IF NOT EXISTS follow_ups_suggestion ON follow_ups(suggestion_id);
+            CREATE TABLE IF NOT EXISTS understanding (
+                id INTEGER PRIMARY KEY,
+                updated_at REAL NOT NULL,
+                started_at REAL NOT NULL,
+                revision INTEGER NOT NULL,
+                schema_version INTEGER NOT NULL,
+                prompt_version INTEGER NOT NULL,
+                model TEXT NOT NULL,
+                source TEXT NOT NULL,
+                cost REAL NOT NULL,
+                cumulative_cost REAL NOT NULL,
+                content_json TEXT NOT NULL,
+                covered_through_observation_id INTEGER
+            );
+            CREATE INDEX IF NOT EXISTS understanding_updated_at ON understanding(updated_at);
             CREATE TABLE IF NOT EXISTS model_calls (
                 id INTEGER PRIMARY KEY,
                 timestamp REAL NOT NULL,
@@ -155,6 +171,10 @@ public actor Journal {
         try addColumn("replayed INTEGER NOT NULL DEFAULT 0", named: "replayed", to: "model_calls", db)
         try addColumn("region_json TEXT", named: "region_json", to: "suggestions", db)
         try addColumn("callout_shown INTEGER NOT NULL DEFAULT 0", named: "callout_shown", to: "suggestions", db)
+        try addColumn("judged_goal TEXT", named: "judged_goal", to: "suggestions", db)
+        try addColumn(
+            "covered_through_observation_id INTEGER", named: "covered_through_observation_id", to: "understanding", db
+        )
     }
 
     /// Adds a column to an existing table, once. Nothing happens when the table
@@ -237,8 +257,9 @@ public actor Journal {
         let regionJSON = try suggestion.region.map { String(decoding: try encoder.encode($0), as: UTF8.self) }
         try db.run("""
             INSERT INTO suggestions (timestamp, bundle_id, app_name, window_title, category, title, body, explanation,
-                confidence, observation_id, model, prompt_version, feedback, feedback_at, region_json, callout_shown)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                confidence, judged_goal, observation_id, model, prompt_version, feedback, feedback_at, region_json,
+                callout_shown)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 .double(suggestion.timestamp.timeIntervalSince1970),
                 suggestion.bundleID.map(Value.text) ?? .null,
@@ -249,6 +270,7 @@ public actor Journal {
                 .text(suggestion.body),
                 .text(suggestion.explanation),
                 .double(suggestion.confidence),
+                suggestion.judgedGoal.map(Value.text) ?? .null,
                 suggestion.observationID.map(Value.int) ?? .null,
                 .text(suggestion.model),
                 .int(Int64(suggestion.promptVersion)),
@@ -374,14 +396,80 @@ public actor Journal {
         ) { Journal.modelCall(from: $0) }
     }
 
+    // MARK: Understanding
+
+    /// Stores a revision of the understanding. Revisions are inserted, never
+    /// updated, so the journal keeps the trail of how the reading developed.
+    @discardableResult
+    public func record(_ record: UnderstandingRecord) throws -> UnderstandingRecord {
+        let contentJSON = String(decoding: try encoder.encode(record.content), as: UTF8.self)
+        try db.run("""
+            INSERT INTO understanding (updated_at, started_at, revision, schema_version, prompt_version,
+                model, source, cost, cumulative_cost, content_json, covered_through_observation_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, [
+                .double(record.updatedAt.timeIntervalSince1970),
+                .double(record.startedAt.timeIntervalSince1970),
+                .int(Int64(record.revision)),
+                .int(Int64(record.schemaVersion)),
+                .int(Int64(record.promptVersion)),
+                .text(record.model),
+                .text(record.source.rawValue),
+                .double(record.cost),
+                .double(record.cumulativeCost),
+                .text(contentJSON),
+                record.coveredThroughObservationID.map(Value.int) ?? .null,
+            ])
+        var stored = record
+        stored.id = db.lastInsertRowID
+        return stored
+    }
+
+    /// The current revision, or nil when none has been written or an
+    /// `understanding` event, an expiry or a reset, was journaled after the
+    /// latest one. Deciding expiry is the caller's job; the event it journals
+    /// is what keeps an expired revision from being current again, while the
+    /// revision itself stays in the trail.
+    public func latestUnderstanding() throws -> UnderstandingRecord? {
+        try db.query("""
+            SELECT \(Journal.understandingColumns) FROM (
+                SELECT \(Journal.understandingColumns) FROM understanding ORDER BY updated_at DESC, id DESC LIMIT 1
+            ) AS latest
+            WHERE NOT EXISTS (SELECT 1 FROM events WHERE kind = ? AND events.timestamp > latest.updated_at)
+            """, [.text(JournalEvent.Kind.understanding.rawValue)]
+        ) { try self.understanding(from: $0) }.first
+    }
+
+    /// Forgets every revision, for "Reset Understanding".
+    public func clearUnderstanding() throws {
+        try db.execute("DELETE FROM understanding")
+        try db.execute("PRAGMA incremental_vacuum")
+    }
+
     // MARK: Reads
 
-    /// The newest `limit` observations at or after `since`, newest first, without thumbnail bytes.
-    public func recentObservations(since: Date, limit: Int) throws -> [ActivityObservation] {
+    /// The newest `limit` observations at or after `since` or with an id above
+    /// `cursor`, newest first, without thumbnail bytes. A nil bound matches
+    /// nothing on its own.
+    public func recentObservations(since: Date?, after cursor: Int64? = nil, limit: Int) throws -> [ActivityObservation] {
         try db.query(
-            "SELECT \(Journal.observationColumns) FROM observations WHERE timestamp >= ? ORDER BY timestamp DESC, id DESC LIMIT ?",
-            [.double(since.timeIntervalSince1970), .int(Int64(limit))]
+            "SELECT \(Journal.observationColumns) FROM observations WHERE timestamp >= ? OR id > ? ORDER BY timestamp DESC, id DESC LIMIT ?",
+            [since.map { .double($0.timeIntervalSince1970) } ?? .null, cursor.map(Value.int) ?? .null, .int(Int64(limit))]
         ) { try self.observation(from: $0) }
+    }
+
+    /// How many observations are at or after `since` or have an id above
+    /// `cursor`, so a capped read can say how many it left unread.
+    public func observationCount(since: Date?, after cursor: Int64?) throws -> Int {
+        Int(try db.scalarInt(
+            "SELECT COUNT(*) FROM observations WHERE timestamp >= ? OR id > ?",
+            [since.map { .double($0.timeIntervalSince1970) } ?? .null, cursor.map(Value.int) ?? .null]
+        ))
+    }
+
+    /// The largest observation id in the journal, or 0 when it has none.
+    public func newestObservationID() throws -> Int64 {
+        try db.scalarInt("SELECT IFNULL(MAX(id), 0) FROM observations")
     }
 
     /// The newest `limit` entries of both kinds, newest first, without thumbnail bytes.
@@ -470,7 +558,7 @@ public actor Journal {
     public func clear() throws {
         try db.execute("BEGIN")
         do {
-            try db.execute("DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events; DELETE FROM suggestions; DELETE FROM follow_ups; DELETE FROM model_calls;")
+            try db.execute("DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events; DELETE FROM suggestions; DELETE FROM follow_ups; DELETE FROM model_calls; DELETE FROM understanding;")
             try db.execute("COMMIT")
         } catch {
             try? db.execute("ROLLBACK")
@@ -500,6 +588,8 @@ public actor Journal {
         result.followUpsDeleted += db.changes
         try db.run("DELETE FROM model_calls WHERE timestamp < ?", [.double(textCutoff)])
         result.modelCallsDeleted += db.changes
+        try db.run("DELETE FROM understanding WHERE updated_at < ?", [.double(textCutoff)])
+        result.understandingDeleted += db.changes
 
         try db.execute("PRAGMA incremental_vacuum")
         var used = try usedBytes()
@@ -559,7 +649,7 @@ public actor Journal {
 
     private static let suggestionColumns = """
         id, timestamp, bundle_id, app_name, window_title, category, title, body, explanation, confidence,
-        observation_id, model, prompt_version, feedback, feedback_at, region_json, callout_shown
+        judged_goal, observation_id, model, prompt_version, feedback, feedback_at, region_json, callout_shown
         """
 
     private static let followUpColumns = """
@@ -580,7 +670,7 @@ public actor Journal {
     }
 
     private static func suggestion(from row: SQLiteConnection.Statement) -> Suggestion {
-        let region = row.text(15).flatMap { try? JSONDecoder().decode(CalloutRegion.self, from: Data($0.utf8)) }
+        let region = row.text(16).flatMap { try? JSONDecoder().decode(CalloutRegion.self, from: Data($0.utf8)) }
         return Suggestion(
             id: row.int(0),
             timestamp: Date(timeIntervalSince1970: row.double(1)),
@@ -592,13 +682,14 @@ public actor Journal {
             body: row.text(7) ?? "",
             explanation: row.text(8) ?? "",
             confidence: row.double(9),
-            observationID: row.isNull(10) ? nil : row.int(10),
-            model: row.text(11) ?? "",
-            promptVersion: Int(row.int(12)),
-            feedback: row.text(13).flatMap(SuggestionFeedback.init(rawValue:)),
-            feedbackAt: row.isNull(14) ? nil : Date(timeIntervalSince1970: row.double(14)),
+            judgedGoal: row.text(10),
+            observationID: row.isNull(11) ? nil : row.int(11),
+            model: row.text(12) ?? "",
+            promptVersion: Int(row.int(13)),
+            feedback: row.text(14).flatMap(SuggestionFeedback.init(rawValue:)),
+            feedbackAt: row.isNull(15) ? nil : Date(timeIntervalSince1970: row.double(15)),
             region: region,
-            calloutShown: row.int(16) != 0
+            calloutShown: row.int(17) != 0
         )
     }
 
@@ -627,6 +718,28 @@ public actor Journal {
             outcome: ModelCallOutcome(rawValue: row.text(13) ?? "") ?? .error,
             detail: row.text(14),
             replayed: row.int(15) != 0
+        )
+    }
+
+    private static let understandingColumns = """
+        id, updated_at, started_at, revision, schema_version, prompt_version, model, source, cost,
+        cumulative_cost, content_json, covered_through_observation_id
+        """
+
+    private func understanding(from row: SQLiteConnection.Statement) throws -> UnderstandingRecord {
+        UnderstandingRecord(
+            id: row.int(0),
+            updatedAt: Date(timeIntervalSince1970: row.double(1)),
+            startedAt: Date(timeIntervalSince1970: row.double(2)),
+            revision: Int(row.int(3)),
+            schemaVersion: Int(row.int(4)),
+            promptVersion: Int(row.int(5)),
+            model: row.text(6) ?? "",
+            source: UnderstandingSource(rawValue: row.text(7) ?? "") ?? .periodic,
+            cost: row.double(8),
+            cumulativeCost: row.double(9),
+            content: try decoder.decode(Understanding.self, from: Data((row.text(10) ?? "{}").utf8)),
+            coveredThroughObservationID: row.isNull(11) ? nil : row.int(11)
         )
     }
 

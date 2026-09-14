@@ -387,10 +387,13 @@ public struct AnthropicClient: ClaudeClient {
         self.session = session
     }
 
+    /// The most a whole call may take, whatever its own timeout says.
+    public static let resourceTimeout: TimeInterval = 600
+
     public static func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.waitsForConnectivity = false
-        configuration.timeoutIntervalForResource = 600
+        configuration.timeoutIntervalForResource = resourceTimeout
         configuration.httpAdditionalHeaders = nil
         return URLSession(configuration: configuration)
     }

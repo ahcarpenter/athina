@@ -2,14 +2,16 @@ import Foundation
 
 /// Pure decision logic for when each tier runs.
 ///
-/// Two gates, each a single function: `triageGate` decides whether an
-/// observation is a change moment worth a triage call, and `mentorGate` is the
-/// yes-or-no between triage's verdict and the mentor tier. The declared
-/// mentorship contexts are enforced in these two functions and nowhere else:
-/// an enforced but empty list holds triage, and an out-of-context placement
-/// holds the mentor tier. Two smaller ones follow the calls: `publishGate`
-/// decides whether a finished suggestion may be shown now, and `followUpGate`
-/// whether a question the user asked may be sent.
+/// Three gates, each a single function: `triageGate` decides whether an
+/// observation is a change moment worth a triage call, `mentorGate` is the
+/// yes-or-no between triage's verdict and the mentor tier, and `refreshGate`
+/// decides whether the understanding needs a refresh call of its own. The
+/// declared mentorship contexts are enforced in these three functions and
+/// nowhere else: an enforced but empty list holds triage, and an
+/// out-of-context placement holds the mentor tier and the refresh. Two smaller
+/// ones follow the calls: `publishGate` decides whether a finished suggestion
+/// may be shown now, and `followUpGate` whether a question the user asked may
+/// be sent.
 public struct MentorScheduler: Equatable, Sendable {
     /// What the loop knows about the world when it asks a gate.
     public struct Conditions: Equatable, Sendable {
@@ -140,6 +142,8 @@ public struct MentorScheduler: Equatable, Sendable {
     public private(set) var lastTriagedWindow: String?
     public private(set) var lastTriagedText: String?
     public private(set) var lastMentorAt: Date?
+    /// When the last refresh call of its own started, whatever came of it.
+    public private(set) var lastRefreshAt: Date?
 
     public init(settings: MentorSettings) {
         self.settings = settings
@@ -249,6 +253,104 @@ public struct MentorScheduler: Equatable, Sendable {
 
     public func nextMentorAllowed(multiplier: Double) -> Date? {
         lastMentorAt?.addingTimeInterval(settings.mentorMinInterval * max(1, multiplier))
+    }
+
+    // MARK: Refresh gate
+
+    /// Why the understanding was not refreshed by a call of its own.
+    public enum RefreshHold: Equatable, Sendable {
+        /// Something holds every tier: off, paused, idle, an excluded app,
+        /// missing permissions, no key, the spend cap, or contexts enforced
+        /// with none declared.
+        case unavailable(Hold)
+        /// Contexts are enforced and triage placed the frontmost app outside
+        /// every declared one.
+        case outOfContext(ContextExclusion)
+        /// Contexts are enforced and triage has not placed the frontmost app
+        /// since it came to the front, so nothing says the work is inside one.
+        case notPlacedInAContext
+        case callInFlight
+        /// A mentor call or an earlier refresh already rewrote the record
+        /// recently enough.
+        case notDue(until: Date)
+        /// Nothing has been observed yet, so there is nothing to fold in.
+        case noNewActivity
+
+        public var label: String {
+            switch self {
+            case .unavailable(let hold): hold.label
+            case .outOfContext(let exclusion): "outside every declared context (\(exclusion.label))"
+            case .notPlacedInAContext: "not yet placed in a declared context"
+            case .callInFlight: "a call is in flight"
+            case .notDue(let until): "not due, next at \(until.formatted(date: .omitted, time: .standard))"
+            case .noNewActivity: "nothing observed yet"
+            }
+        }
+    }
+
+    public enum RefreshGate: Equatable, Sendable {
+        /// Refresh now, folding in everything since the period began.
+        case run(since: Date)
+        case hold(RefreshHold)
+    }
+
+    /// Whether the understanding needs a refresh call of its own right now.
+    ///
+    /// Every mentor call rewrites the record on the way past, so this only
+    /// fires after a whole refresh interval of active use with no mentor call
+    /// in it. `periodStart` is when that interval began: the last refresh, or
+    /// the first activity seen when nothing has refreshed yet, so the very
+    /// first observation of a session never buys a call of its own, and no
+    /// period at all means nothing is due. A refresh attempt starts the
+    /// interval over whatever came of it, like the other tiers' minimum
+    /// intervals, so a failed call is not retried on every observation.
+    ///
+    /// `context` is triage's latest placement of the frontmost app, or nil
+    /// when it has not placed that app. While contexts are enforced the record
+    /// is only ever written from inside one: the mentor tier never runs
+    /// outside, and this gate waits until the frontmost app is placed inside.
+    public func refreshGate(
+        conditions: Conditions,
+        context: ContextPlacement?,
+        periodStart: Date?,
+        lastActivityAt: Date?,
+        now: Date
+    ) -> RefreshGate {
+        if let hold = availabilityHold(conditions: conditions) { return .hold(.unavailable(hold)) }
+        if let hold = contextHold() { return .hold(.unavailable(hold)) }
+        if let hold = placementHold(context) { return .hold(hold) }
+        if conditions.callInFlight { return .hold(.callInFlight) }
+        guard let periodStart, let lastActivityAt else { return .hold(.noNewActivity) }
+        if let next = nextRefreshAllowed(after: periodStart, multiplier: conditions.cadenceMultiplier),
+           next > now {
+            return .hold(.notDue(until: next))
+        }
+        return .run(since: periodStart)
+    }
+
+    /// What the latest placement decides for the refresh while contexts are
+    /// enforced. No verdict for the frontmost app, or one reached while the
+    /// switch was off, counts as outside: enforcement fails closed here as it
+    /// does at the mentor gate.
+    private func placementHold(_ context: ContextPlacement?) -> RefreshHold? {
+        guard settings.onlyMentorInsideContexts else { return nil }
+        switch context {
+        case .inside: return nil
+        case .outside(let exclusion): return .outOfContext(exclusion)
+        case .notEnforced, nil: return .notPlacedInAContext
+        }
+    }
+
+    public mutating func noteRefreshStarted(now: Date) {
+        lastRefreshAt = now
+    }
+
+    /// When the next refresh call may start: a whole interval after the period
+    /// began or after the last attempt, whichever is later. Nil before any
+    /// activity or attempt at all.
+    public func nextRefreshAllowed(after periodStart: Date?, multiplier: Double) -> Date? {
+        let start = [periodStart, lastRefreshAt].compactMap { $0 }.max()
+        return start?.addingTimeInterval(settings.understandingRefreshInterval * max(1, multiplier))
     }
 }
 

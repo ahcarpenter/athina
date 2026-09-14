@@ -2,6 +2,10 @@ import Foundation
 
 /// The closed set of suggestion kinds. "Never for this" suppresses one
 /// category for one app, so the set stays small and stable.
+///
+/// The last three judge the current action against the goal Mentor has
+/// inferred, and are raised only when there is an understanding to judge
+/// against; the first seven stand on the moment alone.
 public enum SuggestionCategory: String, Codable, CaseIterable, Sendable, Identifiable {
     case shortcut
     case workflow
@@ -10,8 +14,24 @@ public enum SuggestionCategory: String, Codable, CaseIterable, Sendable, Identif
     case correctness
     case risk
     case other
+    // The raw values stay snake_case, matching the other multi-word JSON names
+    // in the prompts, so the schema's enum and the prompt text agree.
+    /// The approach will not get the user to the goal they appear to have.
+    case wontAchieveGoal = "wont_achieve_goal"
+    /// It will get there, but an available alternative gets there for less work.
+    case lessEfficient = "less_efficient"
+    /// It will get there and bring a consequence the user would not want.
+    case unwantedSideEffect = "unwanted_side_effect"
 
     public var id: String { rawValue }
+
+    /// True for the kinds that are judged against an inferred goal.
+    public var judgesAgainstGoal: Bool {
+        switch self {
+        case .wontAchieveGoal, .lessEfficient, .unwantedSideEffect: true
+        case .shortcut, .workflow, .tool, .approach, .correctness, .risk, .other: false
+        }
+    }
 
     public var label: String {
         switch self {
@@ -22,6 +42,9 @@ public enum SuggestionCategory: String, Codable, CaseIterable, Sendable, Identif
         case .correctness: "Correctness"
         case .risk: "Risk"
         case .other: "Other"
+        case .wontAchieveGoal: "Will not reach the goal"
+        case .lessEfficient: "Less efficient"
+        case .unwantedSideEffect: "Unwanted side effect"
         }
     }
 
@@ -34,6 +57,9 @@ public enum SuggestionCategory: String, Codable, CaseIterable, Sendable, Identif
         case .correctness: "checkmark.circle"
         case .risk: "exclamationmark.triangle"
         case .other: "sparkles"
+        case .wontAchieveGoal: "flag.slash"
+        case .lessEfficient: "tortoise"
+        case .unwantedSideEffect: "bolt.trianglebadge.exclamationmark"
         }
     }
 }
@@ -83,6 +109,10 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
     public var body: String
     public var explanation: String
     public var confidence: Double
+    /// The inferred goal this was judged against, when there was one. Shown in
+    /// the history window and the debug panel so a suggestion can be read
+    /// against what Mentor thought the user was trying to do.
+    public var judgedGoal: String?
     public var observationID: Int64?
     public var model: String
     public var promptVersion: Int
@@ -105,6 +135,7 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
         body: String,
         explanation: String,
         confidence: Double,
+        judgedGoal: String? = nil,
         observationID: Int64?,
         model: String,
         promptVersion: Int,
@@ -123,6 +154,7 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
         self.body = body
         self.explanation = explanation
         self.confidence = confidence
+        self.judgedGoal = judgedGoal
         self.observationID = observationID
         self.model = model
         self.promptVersion = promptVersion
@@ -139,6 +171,9 @@ public enum ModelTier: String, Codable, Sendable, CaseIterable {
     case mentor
     /// The mentor model answering something the user said about a suggestion.
     case followUp
+    /// A periodic refresh of the understanding, made only when no mentor call
+    /// has refreshed it within the refresh interval.
+    case understanding
     /// The Settings "Test connection" button.
     case test
 
@@ -147,6 +182,7 @@ public enum ModelTier: String, Codable, Sendable, CaseIterable {
         case .triage: "Triage"
         case .mentor: "Mentor"
         case .followUp: "Follow-up"
+        case .understanding: "Understanding"
         case .test: "Test"
         }
     }
@@ -169,6 +205,8 @@ public enum ModelCallOutcome: String, Codable, Sendable, CaseIterable {
     case belowConfidence
     /// A suggestion came back for a snoozed or never-for-this category and was dropped.
     case suppressed
+    /// A refresh call rewrote the understanding.
+    case refreshed
     /// The API declined the request (`stop_reason: refusal`).
     case refused
     /// The response hit `max_tokens` before finishing.
@@ -189,6 +227,7 @@ public enum ModelCallOutcome: String, Codable, Sendable, CaseIterable {
         case .suggested: "Suggested"
         case .belowConfidence: "Below confidence"
         case .suppressed: "Suppressed"
+        case .refreshed: "Refreshed"
         case .refused: "Refused"
         case .truncated: "Truncated"
         case .error: "Error"
@@ -266,6 +305,15 @@ public struct MentorStatus: Equatable, Sendable {
             case .capReached: "Spend cap reached"
             }
         }
+
+        /// Whether Mentor can work out an understanding at all: not while it is
+        /// off or has no key. A reached cap only delays it.
+        public var formsUnderstanding: Bool {
+            switch self {
+            case .ready, .capReached: true
+            case .disabled, .noAPIKey: false
+            }
+        }
     }
 
     /// The last time the triage gate looked at an observation, and what it decided.
@@ -320,12 +368,29 @@ public struct MentorStatus: Equatable, Sendable {
         }
     }
 
+    /// The last time the refresh gate looked, and why it did not refresh.
+    public struct RefreshHoldRecord: Equatable, Sendable {
+        public var at: Date
+        public var hold: MentorScheduler.RefreshHold
+
+        public init(at: Date, hold: MentorScheduler.RefreshHold) {
+            self.at = at
+            self.hold = hold
+        }
+    }
+
     public var availability: Availability
     public var lastGate: GateRecord?
     public var lastContext: ContextRecord?
     public var lastTriage: ModelCallRecord?
     public var lastMentorHold: MentorHoldRecord?
     public var lastMentor: ModelCallRecord?
+    /// The understanding being carried between calls, or nil when none has
+    /// formed yet, it expired, or it was reset.
+    public var understanding: UnderstandingRecord?
+    public var lastRefreshHold: RefreshHoldRecord?
+    public var lastRefresh: ModelCallRecord?
+    public var nextRefreshAt: Date?
     public var spendThisHour: Double
     public var hourStart: Date
     public var callsThisHour: Int
@@ -342,6 +407,10 @@ public struct MentorStatus: Equatable, Sendable {
         lastTriage: ModelCallRecord? = nil,
         lastMentorHold: MentorHoldRecord? = nil,
         lastMentor: ModelCallRecord? = nil,
+        understanding: UnderstandingRecord? = nil,
+        lastRefreshHold: RefreshHoldRecord? = nil,
+        lastRefresh: ModelCallRecord? = nil,
+        nextRefreshAt: Date? = nil,
         spendThisHour: Double = 0,
         hourStart: Date = SpendMeter.hourStart(of: Date()),
         callsThisHour: Int = 0,
@@ -357,6 +426,10 @@ public struct MentorStatus: Equatable, Sendable {
         self.lastTriage = lastTriage
         self.lastMentorHold = lastMentorHold
         self.lastMentor = lastMentor
+        self.understanding = understanding
+        self.lastRefreshHold = lastRefreshHold
+        self.lastRefresh = lastRefresh
+        self.nextRefreshAt = nextRefreshAt
         self.spendThisHour = spendThisHour
         self.hourStart = hourStart
         self.callsThisHour = callsThisHour

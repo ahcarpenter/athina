@@ -64,6 +64,14 @@ enum Formatting {
         return String(format: "$%.2f", amount)
     }
 
+    /// Model prose cut to fit a menu item, on a word boundary when there is one.
+    static func clipped(_ text: String, to limit: Int) -> String {
+        guard text.count > limit else { return text }
+        let cut = text.prefix(limit)
+        let head = cut.lastIndex(of: " ").map { cut[..<$0] } ?? cut
+        return head.trimmingCharacters(in: .whitespaces) + "…"
+    }
+
     static func multiplier(_ value: Double) -> String {
         value < 10 ? String(format: "%.1fx", value) : String(format: "%.0fx", value)
     }

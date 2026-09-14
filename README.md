@@ -2,15 +2,19 @@
 
 Live mentor for macOS: watches what you are doing and offers timely guidance.
 
-Three phases are in place. The **foundation** is a menu-bar app that senses
-what you are doing (accessibility context plus low-cadence screen capture with
-on-device OCR), records it in a local journal, and shows a debug panel with what
-it currently thinks you are doing. The **mentor loop** subscribes to that
-stream and asks Claude, in two tiers, whether there is a genuinely more helpful
-way to approach what you are doing; when there is, a small toast says so and
-learns from your answer. **Callouts and voice** let a suggestion point at the
-spot on screen it is about and take a spoken reply: an answer to the toast, or
-a question the mentor tier answers. Reading suggestions aloud is deferred.
+The **foundation** is a menu-bar app that senses what you are doing
+(accessibility context plus low-cadence screen capture with on-device OCR),
+records it in a local journal, and shows a debug panel with what it currently
+thinks you are doing. The **mentor loop** subscribes to that stream and asks
+Claude, in two tiers, whether there is a genuinely more helpful way to approach
+what you are doing; when there is, a small toast says so and learns from your
+answer. The **standing understanding** carries what you appear to be working
+toward from one call to the next, so Mentor can look out for you: it calls out
+an approach that will not reach your goal, one that is slower than an
+alternative you have, or one that will reach it and bring a side effect you
+would not want. **Callouts and voice** let a suggestion point at the spot on
+screen it is about and take a spoken reply: an answer to the toast, or a
+question the mentor tier answers. Reading suggestions aloud is deferred.
 Halt-and-redirect and learned suppression are later phases.
 
 ## Requirements
@@ -287,13 +291,14 @@ Sources/MentorCore            library, fully testable
                               ReplayClaudeClient, ModelClientMode (live, record, or replay from the command line),
                               ScriptedClaudeClient (hand-written answers for tests), ModelCatalog and PriceTable,
                               KeyStore (Keychain and in-memory), JSONValue (schemas)
-  Mentor/                     MentorScheduler (pure trigger, debounce, and gate state machine), SpendMeter,
-                              SuppressionRules (snooze and never-for-this), MentorshipContexts (declared
-                              contexts, normalizing, placement), ContextBuilder (rolling window, prompt
-                              text, follow-up message), Prompts (versioned system prompts and output
-                              schemas), Suggestion, FollowUp and ModelCallRecord, Callout (CalloutRegion,
-                              CalloutAnchor: frame-to-screen mapping and every rule that refuses a
-                              callout), TalkBack (TranscriptMatcher, FollowUp, TalkBackState),
+  Mentor/                     MentorScheduler (pure trigger, debounce, and gate state machine, including the
+                              refresh gate), SpendMeter, SuppressionRules (snooze and never-for-this),
+                              MentorshipContexts (declared contexts, normalizing, placement), ContextBuilder
+                              (rolling window, prompt text, follow-up message), Prompts (versioned system
+                              prompts and output schemas), Understanding (the standing record, its bounding,
+                              rendering, and expiry), Suggestion, FollowUp and ModelCallRecord, Callout
+                              (CalloutRegion, CalloutAnchor: frame-to-screen mapping and every rule that
+                              refuses a callout), TalkBack (TranscriptMatcher, FollowUp, TalkBackState),
                               MentorLoop (orchestration)
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory)
@@ -345,16 +350,19 @@ thumbnails, and then, if the file is still over `journalSizeCapBytes`, the
 oldest thumbnails and finally the oldest observations and events until it fits.
 "Clear Journal" in settings deletes everything.
 
-The mentor loop adds two tables: `suggestions` (every suggestion shown, with
-the user's feedback, the region it pointed at if any, and whether a callout
-was drawn) and `model_calls` (one row per API call:
-tier, model, prompt version and size, token counts, estimated cost, latency,
-outcome, the model's one-line reason, and whether it was replayed; never the
-prompt text). A moment held at the context boundary is recorded there as the
-`outOfContext` outcome. Talking back adds `follow_ups` (one row per question:
-the transcript, the answer or why there is none, and the model). All three expire with `textRetention` and are emptied by
-Clear Journal. Columns added after a table shipped are added to an existing
-journal on open, so older files keep working.
+The mentor loop adds four tables: `suggestions` (every suggestion shown, with
+the user's feedback, the inferred goal it was judged against, the region it
+pointed at if any, and whether a callout was drawn), `model_calls` (one row per
+API call: tier, model, prompt version and size, token counts, estimated cost,
+latency, outcome, the model's one-line reason, and whether it was replayed;
+never the prompt text), `understanding` (one row per revision of the standing
+understanding, see below), and `follow_ups` (one row per question talked back:
+the transcript, the answer or why there is none, and the model). A moment held
+at the context boundary is recorded in `model_calls` as the `outOfContext`
+outcome. All four expire with `textRetention` and are emptied by Clear Journal.
+A journal written by an earlier build is migrated in place when it is opened:
+missing tables are created and missing columns added, so nothing has to be
+thrown away.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
 to defaults so older files keep working. A replay keeps both files in a
@@ -394,15 +402,17 @@ each kept observation it runs, in order:
    default; Sonnet 5 and Fable 5.1 are offered too) with a rolling window of
    recent observations' text (bounded by `mentorWindowDuration` and
    `mentorWindowTokenBudget`), a compact event summary, the categories
-   currently suppressed for the app, and, when `sendThumbnail` is on, the
-   latest kept thumbnail as an image. While mentorship contexts are enforced
-   the message also names the declared context the moment was placed in, with
-   its description, so the suggestion stays useful for that work. The reply is
-   `{"reason": string,
-   "suggestion": null | {title, body, explanation, category, confidence, region}}`.
-   A null suggestion is the normal outcome, and a null region is the normal
-   suggestion; the region is filled only when the suggestion is about one
-   specific spot visible in the attached screenshot (see Callouts).
+   currently suppressed for the app, the standing understanding as its own
+   system block, and, when `sendThumbnail` is on, the latest kept thumbnail as
+   an image. While mentorship contexts are enforced the message also names the
+   declared context the moment was placed in, with its description, so the
+   suggestion stays useful for that work. The reply is `{"reason": string,
+   "suggestion": null | {title, body, explanation, category, confidence,
+   judged_goal, region}, "updated_understanding": {...}}`. A null suggestion is
+   the normal outcome, and a null region is the normal suggestion; the region is
+   filled only when the suggestion is about one specific spot visible in the
+   attached screenshot (see Callouts). The understanding comes back on every
+   call.
 
    Each tier has its own model and effort in Settings > Mentor. Effort (low,
    medium, high, extra high) goes out as `output_config.effort` only to models
@@ -593,8 +603,10 @@ the one way the model declines to place a snapshot, and the prompt tells it to
 answer null whenever it is unsure rather than guessing. A moment triage leaves
 at null never reaches the mentor tier and never becomes a suggestion; the
 triage call is logged with the `outOfContext` outcome and the reason. The
-schema offers only the declared names, so the model cannot answer with a
-context that does not exist. The declared list is part of the triage system
+standing understanding (below) stands behind the same boundary: a moment
+outside every context neither reaches the mentor tier that rewrites it nor
+buys a refresh of its own. The schema offers only the declared names, so the
+model cannot answer with a context that does not exist. The declared list is part of the triage system
 prompt's single cached block, so an edit changes that prefix once; whether the
 triage prompt is served from cache at all is the per-model question answered
 above.
@@ -616,6 +628,88 @@ or why it is out) while it is still about the frontmost app, and
 `Context: not yet judged in <app>` otherwise; the debug panel's Mentor card
 shows it with the app it was made for and its age, and the model call log marks
 a held call with the `outOfContext` outcome.
+
+### Standing understanding
+
+A mentor call used to see only the last ten minutes, so it could tell you a
+faster way to do the thing on screen but never whether that thing would get
+you where you were going. Mentor now keeps a short record of the longer arc
+and carries it from one call to the next.
+
+**What it contains.** The model writes it, in four parts: the **goals** the
+user appears to be working toward, most likely first, each with the evidence
+for it and a confidence; a condensed **timeline** of what has happened; the
+**mentor history**, what Mentor has already said and how the user answered, so
+it never repeats itself or re-raises something dismissed; and **open
+concerns** worth watching but not worth an interruption. `Understanding.swift`
+holds the type, its schema version, and the pure functions for bounding,
+rendering, and expiry.
+
+**How it is refreshed.** Every mentor call returns `updated_understanding`
+alongside its verdict, so the record is rewritten on the way past and that
+refresh costs nothing beyond the call that was made anyway; its screen window
+takes every observation journaled after the ones the record's last write read,
+so the rewrite folds in everything since. Each revision stores the highest
+observation id its call read as that cursor rather than a time, because a
+screen is stamped when its capture starts and journaled only after OCR, so one
+captured before a call read the journal can land in it after. A **periodic
+refresh** (`understandingRefreshInterval`, 15 minutes by default) runs only
+when a whole interval of active use has passed with no mentor call to carry
+it. It is a third tier with its own model and effort picker (`claude-opus-5`
+at low effort by default, Haiku offered too), its own versioned prompt and
+schema, and no screenshot: summarising does not need one. `refreshGate` in
+`MentorScheduler` is the single decision, and it holds while the loop is off,
+paused, idle, on an excluded app, waiting for permissions, without a key, over
+the spend cap, mid-call, not yet due, or before anything has been observed.
+While mentorship contexts are enforced it also holds until triage has placed
+the frontmost app inside a declared context, and for as long as the last
+placement was outside every one, so activity outside the contexts never buys
+a refresh; the mentor tier never runs for such a moment either, so neither
+path that writes the record is reached from outside them. A refresh attempt
+starts the interval over whatever came of it, so a failed call waits a whole
+interval like the other tiers rather than retrying on the next observation. Refresh calls appear in the model call log and count
+against the hourly spend cap like every other call. At the top of the
+interval's range no separate call is ever made and mentor calls carry the
+record alone.
+
+**How it is used.** The record goes to the mentor tier as a second system
+block after the prompt, each with its own cache marker, so the prompt stays
+cached across refreshes while the block stays cached until the next refresh
+rewrites it. Triage receives the same record as one compact paragraph in its
+user message, enough to notice an action that conflicts with the goal without
+paying for the whole thing. Three suggestion categories judge the current
+action against the inferred goal: `wont_achieve_goal`, `less_efficient`, and
+`unwanted_side_effect`. They are raised only when there is an understanding to
+judge against, they carry the goal they were judged against (shown in the
+history window), and "Never for this" suppresses each one per app exactly like
+every other category.
+
+**Size and lifetime.** `understandingTokenBudget` (1200 tokens, settable up to
+3000 so a mentor reply keeps room for its thinking and a suggestion beside the
+record) bounds it: the model is told the budget and the app trims to fit on
+the way in, dropping the
+oldest timeline entries first, then the oldest mentor history, then concerns,
+then the weakest goals, always keeping the strongest goal. It expires after
+`understandingIdleGap` with no activity (4 hours), always at a new day, and
+whenever a different build's schema wrote it; expiry and reset are journaled.
+**Reset Understanding**, in Settings > Mentor and in the debug panel, forgets
+every revision at once. Revisions are inserted rather than updated, so the
+journal keeps the trail of how the reading developed, and the current one
+survives a relaunch.
+
+**What it costs.** The common case is free: a mentor call was going to happen
+anyway and the record rides along in its reply, paying only for the extra
+output tokens it writes. A periodic refresh is one call on the understanding
+model, text only. Measured on 2026-09-13 writing the first record from a
+15-minute window: 12,899 input and 1,161 output tokens, $0.09, 70 seconds on
+Claude Opus 5 at low effort. So an hour of reading and browsing with no mentor
+call in it costs about $0.38 in refreshes against the $1 default cap. Raise
+the interval, or pick Claude Haiku 4.5 for this tier, to spend less; both are
+in Settings > Mentor. Like the mentor tier, a refresh holds triage while it
+runs, so a long one costs a change moment or two as well. The debug panel's
+Understanding card shows the revision, when it was last written, which path
+wrote it, its size against the budget, and what refresh calls have cost since
+this understanding began.
 
 ### Spend control
 
@@ -652,13 +746,29 @@ counted (see Iterating without the network).
   observation (cut at 6000 characters), and a compact summary of recent
   journal events. The mentor tier receives the rolling window of recent
   observations' text (app, window, accessibility summary, and OCR text of
-  each, bounded by the window duration and token budget in Settings) and, by
+  each, reaching back to the window duration in Settings and taking every
+  screen journaled since the standing record's last write read the journal,
+  bounded by the token budget with the oldest left out and said so when the
+  record does not already cover them) and, by
   default, the latest kept thumbnail as a JPEG image. "Send the latest
   screenshot to the mentor model" in Settings > Mentor turns the image off, in
   which case the mentor tier receives text only. While mentorship contexts
   are enforced, the mentor tier also receives the name and description of the
-  declared context the moment was placed in. Nothing else is sent: no file
-  names, no keystrokes, no earlier thumbnails, no key.
+  declared context the moment was placed in. The understanding refresh tier
+  receives the current record, the screens since it was last written (the
+  oldest left out, and said so, when they exceed the window's token budget),
+  the event summary, and the titles and categories of recent suggestions with
+  the user's answers; never an image. All three tiers also receive the
+  standing understanding itself, which is the model's own prose about the
+  work, never raw screen text. Nothing else is sent: no file names, no
+  keystrokes, no earlier thumbnails, no key.
+- **The understanding is model-written prose about the work**, kept in the
+  journal on this Mac like everything else, readable in full in the debug
+  panel, bounded by its token budget, expiring with the idle gap and at a new
+  day, and removable at any time with Reset Understanding or Clear Journal.
+  Both prompts that write it, the mentor prompt and the refresh prompt, tell
+  the model to leave out anything private, financial, medical, or personal,
+  and anything about other people on screen.
 - The API key lives in the login keychain, is passed per request, and is never
   written to the journal, the logs, or the debug panel, which show at most its
   last four characters.
@@ -708,7 +818,11 @@ mentorship context verdict, the last triage and mentor calls with tokens, cached
 tokens, estimated cost and latency, spend this hour, the cadence state with
 the current slowdown, the last callout decision with its region in frame
 pixels and screen points, and the last transcript with what was done with
-it), focused element
+it), the Understanding card (revision, when and how it was last written, the
+inferred goals with their evidence and confidence, the timeline, what has been
+said and answered, open concerns, when the next refresh is due or why it is
+held, size against the budget, cost since it began, and Reset Understanding),
+focused element
 (role, title, description, text), cadence settings and counters, journal size
 and path. Centre: the latest kept frame with OCR boxes overlaid and the
 recognized text below; selecting an observation in the timeline shows that
@@ -728,16 +842,18 @@ ones), and each replayed call in the log is tagged Replay and not billed.
 `Mentor --snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the
 macOS 26 SDK this package targets, and uploads the rendered PNGs, replay-mode
 renders included, as the `ui-snapshots` artifact. The tests exercise the pure
-parts (hashing, cadence, journal, retention, settings, the mentor scheduler and
-gates, mentorship context rules and placement, spend accounting, snooze and
-never-for-this rules, the rolling window, request and response coding against
+parts (hashing, cadence, journal, retention and its in-place migration,
+settings, the mentor scheduler and every gate, mentorship context rules and
+placement, spend accounting, snooze and never-for-this rules per category, the
+rolling window, the understanding's encoding, versioning, bounding and expiry,
+prompt assembly with and without one, request and response coding against
 fixture JSON, recording, redaction, replay matching and stale refusal, launch
 flags, a replay's separate files, callout mapping and every anchor rejection,
 transcript matching, the follow-up prompt and gate, the toast rule for voice
-input, the whole loop against a scripted client, follow-ups included, and the whole loop against
-the committed replay fixtures, replayed strictly, a region and a follow-up
-answer included) and Vision OCR on a drawn bitmap, so they need no permissions,
-display, network, microphone, or API key. A committed fixture that is stale, or
-a tier with no committed fixture, fails the run (see The committed fixtures).
-The snapshot run covers the callout over the sample frame, the listening and
-answered toasts, and the talk-back settings.
+input, the whole loop against a scripted client, follow-ups included, and the
+whole loop against the committed replay fixtures, replayed strictly, a region
+and a follow-up answer included) and Vision OCR on a drawn bitmap, so they need
+no permissions, display, network, microphone, or API key. A committed fixture
+that is stale, or a tier with no committed fixture, fails the run (see The
+committed fixtures). The snapshot run covers the callout over the sample frame,
+the listening and answered toasts, and the talk-back settings.
