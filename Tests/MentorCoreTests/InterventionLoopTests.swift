@@ -239,8 +239,11 @@ import Testing
             else { continue }
             return RegionFixture(triage: triage, mentor: entry, payload: payload, region: region, frame: frame)
         }
-        Issue.record("a shown mentor recording must carry a region, recorded from a request that states its frame size")
-        throw CancellationError()
+        throw MissingFixture(description: "a shown mentor recording must carry a region, recorded from a request that states its frame size")
+    }
+
+    private struct MissingFixture: Error, CustomStringConvertible {
+        var description: String
     }
 
     @Test func theCommittedFixturesCarryARegionInsideItsFrameAndAFollowUpAnswer() throws {
