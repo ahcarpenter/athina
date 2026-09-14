@@ -188,7 +188,7 @@ replay directory, and a replay without one refuses that kind of call by name.
 
 ### The committed fixtures
 
-`Tests/MentorCoreTests/Fixtures/Replay` is a small set recorded live once from a
+`Tests/MentorCoreTests/Fixtures/Replay` is a small set recorded live from a
 staged, synthetic scenario (see its README), never from anyone's real work, on
 the cheapest models that exercise every call kind. `ReplayLoopTests` runs the
 whole loop against it: every triage fixture in turn, the mentor calls they
