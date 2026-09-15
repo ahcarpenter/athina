@@ -145,6 +145,9 @@ final class AppState {
     private var toastTask: Task<Void, Never>?
     private var toastDeadline: Date?
     private var toastRemaining: TimeInterval?
+    /// The toast the user has talked to: a transcript was matched to an
+    /// answer or a question was asked. A press that heard nothing does not count.
+    private var talkedToSuggestionID: Int64?
     private let toast = ToastController()
     private let callouts = CalloutController()
     private var calloutTask: Task<Void, Never>?
@@ -546,6 +549,13 @@ final class AppState {
         stopCalloutWatch()
         cancelTalkBack()
         activeSuggestion = nil
+        talkedToSuggestionID = nil
+        endHold()
+    }
+
+    /// Tells the loop no talked-to toast is up, so a suggestion held for it
+    /// is shown if still fresh.
+    private func endHold() {
         Task { await mentor?.setTalkingBack(false) }
     }
 
@@ -822,8 +832,8 @@ final class AppState {
     /// The suggestion a reply is about: the toast that is up, or the most
     /// recent suggestion brought back as a toast that stays until it is
     /// closed. An exchange keeps the toast up, like expanding it, so its
-    /// countdown stops. Nil, with a note,
-    /// when Mentor has not made a suggestion yet.
+    /// countdown stops; what was left of it is kept in case nothing is heard.
+    /// Nil, with a note, when Mentor has not made a suggestion yet.
     private func suggestionToTalkTo() -> Suggestion? {
         let suggestion: Suggestion
         if let active = activeSuggestion {
@@ -835,7 +845,9 @@ final class AppState {
             toast.showNote("Nothing to reply to yet: Mentor has not made a suggestion.")
             return nil
         }
+        let remaining = toastDeadline.map { max(2, $0.timeIntervalSinceNow) } ?? toastRemaining
         cancelToastExpiry()
+        toastRemaining = remaining
         return suggestion
     }
 
@@ -899,13 +911,27 @@ final class AppState {
     }
 
     /// What a transcript, heard or typed, does: one of the toast's answers, or
-    /// one follow-up question whose answer lands in the toast.
+    /// one follow-up question whose answer lands in the toast. Either makes
+    /// the toast a talked-to one that stays up, and holds new suggestions,
+    /// until it is closed. A press that heard nothing is not an exchange: the
+    /// toast gets back whatever countdown it had, and nothing is held for it.
     private func act(on text: String?, for suggestion: Suggestion) async {
         guard let text, let match = TranscriptMatcher.match(text) else {
             lastTranscript = TranscriptRecord(at: Date(), text: text ?? "", handling: "nothing heard")
             setTalkBack(.idle)
             toast.showNote("Mentor did not catch that.")
+            if talkedToSuggestionID != suggestion.id {
+                endHold()
+                if activeSuggestion?.id == suggestion.id, let remaining = toastRemaining {
+                    toastRemaining = nil
+                    scheduleToastExpiry(for: suggestion.id, after: remaining)
+                }
+            }
             return
+        }
+        if activeSuggestion?.id == suggestion.id {
+            talkedToSuggestionID = suggestion.id
+            toastRemaining = nil
         }
         switch match {
         case .answer(let feedback):

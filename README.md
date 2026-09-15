@@ -556,7 +556,9 @@ A suggestion the mentor tier finishes while a talked-to toast is up never
 replaces it. `MentorScheduler.publishGate` holds it, leaving the toast, the
 recording, the pending answer, and the answer on screen untouched; the
 exchange ends only when that toast is closed, by the user answering or
-dismissing it. Then the held suggestion is shown normally if it is at most
+dismissing it. A press that hears nothing is not an exchange: the toast gets
+back whatever countdown it had, and anything held in the meantime is shown at
+once. Otherwise the held suggestion is shown normally if it is at most
 30 s old (the same staleness bound as a queued observation); otherwise, and
 whenever Mentor is paused while one is held, it is journaled with the feedback
 "Expired, never shown" and never put on screen, since the screen it describes

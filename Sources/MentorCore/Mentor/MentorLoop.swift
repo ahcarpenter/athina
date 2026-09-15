@@ -494,7 +494,8 @@ public actor MentorLoop {
             suggestionID: suggestion.id, timestamp: now, question: question,
             model: settings.mentorModel, promptVersion: MentorPrompts.version
         )
-        var gate = scheduler.followUpGate(conditions: conditions(now: now))
+        var asking = now
+        var gate = scheduler.followUpGate(conditions: conditions(now: asking))
         while gate == .wait {
             let record = MentorStatus.PendingFollowUp(suggestionID: suggestion.id, question: question, since: now)
             let asked = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
@@ -504,7 +505,8 @@ public actor MentorLoop {
                 Task { await self.publishStatus() }
             }
             guard asked else { return nil }
-            gate = scheduler.followUpGate(conditions: conditions(now: now))
+            asking = Date()
+            gate = scheduler.followUpGate(conditions: conditions(now: asking))
         }
         if case .hold(let hold) = gate {
             followUp.error = hold.label
@@ -520,7 +522,7 @@ public actor MentorLoop {
             screenText = try? await journal.observation(id: observationID)?.ocrText
         }
         let text = PromptBuilder.followUpMessage(
-            suggestion: suggestion, screenText: screenText, exchange: exchange, question: question, now: now
+            suggestion: suggestion, screenText: screenText, exchange: exchange, question: question, now: asking
         )
         let model = settings.mentorModelInfo
         let request = MessagesRequest(
