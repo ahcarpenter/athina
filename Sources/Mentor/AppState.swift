@@ -530,10 +530,16 @@ final class AppState {
     }
 
     private func show(_ suggestion: Suggestion, autoExpires: Bool) {
-        if let active = activeSuggestion, active.id != suggestion.id {
+        if case .bringToFront = TalkBackPress.bringingBack(suggestion.id, over: activeSuggestion?.id) {
+            cancelToastExpiry()
+            toast.bringToFront()
+            return
+        }
+        if let active = activeSuggestion {
             respond(to: active.id, with: .expired)
         }
         cancelToastExpiry()
+        toastHovered = false
         cancelTalkBack()
         activeSuggestion = suggestion
         toast.show(suggestion, expanded: false, exchange: exchange(for: suggestion.id))
@@ -577,7 +583,6 @@ final class AppState {
         switch outcome {
         case .talkedTo:
             talkedToSuggestionID = suggestion.id
-            Task { await mentor?.setTalkingBack(true) }
         case .notAnExchange(let countdown):
             endHold()
             guard let countdown, activeSuggestion?.id == suggestion.id else { return }
@@ -972,6 +977,9 @@ final class AppState {
             AppState.log.notice("transcript answered \(feedback.rawValue, privacy: .public)")
             if feedback == .tellMeMore { toast.expand() }
             respond(to: suggestion.id, with: feedback)
+            if activeSuggestion?.id == suggestion.id {
+                Task { await mentor?.setTalkingBack(true) }
+            }
         case .question(let question):
             lastTranscript = TranscriptRecord(at: Date(), text: text, handling: "asked the mentor")
             AppState.log.notice("transcript asked the mentor")
