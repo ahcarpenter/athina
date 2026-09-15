@@ -2,21 +2,24 @@
 
 Live mentor for macOS: watches what you are doing and offers timely guidance.
 
-Two phases are in place. The **foundation** is a menu-bar app that senses what
-you are doing (accessibility context plus low-cadence screen capture with
+Three phases are in place. The **foundation** is a menu-bar app that senses
+what you are doing (accessibility context plus low-cadence screen capture with
 on-device OCR), records it in a local journal, and shows a debug panel with what
 it currently thinks you are doing. The **mentor loop** subscribes to that
 stream and asks Claude, in two tiers, whether there is a genuinely more helpful
 way to approach what you are doing; when there is, a small toast says so and
-learns from your answer. Callouts, voice, and halt-and-redirect are later
-phases.
+learns from your answer. **Callouts and voice** let a suggestion point at the
+spot on screen it is about and take a spoken reply: an answer to the toast, or
+a question the mentor tier answers. Reading suggestions aloud is deferred.
+Halt-and-redirect and learned suppression are later phases.
 
 ## Requirements
 
 - macOS 26 or later (developed and measured on macOS 27, Apple Silicon)
 - Xcode 26 or later with its command line tools (`swift`, `codesign`)
 - No third-party dependencies: SwiftUI, ScreenCaptureKit, Vision, the
-  accessibility API, Carbon hotkeys, and the system SQLite
+  accessibility API, Carbon hotkeys, AVFoundation and Speech for talking
+  back, and the system SQLite
 
 ## Build, run, test
 
@@ -72,6 +75,15 @@ with an explicit requirement on the bundle identifier
 grant made once stays valid. The trade-off is that any ad-hoc binary claiming
 that identifier would inherit the grants, which is acceptable on a development
 machine and is exactly what a development certificate fixes.
+
+The keychain is stricter than TCC: for an app that is not Apple-signed it
+trusts a keychain item's readers by the hash of the exact binary, so the
+first time a rebuilt ad-hoc Mentor reads the API key, macOS can show its
+"Mentor wants to access key" prompt. The app reads the key off the main
+thread and keeps sensing behind the prompt, but makes no live call until it
+is answered. Always Allow adds that build to the item's list; Deny leaves the
+loop without a key until the next launch. A replay never reads the key, so it
+never shows the prompt. A development certificate makes this go away too.
 
 If a grant was made against an older build (the app shows a permission as
 missing although System Settings shows it on), remove the stale record and
@@ -190,11 +202,14 @@ replay directory, and a replay without one refuses that kind of call by name.
 
 `Tests/MentorCoreTests/Fixtures/Replay` is a small set recorded live from a
 staged, synthetic scenario (see its README), never from anyone's real work, on
-the cheapest models that exercise every call kind. `ReplayLoopTests` runs the
-whole loop against it: every triage fixture in turn, the mentor calls they
-lead to, the suggestion, its feedback, the journal rows, zero spend, and the
-cycle starting over. The same tests fail when a file carries anything shaped
-like a key, or an em dash.
+the cheapest models whose answers are worth replaying for every call kind (its
+README names them). `ReplayLoopTests` runs the whole loop against it: every
+triage fixture in turn, the mentor calls they lead to, the suggestion, its
+feedback, the journal rows, zero spend, and the cycle starting over.
+`ReplayInterventionTests` replays the mentor reply's region into a placed
+callout and the recorded follow-up answer. The same tests fail when a file
+carries anything shaped like a key, or an em dash, and when the set has no
+shown suggestion with a region or no follow-up answer.
 
 They also fail when the set is not current: a fixture recorded with another
 prompt version than `MentorPrompts.version`, or a tier with no fixture, fails
@@ -214,9 +229,14 @@ scenario and an empty journal:
    documents in the fixture directory's `scenario/` folder work), and add every
    other running app to Settings > Privacy > Excluded apps.
 3. Run `make record RECORD_DIR=recordings`, drive it through a moment worth a
-   look that yields a shown suggestion, a quiet moment, a Test Connection, and
-   one call of every other kind, then quit.
-4. Read every file, text and screenshot, replace the fixture directory's
+   look that yields a shown suggestion pointing at one spot, a quiet moment, a
+   follow-up question typed into the debug panel's Talk back field, a Test
+   Connection, and one call of every other kind, then quit. Drive it without
+   keystrokes (TextEdit scripting and accessibility actions), so no other app
+   takes the front and reaches a request's event history; raise the idle
+   threshold for the session so sensing does not stop behind it.
+4. Read every file, text and screenshot, and every reply for quality (a model
+   can fill a required field with an empty string), replace the fixture directory's
    recordings with the ones you keep, update its README, delete the rest, put
    the journal and settings back, and run `make fixture-status` and
    `swift test`.
@@ -226,16 +246,21 @@ answer, such as a refusal, an unparseable reply, or a slow call.
 
 ## Permissions
 
-Mentor asks for two permissions and explains each in a first-run window that
-opens whenever one is missing. The window triggers each missing permission's
-system prompt once when it opens, so Mentor appears in both System Settings
-lists, shows live status, deep-links to the matching System Settings pane, and
-re-checks every second while open and when the app regains focus.
+Mentor needs two permissions and explains each in a first-run window that
+opens whenever one is missing. The window triggers each missing sensing
+permission's system prompt once when it opens, so Mentor appears in both
+System Settings lists, shows live status, deep-links to the matching System
+Settings pane, and re-checks every second while open and when the app regains
+focus. Two more are optional and serve only talking back; the window lists
+them below the required pair and asks for them only when you press Grant or
+first hold the talk-back key.
 
 | Permission | Used for | Without it |
 | --- | --- | --- |
 | Screen Recording | ScreenCaptureKit capture of the display containing the focused window, then Vision OCR | Accessibility-only mode: app, window, and focused element are still sensed; no frames |
-| Accessibility | Focused app, window title, focused element role and text, via the AX API | Screen-only mode: frames and OCR only; app identity comes from NSWorkspace |
+| Accessibility | Focused app, window title, focused element role and text, via the AX API; the live window frame a callout is checked against | Screen-only mode: frames and OCR only; app identity comes from NSWorkspace; no callouts, since the window cannot be verified |
+| Microphone (optional) | Hearing you while the talk-back key is held | Talking back is off; a key press says so |
+| Speech Recognition (optional) | Turning that audio into text on this Mac with the system recognizer, on-device only | Talking back is off; a key press says so |
 
 Idle detection uses `CGEventSource.secondsSinceLastEventType`, which needs no
 permission. Input Monitoring is never requested. The only network connection
@@ -265,11 +290,17 @@ Sources/MentorCore            library, fully testable
   Mentor/                     MentorScheduler (pure trigger, debounce, and gate state machine), SpendMeter,
                               SuppressionRules (snooze and never-for-this), MentorshipContexts (declared
                               contexts, normalizing, placement), ContextBuilder (rolling window, prompt
-                              text), Prompts (versioned system prompts and output schemas), Suggestion and
-                              ModelCallRecord, MentorLoop (orchestration)
-  System/                     PermissionProbe, InputActivity (idle seconds), ProcessResources (CPU, memory)
+                              text, follow-up message), Prompts (versioned system prompts and output
+                              schemas), Suggestion, FollowUp and ModelCallRecord, Callout (CalloutRegion,
+                              CalloutAnchor: frame-to-screen mapping and every rule that refuses a
+                              callout), TalkBack (TranscriptMatcher, FollowUp, TalkBackState),
+                              MentorLoop (orchestration)
+  System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
+                              ProcessResources (CPU, memory)
 Sources/Mentor                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
-                              HotKeyCenter (Carbon), Snapshots
+                              Overlay/CalloutController (click-through overlay), Voice/SpeechListener
+                              (on-device speech recognition), HotKeyCenter (Carbon, press and release),
+                              Snapshots
 Tests/MentorCoreTests         Swift Testing suites for the pure parts, with JSON fixtures under Fixtures/
 ```
 
@@ -315,12 +346,15 @@ oldest thumbnails and finally the oldest observations and events until it fits.
 "Clear Journal" in settings deletes everything.
 
 The mentor loop adds two tables: `suggestions` (every suggestion shown, with
-the user's feedback) and `model_calls` (one row per API call: tier, model,
-prompt version and size, token counts, estimated cost, latency, outcome, and
-the model's one-line reason, and whether it was replayed; never the prompt
-text). A moment held at the context boundary is recorded there as the
-`outOfContext` outcome. Both expire
-with `textRetention` and are emptied by Clear Journal.
+the user's feedback, the region it pointed at if any, and whether a callout
+was drawn) and `model_calls` (one row per API call:
+tier, model, prompt version and size, token counts, estimated cost, latency,
+outcome, the model's one-line reason, and whether it was replayed; never the
+prompt text). A moment held at the context boundary is recorded there as the
+`outOfContext` outcome. Talking back adds `follow_ups` (one row per question:
+the transcript, the answer or why there is none, and the model). All three expire with `textRetention` and are emptied by
+Clear Journal. Columns added after a table shipped are added to an existing
+journal on open, so older files keep working.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
 to defaults so older files keep working. A replay keeps both files in a
@@ -365,8 +399,10 @@ each kept observation it runs, in order:
    the message also names the declared context the moment was placed in, with
    its description, so the suggestion stays useful for that work. The reply is
    `{"reason": string,
-   "suggestion": null | {title, body, explanation, category, confidence}}`. A
-   null suggestion is the normal outcome.
+   "suggestion": null | {title, body, explanation, category, confidence, region}}`.
+   A null suggestion is the normal outcome, and a null region is the normal
+   suggestion; the region is filled only when the suggestion is about one
+   specific spot visible in the attached screenshot (see Callouts).
 
    Each tier has its own model and effort in Settings > Mentor. Effort (low,
    medium, high, extra high) goes out as `output_config.effort` only to models
@@ -375,8 +411,9 @@ each kept observation it runs, in order:
    (adaptive on Sonnet 5, Opus 5, and Fable 5.1); no thinking configuration is
    sent.
 
-5. **Delivery.** A suggestion under `minimumConfidence` or in a snoozed or
-   never-for-this category is logged and dropped. Otherwise it is journaled and
+5. **Delivery.** A suggestion under `minimumConfidence`, in a snoozed or
+   never-for-this category, or with an empty title or body is logged and
+   dropped. Otherwise it is journaled and
    shown as a toast: a floating, non-activating panel under the menu bar that
    never takes keyboard focus and auto-dismisses after `toastTimeout` (60 s;
    the countdown pauses while the pointer is over it). Closing it with the x,
@@ -404,6 +441,142 @@ Menu > Show Last Suggestion brings a missed toast back; a toast asked for
 that way never expires on its own, and a non-answer never overwrites an
 answer already given. The API key is read from the Keychain inside the loop
 and passed per request; it is never journaled or logged.
+
+### Callouts
+
+A suggestion that is about one specific spot on screen can point at it. The
+mentor output schema carries an optional `region`: a bounding box in the
+pixel coordinates of the frame the model saw (the message states the frame's
+size) plus a note of a few words, such as "this flag". The prompt tells the
+model to leave it null when no screenshot is attached, when the suggestion is
+about the work as a whole, or when it is not sure where the spot is, because
+a box on the wrong thing is worse than no box. The loop keeps a region only
+when an image was actually sent and the box lies inside the frame; anything
+else is dropped before the suggestion is journaled.
+
+Placing the callout is `CalloutAnchor`'s job, a pure function the app feeds
+live readings to. The region is mapped through the observation's `FrameInfo`
+into global display points with the same scale OCR blocks use, so a region
+that covers a recognized line lands exactly on that line's `screenRect`. The
+callout is then drawn only when every check passes, and the first failure is
+the recorded reason:
+
+- the region is inside the frame and at least a few pixels in each dimension;
+- the display the frame came from is still attached with the same bounds;
+- the screen under the spot was last confirmed unchanged no more than two
+  minutes ago (`CalloutAnchor.maxFrameAge`; see below for what confirms it);
+- the observation recorded the window's frame, which needs Accessibility;
+- the same process is frontmost and a fresh accessibility read shows the same
+  window (bundle identifier and title) with its frame within two points of
+  where it was captured;
+- the spot's centre lies inside that window.
+
+While a callout is up the app repeats the check once a second, and takes the
+callout down the moment a check fails: the window moved, another window or app
+came to the front, the display configuration changed, or the frame aged out.
+A window can also change without moving: a terminal scrolls, a document is
+edited. `CalloutWitness` watches for that. Every frame the sensing pipeline
+keeps of the same window must still show the recognized text the region
+framed within a few pixels (`CalloutAnchor.contentStillMatches`), or the
+callout comes down with "content under the spot changed". Such a frame also
+confirms the screen, and so does each capture the pipeline then drops as a
+near duplicate of it, because it drops one only when the picture, the window,
+and the focused text are all unchanged. Staleness counts from the latest
+confirmation, so a callout over a screen nobody touches stays up with its
+toast, through a follow-up question, while one that nothing has confirmed for
+two minutes comes down. The callout also goes
+away whenever the toast does, for any reason. Menu > Show Last Suggestion
+re-shows the callout only when its anchor still passes.
+
+The overlay itself is `CalloutController`: a transparent, borderless,
+non-activating panel above normal windows on the display the frame came from,
+with `ignoresMouseEvents` set, so it never takes focus and never intercepts a
+click, key, or scroll. It draws a tinted rounded box with a soft glow around
+the spot and the note in a material pill beside it, to its right, where the
+rest of a line of text is usually empty (below the box, or above it at the
+bottom of the display, only when there is no room), styled like the toast. Mentor's own windows are excluded from
+capture, so the overlay never appears in a frame. Settings > Mentor > "Show
+callouts on screen" (on by default) turns callouts off; the history window
+records for each suggestion whether one was drawn, and the debug panel's
+Mentor card shows the last callout decision with the region in frame pixels
+and in screen points.
+
+### Talking back
+
+A push-to-talk hotkey, recorded in Settings > Mentor the same way as the pause
+hotkey and unset by default, captures the microphone only while it is held.
+Carbon's hotkey registration delivers both `kEventHotKeyPressed` and
+`kEventHotKeyReleased` for a combination it registered, so `HotKeyCenter`
+hears the key go down and up without Input Monitoring or any other
+permission beyond the two optional ones. The same combination cannot be both
+the pause and the talk-back key; the recorder refuses it and validation
+clears it. A recording is cut off after 30 seconds in case the release is
+missed.
+
+Audio goes to `SFSpeechRecognizer` for the current locale with
+`requiresOnDeviceRecognition` set, so nothing is sent to Apple's servers. When
+the locale has no on-device recognizer, Settings and the menu say so plainly
+and the feature stays off rather than falling back to server recognition.
+While the key is held the toast shows a listening indicator and the live
+transcript. The toast being talked to is never hidden while voice input is
+active: from the key going down until the transcript is handled or the answer
+is shown, it does not expire, a click elsewhere does not dismiss it, and it is
+kept in front of other windows; afterwards it stays up until it is closed,
+like an expanded one, and no new suggestion replaces it until then (see
+below). Each recording is its own session: a recognizer result or timeout left
+over from an earlier one is ignored, so a re-press never hears the previous
+question again.
+
+When the key is released, `TranscriptMatcher` reads the whole utterance,
+lowercased, without punctuation, and with filler words such as "please"
+trimmed from the ends. "Tell me more", "not now", and "never for this" (and
+close variants: "more", "later", "no thanks", "never again", "don't show this
+again") perform that answer; "never mind", "close it", and "got it" close the
+toast. Anything else becomes one follow-up question to the mentor tier: the
+suggestion (title, body, explanation), the exchange so far on that suggestion,
+the recognized text of the screen the suggestion was made from when the
+journal still has it, and the transcript, on the mentor model and effort,
+with structured output `{"answer": string}`. The answer appears in the toast's
+exchange area; an empty answer is journaled as an error and the toast says
+so. The call is
+journaled in the model call log with the `followUp` tier and counted against
+the hourly spend cap like every other call; the same gates that hold both
+tiers (off, paused, idle, excluded app, no key, the cap) hold a follow-up,
+which is then journaled with the reason and never sent
+(`MentorScheduler.followUpGate`). A question released while another call is
+in flight is not refused: the toast says it is waiting, and it is asked as
+soon as that call returns. At most one question waits; pressing the key again
+withdraws it and the new question takes its place, and closing the toast or
+pausing withdraws it too, in neither case journaling anything. The key does
+nothing with no suggestion to talk back to except a brief note in the toast
+area, and with no toast up it brings the most recent suggestion back to talk
+to. The history window shows the full exchange under each suggestion, and the
+debug panel's Mentor card shows the last transcript and what was done with it.
+
+A suggestion the mentor tier finishes while a talked-to toast is up never
+replaces it. `MentorScheduler.publishGate` holds it, leaving the toast, the
+recording, the pending answer, and the answer on screen untouched; the
+exchange ends only when that toast is closed, by the user answering or
+dismissing it. A press that hears nothing, or a recording cut short by
+pausing, is not an exchange (`TalkBackPress`): the toast gets back whatever
+countdown it had (still paused while the pointer is over it), and anything
+held in the meantime is shown at once. Show Last Suggestion during a recording
+on a different toast ends it the same way; on the toast already on screen it
+only brings that toast to the front and does not end its own exchange. The
+toast it brings back stays up until closed, as it always does. Otherwise the
+held suggestion is shown normally if it is at most 30 s old (the same staleness
+bound as a queued observation); otherwise, and
+whenever Mentor is paused while one is held, it is journaled with the feedback
+"Expired, never shown" and never put on screen, since the screen it describes
+is gone. Such a suggestion still appears in the history window but is skipped
+by Show Last Suggestion and by a key press with no toast up, which bring back
+the most recent suggestion that was actually shown.
+
+The Mentor card also has a **Talk back** field. Words typed there and sent take
+exactly the path a released key does, from transcript matching to the
+follow-up call and the answer in the toast, so the whole path can be
+checked, in a replay or while recording a follow-up fixture, on a Mac where
+Microphone and Speech Recognition are not granted.
 
 ### Mentorship contexts
 
@@ -464,6 +637,15 @@ counted (see Iterating without the network).
   it. The only network peer is `api.anthropic.com`, reached only by the mentor
   loop, only when an API key is saved and the loop is enabled. No other part
   of the app has network code.
+- **Audio and transcripts stay on this Mac.** The microphone is open only
+  while the talk-back key is held, and only the system's on-device recognizer
+  ever hears it; audio is never stored. The one exception is deliberate: a transcript you spoke while holding
+  the key (or typed into the debug panel's Talk back field), when it is not
+  one of the toast's answers, is sent to the mentor tier as your follow-up
+  question, together with the suggestion it is about,
+  the earlier questions and answers on that suggestion, and the recognized
+  text of the screen the suggestion was made from. Transcripts are journaled
+  locally with the answers so the history window can show the exchange.
 - **What leaves the machine.** The triage tier receives text only: the
   frontmost app and window title, the accessibility summary (focused element
   role and an excerpt of its text), the OCR text of the latest kept
@@ -494,8 +676,8 @@ counted (see Iterating without the network).
 - Secure text fields are never read, even in non-excluded apps, so their
   contents never reach either tier.
 - Model calls are journaled as counts (tokens, cost, latency, outcome) with the
-  model's one-line reason, never with the prompt or the screen text that was
-  sent.
+  model's one-line reason, or the first line of a follow-up answer, never with
+  the prompt or the screen text that was sent.
 - **Recordings** are the one exception, and only when the app is launched with
   `--record`: each call's whole request, screen text and screenshot included,
   and its answer are written to a file on this Mac
@@ -523,8 +705,10 @@ counted (see Iterating without the network).
 Menu bar > Debug Panel. Left: frontmost app, window, the Mentor loop card
 (availability, the last triage gate decision and its reason, the current
 mentorship context verdict, the last triage and mentor calls with tokens, cached
-tokens, estimated cost and latency, spend this hour, and the cadence state with
-the current slowdown), focused element
+tokens, estimated cost and latency, spend this hour, the cadence state with
+the current slowdown, the last callout decision with its region in frame
+pixels and screen points, and the last transcript with what was done with
+it), focused element
 (role, title, description, text), cadence settings and counters, journal size
 and path. Centre: the latest kept frame with OCR boxes overlaid and the
 recognized text below; selecting an observation in the timeline shows that
@@ -548,8 +732,12 @@ parts (hashing, cadence, journal, retention, settings, the mentor scheduler and
 gates, mentorship context rules and placement, spend accounting, snooze and
 never-for-this rules, the rolling window, request and response coding against
 fixture JSON, recording, redaction, replay matching and stale refusal, launch
-flags, a replay's separate files, the whole loop against a scripted client, and
-the whole loop against the committed replay fixtures, replayed strictly) and
-Vision OCR on a drawn bitmap, so they need no permissions, display, network, or
-API key. A committed fixture that is stale, or a tier with no committed
-fixture, fails the run (see The committed fixtures).
+flags, a replay's separate files, callout mapping and every anchor rejection,
+transcript matching, the follow-up prompt and gate, the toast rule for voice
+input, the whole loop against a scripted client, follow-ups included, and the whole loop against
+the committed replay fixtures, replayed strictly, a region and a follow-up
+answer included) and Vision OCR on a drawn bitmap, so they need no permissions,
+display, network, microphone, or API key. A committed fixture that is stale, or
+a tier with no committed fixture, fails the run (see The committed fixtures).
+The snapshot run covers the callout over the sample frame, the listening and
+answered toasts, and the talk-back settings.

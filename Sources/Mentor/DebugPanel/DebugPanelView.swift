@@ -652,6 +652,7 @@ private struct TimelineRow: View {
             case .retention: "clock.arrow.circlepath"
             case .suggested: "lightbulb.fill"
             case .feedback: "hand.thumbsup"
+            case .talkBack: "mic"
             }
         }
     }
@@ -666,6 +667,7 @@ private struct TimelineRow: View {
             case .journalCleared: .red
             case .suggested: .yellow
             case .feedback: .green
+            case .talkBack: .teal
             default: .secondary
             }
         }
@@ -706,8 +708,11 @@ private struct MentorCard: View {
                     Field(label: "Last mentor", value: describe(state.mentorStatus.lastMentor, now: context.date), lineLimit: 4)
                     Field(label: "Spend", value: spend(now: context.date))
                     Field(label: "Cadence", value: cadence(now: context.date))
+                    Field(label: "Callout", value: callout(now: context.date), lineLimit: 6)
+                    Field(label: "Transcript", value: transcript(now: context.date), lineLimit: 4)
                 }
             }
+            TalkBackField()
         }
     }
 
@@ -760,6 +765,33 @@ private struct MentorCard: View {
                 ModeField(label: "Fixtures", value: fixtures, lineLimit: 3),
                 ModeField(label: "From", value: Formatting.path(directory), truncation: .middle),
             ]
+        }
+    }
+
+    /// The last callout decision with both coordinate spaces: the frame
+    /// pixels the model answered in and the screen points it mapped to.
+    private func callout(now: Date) -> String {
+        guard let record = state.lastCallout else { return "none yet" }
+        var text = "\(record.status.rawValue) \(Formatting.age(record.at, now: now))"
+        if let reason = record.reason { text += ": \(reason)" }
+        text += "\n\"\(record.region.note)\", frame \(Formatting.rect(record.region.rect)) px"
+        if let placement = record.placement {
+            text += "\nscreen \(Formatting.rect(placement.screenRect)) pt on display \(placement.displayID)"
+        }
+        return text
+    }
+
+    private func transcript(now: Date) -> String {
+        switch state.talkBack {
+        case .listening(let partial):
+            return partial.isEmpty ? "listening…" : "listening: \"\(partial)\""
+        case .waiting(let question):
+            return "waiting for the call in flight to ask: \"\(question)\""
+        case .thinking(let question):
+            return "asking the mentor: \"\(question)\""
+        case .idle:
+            guard let record = state.lastTranscript else { return "none yet" }
+            return "\"\(record.text)\" \(Formatting.age(record.at, now: now)), \(record.handling)"
         }
     }
 
@@ -835,6 +867,42 @@ private struct MentorCard: View {
             parts.append("mentor allowed \(Formatting.countdown(to: next, now: now))")
         }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// Typed words down the push-to-talk path: a transcript that is one of the
+/// toast's answers answers it, anything else is a follow-up question. For
+/// checking talk-back, and recording a follow-up, without a microphone.
+private struct TalkBackField: View {
+    @Environment(AppState.self) private var state
+    @State private var text = ""
+
+    private var canSend: Bool {
+        state.canTalkBackTyped && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text("Talk back")
+                .foregroundStyle(.secondary)
+                .frame(width: 78, alignment: .trailing)
+            TextField("Type a reply", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit(send)
+                .accessibilityLabel("Talk back")
+            Button("Send", action: send)
+                .disabled(!canSend)
+        }
+        .font(.callout)
+        .controlSize(.small)
+        .padding(.top, 2)
+        .help("Sends these words the way releasing the talk-back key sends what you said, to the toast that is up or the last suggestion.")
+    }
+
+    private func send() {
+        guard canSend else { return }
+        state.talkBack(typed: text)
+        text = ""
     }
 }
 
@@ -947,6 +1015,7 @@ private struct CallLogRow: View {
         switch call.tier {
         case .triage: .blue
         case .mentor: .purple
+        case .followUp: .teal
         case .test: .secondary
         }
     }

@@ -132,6 +132,8 @@ public struct SensingSettings: Codable, Equatable, Sendable {
         s.retentionInterval = s.retentionInterval.clamped(to: 30...86400)
         s.excludedBundleIDs = ExcludedApps.normalized(s.excludedBundleIDs)
         s.mentor = s.mentor.validated()
+        // One combination cannot both pause and listen; the pause key wins.
+        if s.mentor.pushToTalkHotKey == s.pauseHotKey { s.mentor.pushToTalkHotKey = nil }
         return s
     }
 

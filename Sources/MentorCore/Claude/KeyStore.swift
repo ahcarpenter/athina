@@ -8,6 +8,19 @@ public protocol KeyStore: Sendable {
     func delete() throws
 }
 
+extension KeyStore {
+    /// `load()` on a background queue. The keychain can block on its own
+    /// prompt for as long as the user takes to answer it, and neither the main
+    /// thread nor an actor's executor should wait on that.
+    public func loadInBackground() async throws -> String? {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(with: Result { try load() })
+            }
+        }
+    }
+}
+
 public struct KeyStoreError: Error, CustomStringConvertible, Equatable, Sendable {
     public let status: OSStatus
     public let operation: String
@@ -18,9 +31,11 @@ public struct KeyStoreError: Error, CustomStringConvertible, Equatable, Sendable
     }
 }
 
-/// A generic password item in the login keychain. The ad-hoc code signature's
-/// bundle-identifier requirement (see `scripts/bundle.sh`) keeps the item
-/// readable across rebuilds.
+/// A generic password item in the login keychain. The keychain trusts a
+/// non-Apple-signed app by the hash of its binary, not by the designated
+/// requirement that keeps the TCC grants, so the first read after an ad-hoc
+/// rebuild shows the system's keychain prompt once; Always Allow adds that
+/// build to the item's list (README, "Code signing").
 public struct KeychainKeyStore: KeyStore {
     public static let service = "com.ahcarpenter.mentor"
     public static let account = "anthropic-api-key"

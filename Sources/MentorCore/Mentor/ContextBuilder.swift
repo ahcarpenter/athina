@@ -1,5 +1,34 @@
 import Foundation
 
+/// Fixed 24-hour formats for prompts and the app's panels. The locale's own
+/// style may be 12-hour without a marker when the marker is omitted, which
+/// made every afternoon time read as a morning one.
+public enum ClockFormat {
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    private static let dayAndTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM d 'at' HH:mm"
+        return formatter
+    }()
+
+    /// "15:23:06", in the local time zone.
+    public static func time(_ date: Date) -> String {
+        timeFormatter.string(from: date)
+    }
+
+    /// "Sep 14 at 15:23", in the local time zone.
+    public static func dayAndTime(_ date: Date) -> String {
+        dayAndTimeFormatter.string(from: date)
+    }
+}
+
 /// A rough token estimate for budgeting prompt text. The API bills the real
 /// count; this only decides how much journal fits in the window.
 public enum TokenEstimate {
@@ -143,7 +172,9 @@ public enum PromptBuilder {
             lines.append("Suppressed categories for this app (do not raise these): \(suppressed.map(\.rawValue).joined(separator: ", ")).")
         }
         if includesImage {
-            lines.append("The attached image is the latest screen.")
+            lines.append("The attached image is the latest screen, \(latest.frame.width) by \(latest.frame.height) pixels; a region, if you give one, is in those pixels.")
+        } else {
+            lines.append("No screenshot is attached, so leave region null.")
         }
         lines.append("")
         lines.append("Recent events:")
@@ -164,6 +195,47 @@ public enum PromptBuilder {
         return lines.joined(separator: "\n")
     }
 
+    /// The follow-up message: the suggestion being discussed, the recognized
+    /// text of the screen it was made from when the journal still has it,
+    /// the exchange so far, and what the user just said.
+    public static func followUpMessage(
+        suggestion: Suggestion,
+        screenText: String?,
+        exchange: [FollowUp],
+        question: String,
+        now: Date
+    ) -> String {
+        var lines: [String] = []
+        lines.append("Time: \(clock(now))")
+        let window = suggestion.windowTitle.map { ", window \"\($0)\"" } ?? ""
+        lines.append("Your suggestion, made \(age(suggestion.timestamp, now: now)) in \(suggestion.appName)\(window) (\(suggestion.category.rawValue), confidence \(Int((suggestion.confidence * 100).rounded()))%):")
+        lines.append("Title: \(suggestion.title)")
+        lines.append("Body: \(suggestion.body)")
+        lines.append("Explanation: \(suggestion.explanation)")
+        if let region = suggestion.region {
+            lines.append("You pointed at a spot on screen with the note \"\(region.note)\".")
+        }
+        lines.append("")
+        if let screenText, !screenText.isEmpty {
+            let cut = screenText.count > triageTextLimit
+            lines.append("Recognized text of the screen the suggestion was made from (top to bottom\(cut ? ", first \(triageTextLimit) characters" : "")):")
+            lines.append(cut ? String(screenText.prefix(triageTextLimit)) : screenText)
+        } else {
+            lines.append("The screen the suggestion was made from is no longer available.")
+        }
+        if !exchange.isEmpty {
+            lines.append("")
+            lines.append("Earlier in this exchange:")
+            for entry in exchange {
+                lines.append("User: \(entry.question)")
+                lines.append("You: \(entry.answer ?? "(no answer: \(entry.error ?? "unknown error"))")")
+            }
+        }
+        lines.append("")
+        lines.append("The user now says, spoken and transcribed on their Mac: \"\(question)\"")
+        return lines.joined(separator: "\n")
+    }
+
     /// The most recent events inside `eventWindow`, newest last, one per line.
     public static func eventSummary(_ events: [JournalEvent], now: Date) -> String {
         let cutoff = now.addingTimeInterval(-eventWindow)
@@ -180,8 +252,10 @@ public enum PromptBuilder {
         }.joined(separator: "\n")
     }
 
+    /// 24-hour wall-clock time, whatever the locale's preference: "15:23:06"
+    /// is unambiguous where "03:23:06" is not.
     static func clock(_ date: Date) -> String {
-        date.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits))
+        ClockFormat.time(date)
     }
 
     static func age(_ date: Date, now: Date) -> String {

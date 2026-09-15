@@ -108,6 +108,12 @@ public final class FocusTracker {
         return context
     }
 
+    /// The same fresh read without touching the change tracking, for callers
+    /// that only want to compare the window against an earlier reading.
+    public func peekCurrent() -> FocusContext? {
+        current.map(read)
+    }
+
     // MARK: Observers
 
     private func attach(to app: RunningApp, kind: FocusChangeKind) {

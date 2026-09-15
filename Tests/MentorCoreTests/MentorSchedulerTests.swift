@@ -49,9 +49,9 @@ enum Fixtures {
         return s
     }
 
-    private func conditions(mode: SensingMode = .watching, key: Bool = true, inFlight: Bool = false, spend: Double = 0, multiplier: Double = 1) -> MentorScheduler.Conditions {
+    private func conditions(mode: SensingMode = .watching, key: Bool = true, inFlight: Bool = false, talkingBack: Bool = false, spend: Double = 0, multiplier: Double = 1) -> MentorScheduler.Conditions {
         MentorScheduler.Conditions(
-            mode: mode, hasAPIKey: key, callInFlight: inFlight,
+            mode: mode, hasAPIKey: key, callInFlight: inFlight, talkingBack: talkingBack,
             spendFraction: spend, cadenceMultiplier: multiplier, nextHourStart: t0 + 3600
         )
     }
@@ -222,6 +222,20 @@ enum Fixtures {
         let observation = Fixtures.observation(at: t0)
         #expect(scheduler.triageGate(for: observation, conditions: conditions(), now: t0 + 29) == .run)
         #expect(scheduler.triageGate(for: observation, conditions: conditions(), now: t0 + 31) == .hold(.stale(age: 31)))
+    }
+
+    /// The captain's rule for a suggestion that arrives mid-exchange: it is
+    /// held, never shown over the toast being talked to, and when the
+    /// exchange ends it is shown if still fresh, otherwise it expires unseen.
+    @Test func aSuggestionMadeWhileTalkingBackIsHeldThenShownOrExpired() {
+        let scheduler = MentorScheduler(settings: settings)
+        #expect(scheduler.publishGate(madeAt: t0, conditions: conditions(), now: t0) == .show)
+        #expect(scheduler.publishGate(madeAt: t0, conditions: conditions(talkingBack: true), now: t0) == .hold)
+        #expect(scheduler.publishGate(madeAt: t0, conditions: conditions(talkingBack: true), now: t0 + 120) == .hold)
+        #expect(scheduler.publishGate(madeAt: t0, conditions: conditions(), now: t0 + MentorScheduler.maxObservationAge) == .show)
+        #expect(scheduler.publishGate(madeAt: t0, conditions: conditions(), now: t0 + 31) == .expired(age: 31))
+        // Talking back changes nothing about what is triaged or mentored.
+        #expect(scheduler.triageGate(for: Fixtures.observation(at: t0), conditions: conditions(talkingBack: true), now: t0) == .run)
     }
 
     @Test func spendCapStopsTriageUntilTheHourRollsOver() {

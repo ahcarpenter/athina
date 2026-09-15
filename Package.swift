@@ -16,12 +16,18 @@ let package = Package(
                 .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("Vision"),
                 .linkedFramework("ApplicationServices"),
+                .linkedFramework("AVFoundation"),
+                .linkedFramework("Speech"),
             ]
         ),
         .executableTarget(
             name: "Mentor",
             dependencies: ["MentorCore"],
-            linkerSettings: [.linkedFramework("Carbon")]
+            linkerSettings: [
+                .linkedFramework("Carbon"),
+                .linkedFramework("AVFoundation"),
+                .linkedFramework("Speech"),
+            ]
         ),
         .testTarget(
             name: "MentorCoreTests",

@@ -15,7 +15,7 @@ enum Formatting {
     }
 
     static func clockTime(_ date: Date) -> String {
-        date.formatted(Date.FormatStyle().hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits))
+        ClockFormat.time(date)
     }
 
     static func age(_ date: Date, now: Date) -> String {
@@ -53,7 +53,7 @@ enum Formatting {
     }
 
     static func dayAndTime(_ date: Date) -> String {
-        date.formatted(Date.FormatStyle().month(.abbreviated).day().hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+        ClockFormat.dayAndTime(date)
     }
 
     /// Dollars with enough precision for cents on small figures: $0.0042, $0.13, $1.00.

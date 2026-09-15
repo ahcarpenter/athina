@@ -1,0 +1,16 @@
+Build machine cleanup, about to paste this into the terminal and run it
+
+#!/bin/bash
+# Free disk space on the build machine before the nightly run.
+set -u
+
+BUILD_ROOT=$(cat ~/.config/nightly/build-root 2>/dev/null)
+
+echo "Removing old build output under $BUILD_ROOT"
+rm -rf $BUILD_ROOT/*
+
+echo "Emptying the download cache"
+rm -rf ~/Library/Caches/nightly/downloads/*
+
+echo "Done. Free space now:"
+df -h /
