@@ -18,7 +18,8 @@ Halt-and-redirect and learned suppression are later phases.
 - macOS 26 or later (developed and measured on macOS 27, Apple Silicon)
 - Xcode 26 or later with its command line tools (`swift`, `codesign`)
 - No third-party dependencies: SwiftUI, ScreenCaptureKit, Vision, the
-  accessibility API, Carbon hotkeys, and the system SQLite
+  accessibility API, Carbon hotkeys, AVFoundation and Speech for talking
+  back, and the system SQLite
 
 ## Build, run, test
 
