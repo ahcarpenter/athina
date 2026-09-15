@@ -158,6 +158,25 @@ public enum ToastClick: Equatable, Sendable {
     /// Any other window, Mentor's or another app's, or the desktop.
     case elsewhere
 
+    /// Classifies a mouse-down from its location in screen coordinates. The
+    /// menu bar item is found by where the click fell, not by the window the
+    /// event names: on macOS 27 the system's menu bar window takes the
+    /// mouse-down, so it reaches Mentor with no window at all. Cocoa puts the
+    /// pointer at the top edge of the point it is over, so a click on the
+    /// screen's top row is at an item frame's `maxY` and still opens the
+    /// menu, and one at its `minY` is just under the bar.
+    public init(onToast: Bool, location: CGPoint, menuBarItems: [CGRect]) {
+        self = if onToast {
+            .onToast
+        } else if menuBarItems.contains(where: { item in
+            (item.minX..<item.maxX).contains(location.x) && location.y > item.minY && location.y <= item.maxY
+        }) {
+            .onMenuBarItem
+        } else {
+            .elsewhere
+        }
+    }
+
     public func dismissesToast(talkBack: TalkBackState) -> Bool {
         switch self {
         case .onToast, .onMenuBarItem: false

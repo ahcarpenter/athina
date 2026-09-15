@@ -134,14 +134,14 @@ final class ToastController {
     // MARK: Outside clicks
 
     /// A mouse-down anywhere but the toast or Mentor's menu bar item dismisses
-    /// it (`ToastClick`). The global monitor sees clicks in other apps and on
-    /// the desktop, which carry no window of ours; the local one sees clicks
-    /// in Mentor's own windows and passes every event through, so an event
-    /// aimed at the toast's own panel keeps it up and its buttons still work,
-    /// and one on the menu bar item opens the menu that answers it. Only
-    /// mouse-down is watched, so scrolling, typing, and moving the pointer
-    /// leave the toast alone. Neither monitor makes the panel key or
-    /// activates the app.
+    /// it (`ToastClick`). The global monitor sees clicks in other apps, on the
+    /// desktop, and on the menu bar, which carry no window of ours; the local
+    /// one sees clicks in Mentor's own windows and passes every event through,
+    /// so an event aimed at the toast's own panel keeps it up and its buttons
+    /// still work. A click inside the menu bar item's frame, whichever monitor
+    /// sees it, opens the menu that answers the toast. Only mouse-down is
+    /// watched, so scrolling, typing, and moving the pointer leave the toast
+    /// alone. Neither monitor makes the panel key or activates the app.
     private func startWatchingForOutsideClicks() {
         guard outsideClickMonitors.isEmpty else { return }
         let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
@@ -165,13 +165,12 @@ final class ToastController {
 
     private func handleClick(_ event: NSEvent) {
         guard let panel, panel.isVisible, let suggestion = model.suggestion else { return }
-        let click: ToastClick = if event.window === panel {
-            .onToast
-        } else if event.window?.holdsStatusBarButton == true {
-            .onMenuBarItem
-        } else {
-            .elsewhere
-        }
+        let location = event.window.map { $0.convertPoint(toScreen: event.locationInWindow) } ?? event.locationInWindow
+        let click = ToastClick(
+            onToast: event.window === panel,
+            location: location,
+            menuBarItems: NSApp.windows.filter(\.holdsStatusBarButton).map(\.frame)
+        )
         guard click.dismissesToast(talkBack: model.talkBack) else { return }
         onAction?(suggestion.id, .dismissed)
     }
@@ -241,7 +240,8 @@ final class ToastController {
 
 private extension NSWindow {
     /// True for a menu bar item's window, the only kind that holds a status
-    /// bar button. The one Mentor's local monitor sees is Mentor's own.
+    /// bar button. `NSApp.windows` lists only Mentor's own, so its frame is
+    /// Mentor's item, as tall as the menu bar.
     var holdsStatusBarButton: Bool {
         var views = contentView.map { [$0] } ?? []
         while let view = views.popLast() {
