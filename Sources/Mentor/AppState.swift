@@ -547,16 +547,39 @@ final class AppState {
         toast.dismiss()
         callouts.dismiss()
         stopCalloutWatch()
-        cancelTalkBack()
         activeSuggestion = nil
         talkedToSuggestionID = nil
+        cancelTalkBack()
         endHold()
     }
 
     /// Tells the loop no talked-to toast is up, so a suggestion held for it
-    /// is shown if still fresh.
+    /// is shown if still fresh; while pausing it expires instead.
     private func endHold() {
-        Task { await mentor?.setTalkingBack(false) }
+        let pausing = isPaused
+        Task {
+            if pausing { await mentor?.expireHeldSuggestion() }
+            await mentor?.setTalkingBack(false)
+        }
+    }
+
+    /// Settles a press that has ended, by `TalkBackPress`: a talked-to toast
+    /// keeps the hold and no countdown; otherwise the hold ends and the
+    /// countdown the press interrupted resumes.
+    private func settlePress(_ match: TranscriptMatcher.Match?, for suggestion: Suggestion) {
+        let outcome = TalkBackPress.outcome(
+            match: match, toastTalkedTo: talkedToSuggestionID == suggestion.id, countdownRemaining: toastRemaining
+        )
+        toastRemaining = nil
+        switch outcome {
+        case .talkedTo:
+            talkedToSuggestionID = suggestion.id
+        case .notAnExchange(let countdown):
+            endHold()
+            if let countdown, activeSuggestion?.id == suggestion.id {
+                scheduleToastExpiry(for: suggestion.id, after: countdown)
+            }
+        }
     }
 
     /// The countdown pauses while the pointer is over the toast and resumes
@@ -884,20 +907,28 @@ final class AppState {
     /// Ends the exchange: the recording is dropped, a transcript still being
     /// finalized is ignored, and a question waiting its turn is withdrawn. A
     /// follow-up call already in flight completes and its answer is journaled.
+    /// A recording cut short counts as nothing heard.
     private func cancelTalkBack() {
         listeningLimitTask?.cancel()
         listeningLimitTask = nil
         transcriptTask?.cancel()
         transcriptTask = nil
         listener.cancel()
-        switch talkBack {
+        let state = talkBack
+        if state != .idle {
+            setTalkBack(.idle)
+        }
+        switch state {
+        case .listening:
+            if let active = activeSuggestion {
+                settlePress(nil, for: active)
+            } else {
+                endHold()
+            }
         case .waiting, .thinking:
             Task { await mentor?.withdrawFollowUp() }
-        case .idle, .listening:
+        case .idle:
             break
-        }
-        if talkBack != .idle {
-            setTalkBack(.idle)
         }
     }
 
@@ -916,28 +947,18 @@ final class AppState {
     /// until it is closed. A press that heard nothing is not an exchange: the
     /// toast gets back whatever countdown it had, and nothing is held for it.
     private func act(on text: String?, for suggestion: Suggestion) async {
-        guard let text, let match = TranscriptMatcher.match(text) else {
+        let match = text.flatMap(TranscriptMatcher.match)
+        setTalkBack(.idle)
+        settlePress(match, for: suggestion)
+        guard let text, let match else {
             lastTranscript = TranscriptRecord(at: Date(), text: text ?? "", handling: "nothing heard")
-            setTalkBack(.idle)
             toast.showNote("Mentor did not catch that.")
-            if talkedToSuggestionID != suggestion.id {
-                endHold()
-                if activeSuggestion?.id == suggestion.id, let remaining = toastRemaining {
-                    toastRemaining = nil
-                    scheduleToastExpiry(for: suggestion.id, after: remaining)
-                }
-            }
             return
-        }
-        if activeSuggestion?.id == suggestion.id {
-            talkedToSuggestionID = suggestion.id
-            toastRemaining = nil
         }
         switch match {
         case .answer(let feedback):
             lastTranscript = TranscriptRecord(at: Date(), text: text, handling: "answered: \(feedback.label)")
             AppState.log.notice("transcript answered \(feedback.rawValue, privacy: .public)")
-            setTalkBack(.idle)
             if feedback == .tellMeMore { toast.expand() }
             respond(to: suggestion.id, with: feedback)
         case .question(let question):

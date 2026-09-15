@@ -238,30 +238,6 @@ import Testing
         #expect(try await h.journal.suggestion(id: s2.id)?.feedback == nil)
     }
 
-    /// An accidental tap: the key goes down and up with nothing heard. The app
-    /// ends the hold at once, so a suggestion made in between is shown, fresh
-    /// and unmarked, as if no key had been pressed.
-    @Test func anAccidentalTapEndsTheHoldAndTheSuggestionMadeMeanwhileIsShown() async throws {
-        let h = try await MentorLoopTests.Harness()
-        await h.loop.setTalkingBack(true)
-        await h.client.enqueue(json: Self.yes)
-        await h.client.enqueue(json: Self.suggestion(region: "null"))
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
-        let made = try #require(try await h.journal.recentSuggestions(limit: 1).first)
-
-        await h.loop.setTalkingBack(false)
-        let events = await h.drain(until: isSuggestion)
-        #expect(events.filter(isSuggestion).count == 1)
-        guard case .suggestion(let shown)? = events.last else {
-            Issue.record("expected the suggestion once the hold ended")
-            return
-        }
-        #expect(shown.id == made.id)
-        #expect(shown.feedback == nil)
-        #expect(try await h.journal.suggestion(id: made.id)?.feedback == nil)
-        #expect(!events.contains { if case .feedback = $0 { return true } else { return false } })
-    }
-
     @Test func aHeldSuggestionThatOutlivedTheExchangeExpiresUnseen() async throws {
         let h = try await MentorLoopTests.Harness()
         await h.loop.setTalkingBack(true)

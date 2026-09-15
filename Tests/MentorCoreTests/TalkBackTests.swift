@@ -71,6 +71,28 @@ import Testing
     }
 }
 
+/// The captain's rule for when a press counts: a toast is talked to only
+/// once a transcript matched an answer or a question was asked. An
+/// accidental tap, or a recording cut short, is not an exchange.
+@Suite struct TalkBackPressTests {
+    @Test func anAccidentalTapEndsTheHoldAndGivesBackTheCountdown() {
+        #expect(TalkBackPress.outcome(match: nil, toastTalkedTo: false, countdownRemaining: 20) == .notAnExchange(countdown: 20))
+        // A toast brought back by hand had no countdown, and gets none.
+        #expect(TalkBackPress.outcome(match: nil, toastTalkedTo: false, countdownRemaining: nil) == .notAnExchange(countdown: nil))
+    }
+
+    @Test func aMatchedAnswerOrAnAskedQuestionMakesTheToastTalkedTo() {
+        #expect(TalkBackPress.outcome(match: .answer(.tellMeMore), toastTalkedTo: false, countdownRemaining: 20) == .talkedTo)
+        #expect(TalkBackPress.outcome(match: .question("which line"), toastTalkedTo: false, countdownRemaining: 20) == .talkedTo)
+        #expect(TalkBackPress.outcome(match: TranscriptMatcher.match("Why is that better?"), toastTalkedTo: false, countdownRemaining: nil) == .talkedTo)
+    }
+
+    @Test func aTalkedToToastStaysTalkedToThroughAnEmptyPress() {
+        #expect(TalkBackPress.outcome(match: nil, toastTalkedTo: true, countdownRemaining: nil) == .talkedTo)
+        #expect(TalkBackPress.outcome(match: TranscriptMatcher.match("um"), toastTalkedTo: true, countdownRemaining: nil) == .talkedTo)
+    }
+}
+
 @Suite struct ClockFormatTests {
     @Test func timesAre24HourWhateverTheLocalePrefers() {
         var components = DateComponents()

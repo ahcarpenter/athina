@@ -117,8 +117,11 @@ public actor MentorLoop {
         await publish(held, now: now)
     }
 
-    /// A held suggestion is not shown while the user is pausing Mentor.
-    private func expireHeldSuggestion(now: Date) async {
+    /// A held suggestion is not shown while the user is pausing Mentor. The
+    /// pause reaches the loop through the sensing stream too, but the app
+    /// calls this first when it ends a hold while pausing, so the held
+    /// suggestion cannot slip out in between.
+    public func expireHeldSuggestion(now: Date = Date()) async {
         guard let held = heldSuggestion else { return }
         heldSuggestion = nil
         await expireUnseen(held, now: now)

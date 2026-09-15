@@ -87,6 +87,33 @@ public enum TranscriptMatcher {
     }
 }
 
+/// What a press of the talk-back key means for the toast it was about,
+/// once the recording has ended: by a transcript, by nothing being heard, or
+/// by being cut short (pausing, or bringing a toast back mid-recording).
+///
+/// A toast counts as talked to only once a transcript was matched to an
+/// answer or a question was asked; from then on it stays up, holding new
+/// suggestions, until it is closed. A press that comes to nothing on a toast
+/// not yet talked to is not an exchange: the hold ends and the toast gets
+/// back whatever countdown the press interrupted.
+public enum TalkBackPress {
+    public enum Outcome: Equatable, Sendable {
+        /// The toast is talked to: it stays up until closed and new suggestions wait.
+        case talkedTo
+        /// The hold on new suggestions ends, and the toast's countdown, if it
+        /// had one, resumes with this much left.
+        case notAnExchange(countdown: TimeInterval?)
+    }
+
+    /// `match` is nil when nothing usable was heard or the recording was cut
+    /// short; `countdownRemaining` is what was left of the toast's countdown
+    /// when the key went down, nil when it had none.
+    public static func outcome(match: TranscriptMatcher.Match?, toastTalkedTo: Bool, countdownRemaining: TimeInterval?) -> Outcome {
+        if match != nil || toastTalkedTo { return .talkedTo }
+        return .notAnExchange(countdown: countdownRemaining)
+    }
+}
+
 /// What push-to-talk is doing, shown in the toast.
 public enum TalkBackState: Equatable, Sendable {
     case idle
