@@ -667,9 +667,9 @@ screen is stamped when its capture starts and journaled only after OCR, so one
 captured before a call read the journal can land in it after. A **periodic
 refresh** (`understandingRefreshInterval`, 15 minutes by default) runs only
 when a whole interval of active use has passed with no mentor call to carry
-it. Active use is time spent capturing the screen: a break, a pause, an
-excluded app, missing permissions, or a closed app counts for nothing, so
-coming back never buys a call over the few screens since. The count is kept
+it. Active use is time spent capturing the screen: a break, a pause, a
+sleeping Mac, an excluded app, missing permissions, or a closed app counts for
+nothing, so coming back never buys a call over the few screens since. The count is kept
 in the journal, so a relaunch carries on from it. It is a third tier with its own model and effort picker (`claude-opus-5`
 at low effort by default, Haiku offered too), its own versioned prompt and
 schema, and no screenshot: summarising does not need one. `refreshGate` in

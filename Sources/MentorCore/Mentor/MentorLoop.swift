@@ -95,6 +95,11 @@ public actor MentorLoop {
     /// mentor call to write the record for free. Counted whenever the mode
     /// changes and kept in the journal, so a relaunch carries on from it.
     private var period: RefreshPeriod?
+    /// The system uptime when `period` was last counted or replaced. Uptime
+    /// stops while the Mac sleeps, so the next count measures only time awake.
+    /// Nil until this run first sets the period, so nothing from before the
+    /// launch is counted.
+    private var uptimeAtCount: TimeInterval?
     /// When Reset Understanding last ran, so a request built before it
     /// cannot store the record it was shown.
     private var lastResetAt: Date?
@@ -786,6 +791,7 @@ public actor MentorLoop {
     /// Replaces the refresh period and keeps it in the journal.
     private func setPeriod(_ newPeriod: RefreshPeriod?) async {
         period = newPeriod
+        uptimeAtCount = ProcessInfo.processInfo.systemUptime
         do {
             try await journal.storeRefreshPeriod(newPeriod)
         } catch {
@@ -793,12 +799,13 @@ public actor MentorLoop {
         }
     }
 
-    /// Counts the time since the period was last counted as active use when
-    /// the current mode captures the screen. Runs before every mode change, so
-    /// all of that time was spent in the current mode.
+    /// Counts the time awake since the period was last counted as active use
+    /// when the current mode captures the screen. Runs before every mode
+    /// change, so all of that time was spent in the current mode.
     private func countActiveUse(now: Date) async {
         guard let period else { return }
-        await setPeriod(period.counted(through: now, in: mode))
+        let awake = uptimeAtCount.map { ProcessInfo.processInfo.systemUptime - $0 }
+        await setPeriod(period.counted(through: now, awake: awake, in: mode))
     }
 
     /// Runs the periodic refresh when the gate allows it. Every mentor call

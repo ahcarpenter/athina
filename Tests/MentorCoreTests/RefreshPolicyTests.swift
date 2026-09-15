@@ -96,7 +96,7 @@ import Testing
     @Test func aRefreshAttemptStartsTheCountOverWhateverCameOfIt() {
         let scheduler = MentorScheduler(settings: settings)
         let attempt = t0.addingTimeInterval(901)
-        let restarted = RefreshPeriod(startedAt: t0).counted(through: attempt, in: .watching).restarted(at: attempt)
+        let restarted = RefreshPeriod(startedAt: t0).counted(through: attempt, awake: 901, in: .watching).restarted(at: attempt)
         #expect(restarted == RefreshPeriod(startedAt: t0, activeUse: 0, countedAt: attempt))
         // The period is as old as before, but the attempt was just made.
         #expect(gate(scheduler, conditions: conditions(), period: restarted, now: attempt.addingTimeInterval(1))
@@ -130,8 +130,8 @@ import Testing
         let back = written.addingTimeInterval(3600)
         // The loop counts at each mode change: into idle at lunch, out of it on return.
         let period = RefreshPeriod(startedAt: written)
-            .counted(through: lunch, in: .watching)
-            .counted(through: back, in: .idle)
+            .counted(through: lunch, awake: 300, in: .watching)
+            .counted(through: back, awake: 3300, in: .idle)
         #expect(period.activeUse == 300)
         #expect(period.countedAt == back)
 
@@ -146,13 +146,48 @@ import Testing
             == .run(since: written))
     }
 
+    /// The same lunch with the lid closed at 10:05:20, before the mode could go
+    /// idle, and opened at 11:00. The mode never left one that captures the
+    /// screen, but the Mac slept, so only the twenty seconds before the lid
+    /// closed and the five after it opened count, not the hour between.
+    @Test func aLunchWithTheLidClosedDoesNotCountTheSleep() {
+        let scheduler = MentorScheduler(settings: settings)
+        let written = t0
+        let lastCount = written.addingTimeInterval(300)
+        let back = written.addingTimeInterval(3600)
+        let period = RefreshPeriod(startedAt: written)
+            .counted(through: lastCount, awake: 300, in: .watching)
+            .counted(through: back, awake: 25, in: .watching)
+        #expect(period.activeUse == 325)
+        #expect(period.countedAt == back)
+
+        let due = back.addingTimeInterval(575)
+        #expect(gate(scheduler, conditions: conditions(), period: period, lastActivityAt: back, now: back)
+            == .hold(.notDue(until: due)))
+        #expect(gate(scheduler, conditions: conditions(), period: period, lastActivityAt: due, now: due)
+            == .run(since: written))
+    }
+
+    /// Only the smaller of the wall-clock gap and the time awake counts, and
+    /// nothing at all before the loop has a clock reading to measure from, as
+    /// right after a launch; the count still moves on to `now` either way.
+    @Test func onlyTheSmallerOfTheWallClockAndTheTimeAwakeCounts() {
+        let period = RefreshPeriod(startedAt: t0, activeUse: 60, countedAt: t0.addingTimeInterval(60))
+        let now = t0.addingTimeInterval(120)
+        #expect(period.counted(through: now, awake: 45, in: .watching).activeUse == 105)
+        #expect(period.counted(through: now, awake: 600, in: .watching).activeUse == 120)
+        let unmeasured = period.counted(through: now, awake: nil, in: .watching)
+        #expect(unmeasured.activeUse == 60)
+        #expect(unmeasured.countedAt == now)
+    }
+
     /// Only a mode that captures the screen counts. The time a closed app
     /// spends stopped counts for nothing too, so a relaunch neither restarts
     /// the count nor adds the time it was closed.
     @Test(arguments: SensingMode.allCases)
     func onlyTimeInAModeThatCapturesTheScreenCounts(mode: SensingMode) {
         let period = RefreshPeriod(startedAt: t0, activeUse: 120, countedAt: t0.addingTimeInterval(120))
-        let counted = period.counted(through: t0.addingTimeInterval(180), in: mode)
+        let counted = period.counted(through: t0.addingTimeInterval(180), awake: 60, in: mode)
         let counts = mode == .watching || mode == .screenOnly
         #expect(counted.activeUse == (counts ? 180 : 120))
         #expect(counted.countedAt == t0.addingTimeInterval(180))
@@ -161,9 +196,9 @@ import Testing
 
     @Test func countingIsIdempotentAndNeverRunsBackwards() {
         let period = RefreshPeriod(startedAt: t0, activeUse: 60, countedAt: t0.addingTimeInterval(60))
-        let once = period.counted(through: t0.addingTimeInterval(90), in: .watching)
-        #expect(once.counted(through: t0.addingTimeInterval(90), in: .watching) == once)
-        #expect(once.counted(through: t0.addingTimeInterval(30), in: .watching) == once)
+        let once = period.counted(through: t0.addingTimeInterval(90), awake: 30, in: .watching)
+        #expect(once.counted(through: t0.addingTimeInterval(90), awake: 0, in: .watching) == once)
+        #expect(once.counted(through: t0.addingTimeInterval(30), awake: 5, in: .watching) == once)
     }
 
     /// While nothing counts, nothing comes due, so no countdown is shown.
