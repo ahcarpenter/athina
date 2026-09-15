@@ -102,6 +102,12 @@ public enum PermissionProbe {
     }
 
     /// Shows the system prompt (once per app identity) and adds the app to the pane's list.
+    ///
+    /// The microphone and speech handlers are `@Sendable` on purpose: TCC
+    /// calls them on its own reply queue, and a closure written in a
+    /// main-actor function is otherwise inferred to be main-actor isolated,
+    /// which the runtime checks on entry and traps on. Nothing in them needs
+    /// the main actor; the app polls the status afterwards.
     @MainActor
     public static func request(_ permission: Permission) {
         switch permission {
@@ -111,9 +117,9 @@ public enum PermissionProbe {
             let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
             _ = AXIsProcessTrustedWithOptions(options)
         case .microphone:
-            AVCaptureDevice.requestAccess(for: .audio) { _ in }
+            AVCaptureDevice.requestAccess(for: .audio) { @Sendable _ in }
         case .speechRecognition:
-            SFSpeechRecognizer.requestAuthorization { _ in }
+            SFSpeechRecognizer.requestAuthorization { @Sendable _ in }
         }
     }
 

@@ -77,8 +77,11 @@ final class SpeechListener {
         latest = ""
         finished = false
 
-        task = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            // The recognizer calls back off the main thread; only plain values cross.
+        // Both callbacks below run on the framework's own threads, so they are
+        // `@Sendable`: a closure written here would otherwise be inferred to
+        // be main-actor isolated, and the runtime traps on entry off the main
+        // actor. Only plain values cross to the main actor.
+        task = recognizer.recognitionTask(with: request) { @Sendable [weak self] result, error in
             let text = result?.bestTranscription.formattedString
             let isFinal = result?.isFinal ?? false
             let failed = error != nil
@@ -86,8 +89,11 @@ final class SpeechListener {
                 self?.handle(text: text, isFinal: isFinal, failed: failed, onPartial: onPartial)
             }
         }
-        input.installTap(onBus: 0, bufferSize: 2048, format: format) { buffer, _ in
-            request.append(buffer)
+        // The request is appended to from the audio thread only, and read by
+        // the recognizer, which is what it is for.
+        nonisolated(unsafe) let tapRequest = request
+        input.installTap(onBus: 0, bufferSize: 2048, format: format) { @Sendable buffer, _ in
+            tapRequest.append(buffer)
         }
         engine.prepare()
         try engine.start()
