@@ -557,9 +557,11 @@ replaces it. `MentorScheduler.publishGate` holds it, leaving the toast, the
 recording, the pending answer, and the answer on screen untouched; the
 exchange ends only when that toast is closed, by the user answering or
 dismissing it. A press that hears nothing, or a recording cut short by
-pausing or by Show Last Suggestion, is not an exchange (`TalkBackPress`): the
-toast gets back whatever countdown it had, and anything held in the meantime
-is shown at once. Otherwise the held suggestion is shown normally if it is at
+pausing, is not an exchange (`TalkBackPress`): the toast gets back whatever
+countdown it had (still paused while the pointer is over it), and anything
+held in the meantime is shown at once. Show Last Suggestion during a recording
+ends it the same way, and the toast it brings back stays up until closed, as
+it always does. Otherwise the held suggestion is shown normally if it is at
 most 30 s old (the same staleness bound as a queued observation); otherwise, and
 whenever Mentor is paused while one is held, it is journaled with the feedback
 "Expired, never shown" and never put on screen, since the screen it describes

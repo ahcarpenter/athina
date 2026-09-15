@@ -145,6 +145,9 @@ final class AppState {
     private var toastTask: Task<Void, Never>?
     private var toastDeadline: Date?
     private var toastRemaining: TimeInterval?
+    /// Whether the pointer is over the toast, kept through an exchange so a
+    /// countdown given back afterwards does not run under it.
+    private var toastHovered = false
     /// The toast the user has talked to: a transcript was matched to an
     /// answer or a question was asked. A press that heard nothing does not count.
     private var talkedToSuggestionID: Int64?
@@ -574,9 +577,13 @@ final class AppState {
         switch outcome {
         case .talkedTo:
             talkedToSuggestionID = suggestion.id
+            Task { await mentor?.setTalkingBack(true) }
         case .notAnExchange(let countdown):
             endHold()
-            if let countdown, activeSuggestion?.id == suggestion.id {
+            guard let countdown, activeSuggestion?.id == suggestion.id else { return }
+            if toastHovered {
+                toastRemaining = countdown
+            } else {
                 scheduleToastExpiry(for: suggestion.id, after: countdown)
             }
         }
@@ -585,6 +592,7 @@ final class AppState {
     /// The countdown pauses while the pointer is over the toast and resumes
     /// with the remaining time when it leaves.
     private func toastHoverChanged(_ hovering: Bool) {
+        toastHovered = hovering
         guard let active = activeSuggestion, !talkBack.keepsToastUp else { return }
         if hovering {
             // cancelToastExpiry clears toastRemaining, so record the remainder after it.
@@ -886,6 +894,9 @@ final class AppState {
     func talkBack(typed text: String) {
         guard canTalkBackTyped, let suggestion = suggestionToTalkTo() else { return }
         AppState.log.notice("typed talk-back for suggestion \(suggestion.id)")
+        if case .waiting = talkBack {
+            Task { await mentor?.withdrawFollowUp() }
+        }
         Task { await act(on: text, for: suggestion) }
     }
 
