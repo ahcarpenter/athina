@@ -7,6 +7,8 @@ let package = Package(
     products: [
         .executable(name: "Mentor", targets: ["Mentor"]),
         .library(name: "MentorCore", targets: ["MentorCore"]),
+        // The end-to-end harness's drive tool (scripts/e2e, see README "End-to-end harness").
+        .executable(name: "mentor-drive", targets: ["MentorDrive"]),
     ],
     targets: [
         .target(
@@ -28,6 +30,16 @@ let package = Package(
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("Speech"),
             ]
+        ),
+        .target(name: "MentorE2E"),
+        .executableTarget(
+            name: "MentorDrive",
+            dependencies: ["MentorE2E"],
+            linkerSettings: [.linkedFramework("ApplicationServices")]
+        ),
+        .testTarget(
+            name: "MentorE2ETests",
+            dependencies: ["MentorE2E"]
         ),
         .testTarget(
             name: "MentorCoreTests",

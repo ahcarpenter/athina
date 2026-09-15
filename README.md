@@ -331,6 +331,113 @@ scenario and an empty journal:
 `ScriptedClaudeClient` stays for unit tests that need one exact hand-written
 answer, such as a refusal, an unparseable reply, or a slow call.
 
+## End-to-end harness
+
+Checking Mentor against the real app is what takes the time, not building it:
+a scratch home has to be prepared, the app launched in replay under a sandbox,
+a toast waited for, a real click posted, and the journal read. Every one of
+those was written again by hand for each check until now.
+`scripts/e2e/mentor-e2e` is that work, once, in the repository. A change, a
+check, or a validation run drives the app through it rather than writing its
+own driving code.
+
+```sh
+scripts/e2e/mentor-e2e warm          # once per machine: prepare the warm home
+scripts/e2e/mentor-e2e list          # the scenarios and what each one proves
+scripts/e2e/mentor-e2e run all       # run them; one JSON line of result each
+scripts/e2e/mentor-e2e run menubar-keyboard
+scripts/e2e/mentor-e2e doctor        # what is missing before a run
+scripts/e2e/mentor-e2e journal suggestions   # a named query over the last run
+```
+
+Every run is replay only: no API key is read, no network is reachable inside
+the sandbox, and nothing is billed. It needs a display, so it never runs in
+CI; CI runs the harness's unit tests with the rest of the suite.
+
+### Scenarios
+
+| name | what it proves |
+| --- | --- |
+| `menubar-item-click` | a real pointer click on Mentor's menu bar item opens the menu and leaves the suggestion up, and Answer Suggestion > Tell Me More is recorded |
+| `menubar-empty-click` | a real click on empty menu bar space beside the item dismisses the suggestion, attributed to a real mouse-down by a session tap |
+| `other-app-click` | a real click inside a staged TextEdit window dismisses the suggestion |
+| `menubar-keyboard` | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one scenario that needs no idle input |
+| `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
+
+A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
+every check it made, and the directory holding its evidence (transcript,
+screenshots, event taps, announcements, and the journal as TSV and as a copy).
+
+### The warm fixture home
+
+A fresh scratch home has no text-recognition model cache, so its first capture
+blocks 30 to 60 seconds inside OCR and the journal fills with events and no
+observations. `mentor-e2e warm` pays that once into
+`~/Library/Caches/mentor-e2e/warm-home`, keeps the caches, and throws the
+session's journal away. Every run then clones it with `cp -c`, an APFS
+copy-on-write copy that costs no measurable time and no disk, and starts from
+an empty journal in a home of its own. Re-warm with `warm --force` after a
+macOS upgrade.
+
+### Drive helpers
+
+`mentor-drive` (`Sources/MentorDrive`, built on demand) is the one
+implementation of every step a scenario takes on the screen. It works by pid
+only and never looks an app up by name.
+
+| command | what it does |
+| --- | --- |
+| `ready <pid>` / `toast <pid>` / `windows <pid>` | wait for the app to come up; the toast's window id; a pid's windows with ids and frames |
+| `bar [pid]` | menu bar extras and menu titles with frames, the gaps between neighbours, and a point on the bar that is on no item |
+| `click item <pid>` / `click at <x> <y>` / `click window <pid> <x> <y>` | post a real HID click, aborting if the pointer is moved or the target is not what was asked for, and log the accessibility element and topmost window under it |
+| `menupick <pid> <row> <item>` | hover a submenu row and click one of its items with the pointer |
+| `ax <pid> <dump\|texts\|menuitems\|pressextra\|cancelmenu\|get\|press\|pressx\|focus\|set>` | read or press through accessibility, with no pointer |
+| `announce <pid>` | log every `AXAnnouncementRequested` the app posts |
+| `tap session` / `tap pid <pid>` | listen-only event taps, which is what attributes a dismissal to a real click rather than a timeout |
+| `flip <x> <y> <w> <h>` | a click-through helper window that changes text and colour on `SIGUSR1`, so sensing has something to see |
+| `journal <db> <query>` | a named read-only query (`journal - queries` lists them), including `capture-race` |
+| `shot window <id>` / `shot region <x> <y> <w> <h>` | capture a window or a screen region |
+| `permissions` | whether this shell has Accessibility and Screen Recording |
+
+The maths and parsing behind them are a plain library (`Sources/MentorE2E`)
+with unit tests: the journal queries, the menu bar geometry, the capture-race
+report, and the drive tool's argument handling.
+
+### What the harness already handles, so a scenario need not
+
+- **The warm home**, above: no run pays the cold OCR stall again.
+- **Idle input.** Every pointer step waits for a quiet keyboard and mouse
+  first, and a click aborts if the pointer moves off the target, because the
+  Mac may have someone at it.
+- **The owner's apps are excluded** in the scratch settings from the start.
+  Replay serves fixtures in order whatever is on screen, so a replayed callout
+  would otherwise land over the work of whoever is using the Mac.
+- **The preferences leak.** `CFFIXED_USER_HOME` moves Application Support but
+  not UserDefaults, so a run still writes through cfprefsd into the real
+  `com.ahcarpenter.mentor` domain. Every run saves that domain and restores it,
+  even on failure.
+- **Nothing is stopped by name.** `make run`, `make run-replay`, and
+  `make record` begin with `pkill -x Mentor`, which stops every Mentor on the
+  Mac, including another lane's and the owner's own. The harness launches the
+  binary directly and stops only the pids it started.
+- **A sandbox** denies the real `~/Library/Application Support/mentor` and all
+  outbound network, so no run can reach live data or make a live call.
+- **Cleanup runs on failure**, through a trap: helpers, taps, staged apps, the
+  app itself, the preferences, and the scratch home.
+
+A validation step that needs live evidence should call this harness. Writing
+the driving again is how a check ends up overrunning its time limit on a cold
+home.
+
+### Evidence and the data directory
+
+Runs land in `~/Library/Caches/mentor-e2e/runs/<scenario>-<stamp>/`, or under
+`--out <dir>`; `--keep-home` keeps the scratch home to look inside it.
+Each run has its own home today. Once per-instance replay data directories land
+(the replay-lanes work), `launch_mentor` in `scripts/e2e/lib/harness.sh` is the
+one place that decides where a run's journal and settings live, and is where
+that flag belongs.
+
 ## Permissions
 
 Mentor needs two permissions and explains each in a first-run window that
