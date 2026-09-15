@@ -493,18 +493,25 @@ final class AppState {
                 )
                 settings.mentor.neverRules = SuppressionRules.adding(rule, to: settings.mentor.neverRules)
             }
-        case .tellMeMore, .expired, .dismissed:
+        case .tellMeMore, .expired, .expiredUnseen, .dismissed:
             break
         }
         AppState.log.notice("suggestion \(suggestionID) feedback \(feedback.rawValue, privacy: .public)")
         return Task { await mentor?.recordFeedback(suggestionID: suggestionID, feedback: feedback) }
     }
 
+    /// The most recent suggestion that was ever on screen. One that expired
+    /// unseen while another toast was talked to stays in the history but is
+    /// not the last suggestion: the user never saw it and its screen is gone.
+    var lastShownSuggestion: Suggestion? {
+        suggestionHistory.first { $0.feedback != .expiredUnseen }
+    }
+
     /// Brings the most recent suggestion back as a toast, for one that was
     /// missed. A toast the user asked for stays until answered or closed; its
     /// callout comes back only when the spot still checks out.
     func showLastSuggestion() {
-        guard let latest = suggestionHistory.first else { return }
+        guard let latest = lastShownSuggestion else { return }
         show(latest, autoExpires: false)
     }
 
@@ -531,13 +538,15 @@ final class AppState {
     }
 
     /// Everything that goes with the toast goes with it: the callout and a
-    /// recording in progress.
+    /// recording in progress. If the toast was talked to, this is where the
+    /// exchange ends and a suggestion held meanwhile may be shown.
     private func takeDown() {
         toast.dismiss()
         callouts.dismiss()
         stopCalloutWatch()
         cancelTalkBack()
         activeSuggestion = nil
+        Task { await mentor?.setTalkingBack(false) }
     }
 
     /// The countdown pauses while the pointer is over the toast and resumes
@@ -739,15 +748,15 @@ final class AppState {
         }
     }
 
-    /// The loop hears when an exchange begins and ends, so a suggestion that
-    /// arrives in between waits instead of replacing the toast being talked to.
+    /// The loop hears when an exchange begins, so a suggestion that arrives
+    /// before the talked-to toast is closed (`takeDown`) waits instead of
+    /// replacing it.
     private func setTalkBack(_ state: TalkBackState) {
-        let wasTalking = talkBack.keepsToastUp
+        let begins = talkBack == .idle && state != .idle
         talkBack = state
         toast.setTalkBack(state)
-        if state.keepsToastUp != wasTalking {
-            let talking = state.keepsToastUp
-            Task { await mentor?.setTalkingBack(talking) }
+        if begins {
+            Task { await mentor?.setTalkingBack(true) }
         }
     }
 
@@ -768,7 +777,7 @@ final class AppState {
     /// question still waiting its turn is withdrawn; the new one takes its place.
     private func pushToTalkPressed() {
         guard talkBack.acceptsAQuestion else { return }
-        guard activeSuggestion != nil || !suggestionHistory.isEmpty else {
+        guard activeSuggestion != nil || lastShownSuggestion != nil else {
             toast.showNote("Nothing to reply to yet: Mentor has not made a suggestion.")
             return
         }
@@ -819,7 +828,7 @@ final class AppState {
         let suggestion: Suggestion
         if let active = activeSuggestion {
             suggestion = active
-        } else if let latest = suggestionHistory.first {
+        } else if let latest = lastShownSuggestion {
             suggestion = latest
             show(latest, autoExpires: false)
         } else {
@@ -832,7 +841,7 @@ final class AppState {
 
     /// Whether the debug panel's Talk back field may send now.
     var canTalkBackTyped: Bool {
-        talkBack.acceptsAQuestion && (activeSuggestion != nil || !suggestionHistory.isEmpty)
+        talkBack.acceptsAQuestion && (activeSuggestion != nil || lastShownSuggestion != nil)
     }
 
     /// The debug panel's Talk back field: typed words take the path a released

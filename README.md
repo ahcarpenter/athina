@@ -519,10 +519,10 @@ and the feature stays off rather than falling back to server recognition.
 While the key is held the toast shows a listening indicator and the live
 transcript. The toast being talked to is never hidden while voice input is
 active: from the key going down until the transcript is handled or the answer
-is shown, it does not expire, a click elsewhere does not dismiss it, it is
-kept in front of other windows, and a new suggestion waits for the exchange to
-end (see below); afterwards it stays up until it is closed, like an expanded
-one. Each recording is its own session: a recognizer result or timeout left
+is shown, it does not expire, a click elsewhere does not dismiss it, and it is
+kept in front of other windows; afterwards it stays up until it is closed,
+like an expanded one, and no new suggestion replaces it until then (see
+below). Each recording is its own session: a recognizer result or timeout left
 over from an earlier one is ignored, so a re-press never hears the previous
 question again.
 
@@ -552,12 +552,17 @@ area, and with no toast up it brings the most recent suggestion back to talk
 to. The history window shows the full exchange under each suggestion, and the
 debug panel's Mentor card shows the last transcript and what was done with it.
 
-A suggestion the mentor tier finishes while an exchange is in progress never
-replaces the toast being talked to. `MentorScheduler.publishGate` holds it,
-leaving the toast, the recording, and the pending answer untouched; when the
-exchange ends the held suggestion is shown normally if it is at most 30 s old
-(the same staleness bound as a queued observation), otherwise it is journaled
-as expired without being shown.
+A suggestion the mentor tier finishes while a talked-to toast is up never
+replaces it. `MentorScheduler.publishGate` holds it, leaving the toast, the
+recording, the pending answer, and the answer on screen untouched; the
+exchange ends only when that toast is closed, by the user answering or
+dismissing it. Then the held suggestion is shown normally if it is at most
+30 s old (the same staleness bound as a queued observation); otherwise, and
+whenever Mentor is paused while one is held, it is journaled with the feedback
+"Expired, never shown" and never put on screen, since the screen it describes
+is gone. Such a suggestion still appears in the history window but is skipped
+by Show Last Suggestion and by a key press with no toast up, which bring back
+the most recent suggestion that was actually shown.
 
 The Mentor card also has a **Talk back** field. Words typed there and sent take
 exactly the path a released key does, from transcript matching to the

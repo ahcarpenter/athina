@@ -203,8 +203,9 @@ import Testing
 
     /// The captain's sequence: S1 is up and being talked to, S2 arrives from
     /// a mentor call that was already under way, the answer lands. S2 never
-    /// replaces S1 mid-exchange; it is shown once the exchange ends.
-    @Test func aSuggestionThatArrivesMidExchangeWaitsForTheAnswerToLand() async throws {
+    /// replaces S1 while it is up; it is shown once S1 is closed, which is
+    /// when the app tells the loop the exchange ended.
+    @Test func aSuggestionThatArrivesMidExchangeWaitsUntilTheTalkedToToastCloses() async throws {
         let h = try await MentorLoopTests.Harness()
         let s1 = try await journaledSuggestion(h)
         await h.loop.setTalkingBack(true)
@@ -219,6 +220,8 @@ import Testing
         await h.client.enqueue(json: #"{"answer": "Line 12."}"#)
         let followUp = try #require(await h.loop.askFollowUp(about: s1, question: "which line", at: t0))
         #expect(followUp.answer == "Line 12.")
+
+        #expect(try await h.journal.suggestion(id: s2.id)?.feedback == nil)
 
         await h.loop.setTalkingBack(false)
         // One pass over everything published: S2 appears once, and only after the answer did.
@@ -251,9 +254,32 @@ import Testing
             return
         }
         #expect(expired.id == held.id)
-        #expect(expired.feedback == .expired)
-        #expect(try await h.journal.suggestion(id: held.id)?.feedback == .expired)
-        #expect(try await h.journal.recentEvents(limit: 1).first?.detail == "Expired: Use --filter")
+        #expect(expired.feedback == .expiredUnseen)
+        #expect(try await h.journal.suggestion(id: held.id)?.feedback == .expiredUnseen)
+        #expect(try await h.journal.recentEvents(limit: 1).first?.detail == "Expired, never shown: Use --filter")
+    }
+
+    @Test func pausingExpiresAHeldSuggestionInsteadOfShowingIt() async throws {
+        let h = try await MentorLoopTests.Harness()
+        await h.loop.setTalkingBack(true)
+        await h.client.enqueue(json: Self.yes)
+        await h.client.enqueue(json: Self.suggestion(region: "null"))
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
+        let held = try #require(try await h.journal.recentSuggestions(limit: 1).first)
+
+        h.input.yield(.modeChanged(.paused))
+        let events = await h.drain { if case .feedback = $0 { return true } else { return false } }
+        #expect(!events.contains(where: isSuggestion))
+        guard case .feedback(let expired)? = events.last else {
+            Issue.record("expected the held suggestion to expire on pause")
+            return
+        }
+        #expect(expired.id == held.id)
+        #expect(expired.feedback == .expiredUnseen)
+        #expect(try await h.journal.recentEvents(limit: 1).first?.detail == "Expired, never shown: Use --filter")
+        // Nothing is left to show when the talked-to toast closes.
+        await h.loop.setTalkingBack(false)
+        #expect(try await h.journal.suggestion(id: held.id)?.feedback == .expiredUnseen)
     }
 
     /// A question released while a call is in flight is not refused: it waits

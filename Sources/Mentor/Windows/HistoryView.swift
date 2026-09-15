@@ -142,7 +142,7 @@ struct FeedbackPill: View {
         case .tellMeMore: .green
         case .notNow: .orange
         case .never: .red
-        case .expired, .dismissed: .gray
+        case .expired, .expiredUnseen, .dismissed: .gray
         case nil: .accentColor
         }
     }

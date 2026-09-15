@@ -46,9 +46,9 @@ public actor MentorLoop {
     private var apiKey: String?
     /// Tiers with a call in progress; a Test Connection can overlap a tier call.
     private var inFlight: Set<ModelTier> = []
-    /// The user is talking back to the toast that is up (`setTalkingBack`).
+    /// A toast the user has talked to is up (`setTalkingBack`).
     private var talkingBack = false
-    /// A suggestion made while the user was talking back, waiting for the exchange to end.
+    /// A suggestion made while that toast was up, waiting for it to close.
     private var heldSuggestion: Suggestion?
     /// The one question waiting for the call in flight to return; a newer one takes its place.
     private struct PendingQuestion {
@@ -105,15 +105,28 @@ public actor MentorLoop {
     }
 
     /// Call as an exchange with the toast begins and ends: from the key going
-    /// down until the transcript is handled or the answer is shown. While it
-    /// is on, a new suggestion is held rather than shown; when it goes off,
-    /// the held one is shown if it is still fresh, otherwise it expires unseen.
+    /// down until the toast that was talked to is closed, so its answer can be
+    /// read. While it is on, a new suggestion is held rather than shown; when
+    /// it goes off, the held one is shown if it is still fresh, otherwise it
+    /// expires unseen.
     public func setTalkingBack(_ active: Bool, at now: Date = Date()) async {
         guard talkingBack != active else { return }
         talkingBack = active
         guard !active, let held = heldSuggestion else { return }
         heldSuggestion = nil
         await publish(held, now: now)
+    }
+
+    /// A held suggestion is not shown while the user is pausing Mentor.
+    private func expireHeldSuggestion(now: Date) async {
+        guard let held = heldSuggestion else { return }
+        heldSuggestion = nil
+        await expireUnseen(held, now: now)
+    }
+
+    private func expireUnseen(_ suggestion: Suggestion, now: Date) async {
+        MentorLoop.log.notice("suggestion \(suggestion.id) expired unseen")
+        await recordFeedback(suggestionID: suggestion.id, feedback: .expiredUnseen, at: now)
     }
 
     /// Drops the question waiting for the call in flight, if any: the user
@@ -211,6 +224,9 @@ public actor MentorLoop {
         switch event {
         case .modeChanged(let newMode):
             mode = newMode
+            if newMode == .paused {
+                await expireHeldSuggestion(now: Date())
+            }
             await publishStatus()
         case .observation(let observation):
             await consider(observation)
@@ -438,7 +454,7 @@ public actor MentorLoop {
         await publish(stored, now: Date())
     }
 
-    /// Shows a journaled suggestion, holds it while the user is talking back,
+    /// Shows a journaled suggestion, holds it while a talked-to toast is up,
     /// or expires it when it was held too long.
     private func publish(_ suggestion: Suggestion, now: Date) async {
         switch scheduler.publishGate(madeAt: suggestion.timestamp, conditions: conditions(now: now), now: now) {
@@ -446,13 +462,12 @@ public actor MentorLoop {
             await broadcaster.send(.suggestion(suggestion))
         case .hold:
             if let older = heldSuggestion {
-                await recordFeedback(suggestionID: older.id, feedback: .expired, at: now)
+                await expireUnseen(older, now: now)
             }
             heldSuggestion = suggestion
             MentorLoop.log.notice("suggestion \(suggestion.id) held while the user talks back")
-        case .expired(let age):
-            MentorLoop.log.notice("suggestion \(suggestion.id) expired unseen after \(Int(age))s")
-            await recordFeedback(suggestionID: suggestion.id, feedback: .expired, at: now)
+        case .expired:
+            await expireUnseen(suggestion, now: now)
         }
     }
 

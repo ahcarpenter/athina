@@ -16,8 +16,8 @@ public struct MentorScheduler: Equatable, Sendable {
         public var mode: SensingMode
         public var hasAPIKey: Bool
         public var callInFlight: Bool
-        /// The user is talking back to the toast that is up: the key is held,
-        /// or the transcript or the answer is in progress.
+        /// A toast the user has talked to is up: from the key going down until
+        /// that toast is closed, so its answer can be read.
         public var talkingBack: Bool
         /// Spend this hour as a fraction of the cap (1 or more means capped).
         public var spendFraction: Double
@@ -225,10 +225,10 @@ public struct MentorScheduler: Equatable, Sendable {
     // MARK: Publish gate
 
     /// The yes-or-no between a finished mentor call and the toast. A
-    /// suggestion made while the user is talking back is held so the toast
-    /// being talked to, the recording, and the pending answer stay as they
-    /// are; when the exchange ends it is shown, unless it waited longer than
-    /// `maxObservationAge`, in which case it expires unseen.
+    /// suggestion made while a talked-to toast is up is held so that toast,
+    /// the recording, the pending answer, and the answer on screen stay as
+    /// they are; when that toast closes it is shown, unless it waited longer
+    /// than `maxObservationAge`, in which case it expires unseen.
     public func publishGate(madeAt: Date, conditions: Conditions, now: Date) -> PublishGate {
         if conditions.talkingBack { return .hold }
         let age = now.timeIntervalSince(madeAt)

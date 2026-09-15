@@ -45,6 +45,9 @@ public enum SuggestionFeedback: String, Codable, CaseIterable, Sendable {
     case never
     /// The toast timed out with no action.
     case expired
+    /// Held while the user talked to another toast, and stale by the time
+    /// that ended: never shown at all.
+    case expiredUnseen
     /// The user closed the toast without answering.
     case dismissed
 
@@ -54,13 +57,17 @@ public enum SuggestionFeedback: String, Codable, CaseIterable, Sendable {
         case .notNow: "Not now"
         case .never: "Never for this"
         case .expired: "Expired"
+        case .expiredUnseen: "Expired, never shown"
         case .dismissed: "Dismissed"
         }
     }
 
-    /// True for the two non-answers, which never overwrite an answer.
+    /// True for the non-answers, which never overwrite an answer.
     public var isNonAnswer: Bool {
-        self == .expired || self == .dismissed
+        switch self {
+        case .expired, .expiredUnseen, .dismissed: true
+        case .tellMeMore, .notNow, .never: false
+        }
     }
 }
 
