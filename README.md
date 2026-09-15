@@ -359,19 +359,21 @@ thumbnails, and then, if the file is still over `journalSizeCapBytes`, the
 oldest thumbnails and finally the oldest observations and events until it fits.
 "Clear Journal" in settings deletes everything.
 
-The mentor loop adds four tables: `suggestions` (every suggestion shown, with
+The mentor loop adds five tables: `suggestions` (every suggestion shown, with
 the user's feedback, the inferred goal it was judged against, the region it
 pointed at if any, and whether a callout was drawn), `model_calls` (one row per
 API call: tier, model, prompt version and size, token counts, estimated cost,
 latency, outcome, the model's one-line reason, and whether it was replayed;
 never the prompt text), `understanding` (one row per revision of the standing
-understanding, see below), and `follow_ups` (one row per question talked back:
-the transcript, the answer or why there is none, and the model). A moment held
-at the context boundary is recorded in `model_calls` as the `outOfContext`
-outcome. All four expire with `textRetention` and are emptied by Clear Journal.
-A journal written by an earlier build is migrated in place when it is opened:
-missing tables are created and missing columns added, so nothing has to be
-thrown away.
+understanding, see below), `refresh_period` (a single row: the active use
+counted toward the next understanding refresh), and `follow_ups` (one row per
+question talked back: the transcript, the answer or why there is none, and the
+model). A moment held at the context boundary is recorded in `model_calls` as
+the `outOfContext` outcome. All five expire with `textRetention`, the
+understanding goes with the oldest observations and events in a size-cap sweep,
+and all five are emptied by Clear Journal. A journal written by an earlier build
+is migrated in place when it is opened: missing tables are created and columns
+added or dropped, so nothing has to be thrown away.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
 to defaults so older files keep working. A replay keeps both files in a
@@ -653,8 +655,7 @@ for it and a confidence; a condensed **timeline** of what has happened; the
 **mentor history**, what Mentor has already said and how the user answered, so
 it never repeats itself or re-raises something dismissed; and **open
 concerns** worth watching but not worth an interruption. `Understanding.swift`
-holds the type, its schema version, and the pure functions for bounding,
-rendering, and expiry.
+holds the type and the pure functions for bounding, rendering, and expiry.
 
 **How it is refreshed.** Every mentor call returns `updated_understanding`
 alongside its verdict, so the record is rewritten on the way past and that
@@ -666,7 +667,10 @@ screen is stamped when its capture starts and journaled only after OCR, so one
 captured before a call read the journal can land in it after. A **periodic
 refresh** (`understandingRefreshInterval`, 15 minutes by default) runs only
 when a whole interval of active use has passed with no mentor call to carry
-it. It is a third tier with its own model and effort picker (`claude-opus-5`
+it. Active use is time spent capturing the screen: a break, a pause, an
+excluded app, missing permissions, or a closed app counts for nothing, so
+coming back never buys a call over the few screens since. The count is kept
+in the journal, so a relaunch carries on from it. It is a third tier with its own model and effort picker (`claude-opus-5`
 at low effort by default, Haiku offered too), its own versioned prompt and
 schema, and no screenshot: summarising does not need one. `refreshGate` in
 `MentorScheduler` is the single decision, and it holds while the loop is off,
@@ -679,9 +683,7 @@ a refresh; the mentor tier never runs for such a moment either, so neither
 path that writes the record is reached from outside them. A refresh attempt
 starts the interval over whatever came of it, so a failed call waits a whole
 interval like the other tiers rather than retrying on the next observation. Refresh calls appear in the model call log and count
-against the hourly spend cap like every other call. At the top of the
-interval's range no separate call is ever made and mentor calls carry the
-record alone.
+against the hourly spend cap like every other call.
 
 **How it is used.** The record goes to the mentor tier as its own uncached
 system block after the cached prompt: every mentor call rewrites it, so the
@@ -701,8 +703,8 @@ record) bounds it: the model is told the budget and the app trims to fit on
 the way in, dropping the
 oldest timeline entries first, then the oldest mentor history, then concerns,
 then the weakest goals, always keeping the strongest goal. It expires after
-`understandingIdleGap` with no activity (4 hours), always at a new day, and
-whenever a different build's schema wrote it; expiry and reset are journaled.
+`understandingIdleGap` with no activity (4 hours) and always at a new day;
+expiry and reset are journaled.
 **Reset Understanding**, in Settings > Mentor and in the debug panel, forgets
 every revision at once. Revisions are inserted rather than updated, so the
 journal keeps the trail of how the reading developed, and the current one

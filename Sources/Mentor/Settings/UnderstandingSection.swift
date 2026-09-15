@@ -30,7 +30,7 @@ struct UnderstandingSection: View {
             NumberRow(
                 "Refresh at most every", value: $state.settings.mentor.understandingRefreshInterval,
                 range: MentorSettings.refreshIntervalRange, step: 300, unit: "s",
-                help: "Every mentor call rewrites the understanding on the way past, for free. This is how long it may go unrefreshed before a call of its own is made. At the top of the range no separate call is ever made."
+                help: "Every mentor call rewrites the understanding on the way past, for free. This is how long it may go unrefreshed, counting only time you are active, before a call of its own is made."
             )
             IntRow(
                 "Size limit", value: $state.settings.mentor.understandingTokenBudget,

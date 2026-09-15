@@ -137,7 +137,6 @@ public actor Journal {
                 updated_at REAL NOT NULL,
                 started_at REAL NOT NULL,
                 revision INTEGER NOT NULL,
-                schema_version INTEGER NOT NULL,
                 prompt_version INTEGER NOT NULL,
                 model TEXT NOT NULL,
                 source TEXT NOT NULL,
@@ -147,6 +146,12 @@ public actor Journal {
                 covered_through_observation_id INTEGER
             );
             CREATE INDEX IF NOT EXISTS understanding_updated_at ON understanding(updated_at);
+            CREATE TABLE IF NOT EXISTS refresh_period (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                started_at REAL NOT NULL,
+                active_use REAL NOT NULL,
+                counted_at REAL NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS model_calls (
                 id INTEGER PRIMARY KEY,
                 timestamp REAL NOT NULL,
@@ -166,23 +171,31 @@ public actor Journal {
             );
             CREATE INDEX IF NOT EXISTS model_calls_timestamp ON model_calls(timestamp);
             """)
-        // Columns added after a table shipped: CREATE TABLE IF NOT EXISTS leaves
-        // an existing journal's table alone, so add them here instead.
+        // Columns added or dropped after a table shipped: CREATE TABLE IF NOT
+        // EXISTS leaves an existing journal's table alone, so change them here.
         try addColumn("replayed INTEGER NOT NULL DEFAULT 0", named: "replayed", to: "model_calls", db)
         try addColumn("region_json TEXT", named: "region_json", to: "suggestions", db)
         try addColumn("callout_shown INTEGER NOT NULL DEFAULT 0", named: "callout_shown", to: "suggestions", db)
         try addColumn("judged_goal TEXT", named: "judged_goal", to: "suggestions", db)
-        try addColumn(
-            "covered_through_observation_id INTEGER", named: "covered_through_observation_id", to: "understanding", db
-        )
+        try dropColumn(named: "schema_version", from: "understanding", db)
+    }
+
+    private static func columns(of table: String, _ db: SQLiteConnection) throws -> [String?] {
+        try db.query("PRAGMA table_info(\(table))") { $0.text(1) }
     }
 
     /// Adds a column to an existing table, once. Nothing happens when the table
     /// was created with it already.
     private static func addColumn(_ definition: String, named name: String, to table: String, _ db: SQLiteConnection) throws {
-        let existing = try db.query("PRAGMA table_info(\(table))") { $0.text(1) }
-        guard !existing.contains(name) else { return }
+        guard !(try columns(of: table, db)).contains(name) else { return }
         try db.execute("ALTER TABLE \(table) ADD COLUMN \(definition)")
+    }
+
+    /// Drops a column from an existing table, once. Nothing happens when the
+    /// table was created without it.
+    private static func dropColumn(named name: String, from table: String, _ db: SQLiteConnection) throws {
+        guard (try columns(of: table, db)).contains(name) else { return }
+        try db.execute("ALTER TABLE \(table) DROP COLUMN \(name)")
     }
 
     // MARK: Writes
@@ -404,14 +417,13 @@ public actor Journal {
     public func record(_ record: UnderstandingRecord) throws -> UnderstandingRecord {
         let contentJSON = String(decoding: try encoder.encode(record.content), as: UTF8.self)
         try db.run("""
-            INSERT INTO understanding (updated_at, started_at, revision, schema_version, prompt_version,
+            INSERT INTO understanding (updated_at, started_at, revision, prompt_version,
                 model, source, cost, cumulative_cost, content_json, covered_through_observation_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 .double(record.updatedAt.timeIntervalSince1970),
                 .double(record.startedAt.timeIntervalSince1970),
                 .int(Int64(record.revision)),
-                .int(Int64(record.schemaVersion)),
                 .int(Int64(record.promptVersion)),
                 .text(record.model),
                 .text(record.source.rawValue),
@@ -446,6 +458,34 @@ public actor Journal {
         try db.execute("PRAGMA incremental_vacuum")
     }
 
+    /// Keeps the count toward the next understanding refresh in place of the
+    /// one before it, or forgets it when `period` is nil.
+    public func storeRefreshPeriod(_ period: RefreshPeriod?) throws {
+        guard let period else {
+            try db.execute("DELETE FROM refresh_period")
+            return
+        }
+        try db.run(
+            "INSERT OR REPLACE INTO refresh_period (id, started_at, active_use, counted_at) VALUES (1, ?, ?, ?)",
+            [
+                .double(period.startedAt.timeIntervalSince1970),
+                .double(period.activeUse),
+                .double(period.countedAt.timeIntervalSince1970),
+            ]
+        )
+    }
+
+    /// The count toward the next understanding refresh, or nil when none is kept.
+    public func refreshPeriod() throws -> RefreshPeriod? {
+        try db.query("SELECT started_at, active_use, counted_at FROM refresh_period") { row in
+            RefreshPeriod(
+                startedAt: Date(timeIntervalSince1970: row.double(0)),
+                activeUse: row.double(1),
+                countedAt: Date(timeIntervalSince1970: row.double(2))
+            )
+        }.first
+    }
+
     // MARK: Reads
 
     /// The newest `limit` observations at or after `since` or with an id above
@@ -465,11 +505,6 @@ public actor Journal {
             "SELECT COUNT(*) FROM observations WHERE timestamp >= ? OR id > ?",
             [since.map { .double($0.timeIntervalSince1970) } ?? .null, cursor.map(Value.int) ?? .null]
         ))
-    }
-
-    /// The largest observation id in the journal, or 0 when it has none.
-    public func newestObservationID() throws -> Int64 {
-        try db.scalarInt("SELECT IFNULL(MAX(id), 0) FROM observations")
     }
 
     /// The newest `limit` entries of both kinds, newest first, without thumbnail bytes.
@@ -558,7 +593,7 @@ public actor Journal {
     public func clear() throws {
         try db.execute("BEGIN")
         do {
-            try db.execute("DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events; DELETE FROM suggestions; DELETE FROM follow_ups; DELETE FROM model_calls; DELETE FROM understanding;")
+            try db.execute("DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events; DELETE FROM suggestions; DELETE FROM follow_ups; DELETE FROM model_calls; DELETE FROM understanding; DELETE FROM refresh_period;")
             try db.execute("COMMIT")
         } catch {
             try? db.execute("ROLLBACK")
@@ -590,6 +625,7 @@ public actor Journal {
         result.modelCallsDeleted += db.changes
         try db.run("DELETE FROM understanding WHERE updated_at < ?", [.double(textCutoff)])
         result.understandingDeleted += db.changes
+        try db.run("DELETE FROM refresh_period WHERE started_at < ?", [.double(textCutoff)])
 
         try db.execute("PRAGMA incremental_vacuum")
         var used = try usedBytes()
@@ -607,7 +643,7 @@ public actor Journal {
                 try db.execute("PRAGMA incremental_vacuum")
                 used = try usedBytes()
             }
-            // Then the oldest observations and events together.
+            // Then the oldest observations, events, and understanding together.
             while used > policy.sizeTargetBytes {
                 let oldest = try db.query("""
                     SELECT MIN(t) FROM (
@@ -626,6 +662,9 @@ public actor Journal {
                 let observationsRemoved = db.changes
                 try db.run("DELETE FROM events WHERE timestamp <= ?", [.double(cutoff)])
                 let eventsRemoved = db.changes
+                try db.run("DELETE FROM understanding WHERE updated_at <= ?", [.double(cutoff)])
+                result.understandingDeleted += db.changes
+                try db.run("DELETE FROM refresh_period WHERE started_at <= ?", [.double(cutoff)])
                 result.observationsDeleted += observationsRemoved
                 result.eventsDeleted += eventsRemoved
                 if observationsRemoved + eventsRemoved == 0 { break }
@@ -722,7 +761,7 @@ public actor Journal {
     }
 
     private static let understandingColumns = """
-        id, updated_at, started_at, revision, schema_version, prompt_version, model, source, cost,
+        id, updated_at, started_at, revision, prompt_version, model, source, cost,
         cumulative_cost, content_json, covered_through_observation_id
         """
 
@@ -732,14 +771,13 @@ public actor Journal {
             updatedAt: Date(timeIntervalSince1970: row.double(1)),
             startedAt: Date(timeIntervalSince1970: row.double(2)),
             revision: Int(row.int(3)),
-            schemaVersion: Int(row.int(4)),
-            promptVersion: Int(row.int(5)),
-            model: row.text(6) ?? "",
-            source: UnderstandingSource(rawValue: row.text(7) ?? "") ?? .periodic,
-            cost: row.double(8),
-            cumulativeCost: row.double(9),
-            content: try decoder.decode(Understanding.self, from: Data((row.text(10) ?? "{}").utf8)),
-            coveredThroughObservationID: row.isNull(11) ? nil : row.int(11)
+            promptVersion: Int(row.int(4)),
+            model: row.text(5) ?? "",
+            source: UnderstandingSource(rawValue: row.text(6) ?? "") ?? .periodic,
+            cost: row.double(7),
+            cumulativeCost: row.double(8),
+            content: try decoder.decode(Understanding.self, from: Data((row.text(9) ?? "{}").utf8)),
+            coveredThroughObservationID: row.isNull(10) ? nil : row.int(10)
         )
     }
 

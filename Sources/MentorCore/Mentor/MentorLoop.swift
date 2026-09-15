@@ -89,17 +89,16 @@ public actor MentorLoop {
     /// exists. Seeded from the journal at launch so the gap is measured from
     /// real activity rather than from the record's last write.
     private var lastActivityAt: Date?
-    /// When the current refresh period began, before any understanding exists:
-    /// the first observation of the run, or of the stretch since the record was
-    /// reset or expired. Cleared with the record so the next stretch gets a
-    /// whole interval for a mentor call to write the record for free.
-    private var periodStartedAt: Date?
+    /// The active use counted toward the next refresh: begun at the record's
+    /// last write, or at the first observation while there is no record, and
+    /// cleared with the record so the next stretch gets a whole interval for a
+    /// mentor call to write the record for free. Counted whenever the mode
+    /// changes and kept in the journal, so a relaunch carries on from it.
+    private var period: RefreshPeriod?
     /// When Reset Understanding last ran, so a request built before it
     /// cannot store the record it was shown.
     private var lastResetAt: Date?
 
-    /// When the current unrefreshed period began.
-    private var refreshPeriodStart: Date? { understanding?.updatedAt ?? periodStartedAt }
     /// Decides when a day ends for expiry.
     private let calendar: Calendar
 
@@ -148,6 +147,7 @@ public actor MentorLoop {
         consumeTask?.cancel()
         consumeTask = nil
         dropPendingQuestion()
+        await countActiveUse(now: Date())
         await broadcaster.finish()
     }
 
@@ -273,6 +273,7 @@ public actor MentorLoop {
     private func handle(_ event: SensingEvent) async {
         switch event {
         case .modeChanged(let newMode):
+            await countActiveUse(now: Date())
             mode = newMode
             if newMode == .paused {
                 await expireHeldSuggestion(now: Date())
@@ -281,7 +282,7 @@ public actor MentorLoop {
         case .observation(let observation):
             await expireUnderstandingIfNeeded(now: Date())
             lastActivityAt = observation.timestamp
-            if periodStartedAt == nil { periodStartedAt = observation.timestamp }
+            if period == nil { await setPeriod(RefreshPeriod(startedAt: observation.timestamp)) }
             await consider(observation)
             // After the interactive path, so a mentor call that just refreshed
             // the record leaves nothing for the refresh gate to do, and the
@@ -734,6 +735,7 @@ public actor MentorLoop {
             MentorLoop.log.error("understanding not journaled: \(String(describing: error), privacy: .public)")
         }
         understanding = record
+        await setPeriod(RefreshPeriod(startedAt: record.updatedAt))
         MentorLoop.log.notice(
             "understanding revision \(record.revision) by \(source.rawValue, privacy: .public), \(record.content.goals.count) goals, \(record.content.estimatedTokens) tokens"
         )
@@ -741,15 +743,19 @@ public actor MentorLoop {
     }
 
     /// Drops an understanding that no longer describes the present: a long gap
-    /// with no activity, a new day, or a record a different build wrote.
+    /// with no activity, or a new day. A period still counting toward the first
+    /// record goes by the same rules, quietly, since nothing was formed.
     private func expireUnderstandingIfNeeded(now: Date) async {
-        guard let record = understanding,
-              let expiry = record.expiry(
-                  now: now, idleGap: settings.understandingIdleGap, lastActivityAt: lastActivityAt, calendar: calendar
+        guard let writtenAt = understanding?.updatedAt ?? period?.startedAt,
+              let expiry = UnderstandingExpiry.of(
+                  writtenAt: writtenAt, now: now, idleGap: settings.understandingIdleGap,
+                  lastActivityAt: lastActivityAt, calendar: calendar
               )
         else { return }
+        let expired = understanding
         understanding = nil
-        periodStartedAt = nil
+        await setPeriod(nil)
+        guard let record = expired else { return }
         MentorLoop.log.notice("understanding expired: \(expiry.label, privacy: .public)")
         await journalEvent(JournalEvent(
             timestamp: now, kind: .understanding, detail: "expired after revision \(record.revision): \(expiry.label)"
@@ -761,8 +767,8 @@ public actor MentorLoop {
     public func resetUnderstanding(at now: Date = Date()) async {
         let previous = understanding
         understanding = nil
-        periodStartedAt = nil
         lastResetAt = now
+        await setPeriod(nil)
         do {
             try await journal.clearUnderstanding()
         } catch {
@@ -777,15 +783,34 @@ public actor MentorLoop {
 
     public func currentUnderstanding() -> UnderstandingRecord? { understanding }
 
+    /// Replaces the refresh period and keeps it in the journal.
+    private func setPeriod(_ newPeriod: RefreshPeriod?) async {
+        period = newPeriod
+        do {
+            try await journal.storeRefreshPeriod(newPeriod)
+        } catch {
+            MentorLoop.log.error("refresh period not journaled: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Counts the time since the period was last counted as active use when
+    /// the current mode captures the screen. Runs before every mode change, so
+    /// all of that time was spent in the current mode.
+    private func countActiveUse(now: Date) async {
+        guard let period else { return }
+        await setPeriod(period.counted(through: now, in: mode))
+    }
+
     /// Runs the periodic refresh when the gate allows it. Every mentor call
     /// refreshes the record for free, so this only fires in a stretch of active
     /// use with no mentor call in it.
     private func refreshUnderstandingIfDue(after observation: ActivityObservation) async {
         let now = Date()
+        await countActiveUse(now: now)
         let gate = scheduler.refreshGate(
             conditions: conditions(now: now),
             context: contextPlacement(for: observation),
-            periodStart: refreshPeriodStart,
+            period: period,
             lastActivityAt: lastActivityAt,
             now: now
         )
@@ -799,7 +824,7 @@ public actor MentorLoop {
             status.lastRefreshHold = nil
             since = periodStart
         }
-        scheduler.noteRefreshStarted(now: now)
+        await setPeriod(period?.restarted(at: now))
         await runRefresh(since: since, now: now)
         await publishStatus()
     }
@@ -876,11 +901,7 @@ public actor MentorLoop {
     ) async -> (entries: [RollingWindow.Entry], leftOut: Int, readThrough: Int64?) {
         // Observation ids are SQLite rowids, assigned at insert as one past the
         // largest in the table, so they follow the order rows were journaled
-        // whatever their capture timestamps. Only deleting the newest rows, as
-        // Clear Journal or retention can, lets an id come round again, so a
-        // cursor past the largest id covers none of the rows left.
-        let newestID = cursor == nil ? 0 : (try? await journal.newestObservationID()) ?? 0
-        let cursor = cursor.map { $0 > newestID ? 0 : $0 }
+        // whatever their capture timestamps.
         var history = (try? await journal.recentObservations(
             since: since, after: cursor, limit: MentorLoop.windowLookback
         )) ?? []
@@ -1009,7 +1030,7 @@ public actor MentorLoop {
         status.nextTriageAt = scheduler.nextTriageAllowed(multiplier: multiplier)
         status.nextMentorAt = scheduler.nextMentorAllowed(multiplier: multiplier)
         status.understanding = understanding
-        status.nextRefreshAt = scheduler.nextRefreshAllowed(after: refreshPeriodStart, multiplier: multiplier)
+        status.nextRefreshAt = scheduler.nextRefreshAllowed(after: period, mode: mode, multiplier: multiplier)
         status.inFlight = ModelTier.allCases.first { inFlight.contains($0) }
         guard status != lastPublishedStatus else { return }
         lastPublishedStatus = status
@@ -1046,9 +1067,15 @@ public actor MentorLoop {
         // throw away what Mentor had worked out. Expiry runs here as on every
         // observation, so one that went stale while the app was closed is
         // journaled as expired rather than silently skipped. The journal's
-        // newest observation is the activity this run has not seen yet.
+        // newest observation is the activity this run has not seen yet. The
+        // count toward the next refresh survives with it; one kept from before
+        // the record's last write, or none, starts over at that write.
         understanding = try? await journal.latestUnderstanding()
         lastActivityAt = (try? await journal.recentObservations(limit: 1))?.first?.timestamp
+        period = try? await journal.refreshPeriod()
+        if let record = understanding, (period?.startedAt ?? .distantPast) < record.updatedAt {
+            await setPeriod(RefreshPeriod(startedAt: record.updatedAt))
+        }
         await expireUnderstandingIfNeeded(now: now)
     }
 

@@ -505,15 +505,20 @@ import Testing
 
         var settings = MentorSettings()
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
-        // A record written longer ago than the interval, so the refresh is due.
+        // A record written longer ago than the interval, with work all the way
+        // since, so the refresh is due.
         let journal = try Journal.inMemory()
-        try await journal.record(UnderstandingRecord.first(
+        let activeUse = settings.understandingRefreshInterval + 60
+        let written = try await journal.record(UnderstandingRecord.first(
             content: Understanding(
                 goals: [Understanding.Goal(goal: "rename the trip photos", evidence: "a list of mv commands", confidence: 0.7)],
                 timeline: ["opened the rename list"]
             ),
-            at: Date().addingTimeInterval(-(settings.understandingRefreshInterval + 60)),
+            at: Date().addingTimeInterval(-activeUse),
             model: "claude-sonnet-5", source: .mentorCall, cost: 0, promptVersion: MentorPrompts.version
+        ))
+        try await journal.storeRefreshPeriod(RefreshPeriod(
+            startedAt: written.updatedAt, activeUse: activeUse, countedAt: written.updatedAt.addingTimeInterval(activeUse)
         ))
         let h = await Harness(journal: journal, client: client, settings: settings)
 

@@ -47,10 +47,10 @@ public struct MentorSettings: Codable, Equatable, Sendable {
 
     // MARK: Understanding
 
-    /// How long the understanding may go unrefreshed before a refresh call of
-    /// its own is made. Mentor calls refresh it on the way past, so this only
-    /// fires in a stretch with no mentor call. Raise it to spend less; at the
-    /// top of its range only mentor calls ever refresh it.
+    /// How much active use the understanding may go unrefreshed before a
+    /// refresh call of its own is made. Mentor calls refresh it on the way
+    /// past, so this only fires in a stretch with no mentor call. Raise it to
+    /// spend less.
     public var understandingRefreshInterval: TimeInterval = 900
     /// Rough token budget for the whole understanding. It is trimmed to fit,
     /// oldest first, so it can never grow without bound. Its range keeps the
@@ -171,20 +171,12 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     public var mentorModelInfo: ClaudeModel { ModelCatalog.model(id: mentorModel) ?? ModelCatalog.opus5 }
     public var understandingModelInfo: ClaudeModel { ModelCatalog.model(id: understandingModel) ?? ModelCatalog.opus5 }
 
-    /// Settable range for the refresh interval. The top is the off position:
-    /// no periodic refresh ever comes due, so only mentor calls refresh.
+    /// Settable range for the refresh interval.
     public static let refreshIntervalRange: ClosedRange<TimeInterval> = 300...43200
 
     /// Settable range for the token budget. The top leaves a mentor reply room
     /// for its thinking and a suggestion beside the record it carries.
     public static let understandingTokenBudgetRange: ClosedRange<Int> = 200...3000
-
-    /// True when the refresh interval is at the top of its range, where
-    /// `MentorScheduler.refreshGate` always holds and mentor calls carry the
-    /// record alone.
-    public var periodicRefreshIsOff: Bool {
-        understandingRefreshInterval >= MentorSettings.refreshIntervalRange.upperBound
-    }
 
     /// The effort to send for a tier: nil when its model rejects the parameter.
     public func effort(for tier: ModelTier) -> Effort? {

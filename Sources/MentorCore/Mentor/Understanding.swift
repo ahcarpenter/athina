@@ -7,11 +7,6 @@ import Foundation
 /// into the next prompt. Every field is a plain sentence so a person can read
 /// the whole record in the debug panel and see exactly what is being carried.
 public struct Understanding: Codable, Equatable, Sendable {
-    /// The encoding this type writes. Stored with every revision so a record
-    /// written by a future build is recognised and dropped rather than
-    /// misread; older records still decode, because every field defaults.
-    public static let schemaVersion = 1
-
     /// Something the user appears to be working toward, and why Mentor thinks so.
     public struct Goal: Codable, Equatable, Sendable, Identifiable {
         public var goal: String
@@ -206,15 +201,25 @@ public enum UnderstandingExpiry: Equatable, Sendable {
     case idleGap(TimeInterval)
     /// It was last written on an earlier day.
     case newDay
-    /// A different build wrote it, so this one cannot read it faithfully.
-    case schemaChanged(Int)
 
     public var label: String {
         switch self {
         case .idleGap(let gap): "no activity for \(gap < 3600 ? "\(Int(gap / 60))m" : "\(Int(gap / 3600))h")"
         case .newDay: "a new day started"
-        case .schemaChanged(let version): "written by schema version \(version)"
         }
+    }
+
+    /// Why a reading written at `writtenAt` no longer describes the present,
+    /// or nil while it still does. The idle gap runs from the user's last
+    /// activity, or from the write when nothing has been observed since it,
+    /// as after a relaunch.
+    public static func of(
+        writtenAt: Date, now: Date, idleGap: TimeInterval, lastActivityAt: Date?, calendar: Calendar = .current
+    ) -> UnderstandingExpiry? {
+        if !calendar.isDate(writtenAt, inSameDayAs: now) { return .newDay }
+        let lastActive = max(writtenAt, lastActivityAt ?? writtenAt)
+        if now.timeIntervalSince(lastActive) > idleGap { return .idleGap(idleGap) }
+        return nil
     }
 }
 
@@ -230,8 +235,6 @@ public struct UnderstandingRecord: Codable, Equatable, Sendable, Identifiable {
     public var startedAt: Date
     /// 1 for the first revision, one more for each refresh that folds into it.
     public var revision: Int
-    /// `Understanding.schemaVersion` at the time of writing.
-    public var schemaVersion: Int
     /// `MentorPrompts.version` at the time of writing.
     public var promptVersion: Int
     public var model: String
@@ -251,7 +254,6 @@ public struct UnderstandingRecord: Codable, Equatable, Sendable, Identifiable {
         updatedAt: Date,
         startedAt: Date,
         revision: Int,
-        schemaVersion: Int = Understanding.schemaVersion,
         promptVersion: Int,
         model: String,
         source: UnderstandingSource,
@@ -264,7 +266,6 @@ public struct UnderstandingRecord: Codable, Equatable, Sendable, Identifiable {
         self.updatedAt = updatedAt
         self.startedAt = startedAt
         self.revision = revision
-        self.schemaVersion = schemaVersion
         self.promptVersion = promptVersion
         self.model = model
         self.source = source
@@ -272,19 +273,6 @@ public struct UnderstandingRecord: Codable, Equatable, Sendable, Identifiable {
         self.cumulativeCost = cumulativeCost
         self.content = content
         self.coveredThroughObservationID = coveredThroughObservationID
-    }
-
-    /// Why this record is no longer current, or nil while it still is. The
-    /// idle gap runs from the user's last activity, or from this revision's
-    /// write when nothing has been observed since it, as after a relaunch.
-    public func expiry(
-        now: Date, idleGap: TimeInterval, lastActivityAt: Date?, calendar: Calendar = .current
-    ) -> UnderstandingExpiry? {
-        if schemaVersion != Understanding.schemaVersion { return .schemaChanged(schemaVersion) }
-        if !calendar.isDate(updatedAt, inSameDayAs: now) { return .newDay }
-        let lastActive = max(updatedAt, lastActivityAt ?? updatedAt)
-        if now.timeIntervalSince(lastActive) > idleGap { return .idleGap(idleGap) }
-        return nil
     }
 
     /// The next revision after this one, carrying the run's start, count, and cost forward.

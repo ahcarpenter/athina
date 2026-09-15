@@ -15,16 +15,27 @@ import Testing
 
         /// `screens`, then `understanding`, when given, are journaled before the
         /// loop starts, so the loop seeds from them exactly as it would after a
-        /// relaunch. The screens get ids 1, 2, and so on, in order.
+        /// relaunch. The screens get ids 1, 2, and so on, in order. `activeUse`
+        /// is how long the user worked right after the record was written, with
+        /// nothing counted since, as the loop would have kept the count.
         init(
             settings: MentorSettings = MentorSettings(),
             key: String? = "sk-ant-test",
             screens: [ActivityObservation] = [],
-            understanding: UnderstandingRecord? = nil
+            understanding: UnderstandingRecord? = nil,
+            activeUse: TimeInterval? = nil
         ) async throws {
             let journal = try Journal.inMemory()
             for screen in screens { try await journal.record(screen) }
-            if let understanding { try await journal.record(understanding) }
+            if let understanding {
+                try await journal.record(understanding)
+                if let activeUse {
+                    try await journal.storeRefreshPeriod(RefreshPeriod(
+                        startedAt: understanding.updatedAt, activeUse: activeUse,
+                        countedAt: understanding.updatedAt.addingTimeInterval(activeUse)
+                    ))
+                }
+            }
             await self.init(settings: settings, key: key, journal: journal, client: ScriptedClaudeClient())
         }
 
@@ -359,7 +370,7 @@ import Testing
     @Test func anOutOfContextMomentNeverBuysARefresh() async throws {
         var settings = Self.enforcing()
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
-        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400))
+        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
         await h.client.enqueue(json: Self.triage(true, context: nil))
         await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
 
@@ -375,7 +386,7 @@ import Testing
     @Test func aDueRefreshRunsInsideAContextAndWaitsForAnAppTriageHasNotPlaced() async throws {
         var settings = Self.enforcing()
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
-        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400))
+        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
         // Inside, with triage passing: no mentor call carries the record, so
         // the refresh of its own runs as it would with the switch off.
         await h.client.enqueue(json: Self.triage(false, context: "writing Swift"))
@@ -706,9 +717,10 @@ import Testing
     @Test func aPeriodicRefreshRunsWhenNoMentorCallHasAndCountsAgainstSpend() async throws {
         var settings = MentorSettings()
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
-        // A record older than the interval, so this stretch of work has had no
-        // mentor call to carry it and a refresh of its own is due.
-        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400))
+        // A record older than the interval, with work all the way since, so
+        // this stretch has had no mentor call to carry it and a refresh of its
+        // own is due.
+        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.refresh, model: "claude-opus-5", usage: Usage(inputTokens: 3000, outputTokens: 500))
         await h.observe(Fixtures.observation(at: Date()), expectCalls: 2)
@@ -750,7 +762,7 @@ import Testing
         var settings = MentorSettings()
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
         // Written 72 minutes ago; twelve minutes of work followed, then an hour away.
-        let h = try await Harness(settings: settings, understanding: Self.existing(age: 72 * 60))
+        let h = try await Harness(settings: settings, understanding: Self.existing(age: 72 * 60), activeUse: 12 * 60)
         for minute in 1...12 {
             try await h.journal.record(Fixtures.observation(
                 at: Date().addingTimeInterval(Double(-72 * 60 + minute * 60)),
@@ -873,7 +885,9 @@ import Testing
     @Test func aScreenJournaledAfterARefreshReadTheJournalIsInTheNextWindow() async throws {
         var settings = MentorSettings()
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
-        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400, coveredThrough: 0))
+        let h = try await Harness(
+            settings: settings, understanding: Self.existing(age: 400, coveredThrough: 0), activeUse: 400
+        )
         await h.client.setDelay(.milliseconds(300))
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.refresh, model: "claude-opus-5")
@@ -895,34 +909,12 @@ import Testing
         #expect(message.contains("captured early, journaled late"))
     }
 
-    /// Clearing the journal starts observation ids over, so a cursor from
-    /// before it would hide every new screen; one past the largest id left is
-    /// treated as covering nothing.
-    @Test func aCursorPastTheNewestObservationCoversNothing() async throws {
-        var settings = MentorSettings()
-        settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
-        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400, coveredThrough: 5000))
-        try await h.journal.record(Fixtures.observation(
-            at: Date().addingTimeInterval(-60), window: "fresh.swift", text: "work after the ids started over"
-        ))
-        await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
-        await h.client.enqueue(json: Self.refresh, model: "claude-opus-5")
-        let now = try await h.journal.record(Fixtures.observation(at: Date()))
-        await h.observe(now, expectCalls: 2)
-        guard case .text(let message)? = await h.client.sent.last?.request.messages[0].content.last else {
-            Issue.record("expected a text refresh message")
-            return
-        }
-        #expect(message.contains("work after the ids started over"))
-        #expect(await h.loop.currentUnderstanding()?.coveredThroughObservationID == now.id)
-    }
-
     /// A period with more screens than one journal read returns still tells
     /// the model how many were left out in all.
     @Test func aRefreshCountsTheScreensBeyondTheLookbackAsLeftOut() async throws {
         var settings = MentorSettings()
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
-        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400))
+        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
         let total = MentorLoop.windowLookback + 5
         for i in 0..<total {
             try await h.journal.record(Fixtures.observation(
@@ -945,7 +937,7 @@ import Testing
     @Test func aFailedRefreshWaitsAWholeIntervalBeforeTryingAgain() async throws {
         var settings = MentorSettings()
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
-        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400))
+        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(.failure(.api(status: 529, type: "overloaded_error", message: "Overloaded")))
         await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
@@ -964,7 +956,7 @@ import Testing
     @Test func aRefreshReplyWithNoUnderstandingIsAnErrorAndChangesNothing() async throws {
         var settings = MentorSettings()
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
-        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400))
+        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(
             json: #"{"reason": "Nothing known", "understanding": {"goals": [], "timeline": [], "mentor_history": [], "open_concerns": []}}"#,
@@ -993,7 +985,7 @@ import Testing
         var settings = MentorSettings()
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
         // Due, exactly as in the test above, but the session is not available.
-        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400))
+        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
         h.input.yield(.modeChanged(.paused))
         await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 0)
         #expect(await h.client.sent.isEmpty)
@@ -1005,6 +997,76 @@ import Testing
         #expect(await h.loop.currentStatus().lastRefreshHold?.hold == .unavailable(.idle))
         // Nothing was spent and the record is untouched.
         #expect(await h.loop.currentUnderstanding()?.revision == 1)
+    }
+
+    /// The record was written an hour ago, the user worked five minutes, then
+    /// was at lunch until now. The hour away is not use, so the first
+    /// observation back triages and buys no refresh over the few screens
+    /// since; it comes due after ten more minutes of work.
+    @Test func comingBackFromLunchBuysNoRefreshOverTheScreensSince() async throws {
+        let h = try await Harness(understanding: Self.existing(age: 3600), activeUse: 300)
+        await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
+        let back = Date()
+        await h.observe(Fixtures.observation(id: 1, at: back), expectCalls: 1)
+
+        #expect(await h.client.sent.count == 1)
+        #expect(!(try await h.journal.recentModelCalls(limit: 10)).contains { $0.tier == .understanding })
+        #expect(await h.loop.currentUnderstanding()?.revision == 1)
+        let status = await h.loop.currentStatus()
+        guard case .notDue(let until) = status.lastRefreshHold?.hold ?? .callInFlight else {
+            Issue.record("expected the refresh to be held as not due")
+            return
+        }
+        #expect(abs(until.timeIntervalSince(back) - 600) < 5)
+        #expect(status.nextRefreshAt == until)
+        let kept = try #require(try await h.journal.refreshPeriod())
+        #expect(kept.activeUse >= 300 && kept.activeUse < 305)
+    }
+
+    /// While the loop runs, the count stands still from the moment the user
+    /// goes idle until they are back, and the next refresh moves later by as
+    /// long as they were away.
+    @Test func timeSpentIdleWhileRunningIsNotCounted() async throws {
+        let h = try await Harness(understanding: Self.existing(age: 60), activeUse: 60)
+        await h.waitUntil { $0.nextRefreshAt != nil }
+        let before = try #require(await h.loop.currentStatus().nextRefreshAt)
+
+        h.input.yield(.modeChanged(.idle))
+        await h.waitUntil { $0.nextRefreshAt == nil }
+        #expect(await h.loop.currentStatus().nextRefreshAt == nil)
+        let wentIdle = try #require(try await h.journal.refreshPeriod())
+
+        try await Task.sleep(for: .milliseconds(300))
+        h.input.yield(.modeChanged(.watching))
+        await h.waitUntil { $0.nextRefreshAt != nil }
+        let cameBack = try #require(try await h.journal.refreshPeriod())
+        #expect(cameBack.activeUse == wentIdle.activeUse)
+        #expect(cameBack.countedAt.timeIntervalSince(wentIdle.countedAt) >= 0.25)
+        let after = try #require(await h.loop.currentStatus().nextRefreshAt)
+        #expect(after.timeIntervalSince(before) >= 0.25)
+    }
+
+    /// A relaunch carries the count on: what was counted before the quit still
+    /// counts, and the time the app was closed does not.
+    @Test func aRelaunchCarriesTheCountOnWithoutTheTimeTheAppWasClosed() async throws {
+        let h = try await Harness(understanding: Self.existing(age: 3600), activeUse: 840)
+        await h.waitUntil { $0.nextRefreshAt != nil }
+        await h.loop.stop()
+        let atQuit = try #require(try await h.journal.refreshPeriod())
+        #expect(atQuit.activeUse >= 840 && atQuit.activeUse < 845)
+
+        let relaunched = await Harness(journal: h.journal, client: h.client)
+        await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
+        let back = Date()
+        await relaunched.observe(Fixtures.observation(id: 1, at: back), expectCalls: 1)
+        #expect(await h.client.sent.count == 1)
+        guard case .notDue(let until) = await relaunched.loop.currentStatus().lastRefreshHold?.hold ?? .callInFlight else {
+            Issue.record("expected the refresh to be held as not due")
+            return
+        }
+        // One more minute of the fifteen, not a whole interval again.
+        #expect(abs(until.timeIntervalSince(back) - 60) < 5)
+        #expect(try await h.journal.refreshPeriod()?.startedAt == atQuit.startedAt)
     }
 
     /// Runs one mentor call against an existing understanding and returns the
@@ -1178,8 +1240,9 @@ import Testing
     @Test func resetStartsAFreshRefreshPeriodInsteadOfSpendingImmediately() async throws {
         var settings = MentorSettings()
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
-        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400))
+        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
         await h.loop.resetUnderstanding()
+        #expect(try await h.journal.refreshPeriod() == nil)
         #expect(await h.loop.currentUnderstanding() == nil)
 
         // The record was long overdue, but the reset cleared the period with it,
@@ -1200,7 +1263,7 @@ import Testing
         var settings = MentorSettings()
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
         // Current at launch: well inside the default idle gap.
-        let h = try await Harness(settings: settings, understanding: Self.existing(age: 1200))
+        let h = try await Harness(settings: settings, understanding: Self.existing(age: 1200), activeUse: 1200)
         #expect(await h.loop.currentUnderstanding() != nil)
         // Shrinking the gap below the record's age makes the next observation expire it.
         settings.understandingIdleGap = 600
@@ -1517,10 +1580,10 @@ import Testing
         #expect(try await reopened.recentSuggestions(limit: 5).count == 2)
     }
 
-    /// A journal written by an earlier build of the understanding has no
-    /// cursor column; its revisions still read, with no cursor, and new ones
-    /// store theirs.
-    @Test func opensAJournalWrittenBeforeTheCursorColumnExisted() async throws {
+    /// Earlier builds of the understanding wrote a `schema_version` column,
+    /// NOT NULL with no default, that this build no longer fills in. Opening
+    /// such a journal drops it, so its revisions still read and new ones store.
+    @Test func opensAJournalWhoseUnderstandingTableStillHasASchemaVersion() async throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("mentor-migration-\(UUID().uuidString).sqlite")
         defer { try? FileManager.default.removeItem(at: url) }
@@ -1531,23 +1594,78 @@ import Testing
                 id INTEGER PRIMARY KEY, updated_at REAL NOT NULL, started_at REAL NOT NULL,
                 revision INTEGER NOT NULL, schema_version INTEGER NOT NULL, prompt_version INTEGER NOT NULL,
                 model TEXT NOT NULL, source TEXT NOT NULL, cost REAL NOT NULL, cumulative_cost REAL NOT NULL,
-                content_json TEXT NOT NULL
+                content_json TEXT NOT NULL, covered_through_observation_id INTEGER
             );
+            CREATE INDEX understanding_updated_at ON understanding(updated_at);
             INSERT INTO understanding (updated_at, started_at, revision, schema_version, prompt_version, model,
-                source, cost, cumulative_cost, content_json)
-            VALUES (1700000000, 1700000000, 1, 1, 6, 'm', 'periodic', 0, 0, '{"goals": [], "timeline": ["old"]}');
+                source, cost, cumulative_cost, content_json, covered_through_observation_id)
+            VALUES (1700000000, 1700000000, 1, 1, 8, 'm', 'periodic', 0.02, 0.02, '{"goals": [], "timeline": ["old"]}', 7);
             """)
 
         let journal = try Journal(url: url)
         let existing = try #require(try await journal.latestUnderstanding())
         #expect(existing.content.timeline == ["old"])
-        #expect(existing.coveredThroughObservationID == nil)
+        #expect(existing.coveredThroughObservationID == 7)
 
         let next = try await journal.record(existing.next(
             content: existing.content, at: existing.updatedAt + 60, model: "m", source: .mentorCall,
             cost: 0, promptVersion: MentorPrompts.version, coveredThroughObservationID: 42
         ))
+        #expect(next.cumulativeCost == 0.02)
+        // Opening it again finds the column already gone and the new revision current.
         #expect(try await Journal(url: url).latestUnderstanding() == next)
+    }
+
+    /// The size-cap sweep removes the oldest events, which can include the one
+    /// that expired a revision. The revision goes with it, so an expired record
+    /// is never current again after a relaunch.
+    @Test func aSizeCapSweepNeverBringsAnExpiredRevisionBack() async throws {
+        let journal = try Journal.inMemory()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let content = Understanding(goals: [Understanding.Goal(goal: "g", evidence: "e", confidence: 1)])
+        try await journal.record(UnderstandingRecord.first(
+            content: content, at: now - 6 * 3600, model: "m", source: .mentorCall, cost: 0, promptVersion: 4
+        ))
+        try await journal.record(JournalEvent(
+            timestamp: now - 90 * 60, kind: .understanding, detail: "expired after revision 1: no activity for 4h"
+        ))
+        for minute in 0..<30 {
+            try await journal.record(Fixtures.observation(at: now - Double(89 - minute) * 60, text: "screen \(minute)"))
+        }
+        #expect(try await journal.latestUnderstanding() == nil)
+
+        let swept = try await journal.applyRetention(
+            RetentionPolicy(thumbnailMaxAge: 86400, textMaxAge: 86400, sizeCapBytes: 1), now: now
+        )
+        #expect(swept.eventsDeleted == 1)
+        #expect(swept.understandingDeleted == 1)
+        #expect(try await journal.latestUnderstanding() == nil)
+    }
+
+    @Test func theRefreshPeriodIsKeptReplacedAndCleared() async throws {
+        let journal = try Journal.inMemory()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(try await journal.refreshPeriod() == nil)
+        let counted = RefreshPeriod(startedAt: now - 600, activeUse: 300, countedAt: now - 60)
+        try await journal.storeRefreshPeriod(counted)
+        #expect(try await journal.refreshPeriod() == counted)
+        // There is one period at a time: storing another replaces it.
+        let restarted = counted.restarted(at: now)
+        try await journal.storeRefreshPeriod(restarted)
+        #expect(try await journal.refreshPeriod() == restarted)
+        try await journal.storeRefreshPeriod(nil)
+        #expect(try await journal.refreshPeriod() == nil)
+
+        try await journal.storeRefreshPeriod(counted)
+        try await journal.clear()
+        #expect(try await journal.refreshPeriod() == nil)
+
+        // Text retention takes one that began before its cutoff.
+        try await journal.storeRefreshPeriod(counted)
+        _ = try await journal.applyRetention(
+            RetentionPolicy(thumbnailMaxAge: 60, textMaxAge: 300, sizeCapBytes: 1 << 30), now: now
+        )
+        #expect(try await journal.refreshPeriod() == nil)
     }
 
     @Test func aSuggestionsJudgedGoalSurvivesTheJournal() async throws {

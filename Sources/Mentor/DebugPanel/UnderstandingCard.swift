@@ -143,18 +143,13 @@ struct UnderstandingCard: View {
         let status = state.mentorStatus
         let mentor = state.settings.mentor
         var parts: [String] = []
-        if mentor.periodicRefreshIsOff {
-            parts.append("periodic refresh off, mentor calls only")
+        if let next = status.nextRefreshAt {
+            parts.append("next \(Formatting.countdown(to: next, now: now))")
         } else {
-            if let next = status.nextRefreshAt {
-                parts.append("next \(Formatting.countdown(to: next, now: now))")
-            } else {
-                parts.append("waiting for activity")
-            }
-            parts.append("every \(Formatting.duration(mentor.understandingRefreshInterval)) of active use")
+            parts.append("waiting for activity")
         }
-        // The off position is already the first part; repeating it as a hold says nothing new.
-        if let hold = status.lastRefreshHold, hold.hold != .periodicRefreshOff {
+        parts.append("every \(Formatting.duration(mentor.understandingRefreshInterval)) of active use")
+        if let hold = status.lastRefreshHold {
             parts.append("held \(Formatting.age(hold.at, now: now)): \(hold.hold.label)")
         }
         if let record {

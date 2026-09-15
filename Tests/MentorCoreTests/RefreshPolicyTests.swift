@@ -26,12 +26,13 @@ import Testing
         )
     }
 
-    /// A period that started 901 seconds ago with activity since: due.
+    /// A period that began at `t0` with the user active ever since, and
+    /// activity a second ago: due 901 seconds in.
     private func gate(
         _ scheduler: MentorScheduler,
         conditions: MentorScheduler.Conditions,
         context: ContextPlacement? = .notEnforced,
-        periodStart: Date? = nil,
+        period: RefreshPeriod? = nil,
         lastActivityAt: Date? = nil,
         now: Date? = nil
     ) -> MentorScheduler.RefreshGate {
@@ -39,7 +40,7 @@ import Testing
         return scheduler.refreshGate(
             conditions: conditions,
             context: context,
-            periodStart: periodStart ?? t0,
+            period: period ?? RefreshPeriod(startedAt: t0),
             lastActivityAt: lastActivityAt ?? moment.addingTimeInterval(-1),
             now: moment
         )
@@ -57,7 +58,7 @@ import Testing
         let lastRefresh = t0.addingTimeInterval(901)
         let now = lastRefresh.addingTimeInterval(901)
         #expect(gate(
-            scheduler, conditions: conditions(), periodStart: lastRefresh,
+            scheduler, conditions: conditions(), period: RefreshPeriod(startedAt: lastRefresh),
             lastActivityAt: now.addingTimeInterval(-1), now: now
         ) == .run(since: lastRefresh))
     }
@@ -74,7 +75,7 @@ import Testing
         let scheduler = MentorScheduler(settings: settings)
         // The period starts with that first observation, so nothing is due yet.
         #expect(gate(
-            scheduler, conditions: conditions(), periodStart: t0,
+            scheduler, conditions: conditions(), period: RefreshPeriod(startedAt: t0),
             lastActivityAt: t0, now: t0
         ) == .hold(.notDue(until: t0.addingTimeInterval(900))))
     }
@@ -84,35 +85,96 @@ import Testing
         let refreshed = t0.addingTimeInterval(890)
         let now = t0.addingTimeInterval(901)
         #expect(gate(
-            scheduler, conditions: conditions(), periodStart: refreshed,
+            scheduler, conditions: conditions(), period: RefreshPeriod(startedAt: refreshed),
             lastActivityAt: now, now: now
         ) == .hold(.notDue(until: refreshed.addingTimeInterval(900))))
     }
 
     /// A failed or empty refresh must not be retried on the next observation:
-    /// the attempt itself starts the interval over, as the other tiers do.
-    @Test func aRefreshAttemptStartsTheIntervalOverWhateverCameOfIt() {
-        var scheduler = MentorScheduler(settings: settings)
+    /// the attempt itself starts the count over, as the other tiers do, while
+    /// the screens the next attempt reads still reach back to the period's start.
+    @Test func aRefreshAttemptStartsTheCountOverWhateverCameOfIt() {
+        let scheduler = MentorScheduler(settings: settings)
         let attempt = t0.addingTimeInterval(901)
-        scheduler.noteRefreshStarted(now: attempt)
-        // The period is as overdue as before, but the attempt was just made.
-        #expect(gate(scheduler, conditions: conditions(), now: attempt.addingTimeInterval(1))
+        let restarted = RefreshPeriod(startedAt: t0).counted(through: attempt, in: .watching).restarted(at: attempt)
+        #expect(restarted == RefreshPeriod(startedAt: t0, activeUse: 0, countedAt: attempt))
+        // The period is as old as before, but the attempt was just made.
+        #expect(gate(scheduler, conditions: conditions(), period: restarted, now: attempt.addingTimeInterval(1))
             == .hold(.notDue(until: attempt.addingTimeInterval(900))))
-        #expect(scheduler.nextRefreshAllowed(after: t0, multiplier: 1) == attempt.addingTimeInterval(900))
-        // A refresh that later rewrote the record moves the period past the attempt.
-        let refreshed = attempt.addingTimeInterval(300)
-        #expect(scheduler.nextRefreshAllowed(after: refreshed, multiplier: 1) == refreshed.addingTimeInterval(900))
-        #expect(gate(scheduler, conditions: conditions(), now: attempt.addingTimeInterval(901)) == .run(since: t0))
+        #expect(scheduler.nextRefreshAllowed(after: restarted, mode: .watching, multiplier: 1) == attempt.addingTimeInterval(900))
+        #expect(gate(scheduler, conditions: conditions(), period: restarted, now: attempt.addingTimeInterval(900))
+            == .run(since: t0))
     }
 
     @Test func spendSlowingStretchesTheIntervalLikeTheOtherTiers() {
         let scheduler = MentorScheduler(settings: settings)
         let now = t0.addingTimeInterval(901)
+        let period = RefreshPeriod(startedAt: t0)
         #expect(gate(scheduler, conditions: conditions(multiplier: 2), now: now)
             == .hold(.notDue(until: t0.addingTimeInterval(1800))))
-        #expect(scheduler.nextRefreshAllowed(after: t0, multiplier: 2) == t0.addingTimeInterval(1800))
+        #expect(scheduler.nextRefreshAllowed(after: period, mode: .watching, multiplier: 2) == t0.addingTimeInterval(1800))
         // A multiplier below one never speeds the cadence up.
-        #expect(scheduler.nextRefreshAllowed(after: t0, multiplier: 0.5) == t0.addingTimeInterval(900))
+        #expect(scheduler.nextRefreshAllowed(after: period, mode: .watching, multiplier: 0.5) == t0.addingTimeInterval(900))
+    }
+
+    // MARK: Active use
+
+    /// The record is written at 10:00, the user works until 10:05, goes to
+    /// lunch, and is back at 11:00. The hour away is not use, so the first
+    /// observation after lunch buys nothing and the refresh comes due at
+    /// 11:10, after ten more minutes of work.
+    @Test func aLunchBreakDoesNotCountTowardTheInterval() {
+        let scheduler = MentorScheduler(settings: settings)
+        let written = t0
+        let lunch = written.addingTimeInterval(300)
+        let back = written.addingTimeInterval(3600)
+        // The loop counts at each mode change: into idle at lunch, out of it on return.
+        let period = RefreshPeriod(startedAt: written)
+            .counted(through: lunch, in: .watching)
+            .counted(through: back, in: .idle)
+        #expect(period.activeUse == 300)
+        #expect(period.countedAt == back)
+
+        let due = back.addingTimeInterval(600)
+        #expect(gate(scheduler, conditions: conditions(), period: period, lastActivityAt: back, now: back)
+            == .hold(.notDue(until: due)))
+        #expect(scheduler.nextRefreshAllowed(after: period, mode: .watching, multiplier: 1) == due)
+        let almost = due.addingTimeInterval(-1)
+        #expect(gate(scheduler, conditions: conditions(), period: period, lastActivityAt: almost, now: almost)
+            == .hold(.notDue(until: due)))
+        #expect(gate(scheduler, conditions: conditions(), period: period, lastActivityAt: due, now: due)
+            == .run(since: written))
+    }
+
+    /// Only a mode that captures the screen counts. The time a closed app
+    /// spends stopped counts for nothing too, so a relaunch neither restarts
+    /// the count nor adds the time it was closed.
+    @Test(arguments: SensingMode.allCases)
+    func onlyTimeInAModeThatCapturesTheScreenCounts(mode: SensingMode) {
+        let period = RefreshPeriod(startedAt: t0, activeUse: 120, countedAt: t0.addingTimeInterval(120))
+        let counted = period.counted(through: t0.addingTimeInterval(180), in: mode)
+        let counts = mode == .watching || mode == .screenOnly
+        #expect(counted.activeUse == (counts ? 180 : 120))
+        #expect(counted.countedAt == t0.addingTimeInterval(180))
+        #expect(counted.startedAt == t0)
+    }
+
+    @Test func countingIsIdempotentAndNeverRunsBackwards() {
+        let period = RefreshPeriod(startedAt: t0, activeUse: 60, countedAt: t0.addingTimeInterval(60))
+        let once = period.counted(through: t0.addingTimeInterval(90), in: .watching)
+        #expect(once.counted(through: t0.addingTimeInterval(90), in: .watching) == once)
+        #expect(once.counted(through: t0.addingTimeInterval(30), in: .watching) == once)
+    }
+
+    /// While nothing counts, nothing comes due, so no countdown is shown.
+    @Test func thereIsNoNextRefreshWhileTheModeCountsNoUse() {
+        let scheduler = MentorScheduler(settings: settings)
+        let period = RefreshPeriod(startedAt: t0, activeUse: 300, countedAt: t0.addingTimeInterval(300))
+        for mode in SensingMode.allCases {
+            let next = scheduler.nextRefreshAllowed(after: period, mode: mode, multiplier: 1)
+            #expect(next == (mode.capturesFrames ? t0.addingTimeInterval(900) : nil))
+        }
+        #expect(scheduler.nextRefreshAllowed(after: nil, mode: .watching, multiplier: 1) == nil)
     }
 
     // MARK: No new activity
@@ -120,7 +182,7 @@ import Testing
     @Test func holdsWhenNothingHasEverBeenObserved() {
         let scheduler = MentorScheduler(settings: settings)
         #expect(scheduler.refreshGate(
-            conditions: conditions(), context: .notEnforced, periodStart: t0, lastActivityAt: nil,
+            conditions: conditions(), context: .notEnforced, period: RefreshPeriod(startedAt: t0), lastActivityAt: nil,
             now: t0.addingTimeInterval(901)
         ) == .hold(.noNewActivity))
     }
@@ -128,7 +190,7 @@ import Testing
     @Test func holdsBeforeAnyActivityHasStartedAPeriod() {
         let scheduler = MentorScheduler(settings: settings)
         #expect(scheduler.refreshGate(
-            conditions: conditions(), context: .notEnforced, periodStart: nil, lastActivityAt: nil, now: t0
+            conditions: conditions(), context: .notEnforced, period: nil, lastActivityAt: nil, now: t0
         ) == .hold(.noNewActivity))
     }
 
@@ -138,7 +200,7 @@ import Testing
         let scheduler = MentorScheduler(settings: settings)
         let now = t0.addingTimeInterval(901)
         #expect(scheduler.refreshGate(
-            conditions: conditions(), context: .notEnforced, periodStart: nil, lastActivityAt: now, now: now
+            conditions: conditions(), context: .notEnforced, period: nil, lastActivityAt: now, now: now
         ) == .hold(.noNewActivity))
     }
 
@@ -251,69 +313,20 @@ import Testing
             == .hold(.outOfContext(.noMatch(reason: ""))))
         #expect(gate(scheduler, conditions: conditions(), context: outside, now: t0.addingTimeInterval(1))
             == .hold(.outOfContext(.noMatch(reason: ""))))
-        #expect(gate(scheduler, conditions: conditions(), context: nil, periodStart: nil, lastActivityAt: nil, now: t0)
-            == .hold(.notPlacedInAContext))
-    }
-
-    // MARK: The off position
-
-    private var offSettings: MentorSettings {
-        var never = settings
-        never.understandingRefreshInterval = MentorSettings.refreshIntervalRange.upperBound
-        return never
-    }
-
-    @Test func theTopOfTheRangeMeansOnlyMentorCallsEverRefresh() {
-        let scheduler = MentorScheduler(settings: offSettings)
-        #expect(offSettings.periodicRefreshIsOff)
-        // Half a day of active use later, still nothing due.
-        #expect(gate(scheduler, conditions: conditions(), now: t0.addingTimeInterval(43200 - 1))
-            == .hold(.periodicRefreshOff))
-        #expect(scheduler.nextRefreshAllowed(after: t0, multiplier: 1) == nil)
-    }
-
-    /// Off means off, not a very long interval: once a whole top-of-range
-    /// interval has run, with or without a record behind the period, no
-    /// refresh call comes due.
-    @Test(arguments: [43200.0, 43200.0 + 86400])
-    func theTopOfTheRangeHoldsHoweverLongThePeriodHasRun(elapsed: TimeInterval) {
-        let scheduler = MentorScheduler(settings: offSettings)
-        let now = t0.addingTimeInterval(elapsed)
-        // A record's last write, or the run's first observation, started the period.
-        #expect(gate(scheduler, conditions: conditions(), periodStart: t0, now: now) == .hold(.periodicRefreshOff))
-        // No period has begun at all.
         #expect(scheduler.refreshGate(
-            conditions: conditions(), context: .notEnforced, periodStart: nil,
-            lastActivityAt: now.addingTimeInterval(-1), now: now
-        ) == .hold(.periodicRefreshOff))
+            conditions: conditions(), context: nil, period: nil, lastActivityAt: nil, now: t0
+        ) == .hold(.notPlacedInAContext))
     }
 
-    /// Only the top itself is off: one second below it still comes due after
-    /// its interval, so the 43199 s case above holds because it is off.
-    @Test func justBelowTheTopOfTheRangeStillRefreshes() {
-        var almost = settings
-        almost.understandingRefreshInterval = MentorSettings.refreshIntervalRange.upperBound - 1
-        let scheduler = MentorScheduler(settings: almost)
-        #expect(!almost.periodicRefreshIsOff)
-        #expect(gate(scheduler, conditions: conditions(), now: t0.addingTimeInterval(43200 - 1)) == .run(since: t0))
-    }
-
-    /// A reason that holds every tier, or the context boundary, still says
-    /// why while the periodic refresh is off.
-    @Test func theOffPositionIsCheckedAfterTheAvailabilityAndContextHolds() {
-        let now = t0.addingTimeInterval(43200)
-        let scheduler = MentorScheduler(settings: offSettings)
-        #expect(gate(scheduler, conditions: conditions(mode: .paused), now: now) == .hold(.unavailable(.paused)))
-        #expect(gate(scheduler, conditions: conditions(mode: .idle), now: now) == .hold(.unavailable(.idle)))
-        #expect(gate(scheduler, conditions: conditions(inFlight: true), now: now) == .hold(.periodicRefreshOff))
-        var enforcing = offSettings
-        enforcing.onlyMentorInsideContexts = true
-        enforcing.contexts = [Self.declared]
-        let bounded = MentorScheduler(settings: enforcing)
-        #expect(gate(bounded, conditions: conditions(), context: .outside(.noMatch(reason: "")), now: now)
-            == .hold(.outOfContext(.noMatch(reason: ""))))
-        #expect(gate(bounded, conditions: conditions(), context: nil, now: now) == .hold(.notPlacedInAContext))
-        #expect(gate(bounded, conditions: conditions(), context: Self.inside, now: now) == .hold(.periodicRefreshOff))
+    /// The top of the range is an ordinary interval like any other.
+    @Test func theTopOfTheRangeIsAPlainInterval() {
+        var slowest = settings
+        slowest.understandingRefreshInterval = MentorSettings.refreshIntervalRange.upperBound
+        let scheduler = MentorScheduler(settings: slowest)
+        let top = MentorSettings.refreshIntervalRange.upperBound
+        #expect(gate(scheduler, conditions: conditions(), now: t0.addingTimeInterval(top - 1))
+            == .hold(.notDue(until: t0.addingTimeInterval(top))))
+        #expect(gate(scheduler, conditions: conditions(), now: t0.addingTimeInterval(top)) == .run(since: t0))
     }
 
     @Test func settingsClampTheIntervalIntoItsRange() {

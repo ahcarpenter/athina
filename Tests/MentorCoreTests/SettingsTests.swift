@@ -63,7 +63,6 @@ import Testing
         #expect(d.understandingEffort == .low)
         #expect(d.understandingRefreshInterval == 900)
         #expect(d.understandingIdleGap == 4 * 3600)
-        #expect(!d.periodicRefreshIsOff)
         #expect(d.effort(for: .understanding) == .low)
     }
 

@@ -93,7 +93,7 @@ import Testing
         let data = try JSONEncoder().encode(record)
         let decoded = try JSONDecoder().decode(UnderstandingRecord.self, from: data)
         #expect(decoded == record)
-        #expect(decoded.schemaVersion == Understanding.schemaVersion)
+        #expect(decoded.promptVersion == MentorPrompts.version)
         #expect(decoded.revision == 1)
     }
 
@@ -242,29 +242,24 @@ import Testing
     // MARK: Expiry
 
     @Test func staysCurrentWhileActivityIsRecentAndTheDayIsTheSame() {
-        let record = UnderstandingRecord.first(
-            content: sample(), at: t0, model: "m", source: .periodic, cost: 0, promptVersion: 4
-        )
-        #expect(record.expiry(now: t0.addingTimeInterval(3600), idleGap: 4 * 3600, lastActivityAt: nil) == nil)
+        #expect(UnderstandingExpiry.of(
+            writtenAt: t0, now: t0.addingTimeInterval(3600), idleGap: 4 * 3600, lastActivityAt: nil
+        ) == nil)
     }
 
     /// The gap is measured from the user's last activity, so steady work with
     /// no mentor call to rewrite the record never expires it.
     @Test func staysCurrentWhileTheUserKeepsWorkingLongAfterTheLastWrite() {
-        let record = UnderstandingRecord.first(
-            content: sample(), at: t0, model: "m", source: .periodic, cost: 0, promptVersion: 4
-        )
         let now = t0.addingTimeInterval(5 * 3600)
-        #expect(record.expiry(now: now, idleGap: 4 * 3600, lastActivityAt: now.addingTimeInterval(-60)) == nil)
+        #expect(UnderstandingExpiry.of(
+            writtenAt: t0, now: now, idleGap: 4 * 3600, lastActivityAt: now.addingTimeInterval(-60)
+        ) == nil)
     }
 
     @Test func expiresAfterTheIdleGapSinceTheLastActivity() {
-        let record = UnderstandingRecord.first(
-            content: sample(), at: t0, model: "m", source: .periodic, cost: 0, promptVersion: 4
-        )
         let lastActive = t0.addingTimeInterval(3600)
-        let expiry = record.expiry(
-            now: lastActive.addingTimeInterval(4 * 3600 + 1), idleGap: 4 * 3600, lastActivityAt: lastActive
+        let expiry = UnderstandingExpiry.of(
+            writtenAt: t0, now: lastActive.addingTimeInterval(4 * 3600 + 1), idleGap: 4 * 3600, lastActivityAt: lastActive
         )
         #expect(expiry == .idleGap(4 * 3600))
     }
@@ -272,12 +267,11 @@ import Testing
     /// With nothing observed since the write, as after a relaunch, the gap
     /// runs from the write itself; activity before the write does not count.
     @Test func expiresAfterTheIdleGapSinceTheWriteWhenNothingWasObservedAfterIt() {
-        let record = UnderstandingRecord.first(
-            content: sample(), at: t0, model: "m", source: .periodic, cost: 0, promptVersion: 4
-        )
         let now = t0.addingTimeInterval(4 * 3600 + 1)
-        #expect(record.expiry(now: now, idleGap: 4 * 3600, lastActivityAt: nil) == .idleGap(4 * 3600))
-        #expect(record.expiry(now: now, idleGap: 4 * 3600, lastActivityAt: t0.addingTimeInterval(-600)) == .idleGap(4 * 3600))
+        #expect(UnderstandingExpiry.of(writtenAt: t0, now: now, idleGap: 4 * 3600, lastActivityAt: nil) == .idleGap(4 * 3600))
+        #expect(UnderstandingExpiry.of(
+            writtenAt: t0, now: now, idleGap: 4 * 3600, lastActivityAt: t0.addingTimeInterval(-600)
+        ) == .idleGap(4 * 3600))
     }
 
     @Test func expiresAtANewDayEvenInsideTheIdleGap() throws {
@@ -286,18 +280,9 @@ import Testing
         // 23:30 UTC, then 00:10 the next day: forty minutes apart, different days.
         let lateNight = try #require(calendar.date(from: DateComponents(year: 2026, month: 9, day: 13, hour: 23, minute: 30)))
         let afterMidnight = lateNight.addingTimeInterval(40 * 60)
-        let record = UnderstandingRecord.first(
-            content: sample(), at: lateNight, model: "m", source: .periodic, cost: 0, promptVersion: 4
-        )
-        #expect(record.expiry(now: afterMidnight, idleGap: 4 * 3600, lastActivityAt: afterMidnight, calendar: calendar) == .newDay)
-    }
-
-    @Test func expiresWhenADifferentBuildWroteIt() {
-        var record = UnderstandingRecord.first(
-            content: sample(), at: t0, model: "m", source: .periodic, cost: 0, promptVersion: 4
-        )
-        record.schemaVersion = Understanding.schemaVersion + 1
-        #expect(record.expiry(now: t0.addingTimeInterval(1), idleGap: 4 * 3600, lastActivityAt: nil) == .schemaChanged(Understanding.schemaVersion + 1))
+        #expect(UnderstandingExpiry.of(
+            writtenAt: lateNight, now: afterMidnight, idleGap: 4 * 3600, lastActivityAt: afterMidnight, calendar: calendar
+        ) == .newDay)
     }
 
     // MARK: Categories

@@ -142,8 +142,6 @@ public struct MentorScheduler: Equatable, Sendable {
     public private(set) var lastTriagedWindow: String?
     public private(set) var lastTriagedText: String?
     public private(set) var lastMentorAt: Date?
-    /// When the last refresh call of its own started, whatever came of it.
-    public private(set) var lastRefreshAt: Date?
 
     public init(settings: MentorSettings) {
         self.settings = settings
@@ -269,12 +267,9 @@ public struct MentorScheduler: Equatable, Sendable {
         /// Contexts are enforced and triage has not placed the frontmost app
         /// since it came to the front, so nothing says the work is inside one.
         case notPlacedInAContext
-        /// The refresh interval is at the top of its range, so no refresh call
-        /// is ever made and only mentor calls rewrite the record.
-        case periodicRefreshOff
         case callInFlight
         /// A mentor call or an earlier refresh already rewrote the record
-        /// recently enough.
+        /// recently enough; `until` is when it comes due if use carries on.
         case notDue(until: Date)
         /// Nothing has been observed yet, so there is nothing to fold in.
         case noNewActivity
@@ -284,7 +279,6 @@ public struct MentorScheduler: Equatable, Sendable {
             case .unavailable(let hold): hold.label
             case .outOfContext(let exclusion): "outside every declared context (\(exclusion.label))"
             case .notPlacedInAContext: "not yet placed in a declared context"
-            case .periodicRefreshOff: "periodic refresh is off, mentor calls carry the record"
             case .callInFlight: "a call is in flight"
             case .notDue(let until): "not due, next at \(until.formatted(date: .omitted, time: .standard))"
             case .noNewActivity: "nothing observed yet"
@@ -302,14 +296,15 @@ public struct MentorScheduler: Equatable, Sendable {
     ///
     /// Every mentor call rewrites the record on the way past, so this only
     /// fires after a whole refresh interval of active use with no mentor call
-    /// in it. `periodStart` is when that interval began: the last refresh, or
-    /// the first activity seen when nothing has refreshed yet, so the very
-    /// first observation of a session never buys a call of its own, and no
-    /// period at all means nothing is due. A refresh attempt starts the
-    /// interval over whatever came of it, like the other tiers' minimum
-    /// intervals, so a failed call is not retried on every observation. At the
-    /// top of the interval's range it always holds, however long the period
-    /// has run, so only mentor calls ever write the record.
+    /// in it. `period` counts that use (`RefreshPeriod`): it begins at the
+    /// record's last write, or at the first activity seen when there is no
+    /// record, so the very first observation of a session never buys a call
+    /// of its own, and no period at all means nothing is due. A break, a pause,
+    /// or a closed app counts for nothing, so returning from one never buys a
+    /// call over the few screens since. A refresh attempt starts the count over
+    /// whatever came of it (`RefreshPeriod.restarted(at:)`), like the other
+    /// tiers' minimum intervals, so a failed call is not retried on every
+    /// observation.
     ///
     /// `context` is triage's latest placement of the frontmost app, or nil
     /// when it has not placed that app. While contexts are enforced the record
@@ -318,21 +313,21 @@ public struct MentorScheduler: Equatable, Sendable {
     public func refreshGate(
         conditions: Conditions,
         context: ContextPlacement?,
-        periodStart: Date?,
+        period: RefreshPeriod?,
         lastActivityAt: Date?,
         now: Date
     ) -> RefreshGate {
         if let hold = availabilityHold(conditions: conditions) { return .hold(.unavailable(hold)) }
         if let hold = contextHold() { return .hold(.unavailable(hold)) }
         if let hold = placementHold(context) { return .hold(hold) }
-        if settings.periodicRefreshIsOff { return .hold(.periodicRefreshOff) }
         if conditions.callInFlight { return .hold(.callInFlight) }
-        guard let periodStart, lastActivityAt != nil else { return .hold(.noNewActivity) }
-        if let next = nextRefreshAllowed(after: periodStart, multiplier: conditions.cadenceMultiplier),
+        guard let period, lastActivityAt != nil else { return .hold(.noNewActivity) }
+        let counted = period.counted(through: now, in: conditions.mode)
+        if let next = nextRefreshAllowed(after: counted, mode: conditions.mode, multiplier: conditions.cadenceMultiplier),
            next > now {
             return .hold(.notDue(until: next))
         }
-        return .run(since: periodStart)
+        return .run(since: period.startedAt)
     }
 
     /// What the latest placement decides for the refresh while contexts are
@@ -348,17 +343,54 @@ public struct MentorScheduler: Equatable, Sendable {
         }
     }
 
-    public mutating func noteRefreshStarted(now: Date) {
-        lastRefreshAt = now
+    /// When the next refresh call may start if use carries on unbroken: once
+    /// the period has counted a whole interval of active use. Nil before any
+    /// period has begun, and while `mode` counts none, since nothing comes due
+    /// until the user is back. `period` must have been counted whenever the
+    /// mode last changed, as the loop does.
+    public func nextRefreshAllowed(after period: RefreshPeriod?, mode: SensingMode, multiplier: Double) -> Date? {
+        guard let period, mode.capturesFrames else { return nil }
+        let interval = settings.understandingRefreshInterval * max(1, multiplier)
+        return period.countedAt.addingTimeInterval(interval - period.activeUse)
+    }
+}
+
+/// How far the understanding's refresh interval has run. Only active use
+/// counts: time in a mode that captures the screen, and so leaves screens for
+/// a refresh to read; never paused, idle, on an excluded app, waiting for
+/// permissions, or with the app closed. The loop keeps it in the journal, so a
+/// relaunch carries on counting.
+public struct RefreshPeriod: Equatable, Sendable {
+    /// When the period began: the record's last write, or the first activity
+    /// seen with no record. A refresh reads the screens since then.
+    public var startedAt: Date
+    /// Active use counted toward the next refresh since the period began, or
+    /// since the last refresh attempt when one came after that.
+    public var activeUse: TimeInterval
+    /// When `activeUse` was last brought up to date.
+    public var countedAt: Date
+
+    public init(startedAt: Date, activeUse: TimeInterval = 0, countedAt: Date? = nil) {
+        self.startedAt = startedAt
+        self.activeUse = activeUse
+        self.countedAt = countedAt ?? startedAt
     }
 
-    /// When the next refresh call may start: a whole interval after the period
-    /// began or after the last attempt, whichever is later. Nil before any
-    /// activity or attempt at all, and while the periodic refresh is off.
-    public func nextRefreshAllowed(after periodStart: Date?, multiplier: Double) -> Date? {
-        guard !settings.periodicRefreshIsOff else { return nil }
-        let start = [periodStart, lastRefreshAt].compactMap { $0 }.max()
-        return start?.addingTimeInterval(settings.understandingRefreshInterval * max(1, multiplier))
+    /// The period counted through `now`, with all the time since the last
+    /// count spent in `mode`.
+    public func counted(through now: Date, in mode: SensingMode) -> RefreshPeriod {
+        var counted = self
+        if mode.capturesFrames {
+            counted.activeUse += max(0, now.timeIntervalSince(countedAt))
+        }
+        counted.countedAt = max(countedAt, now)
+        return counted
+    }
+
+    /// The same period with its count started over at `now`, as a refresh
+    /// attempt leaves it. Its screens still reach back to `startedAt`.
+    public func restarted(at now: Date) -> RefreshPeriod {
+        RefreshPeriod(startedAt: startedAt, activeUse: 0, countedAt: now)
     }
 }
 
