@@ -80,6 +80,8 @@ final class AppState {
 
     var mode: SensingMode = .stopped
     var permissions: PermissionStatus
+    /// Permissions the system has never asked about, so asking shows its alert.
+    private(set) var undeterminedPermissions: Set<Permission>
     var focus: FocusContext?
     var latestObservation: ActivityObservation?
     var latestImage: NSImage?
@@ -180,6 +182,7 @@ final class AppState {
         settings = launch.settings
         let status = PermissionProbe.current()
         permissions = status
+        undeterminedPermissions = Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
         needsPermissionsOnboarding = !status.allGranted
         speechAvailability = SpeechListener.availability()
     }
@@ -199,6 +202,7 @@ final class AppState {
         isSample = true
         self.settings = settings
         permissions = PermissionStatus(screenRecording: true, accessibility: true)
+        undeterminedPermissions = Set(Permission.optional)
         needsPermissionsOnboarding = false
         self.speechAvailability = speechAvailability
         reloadKeyHint()
@@ -349,6 +353,8 @@ final class AppState {
 
     func refreshPermissions() {
         guard !isSample else { return }
+        let undetermined = Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
+        if undetermined != undeterminedPermissions { undeterminedPermissions = undetermined }
         let fresh = PermissionProbe.current()
         guard fresh != permissions else { return }
         permissions = fresh
@@ -363,6 +369,39 @@ final class AppState {
         Task {
             try? await Task.sleep(for: .seconds(1))
             refreshPermissions()
+        }
+    }
+
+    /// What the Permissions window offers for a permission right now.
+    func permissionAction(for permission: Permission) -> PermissionAction {
+        PermissionAction.for(
+            permission, granted: permissions.isGranted(permission),
+            undetermined: undeterminedPermissions.contains(permission)
+        )
+    }
+
+    /// The Permissions window's button: the system's request when it has not
+    /// asked yet, otherwise the matching System Settings pane. For the two
+    /// permissions granted there, Mentor is registered in the pane's list
+    /// first, so it is there to switch on; the system may also show its own
+    /// note pointing at the same pane.
+    func perform(_ action: PermissionAction, for permission: Permission) {
+        guard !isSample else { return }
+        switch action {
+        case .none:
+            return
+        case .request:
+            requestPermission(permission)
+        case .openSystemSettings:
+            AppState.log.notice("opening System Settings for \(permission.rawValue, privacy: .public)")
+            if permission.isGrantedInSystemSettings {
+                PermissionProbe.request(permission)
+            }
+            PermissionProbe.openSystemSettings(for: permission)
+            Task {
+                try? await Task.sleep(for: .seconds(1))
+                refreshPermissions()
+            }
         }
     }
 
@@ -521,6 +560,17 @@ final class AppState {
         suggestionHistory.first { $0.feedback != .expiredUnseen }
     }
 
+    /// Answers the suggestion on screen from the menu, the way its buttons
+    /// do: the keyboard and VoiceOver reach the menu, never the toast.
+    func answerActiveSuggestion(_ feedback: SuggestionFeedback) {
+        guard let active = activeSuggestion else { return }
+        if feedback == .tellMeMore {
+            toast.expand()
+            toast.bringToFront()
+        }
+        respond(to: active.id, with: feedback)
+    }
+
     /// Brings the most recent suggestion back as a toast, for one that was
     /// missed. A toast the user asked for stays until answered or closed; its
     /// callout comes back only when the spot still checks out.
@@ -554,7 +604,9 @@ final class AppState {
         cancelTalkBack()
         activeSuggestion = suggestion
         toast.show(suggestion, expanded: false, exchange: exchange(for: suggestion.id))
-        if autoExpires {
+        // With VoiceOver or Switch Control on, a suggestion waits to be
+        // answered or closed instead of timing out while it is being reached.
+        if autoExpires, !AppState.assistiveTechnologyIsRunning {
             scheduleToastExpiry(for: suggestion.id, after: settings.mentor.toastTimeout)
         }
         placeCallout(for: suggestion)
@@ -791,10 +843,35 @@ final class AppState {
         return key.displayString
     }
 
+    /// Whether an assistive technology that moves through the interface
+    /// element by element is on, so nothing should time out under it.
+    static var assistiveTechnologyIsRunning: Bool {
+        NSWorkspace.shared.isVoiceOverEnabled || NSWorkspace.shared.isSwitchControlEnabled
+    }
+
+    /// The menu command that sets talking back up, when it is not yet usable
+    /// for a reason the person can fix.
+    var talkBackAction: MenuStatusAction? {
+        guard speechAvailability.isAvailable else { return nil }
+        if settings.mentor.pushToTalkHotKey == nil {
+            return MenuStatusAction(title: "Set Up Talk Back…", destination: .settings(.general))
+        }
+        if !permissions.voiceGranted {
+            return MenuStatusAction(title: "Set Up Talk Back…", destination: .permissions)
+        }
+        return nil
+    }
+
+    /// The menu command that lets the mentor loop run, when a missing key holds it.
+    var menuStatusAction: MenuStatusAction? {
+        guard !clientMode.isOffline, mentorStatus.availability == .noAPIKey else { return nil }
+        return MenuStatusAction(title: "Add API Key…", destination: .settings(.models))
+    }
+
     /// One line for the menu on talking back: how to do it, or what it needs.
     var talkBackLine: String {
         if case .unavailable = speechAvailability { return "Talk back: no on-device recognition for this language" }
-        guard let key = settings.mentor.pushToTalkHotKey else { return "Talk back: set a hotkey in Settings > Mentor" }
+        guard let key = settings.mentor.pushToTalkHotKey else { return "Talk back: no shortcut set" }
         if !permissions.voiceGranted { return "Talk back: needs Microphone and Speech Recognition" }
         if isRunning, !pushToTalkRegistered { return "Talk back: \(key.displayString) could not be registered" }
         switch talkBack {
@@ -843,10 +920,16 @@ final class AppState {
             return
         }
         guard permissions.voiceGranted else {
-            for permission in Permission.optional where !permissions.isGranted(permission) {
+            let missing = Permission.optional.filter { !permissions.isGranted($0) }
+            let asking = missing.contains { undeterminedPermissions.contains($0) }
+            for permission in missing {
                 requestPermission(permission)
             }
-            toast.showNote("Mentor needs Microphone and Speech Recognition to hear you. Grant them in Permissions.")
+            // The system shows its own request only for a permission it has
+            // never asked about; otherwise the answer is in System Settings.
+            toast.showNote(asking
+                ? "Mentor needs Microphone and Speech Recognition to hear you. Answer the system's request, then hold the shortcut again."
+                : "Mentor needs Microphone and Speech Recognition to hear you. Choose Set Up Talk Back in the Mentor menu to allow them.")
             return
         }
         guard mode.isActive else {
@@ -1105,7 +1188,7 @@ final class AppState {
             }
             return "Mentor: \(spend) of \(cap) this hour"
         case .disabled: return "Mentor: off"
-        case .noAPIKey: return "Mentor: add an API key in Settings"
+        case .noAPIKey: return "Mentor: no API key"
         }
     }
 

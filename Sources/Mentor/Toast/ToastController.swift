@@ -6,9 +6,15 @@ import SwiftUI
 /// takes keyboard focus, placed under the menu bar at the top right of the
 /// screen the user is working on. With no suggestion up it can show a short
 /// note instead, for a talk-back key press that has nothing to reply to.
+///
+/// Because the panel never becomes key, VoiceOver hears about it through
+/// announcements, and the menu bar menu offers its answers to the keyboard.
 @MainActor
 final class ToastController {
     static let width: CGFloat = 380
+    /// The panel is the toast plus a point on each side, so the glass edge is
+    /// never clipped by the window.
+    static let panelWidth: CGFloat = width + 2
     static let margin: CGFloat = 12
     static let noteDuration: TimeInterval = 4
 
@@ -32,6 +38,7 @@ final class ToastController {
         model.talkBack = .idle
         present()
         startWatchingForOutsideClicks()
+        ToastController.announce("Mentor suggestion: \(suggestion.title). \(suggestion.body)", priority: .high)
     }
 
     func dismiss() {
@@ -58,13 +65,25 @@ final class ToastController {
     /// brought to the front so no window covers it, and no click, timeout,
     /// or hover can take it down until the exchange is over.
     func setTalkBack(_ state: TalkBackState) {
+        let previous = model.talkBack
         model.talkBack = state
         if state.keepsToastUp {
             bringToFront()
         }
+        switch state {
+        case .listening where !previous.isListening:
+            ToastController.announce("Listening", priority: .medium)
+        case .thinking where !previous.isThinking:
+            ToastController.announce("Asking the mentor", priority: .medium)
+        case .idle, .listening, .waiting, .thinking:
+            break
+        }
     }
 
     func setExchange(_ exchange: [FollowUp]) {
+        if let latest = exchange.last, latest.id != model.exchange.last?.id || latest.answer != model.exchange.last?.answer {
+            ToastController.announce(latest.answer.map { "Mentor answered: \($0)" } ?? "No answer: \(latest.error ?? "unknown error")", priority: .high)
+        }
         model.exchange = exchange
     }
 
@@ -80,6 +99,7 @@ final class ToastController {
         if model.suggestion == nil {
             present()
         }
+        ToastController.announce(text, priority: .medium)
         noteTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(ToastController.noteDuration))
             guard !Task.isCancelled, let self, self.model.note == text else { return }
@@ -92,10 +112,20 @@ final class ToastController {
 
     private func present() {
         let panel = panel ?? makePanel()
+        // A window that zooms in is motion; with Reduce Motion it just appears.
+        panel.animationBehavior = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? .none : .utilityWindow
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main ?? NSScreen.screens.first
         place(panel, on: screen)
         panel.orderFrontRegardless()
+    }
+
+    /// Tells VoiceOver what appeared, since the panel never takes focus.
+    private static func announce(_ text: String, priority: NSAccessibilityPriorityLevel) {
+        NSAccessibility.post(
+            element: NSApp as Any, notification: .announcementRequested,
+            userInfo: [.announcement: text, .priority: priority.rawValue]
+        )
     }
 
     // MARK: Outside clicks
@@ -147,7 +177,7 @@ final class ToastController {
 
     private func makePanel() -> NSPanel {
         let panel = NSPanel(
-            contentRect: CGRect(x: 0, y: 0, width: ToastController.width, height: 120),
+            contentRect: CGRect(x: 0, y: 0, width: ToastController.panelWidth, height: 120),
             styleMask: [.nonactivatingPanel, .fullSizeContentView, .borderless],
             backing: .buffered,
             defer: false
@@ -161,9 +191,9 @@ final class ToastController {
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.becomesKeyOnlyIfNeeded = true
-        panel.animationBehavior = .utilityWindow
         panel.isMovableByWindowBackground = true
         panel.setAccessibilityTitle("Mentor suggestion")
+        panel.setAccessibilitySubrole(.floatingWindow)
 
         let view = ToastView(model: model, onAction: { [weak self] feedback in
             guard let self, let suggestion = self.model.suggestion else { return }
@@ -191,13 +221,25 @@ final class ToastController {
         panel.contentView?.layoutSubtreeIfNeeded()
         let fitted = panel.contentView?.fittingSize ?? .zero
         guard fitted.height >= 40 else { return }
-        let size = CGSize(width: ToastController.width + 2, height: fitted.height)
+        let size = CGSize(width: ToastController.panelWidth, height: fitted.height)
         let frame = screen.visibleFrame
         let origin = CGPoint(
             x: frame.maxX - size.width - ToastController.margin,
             y: frame.maxY - size.height - ToastController.margin
         )
         panel.setFrame(CGRect(origin: origin, size: size), display: true)
+    }
+}
+
+private extension TalkBackState {
+    var isListening: Bool {
+        if case .listening = self { return true }
+        return false
+    }
+
+    var isThinking: Bool {
+        if case .thinking = self { return true }
+        return false
     }
 }
 
@@ -217,7 +259,16 @@ final class ToastModel {
     var talkBackKey: String?
 }
 
+/// The toast on its Liquid Glass surface. Its corners are concentric with the
+/// small capsule buttons inset from its bottom corners, the way system glass
+/// containers relate to the controls inside them.
 struct ToastView: View {
+    /// Space between the glass edge and the content.
+    static let inset: CGFloat = 14
+    /// Half the height of a small push button, whose capsule sits `inset`
+    /// in from the corner.
+    static let cornerRadius: CGFloat = inset + 10
+
     @Bindable var model: ToastModel
     let onAction: (SuggestionFeedback) -> Void
     var onHover: (Bool) -> Void = { _ in }
@@ -247,8 +298,7 @@ struct ToastView: View {
             }
         }
         .frame(width: ToastController.width)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(.quaternary))
+        .glassEffect(.regular, in: .rect(cornerRadius: ToastView.cornerRadius))
         .padding(1)
         .onHover(perform: onHover)
         .onGeometryChange(for: CGSize.self) { proxy in
@@ -264,16 +314,16 @@ struct ToastNote: View {
     let text: String
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: "mic.slash")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.secondary)
+        Label {
             Text(text)
-                .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
+        } icon: {
+            Image(systemName: "mic.slash")
+                .foregroundStyle(.secondary)
         }
-        .padding(14)
+        .font(.callout)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(ToastView.inset)
     }
 }
 
@@ -295,68 +345,65 @@ struct ToastContent: View {
     let onToggle: () -> Void
     let onAction: (SuggestionFeedback) -> Void
 
+    private let inset = ToastView.inset
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: suggestion.category.symbol)
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.title3)
                         .foregroundStyle(.tint)
-                        .frame(width: 24, height: 24)
-                        .background(.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text("Mentor")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Text("·")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
-                            Text("\(suggestion.category.label) in \(suggestion.appName)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
+                        .frame(width: 28, height: 28)
+                        .background(.tint.quaternary, in: Circle())
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        // No system notification chrome names the source, so the toast does.
+                        Text("\(Text("Mentor").fontWeight(.semibold)) · \(suggestion.category.label) in \(suggestion.appName)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .accessibilityLabel("Mentor, \(suggestion.category.label) in \(suggestion.appName)")
                         Text(suggestion.title)
                             .font(.headline)
                             .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityAddTraits(.isHeader)
                     }
                     Spacer(minLength: 0)
                     Button {
                         onAction(.dismissed)
                     } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 10, weight: .bold))
-                            .frame(width: 20, height: 20)
+                        Label("Close", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
                     }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.small)
                     .help("Close")
-                    .accessibilityLabel("Close")
                 }
                 Text(suggestion.body)
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(14)
+            .padding(inset)
 
             if expanded {
                 Divider()
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, inset)
                 FittedScrollView(maxHeight: ToastContent.explanationMaxHeight) {
                     Text(suggestion.explanation)
                         .font(.callout)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 14)
+                        .padding(.horizontal, inset)
                         .padding(.vertical, 10)
                 }
             }
 
             if !exchange.isEmpty || talkBack != .idle {
                 Divider()
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, inset)
                 FittedScrollView(maxHeight: ToastContent.exchangeMaxHeight, anchor: .bottom) {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(exchange) { entry in
@@ -368,13 +415,13 @@ struct ToastContent: View {
                         case .listening(let partial):
                             ListeningRow(partial: partial)
                         case .waiting(let question):
-                            ThinkingRow(question: question, status: "Mentor is finishing another call, your question is next…")
+                            ThinkingRow(question: question, status: "Your question is next, once Mentor finishes another call.")
                         case .thinking(let question):
-                            ThinkingRow(question: question, status: "Mentor is thinking…")
+                            ThinkingRow(question: question, status: "Asking the mentor…")
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, inset)
                     .padding(.vertical, 10)
                 }
             }
@@ -384,35 +431,33 @@ struct ToastContent: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, inset)
                     .padding(.bottom, 8)
             }
 
-            Divider()
             HStack(spacing: 8) {
-                Button(expanded ? "Show less" : "Tell me more", action: onToggle)
+                Button(expanded ? "Show Less" : "Tell Me More", action: onToggle)
                     .buttonStyle(.borderedProminent)
-                Button("Not now") { onAction(.notNow) }
-                    .buttonStyle(.bordered)
-                Button("Never for this") { onAction(.never) }
-                    .buttonStyle(.bordered)
+                Button("Not Now") { onAction(.notNow) }
+                    .help("Hide \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName) for a while")
+                Button("Never for This") { onAction(.never) }
                     .help("Stop \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName)")
                 Spacer(minLength: 4)
                 if let talkBackKey {
                     Label(talkBackKey, systemImage: "mic")
                         .font(.caption)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .help("Hold \(talkBackKey) to talk back")
                         .accessibilityLabel("Hold \(talkBackKey) to talk back")
                 }
             }
+            .buttonStyle(.bordered)
             .controlSize(.small)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding([.horizontal, .bottom], inset)
+            .padding(.top, expanded || !exchange.isEmpty || talkBack != .idle || note != nil ? 10 : 0)
         }
     }
-
 }
 
 /// A scroll view as tall as its content up to `maxHeight`, then scrolling.
@@ -474,6 +519,7 @@ private struct ExchangeLine: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -484,20 +530,22 @@ struct ListeningRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: "mic.fill")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.callout)
                 .foregroundStyle(.red)
                 .symbolEffect(.pulse, options: .repeating)
                 .frame(width: 44, alignment: .trailing)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Listening…")
                     .font(.callout.weight(.medium))
-                Text(partial.isEmpty ? "Say \"tell me more\", \"not now\", \"never for this\", or ask a question." : partial)
+                Text(partial.isEmpty ? "Say \"tell me more,\" \"not now,\" or \"never for this,\" or ask a question." : partial)
                     .font(.callout)
-                    .foregroundStyle(partial.isEmpty ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -514,6 +562,7 @@ struct ThinkingRow: View {
                 ProgressView()
                     .controlSize(.small)
                     .frame(width: 44, alignment: .trailing)
+                    .accessibilityHidden(true)
                 Text(status)
                     .font(.callout)
                     .foregroundStyle(.secondary)

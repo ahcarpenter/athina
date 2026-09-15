@@ -39,12 +39,12 @@
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
 	<key>NSAccessibilityUsageDescription</key>
-	<string>Mentor reads the focused window and element of the app you are using so it can understand what you are working on.</string>
+	<string>Mentor reads the focused window and element of the app you are using to understand what you are working on.</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Mentor captures the display you are working on at a low cadence and reads its text on this Mac so it can understand what you are doing.</string>
+	<string>Mentor captures the display you are working on and reads its text on this Mac to understand what you are doing.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Mentor listens only while you hold the talk-back key, so you can answer or question a suggestion by voice. Audio stays on this Mac and is never stored.</string>
+	<string>Mentor listens only while you hold the talk-back shortcut, so you can answer or ask about a suggestion by voice, and never stores the audio.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Mentor turns what you say while holding the talk-back key into text on this Mac, with the on-device recognizer and never Apple's servers. Only those words go to the mentor model, as your question.</string>
+	<string>Mentor turns what you say while you hold the talk-back shortcut into text on this Mac and sends only your questions to the mentor model.</string>
 </dict>
 </plist>

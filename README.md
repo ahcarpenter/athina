@@ -46,8 +46,12 @@ There is no Xcode project. `Package.swift` defines the targets and
 `Mentor --snapshot <dir>` renders every window with sample data to PNG files
 (light and dark) without starting the pipeline or calling any model. It is how
 UI changes get checked without a person at the screen; it needs no permissions
-and never reads the keychain. Replay mode has renders of its own.
-`open build/Mentor.app --args --open debug` (or `settings`, `settings:mentor`,
+and never reads the keychain. Each view renders in a borderless window placed
+below the desktop picture, where the window server still composites glass and
+controls and ScreenCaptureKit still captures it, so nothing appears on screen
+and a tall Settings pane renders whole. Replay mode has renders of its own.
+`open build/Mentor.app --args --open debug` (or `settings`, `settings:<pane>`
+for `general`, `contexts`, `models`, `capture`, `journal`, or `privacy`,
 `permissions`, `history`) launches the app with that window already open, which
 is how the live panel gets screenshotted from a shell. `--replay <dir>` and
 `--record [<dir>]` choose where model calls go; see Iterating without the
@@ -55,9 +59,10 @@ network.
 
 ### Setup: the Anthropic API key
 
-The mentor loop needs an Anthropic API key. Open Settings > Mentor, paste the
-key, press Save, then Test Connection: it sends one tiny request on the triage
-model and reports the answering model or the API's own error message. The key
+The mentor loop needs an Anthropic API key. Open Settings > Models (the menu's
+Add API Key item goes there), paste the key, press Save, then Test Connection:
+it sends one tiny request on the triage model and reports the answering model
+or the API's own error message. The key
 goes into your login keychain (`com.ahcarpenter.mentor` /
 `anthropic-api-key`) and nowhere else; the app only ever shows its last four
 characters. Without a key the loop stays idle and the menu says so. Remove
@@ -134,8 +139,8 @@ replay, and a replay that was refused, keeps its journal and settings in
 Every replay launch starts from your live settings, read and never written (or
 from the defaults when there are none), so the apps you excluded stay
 excluded, and your retention and sensing choices hold, exactly as you set them.
-Nothing a replay does, a suggestion and its feedback, a Not now or Never for
-this, a changed setting, reaches the live journal, the live settings, or the
+Nothing a replay does, a suggestion and its feedback, a Not Now or Never for
+This, a changed setting, reaches the live journal, the live settings, or the
 prompts of a later live run; a setting changed during a replay lasts until the
 app quits. Delete that directory to clear the replay journal. `--record` is a
 real session and uses the live files.
@@ -242,9 +247,9 @@ scenario and an empty journal:
    keystrokes (TextEdit scripting and accessibility actions), so no other app
    takes the front and reaches a request's event history; raise the idle
    threshold for the session so sensing does not stop behind it. For the
-   `understanding` kind, set Settings > Mentor > Refresh at most every to its
+   `understanding` kind, set Settings > Models > Refresh at most every to its
    lowest value before recording and leave the scenario in front for that whole
-   interval after the last mentor call; setting Settings > Cadence > Idle after
+   interval after the last mentor call; setting Settings > Capture > Idle after
    above the interval keeps the loop watching with no input. Add Mentor itself
    to the excluded apps, so opening Settings for Test Connection is never
    captured.
@@ -260,13 +265,15 @@ answer, such as a refusal, an unparseable reply, or a slow call.
 ## Permissions
 
 Mentor needs two permissions and explains each in a first-run window that
-opens whenever one is missing. The window triggers each missing sensing
-permission's system prompt once when it opens, so Mentor appears in both
-System Settings lists, shows live status, deep-links to the matching System
-Settings pane, and re-checks every second while open and when the app regains
-focus. Two more are optional and serve only talking back; the window lists
-them below the required pair and asks for them only when you press Grant or
-first hold the talk-back key.
+opens whenever one is missing. The window explains before it asks: no system
+prompt appears when it opens. Each missing permission has one button. For the
+sensing pair it is Open System Settings, which registers Mentor in that
+permission's System Settings list (macOS may show its own note pointing
+there) and opens the matching pane; the window shows live status and re-checks
+every second while open and when the app regains focus. Two more are optional
+and serve only talking back; the window lists them below the required pair and
+asks for them only when you press Request Access (Open System Settings once
+the system has asked) or first hold the talk-back shortcut.
 
 | Permission | Used for | Without it |
 | --- | --- | --- |
@@ -425,7 +432,7 @@ each kept observation it runs, in order:
    attached screenshot (see Callouts). The understanding comes back on every
    call.
 
-   Each tier has its own model and effort in Settings > Mentor. Effort (low,
+   Each tier has its own model and effort in Settings > Models. Effort (low,
    medium, high, extra high) goes out as `output_config.effort` only to models
    that accept it; Haiku 4.5 rejects the parameter, so its effort control is
    disabled and nothing is sent. Thinking is left at each model's default
@@ -441,15 +448,19 @@ each kept observation it runs, in order:
    the countdown pauses while the pointer is over it). Closing it with the x,
    or a mouse-down in any other window or on the desktop, is journaled as
    dismissed, a timeout or quitting the app with the toast still up as
-   expired. *Tell me more* expands the full explanation above the
-   button bar (scrolling past 300 points) and becomes *Show less*; the three
+   expired. *Tell Me More* expands the full explanation above the
+   button bar (scrolling past 300 points) and becomes *Show Less*; the three
    buttons stay pinned to the bottom edge in both states, and an expanded
-   toast stays until closed. *Not now* dismisses and snoozes that category for
-   that app for `notNowSnooze` (1 h). *Never for this* records that the
+   toast stays until closed. *Not Now* dismisses and snoozes that category for
+   that app for `notNowSnooze` (1 h). *Never for This* records that the
    category must never be raised for that app again (the rule is listed and
-   removable in Settings > Mentor). Every suggestion and every answer is
-   journaled, and the history window (menu > Suggestions) lists them with
-   time, app, category, feedback, and full text.
+   removable in Settings > General). The toast never takes keyboard focus, so
+   the menu's Answer Suggestion submenu offers the same answers to the
+   keyboard and VoiceOver, and VoiceOver announces a toast as it appears; while
+   VoiceOver or Switch Control is on, a toast does not expire on its own. Every
+   suggestion and every answer is journaled, and the history window
+   (menu > Suggestions) lists them with time, app, category, feedback, and full
+   text.
 
 The system prompts and output schemas of every tier live in
 `Prompts.swift` under a version number that is stored with every call and
@@ -518,7 +529,7 @@ click, key, or scroll. It draws a tinted rounded box with a soft glow around
 the spot and the note in a material pill beside it, to its right, where the
 rest of a line of text is usually empty (below the box, or above it at the
 bottom of the display, only when there is no room), styled like the toast. Mentor's own windows are excluded from
-capture, so the overlay never appears in a frame. Settings > Mentor > "Show
+capture, so the overlay never appears in a frame. Settings > General > "Show
 callouts on screen" (on by default) turns callouts off; the history window
 records for each suggestion whether one was drawn, and the debug panel's
 Mentor card shows the last callout decision with the region in frame pixels
@@ -526,15 +537,15 @@ and in screen points.
 
 ### Talking back
 
-A push-to-talk hotkey, recorded in Settings > Mentor the same way as the pause
-hotkey and unset by default, captures the microphone only while it is held.
-Carbon's hotkey registration delivers both `kEventHotKeyPressed` and
-`kEventHotKeyReleased` for a combination it registered, so `HotKeyCenter`
-hears the key go down and up without Input Monitoring or any other
-permission beyond the two optional ones. The same combination cannot be both
-the pause and the talk-back key; the recorder refuses it and validation
-clears it. A recording is cut off after 30 seconds in case the release is
-missed.
+A push-to-talk hotkey (the talk-back shortcut), recorded in Settings > General
+the same way as the pause shortcut in Settings > Privacy and unset by default,
+captures the microphone only while it is held. Carbon's hotkey registration
+delivers both `kEventHotKeyPressed` and `kEventHotKeyReleased` for a
+combination it registered, so `HotKeyCenter` hears the key go down and up
+without Input Monitoring or any other permission beyond the two optional ones.
+The same combination cannot be both the pause and the talk-back key; the
+recorder refuses it and validation clears it. A recording is cut off after 30
+seconds in case the release is missed.
 
 Audio goes to `SFSpeechRecognizer` for the current locale with
 `requiresOnDeviceRecognition` set, so nothing is sent to Apple's servers. When
@@ -603,7 +614,7 @@ Microphone and Speech Recognition are not granted.
 
 ### Mentorship contexts
 
-Settings > Mentor > Mentorship contexts is where you say what you want
+Settings > Contexts is where you say what you want
 mentoring in, in your own words: a short name such as "building web apps" and
 an optional sentence saying what counts. **Only mentor inside these contexts**
 turns that list into a hard boundary; it is off by default, and while it is off
@@ -625,8 +636,8 @@ triage prompt is served from cache at all is the per-model question answered
 above.
 
 Up to `ContextRules.maxContexts` (12) contexts may be declared, each with a
-unique name of at most 60 characters and a description of at most 280. The
-editor disables Add at the cap, refuses a name another context already uses,
+unique name of at most 60 characters and a description of at most 280. The pane
+disables Add Context at the cap, refuses a name another context already uses,
 and caps both fields as they are typed with a note at the limit, so nothing
 saved is dropped or cut on the way in. With the switch on and no context
 declared, nothing is inside anything: no triage call is made at all, and the
@@ -694,8 +705,8 @@ conflicts with the goal without paying for the whole thing. Three suggestion
 categories judge the current action against the inferred goal:
 `wont_achieve_goal`, `less_efficient`, and `unwanted_side_effect`. They are
 raised only when there is an understanding to judge against, they carry the
-goal they were judged against (shown in the history window), and "Never for
-this" suppresses each one per app exactly like every other category.
+goal they were judged against (shown in the history window), and Never for
+This suppresses each one per app exactly like every other category.
 
 **Size and lifetime.** `understandingTokenBudget` (1200 tokens, settable up to
 3000 so a mentor reply keeps room for its thinking and a suggestion beside the
@@ -705,7 +716,7 @@ oldest timeline entries first, then the oldest mentor history, then concerns,
 then the weakest goals, always keeping the strongest goal. It expires after
 `understandingIdleGap` with no activity (4 hours) and always at a new day;
 expiry and reset are journaled.
-**Reset Understanding**, in Settings > Mentor and in the debug panel, forgets
+**Reset Understanding**, in Settings > Models and in the debug panel, forgets
 every revision at once. Revisions are inserted rather than updated, so the
 journal keeps the trail of how the reading developed, and the current one
 survives a relaunch.
@@ -718,7 +729,7 @@ model, text only. Measured on 2026-09-13 writing the first record from a
 Claude Opus 5 at low effort. So an hour of reading and browsing with no mentor
 call in it costs about $0.38 in refreshes against the $1 default cap. Raise
 the interval, or pick Claude Haiku 4.5 for this tier, to spend less; both are
-in Settings > Mentor. Like the mentor tier, a refresh holds triage while it
+in Settings > Models. Like the mentor tier, a refresh holds triage while it
 runs, so a long one costs a change moment or two as well. The debug panel's
 Understanding card shows the revision, when it was last written, which path
 wrote it, its size against the budget, and what refresh calls have cost since
@@ -728,7 +739,7 @@ this understanding began.
 
 Every response's usage fields (`input_tokens`, `output_tokens`,
 `cache_creation_input_tokens`, `cache_read_input_tokens`) are priced with the
-table in Settings > Mentor (dollars per million tokens, defaults checked
+table in Settings > Models (dollars per million tokens, defaults checked
 against Anthropic's pricing page on the date shown there, editable) and added
 to a per-clock-hour total. As the total approaches `hourlySpendCap` ($1 by
 default) both minimum intervals and the refresh interval stretch by
@@ -764,7 +775,7 @@ counted (see Iterating without the network).
   bounded by the token budget with the oldest left out and said so when the
   record does not already cover them) and, by
   default, the latest kept thumbnail as a JPEG image. "Send the latest
-  screenshot to the mentor model" in Settings > Mentor turns the image off, in
+  screenshot" in Settings > Models turns the image off, in
   which case the mentor tier receives text only. While mentorship contexts
   are enforced, the mentor tier also receives the name and description of the
   declared context the moment was placed in. The understanding refresh tier
@@ -780,7 +791,7 @@ counted (see Iterating without the network).
   panel, bounded by its token budget, expiring with the idle gap and at a new
   day, and removable at any time with Reset Understanding or Clear Journal.
   The menu bar menu shows its strongest goal, clipped, alongside the debug
-  panel and Settings > Mentor, whenever Mentor is on and has a key.
+  panel and Settings > Models, whenever Mentor is on and has a key.
   Both prompts that write it, the mentor prompt and the refresh prompt, tell
   the model to leave out anything private, financial, medical, or personal,
   and anything about other people on screen.
@@ -829,46 +840,94 @@ counted (see Iterating without the network).
 
 Menu bar > Debug Panel. Left: frontmost app, window, the Mentor loop card
 (availability, the last triage gate decision and its reason, the current
-mentorship context verdict, the last triage and mentor calls with tokens, cached
-tokens, estimated cost and latency, spend this hour, the cadence state with
-the current slowdown, the last callout decision with its region in frame
-pixels and screen points, and the last transcript with what was done with
-it), the Understanding card (revision, when and how it was last written, the
+mentorship context verdict, the last triage and mentor calls with tokens,
+cached tokens, estimated cost and latency, spend this hour, the cadence state
+with the current slowdown, the last callout decision with its region in frame
+pixels and screen points, and the last transcript with what was done with it),
+the Understanding card (revision, when and how it was last written, the
 inferred goals with their evidence and confidence, the timeline, what has been
 said and answered, open concerns, when the next refresh is due or why it is
 held, size against the budget, cost since it began, and Reset Understanding),
-focused element
-(role, title, description, text), cadence settings and counters, journal size
-and path. Centre: the latest kept frame with OCR boxes overlaid and the
-recognized text below; selecting an observation in the timeline shows that
-frame instead. Right: a live timeline of observations and events from the
-journal (suggestions and feedback included), or, under Model calls, a scrolling
-log of every API call with prompt size, tokens, cost, latency, outcome, and the
-model's reason. The status bar shows mode, permission state, last and next
-capture with reason, seconds since input, spend this hour against the cap, and
-the app's own CPU and memory. While calls are replayed or recorded, the status
-bar and the Mentor card carry a Replay or Recording badge, the card says where
-calls go (for a replay, the fixtures by kind and their directory, and any stale
-ones), and each replayed call in the log is tagged Replay and not billed.
+focused element (role, title, description, text), cadence settings and
+counters, journal size and path. Centre: the latest kept frame with OCR boxes
+overlaid and the recognized text below; selecting an observation in the
+timeline shows that frame instead. Right: a live timeline of observations and
+events from the journal (suggestions and feedback included), or, under Model
+Calls, a scrolling log of every API call with prompt size, tokens, cost,
+latency, outcome, and the model's reason. The status bar shows mode, permission
+state, last and next capture with reason, seconds since input, spend this hour
+against the cap (for live calls), and the app's own CPU and memory. While calls
+are replayed or recorded, the status bar and the Mentor card carry a Replay or
+Recording badge, the card says where calls go (for a replay, the fixtures by
+kind and their directory, and any stale ones), and each replayed call in the
+log is tagged Replay and not billed.
+
+## Design conventions
+
+Every surface follows Apple's Human Interface Guidelines for macOS, audited
+against the live guidelines on 2026-09-15, so later changes keep to them
+rather than re-auditing. The sections Mentor leans on are Designing for macOS,
+The menu bar (menu bar extras), Menus, Windows, Panels, Settings, Layout,
+Typography, Color, Dark Mode, Materials (Liquid Glass), Icons, SF Symbols,
+Buttons, Toggles, Pickers, Text fields, Lists and tables, Alerts, Feedback,
+Writing, Onboarding, Privacy, Accessibility, Keyboards, and Motion. The choices
+particular to this app:
+
+- **The menu bar extra is the app.** Mentor has no Dock icon or app menu, so
+  its menu leads with dimmed status rows (a status that needs something, such
+  as a missing key, is the command that fixes it), then commands, windows, and
+  the app menu's About and Quit. Menu items use title case and an ellipsis only
+  where more input follows, and no standard keyboard shortcut is repurposed.
+  The icon is a template SF Symbol per sensing mode, with a word beside it only
+  in replay or recording.
+- **The toast is a non-activating panel, not a notification.** It floats under
+  the menu bar on Liquid Glass and never takes keyboard focus, with corners
+  concentric with its small capsule buttons. Because it cannot be focused, the
+  menu's Answer Suggestion submenu carries its answers, VoiceOver announces
+  it, and it does not expire while VoiceOver or Switch Control is on.
+- **The callout is a click-through overlay** that draws its own accent stroke,
+  since nothing in the system frames a spot in another app's window; its note
+  sits on the toast's glass. It only fades in, and Increase Contrast thickens
+  the stroke and drops the glow.
+- **Settings is the SwiftUI `Settings` scene**: a toolbar of panes, the window
+  titled by its pane, the last pane remembered, each pane a fixed-size grouped
+  form that scrolls. Rows use the form's own label and subtitle styling, and a
+  place elsewhere in Settings is a link, not a description.
+- **Status is never color alone.** Inline messages are `StatusLabel` and badges
+  are `StatusBadge` (`Sources/Mentor/Components.swift`): the symbol or capsule
+  carries the color, the words stay in a label color. Text uses system text
+  styles and label colors, never fixed point sizes or tertiary text for
+  anything that must be read.
+- **Permissions explain before they ask.** The window never prompts on its own,
+  each permission has one button, and the purpose strings in
+  `Resources/Info.plist` say the same as the window in one sentence.
+- **Words.** Buttons, menu items, window titles, and column headings use title
+  case; labels, section headers, and status words use sentence case. The
+  interface says keyboard shortcut rather than hotkey, names panes and places
+  plainly, and speaks of Mentor in the third person, never "we".
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs `swift test`, the bundle script, and
-`Mentor --snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the
-macOS 26 SDK this package targets, and uploads the rendered PNGs, replay-mode
-renders included, as the `ui-snapshots` artifact. The tests exercise the pure
-parts (hashing, cadence, journal, retention and its in-place migration,
-settings, the mentor scheduler and every gate, mentorship context rules and
-placement, spend accounting, snooze and never-for-this rules per category, the
-rolling window, the understanding's encoding, versioning, bounding and expiry,
-prompt assembly with and without one, request and response coding against
-fixture JSON, recording, redaction, replay matching and stale refusal, launch
-flags, a replay's separate files, callout mapping and every anchor rejection,
-transcript matching, the follow-up prompt and gate, the toast rule for voice
-input, the whole loop against a scripted client, follow-ups included, and the
-whole loop against the committed replay fixtures, replayed strictly, a region
-and a follow-up answer included) and Vision OCR on a drawn bitmap, so they need
-no permissions, display, network, microphone, or API key. A committed fixture
-that is stale, or a tier with no committed fixture, fails the run (see The
-committed fixtures). The snapshot run covers the callout over the sample frame,
-the listening and answered toasts, and the talk-back settings.
+`.github/workflows/ci.yml` runs `swift test`, the bundle script, and `Mentor
+--snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the macOS
+26 SDK this package targets, and uploads the rendered PNGs, replay-mode renders
+included, as the `ui-snapshots` artifact. The tests exercise the pure parts
+(hashing, cadence, journal, retention and its in-place migration, settings, the
+mentor scheduler and every gate, mentorship context rules and placement, spend
+accounting, snooze and never-for-this rules per category, the rolling window,
+the understanding's encoding, versioning, bounding and expiry, prompt assembly
+with and without one, request and response coding against fixture JSON,
+recording, redaction, replay matching and stale refusal, launch flags, a
+replay's separate files, callout mapping and every anchor rejection, transcript
+matching, the follow-up prompt and gate, the toast rule for voice input, the
+whole loop against a scripted client, follow-ups included, and the whole loop
+against the committed replay fixtures, replayed strictly, a region and a
+follow-up answer included) and Vision OCR on a drawn bitmap, so they need no
+permissions, display, network, microphone, or API key. A committed fixture that
+is stale, or a tier with no committed fixture, fails the run (see The committed
+fixtures). The snapshot run covers every window and Settings pane with sample
+data, their empty states (no suggestions, no frames, no contexts, contexts at
+the cap), the callout over the sample frame, the toast collapsed, expanded,
+listening, thinking, answered, and as a note, the context editor with a
+duplicate name, and the transient status messages (a connection test, a refused
+or recording shortcut, on-device recognition unavailable).

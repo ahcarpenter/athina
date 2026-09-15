@@ -29,12 +29,12 @@ struct UnderstandingSection: View {
             }
             NumberRow(
                 "Refresh at most every", value: $state.settings.mentor.understandingRefreshInterval,
-                range: MentorSettings.refreshIntervalRange, step: 300, unit: "s",
+                range: MentorSettings.refreshIntervalRange, step: 300, unit: .seconds,
                 help: "Every mentor call rewrites the understanding on the way past, for free. This is how long it may go unrefreshed, counting only time you are active, before a call of its own is made."
             )
             IntRow(
                 "Size limit", value: $state.settings.mentor.understandingTokenBudget,
-                range: MentorSettings.understandingTokenBudgetRange, step: 100, unit: "tok",
+                range: MentorSettings.understandingTokenBudgetRange, step: 100, unit: .tokens,
                 help: "The record is trimmed to fit, oldest timeline entries first, so it can never grow without bound."
             )
             DurationRow("Forget after no activity for", value: $state.settings.mentor.understandingIdleGap)

@@ -32,6 +32,7 @@ final class CalloutController {
         }
         panel.setFrame(NSScreen.cocoaRect(fromGlobal: layout.windowRect), display: true)
         if !panel.isVisible {
+            // A short fade, which Reduce Motion leaves alone: it moves nothing.
             panel.alphaValue = 0
             panel.orderFrontRegardless()
             NSAnimationContext.runAnimationGroup { context in
@@ -72,10 +73,14 @@ final class CalloutController {
     }
 }
 
-/// The highlight box and its note, styled like the toast: a tinted rounded
-/// stroke with a soft glow around the spot, and a material pill for the note.
+/// The highlight box and its note, styled like the toast: an accent-colored
+/// rounded stroke with a soft glow around the spot, and the note on the same
+/// Liquid Glass as the toast. Increase Contrast thickens the stroke and drops
+/// the glow for a crisp edge.
 struct CalloutView: View {
     static let cornerRadius: CGFloat = 8
+
+    @Environment(\.colorSchemeContrast) private var contrast
 
     let layout: CalloutLayout
     let note: String
@@ -95,12 +100,12 @@ struct CalloutView: View {
         ZStack(alignment: .topLeading) {
             Color.clear
             RoundedRectangle(cornerRadius: CalloutView.cornerRadius, style: .continuous)
-                .strokeBorder(.tint, lineWidth: 2.5)
+                .strokeBorder(.tint, lineWidth: contrast == .increased ? 3.5 : 2.5)
                 .background(
                     RoundedRectangle(cornerRadius: CalloutView.cornerRadius, style: .continuous)
                         .fill(.tint.opacity(0.06))
                 )
-                .shadow(color: Color.accentColor.opacity(0.55), radius: 6)
+                .shadow(color: Color.accentColor.opacity(contrast == .increased ? 0 : 0.55), radius: 6)
                 .frame(width: box.width, height: box.height)
                 .offset(x: box.minX, y: box.minY)
             notePill
@@ -115,20 +120,18 @@ struct CalloutView: View {
     }
 
     private var notePill: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "lightbulb.fill")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.tint)
+        Label {
             Text(note)
-                .font(.callout.weight(.medium))
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "lightbulb.fill")
+                .foregroundStyle(.tint)
         }
+        .font(.callout.weight(.medium))
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.quaternary))
-        .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+        .glassEffect(.regular, in: .rect(cornerRadius: CalloutView.cornerRadius + 6))
     }
 }
 
