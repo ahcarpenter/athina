@@ -6,8 +6,10 @@ import SwiftUI
 /// binding shows a placeholder while unset and offers Clear; a combination
 /// listed in `conflicts` is refused with a note instead of being taken.
 struct HotKeyRecorder: View {
+    /// What the hotkey is for, which VoiceOver reads as the button's label.
+    let title: String
     @Binding var hotKey: HotKey?
-    var placeholder = "Not set"
+    var placeholder = "Not Set"
     var allowsClear = true
     var conflicts: [HotKey] = []
     var conflictNote = "That combination is already in use."
@@ -17,12 +19,18 @@ struct HotKeyRecorder: View {
     @State private var refusal: String?
 
     init(
+        title: String,
         hotKey: Binding<HotKey?>,
-        placeholder: String = "Not set",
+        placeholder: String = "Not Set",
         allowsClear: Bool = true,
         conflicts: [HotKey] = [],
-        conflictNote: String = "That combination is already in use."
+        conflictNote: String = "That combination is already in use.",
+        previewRecording: Bool = false,
+        previewRefusal: String? = nil
     ) {
+        self.title = title
+        _isRecording = State(initialValue: previewRecording)
+        _refusal = State(initialValue: previewRefusal)
         _hotKey = hotKey
         self.placeholder = placeholder
         self.allowsClear = allowsClear
@@ -31,37 +39,41 @@ struct HotKeyRecorder: View {
     }
 
     /// A recorder for a hotkey that is always set.
-    init(hotKey: Binding<HotKey>, conflicts: [HotKey] = [], conflictNote: String = "That combination is already in use.") {
+    init(title: String, hotKey: Binding<HotKey>, conflicts: [HotKey] = [], conflictNote: String = "That combination is already in use.") {
         self.init(
+            title: title,
             hotKey: Binding(get: { hotKey.wrappedValue }, set: { if let key = $0 { hotKey.wrappedValue = key } }),
             allowsClear: false, conflicts: conflicts, conflictNote: conflictNote
         )
     }
 
     var body: some View {
-        HStack(spacing: 8) {
-            Button {
-                isRecording ? stop() : start()
-            } label: {
-                Text(isRecording ? "Press keys…" : (hotKey?.displayString ?? placeholder))
-                    .font(.body.weight(.medium))
-                    .foregroundStyle(hotKey == nil && !isRecording ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
-                    .frame(minWidth: 110)
-            }
-            .buttonStyle(.bordered)
-            .tint(isRecording ? .accentColor : nil)
-            if allowsClear, hotKey != nil, !isRecording {
-                Button("Clear") { hotKey = nil }
-                    .controlSize(.small)
+        VStack(alignment: .trailing, spacing: 4) {
+            HStack(spacing: 8) {
+                if allowsClear, hotKey != nil, !isRecording {
+                    Button("Clear") { hotKey = nil }
+                        .accessibilityLabel("Clear \(title.lowercased())")
+                }
+                Button {
+                    isRecording ? stop() : start()
+                } label: {
+                    Text(isRecording ? "Type Shortcut" : (hotKey?.displayString ?? placeholder))
+                        .foregroundStyle(hotKey == nil && !isRecording ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
+                        .frame(minWidth: 96)
+                }
+                .buttonStyle(.bordered)
+                .tint(isRecording ? .accentColor : nil)
+                .accessibilityLabel(title)
+                .accessibilityValue(isRecording ? "Recording" : (hotKey?.accessibilityName ?? placeholder))
+                .accessibilityHint(isRecording ? "Type the new combination, or press Escape to cancel." : "Records a new combination.")
             }
             if isRecording {
-                Text("Include ⌃, ⌥, or ⌘. Esc cancels.")
+                Text("Include Control, Option, or Command. Press Escape to cancel.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else if let refusal {
-                Text(refusal)
+                StatusLabel(refusal, kind: .warning)
                     .font(.caption)
-                    .foregroundStyle(.orange)
             }
         }
         .onDisappear(perform: stop)
@@ -93,6 +105,10 @@ struct HotKeyRecorder: View {
             }
             hotKey = candidate
             stop()
+            NSAccessibility.post(
+                element: NSApp as Any, notification: .announcementRequested,
+                userInfo: [.announcement: "\(title) set to \(candidate.accessibilityName)", .priority: NSAccessibilityPriorityLevel.medium.rawValue]
+            )
             return nil
         }
     }

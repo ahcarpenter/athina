@@ -33,6 +33,20 @@ public struct HotKey: Codable, Equatable, Hashable, Sendable {
         return s + HotKey.keyName(for: keyCode)
     }
 
+    /// The combination spelled out the way the Human Interface Guidelines
+    /// write shortcuts, for VoiceOver: "Control-Option-Command-P". Modifiers
+    /// keep the standard order, and a key shown as a symbol gets its name.
+    public var accessibilityName: String {
+        var parts: [String] = []
+        if modifiers.contains(.control) { parts.append("Control") }
+        if modifiers.contains(.option) { parts.append("Option") }
+        if modifiers.contains(.shift) { parts.append("Shift") }
+        if modifiers.contains(.command) { parts.append("Command") }
+        let key = HotKey.keyName(for: keyCode)
+        parts.append(HotKey.spokenKeyNames[key] ?? key)
+        return parts.joined(separator: "-")
+    }
+
     /// Whether the combination is usable as a global hotkey: it needs at
     /// least one non-shift modifier so ordinary typing cannot trigger it.
     public var isUsable: Bool {
@@ -55,5 +69,14 @@ public struct HotKey: Codable, Equatable, Hashable, Sendable {
         96: "F5", 97: "F6", 98: "F7", 99: "F3", 100: "F8", 101: "F9", 103: "F11",
         109: "F10", 111: "F12", 118: "F4", 120: "F2", 122: "F1",
         123: "←", 124: "→", 125: "↓", 126: "↑",
+    ]
+
+    /// Names for the keys `keyName` shows as a symbol or punctuation mark.
+    private static let spokenKeyNames: [String: String] = [
+        "↩": "Return", "⇥": "Tab", "⌫": "Delete", "⎋": "Escape",
+        "←": "Left Arrow", "→": "Right Arrow", "↓": "Down Arrow", "↑": "Up Arrow",
+        "=": "Equal Sign", "-": "Hyphen", "[": "Left Bracket", "]": "Right Bracket",
+        "'": "Apostrophe", ";": "Semicolon", "\\": "Backslash", ",": "Comma",
+        "/": "Slash", ".": "Period", "`": "Grave Accent",
     ]
 }

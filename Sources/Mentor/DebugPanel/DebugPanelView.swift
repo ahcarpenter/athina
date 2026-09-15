@@ -65,8 +65,8 @@ private struct DebugStatusBar: View {
             if let badge = ClientModeBadge(mode: state.clientMode, recordingUnavailableReason: state.recordingUnavailableReason, clockScale: state.clockScale) {
                 badge
             }
-            PermissionChip(title: "Screen", granted: state.permissions.screenRecording)
-            PermissionChip(title: "AX", granted: state.permissions.accessibility)
+            PermissionChip(title: "Screen Recording", granted: state.permissions.screenRecording)
+            PermissionChip(title: "Accessibility", granted: state.permissions.accessibility)
             Divider().frame(height: 16)
             // One tick a second: finer clocks kept the whole window redrawing at ~10% CPU while idle.
             // Ages read the app's clock, which a replay may run faster or move ahead.
@@ -79,12 +79,13 @@ private struct DebugStatusBar: View {
                 }
             }
             Spacer(minLength: 8)
-            LabeledValue(
-                label: "Spend",
-                value: state.clientMode.isOffline
-                    ? "none, replay mode"
-                    : "\(Formatting.dollars(state.mentorStatus.spendThisHour)) / \(Formatting.dollars(state.settings.mentor.hourlySpendCap))"
-            )
+            // A replay bills nothing, and its badge already says so.
+            if !state.clientMode.isOffline {
+                LabeledValue(
+                    label: "Spend",
+                    value: "\(Formatting.dollars(state.mentorStatus.spendThisHour)) / \(Formatting.dollars(state.settings.mentor.hourlySpendCap))"
+                )
+            }
             if let resources = state.resources {
                 LabeledValue(label: "CPU", value: String(format: "%.1f%%", resources.cpuPercent))
                 LabeledValue(label: "Mem", value: Formatting.bytes(resources.footprintBytes))
@@ -144,19 +145,9 @@ struct ClientModeBadge: View {
     }
 
     var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: symbol)
-                .imageScale(.small)
-                .fontWeight(.bold)
-                .foregroundStyle(color)
-            Text(title)
-                .fontWeight(.semibold)
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 3)
-        .background(color.opacity(0.15), in: Capsule())
-        .help(help)
-        .fixedSize()
+        StatusBadge(text: title, tint: color, symbol: symbol)
+            .help(help)
+            .accessibilityHint(help)
     }
 }
 
@@ -164,16 +155,8 @@ struct ModeBadge: View {
     let mode: SensingMode
 
     var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(color)
-                .frame(width: 8, height: 8)
-            Text(mode.label)
-                .fontWeight(.semibold)
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 3)
-        .background(color.opacity(0.15), in: Capsule())
+        StatusBadge(text: mode.label, tint: color, symbol: "circle.fill")
+            .accessibilityLabel("Mode: \(mode.label)")
     }
 
     private var color: Color {
@@ -195,10 +178,14 @@ private struct PermissionChip: View {
     var body: some View {
         HStack(spacing: 4) {
             Image(systemName: granted ? "checkmark.circle.fill" : "xmark.circle.fill")
-                .foregroundStyle(granted ? Color.green : Color.red)
+                .symbolRenderingMode(.multicolor)
+                .accessibilityHidden(true)
             Text(title)
         }
-        .help(granted ? "\(title) permission granted" : "\(title) permission missing")
+        .help(granted ? "\(title) is granted" : "\(title) is not granted")
+        .fixedSize()
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(granted ? "\(title) granted" : "\(title) not granted")
     }
 }
 
@@ -238,12 +225,14 @@ private struct NowPane: View {
                             }
                         }
                         if focus.isExcluded {
-                            Label("Excluded: nothing is read or captured here", systemImage: "hand.raised.fill")
-                                .foregroundStyle(.purple)
-                                .font(.callout)
+                            Label {
+                                Text("Excluded: nothing is read or captured here")
+                            } icon: {
+                                Image(systemName: "hand.raised.fill").foregroundStyle(.purple)
+                            }
+                            .font(.callout)
                         } else if !focus.accessibilityAvailable {
-                            Label("Accessibility unavailable for this app", systemImage: "exclamationmark.triangle")
-                                .foregroundStyle(.orange)
+                            StatusLabel("Accessibility is unavailable for this app", kind: .warning)
                                 .font(.callout)
                         }
                     } else {
@@ -302,8 +291,7 @@ private struct NowPane: View {
                         Field(label: "Last drop", value: "distance \(distance)")
                     }
                     if let error = state.cadence.lastError {
-                        Label(error, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                        StatusLabel(error, kind: .warning)
                             .font(.caption)
                             .textSelection(.enabled)
                     }
@@ -311,7 +299,9 @@ private struct NowPane: View {
 
                 Card(title: "Journal") {
                     if let error = state.journalError {
-                        Text(error).foregroundStyle(.red).font(.caption)
+                        StatusLabel(error, kind: .error)
+                            .font(.caption)
+                            .textSelection(.enabled)
                     }
                     if let stats = state.journalStats {
                         Field(label: "Size", value: Formatting.bytes(stats.usedBytes))
@@ -352,17 +342,17 @@ struct Card<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title.uppercased())
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .tracking(0.5)
-            content
+        GroupBox {
+            VStack(alignment: .leading, spacing: 8) {
+                content
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(4)
+        } label: {
+            Text(title)
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(.background, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.quaternary))
     }
 }
 
@@ -416,9 +406,8 @@ private struct FramePane: View {
                     Button("Back to Live", action: onBackToLive)
                         .controlSize(.small)
                 }
-                Toggle("OCR boxes", isOn: $showBoxes)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
+                Toggle("Show OCR boxes", isOn: $showBoxes)
+                    .toggleStyle(.checkbox)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
@@ -434,9 +423,9 @@ private struct FramePane: View {
                     .frame(height: 220)
             } else {
                 ContentUnavailableView(
-                    "Waiting for the first capture",
+                    "Waiting for the First Capture",
                     systemImage: "rectangle.dashed",
-                    description: Text("Frames appear here once Screen Recording is granted and the user is active.")
+                    description: Text("Frames appear here once Screen Recording is granted and you are active.")
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -558,9 +547,9 @@ private struct TimelinePane: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Picker("", selection: $page) {
+                Picker("Show", selection: $page) {
                     Text("Timeline").tag(Page.timeline)
-                    Text("Model calls").tag(Page.calls)
+                    Text("Model Calls").tag(Page.calls)
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -585,7 +574,7 @@ private struct TimelinePane: View {
                 .listStyle(.inset)
                 .overlay {
                     if state.timeline.isEmpty {
-                        ContentUnavailableView("Nothing journaled yet", systemImage: "clock")
+                        ContentUnavailableView("Nothing Journaled Yet", systemImage: "clock")
                     }
                 }
             case .calls:
@@ -607,6 +596,7 @@ private struct TimelineRow: View {
             Image(systemName: symbol)
                 .foregroundStyle(tint)
                 .frame(width: 16)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(primary)
                     .lineLimit(1)
@@ -619,6 +609,7 @@ private struct TimelineRow: View {
             }
         }
         .padding(.vertical, 2)
+        .accessibilityElement(children: .combine)
     }
 
     private var primary: String {
@@ -926,7 +917,7 @@ private struct TalkBackField: View {
         .font(.callout)
         .controlSize(.small)
         .padding(.top, 2)
-        .help("Sends these words the way releasing the talk-back key sends what you said, to the toast that is up or the last suggestion.")
+        .help("Sends these words the way releasing the talk-back shortcut sends what you said, to the toast that is up or the last suggestion.")
     }
 
     private func send() {
@@ -963,9 +954,8 @@ private struct ClockAdvanceField: View {
                     .disabled(seconds == nil)
             }
             if let refusal {
-                Text(refusal)
+                StatusLabel(refusal, kind: .warning)
                     .font(.caption)
-                    .foregroundStyle(.red)
                     .padding(.leading, 86)
             }
         }
@@ -987,14 +977,7 @@ private struct AvailabilityBadge: View {
     let availability: MentorStatus.Availability
 
     var body: some View {
-        HStack(spacing: 5) {
-            Circle().fill(color).frame(width: 7, height: 7)
-            Text(availability.label)
-                .font(.caption.weight(.semibold))
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 2)
-        .background(color.opacity(0.15), in: Capsule())
+        StatusBadge(text: availability.label, tint: color, symbol: "circle.fill")
     }
 
     private var color: Color {
@@ -1022,7 +1005,7 @@ private struct CallLogList: View {
         .overlay {
             if calls.isEmpty {
                 ContentUnavailableView(
-                    "No model calls yet",
+                    "No Model Calls Yet",
                     systemImage: "sparkles",
                     description: Text("Each call appears here with its prompt size, tokens, cost, and latency.")
                 )
@@ -1047,10 +1030,8 @@ private struct CallLogRow: View {
                 }
             }
             .frame(width: 60, alignment: .leading)
-            Text(call.tier.label)
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(tierColor)
-                .frame(width: 78, alignment: .leading)
+            StatusBadge(text: call.tier.label, tint: tierColor)
+                .frame(width: 100, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(call.outcome.label)
@@ -1074,6 +1055,7 @@ private struct CallLogRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 5)
+        .accessibilityElement(children: .combine)
     }
 
     /// Each number stays on the line with its unit, and "not billed" stays whole,
@@ -1094,7 +1076,7 @@ private struct CallLogRow: View {
         case .mentor: .purple
         case .followUp: .teal
         case .understanding: .teal
-        case .test: .secondary
+        case .test: .gray
         }
     }
 }
@@ -1102,13 +1084,7 @@ private struct CallLogRow: View {
 /// Marks a call answered from a recording.
 private struct ReplayTag: View {
     var body: some View {
-        Text("Replay")
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(.teal)
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(Color.teal.opacity(0.15), in: Capsule())
-            .fixedSize()
+        StatusBadge(text: "Replay", tint: .teal)
             .help("Answered from a recording: never sent and never billed")
     }
 }
