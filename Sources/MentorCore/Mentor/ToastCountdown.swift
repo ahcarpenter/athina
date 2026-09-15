@@ -34,20 +34,9 @@ public struct ToastCountdown: Equatable, Sendable {
         self.deadline = nil
     }
 
-    /// Runs a held countdown again with what it had left.
-    public mutating func resume(from now: Date) {
-        guard let held else { return }
-        run(for: held, from: now)
-    }
-
     /// Turns the countdown off: the toast stays until it is closed.
     public mutating func cancel() {
         deadline = nil
         held = nil
-    }
-
-    /// Whether a running countdown has reached its deadline.
-    public func hasExpired(at now: Date) -> Bool {
-        deadline.map { now >= $0 } ?? false
     }
 }
