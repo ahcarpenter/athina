@@ -24,6 +24,16 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
         Permission.required.contains(self)
     }
 
+    /// Screen Recording and Accessibility are switched on in System Settings;
+    /// the system's own request for them only points there. Microphone and
+    /// Speech Recognition are answered in the system's Allow alert.
+    public var isGrantedInSystemSettings: Bool {
+        switch self {
+        case .screenRecording, .accessibility: true
+        case .microphone, .speechRecognition: false
+        }
+    }
+
     public var title: String {
         switch self {
         case .screenRecording: "Screen Recording"
@@ -36,13 +46,13 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
     public var purpose: String {
         switch self {
         case .screenRecording:
-            "Lets Mentor capture the display you are working on at a low, change-driven cadence and read its text on this Mac. Frames stay in the local journal; only the latest screenshot goes to the mentor model, and Settings > Mentor can turn that off."
+            "Lets Mentor capture the display you are working on when what you are doing changes, and read its text on this Mac. Frames stay in the local journal. Only the latest screenshot goes to the mentor model, and Models settings can turn that off."
         case .accessibility:
-            "Lets Mentor read the focused app, window title, and focused element of the app you are using, so it knows what you are working on without guessing from pixels."
+            "Lets Mentor read the app, window title, and focused element you are using, so it knows what you are working on without guessing from pixels."
         case .microphone:
-            "Lets Mentor hear you while you hold the talk-back key, and only then. Audio never leaves this Mac and is not stored."
+            "Lets Mentor hear you while you hold the talk-back shortcut, and only then. Audio never leaves this Mac, and Mentor does not store it."
         case .speechRecognition:
-            "Lets Mentor turn what you said into text on this Mac, with Apple's on-device recognizer and never its servers. The words go to the mentor model as your follow-up question."
+            "Lets Mentor turn what you say into text on this Mac, with Apple's on-device recognizer and never its servers. When you ask a question, those words go to the mentor model."
         }
     }
 
@@ -90,8 +100,39 @@ public struct PermissionStatus: Equatable, Sendable {
     }
 }
 
+/// The one action the Permissions window offers for a permission, so the
+/// window explains first and asks only when the person chooses to.
+public enum PermissionAction: Equatable, Sendable {
+    /// Granted: there is nothing to do.
+    case none
+    /// The system has not asked yet: the button brings up its Allow alert.
+    case request
+    /// The answer lives in System Settings: the button registers Mentor in
+    /// the matching list and opens that pane.
+    case openSystemSettings
+
+    public static func `for`(_ permission: Permission, granted: Bool, undetermined: Bool) -> PermissionAction {
+        if granted { return .none }
+        if permission.isGrantedInSystemSettings { return .openSystemSettings }
+        return undetermined ? .request : .openSystemSettings
+    }
+}
+
 /// Reads and requests the permissions Mentor uses.
 public enum PermissionProbe {
+    /// Whether the system has never asked about this permission. Only the
+    /// alert-based pair can say; the System Settings pair reports false.
+    public static func isUndetermined(_ permission: Permission) -> Bool {
+        switch permission {
+        case .screenRecording, .accessibility:
+            false
+        case .microphone:
+            AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined
+        case .speechRecognition:
+            SFSpeechRecognizer.authorizationStatus() == .notDetermined
+        }
+    }
+
     public static func current() -> PermissionStatus {
         PermissionStatus(
             screenRecording: CGPreflightScreenCaptureAccess(),

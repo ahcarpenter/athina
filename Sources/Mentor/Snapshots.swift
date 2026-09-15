@@ -20,31 +20,43 @@ enum Snapshots {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let state = AppState.sample()
         let replay = AppState.sampleReplay()
+        let empty = AppState.sampleEmpty()
+        let atCap = AppState.sampleAtContextCap()
+        let noSpeech = AppState.sample(speechAvailability: .unavailable(reason: "On-device speech recognition is not available for Welsh, so talking back is off."))
+        let pane = CGSize(width: SettingsView.paneWidth, height: 640)
+        // Render windows are not held to a display's height, so a pane that
+        // scrolls in the Settings window renders whole.
+        func whole(_ height: CGFloat) -> CGSize { CGSize(width: SettingsView.paneWidth, height: height) }
         let specs: [(name: String, size: CGSize, view: AnyView, state: AppState)] = [
-            ("permissions", CGSize(width: 560, height: 760), AnyView(PermissionsView()), state),
+            ("permissions", CGSize(width: 580, height: 780), AnyView(PermissionsView()), state),
             ("debug-panel", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), state),
             ("debug-panel-calls", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), state),
-            // The Mentor tab is longer than any window macOS will open, so it
-            // renders as tall as a screen allows and the sections below its
-            // fold, the contexts and the understanding, get renders of their own.
-            ("settings-mentor", CGSize(width: 600, height: 1040), AnyView(SettingsView(initialTab: .mentor)), state),
-            ("settings-mentor-contexts", CGSize(width: 600, height: 800), AnyView(MentorshipContextsPreview()), state),
-            ("settings-mentor-voice", CGSize(width: 600, height: 520), AnyView(VoiceSectionPreview()), state),
-            ("settings-understanding", CGSize(width: 600, height: 420), AnyView(SampleUnderstandingSettings()), state),
-            ("settings-cadence", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .cadence)), state),
-            ("settings-frames", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .frames)), state),
-            ("settings-journal", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .journal)), state),
-            ("settings-privacy", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .privacy)), state),
+            ("debug-panel-empty", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), empty),
+            ("settings-general", whole(860), AnyView(GeneralSettings().formStyle(.grouped)), state),
+            ("settings-contexts", pane, AnyView(ContextsSettings().formStyle(.grouped)), state),
+            ("settings-contexts-empty", CGSize(width: SettingsView.paneWidth, height: 420), AnyView(ContextsSettings().formStyle(.grouped)), empty),
+            ("settings-contexts-at-cap", whole(1200), AnyView(ContextsSettings().formStyle(.grouped)), atCap),
+            ("settings-context-editor", CGSize(width: 520, height: 360), AnyView(SampleContextEditor(duplicate: false)), state),
+            ("settings-context-editor-duplicate", CGSize(width: 520, height: 360), AnyView(SampleContextEditor(duplicate: true)), state),
+            ("settings-status-messages", CGSize(width: SettingsView.paneWidth, height: 760), AnyView(StatusMessagesPreview()), noSpeech),
+            ("settings-models", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), state),
+            ("settings-models-empty", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), empty),
+            ("settings-capture", whole(920), AnyView(CaptureSettings().formStyle(.grouped)), state),
+            ("settings-journal", CGSize(width: SettingsView.paneWidth, height: 500), AnyView(JournalSettings().formStyle(.grouped)), state),
+            ("settings-privacy", pane, AnyView(PrivacySettings().formStyle(.grouped)), state),
             // The side-effect suggestion, so the goal it was judged against shows.
             ("history", CGSize(width: 860, height: 520), AnyView(HistoryView(initialSelection: 5)), state),
-            ("toast", CGSize(width: ToastController.width + 2, height: 170), AnyView(SampleToast(expanded: false)), state),
-            ("toast-expanded", CGSize(width: ToastController.width + 2, height: 420), AnyView(SampleToast(expanded: true)), state),
-            ("toast-listening", CGSize(width: ToastController.width + 2, height: 260), AnyView(SampleToast(expanded: false, talkBack: .listening(partial: "does that work with tags as"), suggestionID: 4)), state),
-            ("toast-answered", CGSize(width: ToastController.width + 2, height: 360), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: Date(), suggestionID: 4), suggestionID: 4)), state),
+            ("history-empty", CGSize(width: 860, height: 520), AnyView(HistoryView()), empty),
+            ("toast", CGSize(width: ToastController.panelWidth, height: 200), AnyView(SampleToast(expanded: false)), state),
+            ("toast-expanded", CGSize(width: ToastController.panelWidth, height: 460), AnyView(SampleToast(expanded: true)), state),
+            ("toast-listening", CGSize(width: ToastController.panelWidth, height: 300), AnyView(SampleToast(expanded: false, talkBack: .listening(partial: "does that work with tags as"), suggestionID: 4)), state),
+            ("toast-thinking", CGSize(width: ToastController.panelWidth, height: 300), AnyView(SampleToast(expanded: false, talkBack: .thinking(question: "does that work with tags as well"), suggestionID: 4)), state),
+            ("toast-answered", CGSize(width: ToastController.panelWidth, height: 400), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: Date(), suggestionID: 4), suggestionID: 4)), state),
+            ("toast-note", CGSize(width: ToastController.panelWidth, height: 120), AnyView(SampleToastNote()), state),
             ("callout", CGSize(width: 900, height: 620), AnyView(SampleCallout()), state),
             ("debug-panel-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), replay),
             ("debug-panel-calls-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
-            ("settings-mentor-replay", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .mentor)), replay),
+            ("settings-models-replay", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), replay),
         ]
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             for spec in specs {
@@ -59,10 +71,18 @@ enum Snapshots {
         let hosting = NSHostingView(rootView: view)
         hosting.sizingOptions = []
         hosting.wantsLayer = true
+        // On a display, so the window server composites glass and control
+        // bezels, but below the desktop picture, so nothing appears on a screen
+        // someone else is using. ScreenCaptureKit captures a window whatever
+        // covers it.
         let window = NSWindow(
             contentRect: CGRect(origin: CGPoint(x: 40, y: 80), size: size),
-            styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false
+            styleMask: [.borderless], backing: .buffered, defer: false
         )
+        window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
+        window.ignoresMouseEvents = true
+        window.collectionBehavior = [.stationary, .ignoresCycle]
+        window.hasShadow = false
         window.appearance = NSAppearance(named: appearance)
         window.contentView = hosting
         window.isReleasedWhenClosed = false
@@ -153,11 +173,15 @@ enum Snapshots {
 
 extension AppState {
     /// Realistic data for snapshots and previews. Nothing here touches the pipeline.
-    static func sample() -> AppState {
+    static func sample(speechAvailability: SpeechListener.Availability = .available(locale: "English (US)")) -> AppState {
         var settings = SensingSettings()
         settings.mentor.onlyMentorInsideContexts = true
         settings.mentor.contexts = SampleSuggestions.contexts
-        let state = AppState(sampleWithSettings: settings)
+        // The oldest sample suggestion was answered Never for This.
+        settings.mentor.neverRules = [
+            NeverRule(bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .correctness, createdAt: Date().addingTimeInterval(-7990)),
+        ]
+        let state = AppState(sampleWithSettings: settings, speechAvailability: speechAvailability)
         let now = Date()
         let focus = FocusContext(
             timestamp: now,
@@ -285,6 +309,29 @@ extension AppState {
 }
 
 extension AppState {
+    /// A state with nothing in it yet: no suggestions, frames, journal
+    /// entries, calls, or declared contexts, for the empty states.
+    static func sampleEmpty() -> AppState {
+        var settings = SensingSettings()
+        settings.mentor.onlyMentorInsideContexts = true
+        let state = AppState(sampleWithSettings: settings)
+        state.mode = .watching
+        state.mentorStatus = MentorStatus(availability: .noAPIKey)
+        return state
+    }
+
+    /// Every context slot declared, for the editor's limit state.
+    static func sampleAtContextCap() -> AppState {
+        var settings = SensingSettings()
+        settings.mentor.onlyMentorInsideContexts = true
+        settings.mentor.contexts = (1...ContextRules.maxContexts).map { index in
+            index <= SampleSuggestions.contexts.count
+                ? SampleSuggestions.contexts[index - 1]
+                : MentorshipContext(name: "sample context \(index)")
+        }
+        return AppState(sampleWithSettings: settings)
+    }
+
     /// The sample in replay mode: every call in the log answered from the
     /// committed fixtures and nothing billed.
     static func sampleReplay() -> AppState {
@@ -323,35 +370,59 @@ extension AppState {
     }
 }
 
-/// The mentorship contexts section on its own, because the Mentor tab is
-/// taller than any window it would otherwise be rendered in.
-struct MentorshipContextsPreview: View {
+/// The context editor sheet's content: editing the first sample context, or
+/// adding one whose name another context already uses.
+struct SampleContextEditor: View {
+    let duplicate: Bool
+
     var body: some View {
-        Form {
-            MentorshipContextsSection()
-        }
-        .formStyle(.grouped)
+        ContextEditor(
+            context: duplicate ? MentorshipContext(name: SampleSuggestions.contexts[0].name) : SampleSuggestions.contexts[0],
+            existing: SampleSuggestions.contexts
+        ) { _ in }
     }
 }
 
-/// The voice section on its own, for the same reason.
-struct VoiceSectionPreview: View {
+/// Every inline status message the Settings panes can show, in one form, so
+/// the transient ones (a connection test, a refused shortcut, recording a
+/// shortcut, recognition unavailable) have renders too.
+struct StatusMessagesPreview: View {
+    @State private var shortcut: HotKey? = HotKey(keyCode: 17, modifiers: [.control, .option, .command])
+
     var body: some View {
         Form {
+            Section("Connection") {
+                LabeledContent("Testing") { ConnectionResult(testing: true, result: nil, replayed: false) }
+                LabeledContent("Connected") { ConnectionResult(testing: false, result: .success("claude-haiku-4-5-20251001"), replayed: false) }
+                LabeledContent("Replayed") { ConnectionResult(testing: false, result: .success("claude-haiku-4-5-20251001"), replayed: true) }
+                LabeledContent("Failed") { ConnectionResult(testing: false, result: .failure(.api(status: 401, type: "authentication_error", message: "invalid x-api-key")), replayed: false) }
+                StatusLabel("Paste the whole key. It is one word with no spaces.", kind: .error)
+            }
+            Section("Shortcuts") {
+                LabeledContent("Recording") {
+                    HotKeyRecorder(title: "Talk-back shortcut", hotKey: $shortcut, previewRecording: true)
+                }
+                LabeledContent("Refused") {
+                    HotKeyRecorder(title: "Talk-back shortcut", hotKey: $shortcut, previewRefusal: "That is the pause shortcut.")
+                }
+                StatusLabel("Another app uses this combination, or it lacks Control, Option, or Command. Choose another.", kind: .warning)
+            }
             VoiceSection()
         }
         .formStyle(.grouped)
     }
 }
 
-/// The Understanding settings section on its own, so it is reviewable without
-/// scrolling the Mentor tab past what a window can show.
-struct SampleUnderstandingSettings: View {
+/// The note the toast shows on its own, for a talk-back press with nothing to reply to.
+struct SampleToastNote: View {
     var body: some View {
-        Form {
-            UnderstandingSection()
+        let model = ToastModel()
+        model.note = "Nothing to reply to yet: Mentor has not made a suggestion."
+        return VStack(spacing: 0) {
+            ToastView(model: model, onAction: { _ in })
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
-        .formStyle(.grouped)
     }
 }
 
