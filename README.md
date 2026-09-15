@@ -30,7 +30,7 @@ Halt-and-redirect and learned suppression are later phases.
 ```sh
 make build            # builds build/Mentor.app from the SwiftPM binary
 make run              # builds, quits a running copy, and launches the app
-make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend
+make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
 make record           # the same, live, writing every model call to a fixture file (spends API credits)
 make clear-recordings # deletes the app's own recordings directory
 make fixture-status   # checks that the committed fixtures are current (fails when not), with no network
@@ -50,7 +50,8 @@ and never reads the keychain. Replay mode has renders of its own.
 `open build/Mentor.app --args --open debug` (or `settings`, `settings:mentor`,
 `permissions`, `history`) launches the app with that window already open, which
 is how the live panel gets screenshotted from a shell. `--replay <dir>` and
-`--record [<dir>]` choose where model calls go; see Iterating without the
+`--record [<dir>]` choose where model calls go, and `--time-scale <n>` and
+`--advance-clock <interval>` set a replay's clock; see Iterating without the
 network.
 
 ### Setup: the Anthropic API key
@@ -114,6 +115,7 @@ change makes it stale, and the separate live check of the models' answers.
 make run-replay                                   # the committed fixtures
 make run-replay REPLAY_DIR=~/Library/Application\ Support/mentor/recordings
 make run-replay ALLOW_STALE=1                     # also serve stale fixtures, see below
+make run-replay TIME_SCALE=60                     # on a clock 60 times real time, see A faster clock
 open build/Mentor.app --args --replay <dir> --open debug
 ```
 
@@ -166,6 +168,70 @@ prompt version re-records the committed set live in the same change (see The
 committed fixtures). `--allow-stale-fixtures` (`make run-replay ALLOW_STALE=1`)
 serves stale fixtures anyway, and is only for replaying locally while
 iterating on prompts.
+
+### A faster clock
+
+Replay takes away the model's cost and latency, not the clock. A refresh that
+comes due after fifteen minutes of use, a Not now that lasts an hour, the spend
+hour, and a new day all still take that long. So every time-based behavior in
+Mentor reads one time source, `MentorClock`
+(`Sources/MentorCore/System/MentorClock.swift`): the dates the journal is
+stamped with and the gates compare, the time awake a refresh counts, and every
+wait (a toast's countdown, the callout check, the sensing cadence and idle
+threshold, the talk-back timers, a replayed call's latency). The shipped app
+runs on `SystemClock`, which is `ContinuousClock` and `Date`, so a live run is
+exactly what it was. A replay runs on a clock of its own that a scripted check
+can compress:
+
+```sh
+make run-replay TIME_SCALE=60
+open build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1d --open debug
+```
+
+- `--time-scale <n>` runs the replay's clock n times faster than real time,
+  from 1 to 100. Everything above shrinks with it: at 60x the fifteen-minute
+  refresh comes due after fifteen seconds of use and a toast expires after one.
+  So does the idle threshold, so raise Settings > Cadence > Idle after for the
+  session, or keep input arriving, or sensing goes idle after a second. Timers
+  paced for a person shrink too: at 60x a held talk-back key is cut off after
+  half a second, so talk back to a scaled replay through the Talk back field.
+  A capture still takes its real time, so at a high scale one is nearly always
+  in flight, and a change moment that lands during one can be missed; use a
+  low scale around window switches and the advance directives below for long
+  waits.
+- `--advance-clock <interval>` starts the clock that far ahead: `90s`, `15m`,
+  `2h`, `1d12h`, up to `30d`.
+- The debug panel's Mentor card has an **Advance** field (accessibility label
+  "Advance clock"): type an interval and press Return, and the clock moves
+  ahead at once, as if that much time went by with the Mac awake in the mode
+  Mentor is in; the seconds since the last input are the system's, so moving
+  ahead never makes sensing idle by itself. Every wait due in it ends: a toast expires, a snooze or the
+  spend cap releases, the next capture falls due. While watching it counts as
+  active use toward the next refresh; while paused or idle it counts nothing;
+  and past midnight the next observation expires the understanding.
+
+A replay's clock never starts behind its own journal. A faster or advanced
+session leaves rows stamped ahead of real time, so a relaunch carries on from
+the newest of them, then moves `--advance-clock` further, rather than going
+back in time. Delete the replay directory to start from real time again.
+
+The menu bar and the debug panel's Replay badges read **Replay 60x** while the
+clock is scaled, and the menu's Clock line and the Mentor card's Clock field
+say how fast it runs, how far it was moved ahead, and, in the card, the date it
+reads. A launch that asked for a replay it could not start keeps the replay's
+journal, and so its clock. Either flag on a live or recording launch, or with a
+value it cannot use, is refused: the app runs on real time, and the menu, the
+Mentor card, and the log say why, so a live or recording run can never use a
+controlled clock.
+
+The tests run on the same kind of clock with no real time at all: an
+`AdjustableClock` made with a start date stands still until a test advances
+it, a sleep on it ends exactly when an advance reaches its deadline, and
+`waitForSleepers` lets a test advance it only once the code it drives is
+waiting. No test sleeps: a refresh after fifteen minutes of use across a pause
+and a closed lid, a snooze running out, the spend cap releasing at the top of
+the hour, a toast's paused countdown, a callout aging out, and expiry at a new
+day are each proven in milliseconds.
 
 ### Record
 
@@ -308,9 +374,10 @@ Sources/MentorCore            library, fully testable
                               rendering, and expiry), Suggestion, FollowUp and ModelCallRecord, Callout
                               (CalloutRegion, CalloutAnchor: frame-to-screen mapping and every rule that
                               refuses a callout), TalkBack (TranscriptMatcher, FollowUp, TalkBackState),
-                              MentorLoop (orchestration)
+                              ToastCountdown (a toast's countdown, held and resumed), MentorLoop (orchestration)
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
-                              ProcessResources (CPU, memory)
+                              ProcessResources (CPU, memory), MentorClock (the one time source: SystemClock,
+                              and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
 Sources/Mentor                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
                               (on-device speech recognition), HotKeyCenter (Carbon, press and release),
@@ -849,25 +916,32 @@ capture with reason, seconds since input, spend this hour against the cap, and
 the app's own CPU and memory. While calls are replayed or recorded, the status
 bar and the Mentor card carry a Replay or Recording badge, the card says where
 calls go (for a replay, the fixtures by kind and their directory, and any stale
-ones), and each replayed call in the log is tagged Replay and not billed.
+ones), and each replayed call in the log is tagged Replay and not billed. When
+a replay's clock runs faster the badge says how much (Replay 60x), and the
+Mentor card shows what the clock reads and has the Advance field that moves it
+ahead (see A faster clock).
 
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs `swift test`, the bundle script, and
 `Mentor --snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the
 macOS 26 SDK this package targets, and uploads the rendered PNGs, replay-mode
-renders included, as the `ui-snapshots` artifact. The tests exercise the pure
+renders on a scaled clock included, as the `ui-snapshots` artifact. The tests
+run on a test clock and never sleep, so the whole suite takes well under a
+second. They exercise the pure
 parts (hashing, cadence, journal, retention and its in-place migration,
 settings, the mentor scheduler and every gate, mentorship context rules and
 placement, spend accounting, snooze and never-for-this rules per category, the
 rolling window, the understanding's encoding, versioning, bounding and expiry,
 prompt assembly with and without one, request and response coding against
 fixture JSON, recording, redaction, replay matching and stale refusal, launch
-flags, a replay's separate files, callout mapping and every anchor rejection,
+flags, a replay's separate files, the clocks and a replay's clock flags, the
+toast countdown, callout mapping and every anchor rejection, a callout aging out,
 transcript matching, the follow-up prompt and gate, the toast rule for voice
 input, the whole loop against a scripted client, follow-ups included, and the
 whole loop against the committed replay fixtures, replayed strictly, a region
-and a follow-up answer included) and Vision OCR on a drawn bitmap, so they need
+and a follow-up answer included, and every time-based behavior of the loop on
+the test clock) and Vision OCR on a drawn bitmap, so they need
 no permissions, display, network, microphone, or API key. A committed fixture
 that is stale, or a tier with no committed fixture, fails the run (see The
 committed fixtures). The snapshot run covers the callout over the sample frame,

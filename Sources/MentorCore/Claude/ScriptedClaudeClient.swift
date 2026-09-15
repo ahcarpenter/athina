@@ -17,9 +17,13 @@ public actor ScriptedClaudeClient: ClaudeClient {
     public private(set) var sent: [Sent] = []
     /// Optional delay per call, to test in-flight behavior.
     public var delay: Duration = .zero
+    /// What the delay is waited out on: a test clock holds a call in flight
+    /// until the test advances it.
+    private let clock: any MentorClock
 
-    public init(responses: [Result<MessagesResponse, ClaudeClientError>] = []) {
+    public init(responses: [Result<MessagesResponse, ClaudeClientError>] = [], clock: any MentorClock = SystemClock()) {
         queue = responses
+        self.clock = clock
     }
 
     public func enqueue(_ response: Result<MessagesResponse, ClaudeClientError>) {
@@ -40,7 +44,7 @@ public actor ScriptedClaudeClient: ClaudeClient {
     public func send(_ request: MessagesRequest, call: CallIdentity, apiKey: String, timeout: TimeInterval) async throws -> MessagesResponse {
         sent.append(Sent(request: request, call: call, apiKey: apiKey, timeout: timeout))
         if delay > .zero {
-            try? await Task.sleep(for: delay)
+            try? await clock.sleep(for: delay)
         }
         guard !queue.isEmpty else {
             throw ClaudeClientError.transport("scripted client has no response queued")

@@ -20,6 +20,12 @@ final class ToastController {
     private var model = ToastModel()
     private var outsideClickMonitors: [Any] = []
     private var noteTask: Task<Void, Never>?
+    /// What a note's time on screen is waited out on.
+    private let clock: any MentorClock
+
+    init(clock: any MentorClock) {
+        self.clock = clock
+    }
 
     var isShowingSuggestion: Bool { model.suggestion != nil && (panel?.isVisible ?? false) }
 
@@ -80,8 +86,9 @@ final class ToastController {
         if model.suggestion == nil {
             present()
         }
+        let clock = clock
         noteTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(ToastController.noteDuration))
+            try? await clock.sleep(for: .seconds(ToastController.noteDuration))
             guard !Task.isCancelled, let self, self.model.note == text else { return }
             self.model.note = nil
             if self.model.suggestion == nil {

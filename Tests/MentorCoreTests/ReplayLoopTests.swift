@@ -6,7 +6,7 @@ import Testing
 /// nothing, never touch the key or the live files, and the committed fixture
 /// set carries the whole path from triage to a suggestion and its feedback,
 /// the understanding each mentor reply rewrites, and a periodic refresh.
-@Suite struct ReplayLoopTests {
+@Suite(.timeLimit(.minutes(1))) struct ReplayLoopTests {
     /// Counts reads, so a test can prove the keychain is never asked.
     private final class CountingKeyStore: KeyStore, @unchecked Sendable {
         private let lock = NSLock()
@@ -21,56 +21,66 @@ import Testing
     }
 
     private struct Harness {
+        let clock: AdjustableClock
         let loop: MentorLoop
         let input: AsyncStream<SensingEvent>.Continuation
         let output: AsyncStream<MentorEvent>
+        /// Everything the loop publishes, for waiting on its state without polling.
+        private let updates: AsyncStream<MentorEvent>
 
-        /// On a calendar where this instant is noon, so an understanding
-        /// written moments ago is never expired by a day turning over mid-test.
-        init(journal: Journal, client: any ClaudeClient, keyStore: any KeyStore = InMemoryKeyStore(), settings: MentorSettings = MentorSettings()) async {
+        /// On a test clock started at noon on the UTC calendar the loop is
+        /// given, so an understanding written moments ago is never expired by
+        /// a day turning over mid-test.
+        init(
+            journal: Journal, client: any ClaudeClient, keyStore: any KeyStore = InMemoryKeyStore(), settings: MentorSettings = MentorSettings(),
+            clock: AdjustableClock = AdjustableClock(startingAt: MentorLoopTests.Harness.start)
+        ) async {
+            self.clock = clock
             let (stream, continuation) = AsyncStream<SensingEvent>.makeStream()
             input = continuation
             loop = MentorLoop(
                 settings: settings, journal: journal, client: client, keyStore: keyStore, events: stream,
-                calendar: MentorLoopTests.middayCalendar
+                clock: clock, calendar: MentorLoopTests.calendar
             )
             output = await loop.events()
+            updates = await loop.events()
             await loop.start()
             input.yield(.modeChanged(.watching))
+            await waitUntil { $0.mode == .watching }
         }
 
-        /// Sends an observation and waits until the loop has gated it and
-        /// finished every call it started for it.
+        /// Sends an observation a millisecond after whatever came before it
+        /// and waits, on the events the loop publishes, until it has gated it
+        /// through the refresh gate, which runs last, and finished every call
+        /// it started for it.
         func observe(_ observation: ActivityObservation, calls: @Sendable () async -> Int, expectCalls: Int) async {
+            clock.advance(by: .milliseconds(1))
+            let sentAt = clock.date
             input.yield(.observation(observation))
-            for _ in 0..<250 {
-                let status = await loop.currentStatus()
-                if status.lastGate?.observationID == observation.id, status.inFlight == nil, await calls() >= expectCalls {
-                    return
-                }
-                try? await Task.sleep(for: .milliseconds(20))
+            await waitUntil { status in
+                status.lastGate?.observationID == observation.id && status.inFlight == nil
+                    && MentorLoopTests.Harness.refreshGateRan(status, since: sentAt)
+            } calls: {
+                await calls() >= expectCalls
             }
         }
 
-        /// The next suggestion the loop publishes, or nil when none arrives
-        /// within `timeout`, even while the stream stays open.
-        func nextSuggestion(within timeout: Duration = .seconds(5)) async -> Suggestion? {
-            let output = output
-            return await withTaskGroup(of: Suggestion?.self) { group in
-                group.addTask {
-                    for await event in output {
-                        if case .suggestion(let suggestion) = event { return suggestion }
-                    }
-                    return nil
-                }
-                group.addTask {
-                    try? await Task.sleep(for: timeout)
-                    return nil
-                }
-                let first = await group.next() ?? nil
-                group.cancelAll()
-                return first
+        /// Waits until `condition` holds of the loop's status and `calls`
+        /// does, checking again after every event the loop publishes.
+        func waitUntil(_ condition: (MentorStatus) -> Bool, calls: () async -> Bool = { true }) async {
+            var events = updates.makeAsyncIterator()
+            while true {
+                if condition(await loop.currentStatus()), await calls() { return }
+                guard await events.next() != nil else { return }
             }
+        }
+
+        /// The next suggestion the loop publishes.
+        func nextSuggestion() async -> Suggestion? {
+            for await event in output {
+                if case .suggestion(let suggestion) = event { return suggestion }
+            }
+            return nil
         }
     }
 
@@ -105,7 +115,7 @@ import Testing
 
         // No key is saved, and none is needed.
         #expect(await h.loop.currentStatus().availability == .ready)
-        await h.observe(Fixtures.observation(id: 1, at: Date()), calls: { await client.served.count }, expectCalls: 2)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), calls: { await client.served.count }, expectCalls: 2)
         let suggestion = try #require(await h.nextSuggestion())
         #expect(suggestion.title == "Rename them in one go")
         #expect(suggestion.model == "claude-sonnet-5")
@@ -220,7 +230,7 @@ import Testing
         try SettingsStore(url: SettingsStore.defaultURL(in: live)).save(liveSettings)
         let liveJournal = try Journal(url: Journal.defaultURL(in: live))
         try await liveJournal.record(ModelCallRecord(
-            timestamp: Date(), tier: .triage, model: "claude-haiku-4-5-20251001", promptVersion: MentorPrompts.version,
+            timestamp: MentorLoopTests.Harness.start, tier: .triage, model: "claude-haiku-4-5-20251001", promptVersion: MentorPrompts.version,
             promptCharacters: 10, imageBytes: 0, usage: Usage(inputTokens: 900), cost: 0.001, latency: 0.1, outcome: .candidate, detail: "live"
         ))
         let before = try Self.files(in: live)
@@ -239,11 +249,11 @@ import Testing
         let journal = try Journal(url: Journal.defaultURL(in: replay))
         let client = ReplayClaudeClient(entries: Self.candidateAndSuggestion)
         let h = await Harness(journal: journal, client: client, settings: settings.mentor)
-        await h.observe(Fixtures.observation(id: 1, at: Date()), calls: { await client.served.count }, expectCalls: 2)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), calls: { await client.served.count }, expectCalls: 2)
         let suggestion = try #require(await h.nextSuggestion())
         #expect(await h.loop.recordFeedback(suggestionID: suggestion.id, feedback: .never)?.feedback == .never)
         settings.mentor.neverRules = SuppressionRules.adding(
-            NeverRule(bundleID: suggestion.bundleID, appName: suggestion.appName, category: suggestion.category, createdAt: Date()),
+            NeverRule(bundleID: suggestion.bundleID, appName: suggestion.appName, category: suggestion.category, createdAt: h.clock.date),
             to: settings.mentor.neverRules
         )
         try store.save(settings)
@@ -414,19 +424,20 @@ import Testing
         var nextMentor = 0
         var shown: [Suggestion] = []
         var lastHarness: Harness?
+        let clock = AdjustableClock(startingAt: MentorLoopTests.Harness.start)
         // Every triage recording, then the first again: past the last
         // recording the cycle starts over.
         let walk = Array(triageEntries.enumerated()) + [(triageEntries.count, triageEntries[0])]
         for (index, entry) in walk {
             // A fresh loop per moment, on one journal and one client, so the
             // debounce never holds a moment and the cycle carries on.
-            let h = await Harness(journal: journal, client: client, settings: settings)
+            let h = await Harness(journal: journal, client: client, settings: settings, clock: clock)
             let verdict = try #require((try? entry.fixture.result.get()).flatMap { MentorLoop.decode(TriageVerdict.self, from: $0) })
             let standing = await h.loop.currentUnderstanding()
             let before = await client.served.count
             let expected = before + (verdict.worthALook ? 2 : 1)
             await h.observe(
-                Fixtures.observation(id: Int64(index + 1), at: Date(), window: "moment \(index)", text: "moment \(index)"),
+                Fixtures.observation(id: Int64(index + 1), at: clock.date, window: "moment \(index)", text: "moment \(index)"),
                 calls: { await client.served.count }, expectCalls: expected
             )
             let served = await client.served
@@ -509,28 +520,26 @@ import Testing
         // since, so the refresh is due.
         let journal = try Journal.inMemory()
         let activeUse = settings.understandingRefreshInterval + 60
+        let clock = AdjustableClock(startingAt: MentorLoopTests.Harness.start)
         let written = try await journal.record(UnderstandingRecord.first(
             content: Understanding(
                 goals: [Understanding.Goal(goal: "rename the trip photos", evidence: "a list of mv commands", confidence: 0.7)],
                 timeline: ["opened the rename list"]
             ),
-            at: Date().addingTimeInterval(-activeUse),
+            at: clock.date.addingTimeInterval(-activeUse),
             model: "claude-sonnet-5", source: .mentorCall, cost: 0, promptVersion: MentorPrompts.version
         ))
         try await journal.storeRefreshPeriod(RefreshPeriod(
             startedAt: written.updatedAt, activeUse: activeUse, countedAt: written.updatedAt.addingTimeInterval(activeUse)
         ))
-        let h = await Harness(journal: journal, client: client, settings: settings)
+        let h = await Harness(journal: journal, client: client, settings: settings, clock: clock)
 
         // The floor cadence is not a change moment, so triage holds and only
         // the refresh gate can make a call.
         await h.observe(
-            Fixtures.observation(id: 1, at: Date(), reason: .floor),
+            Fixtures.observation(id: 1, at: clock.date, reason: .floor),
             calls: { await client.served.count }, expectCalls: 1
         )
-        for _ in 0..<250 where await h.loop.currentStatus().lastRefresh == nil {
-            try? await Task.sleep(for: .milliseconds(20))
-        }
 
         let served = await client.served
         #expect(served.map(\.call) == [CallIdentity(kind: ModelTier.understanding.rawValue, promptVersion: MentorPrompts.version)])

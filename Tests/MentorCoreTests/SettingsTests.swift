@@ -160,6 +160,7 @@ import Testing
 @Suite struct FocusContextTests {
     @Test func summaryDescribesWindowFocusAndText() {
         let context = FocusContext(
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000),
             pid: 1, bundleID: "com.apple.Safari", appName: "Safari", windowTitle: "Apple",
             focusedRole: "AXTextField", focusedTitle: "Search", focusedValue: "swift\nconcurrency", focusedValueLength: 17
         )
@@ -168,7 +169,7 @@ import Testing
     }
 
     @Test func excludedAndUnavailableSummaries() {
-        var context = FocusContext(pid: 1, bundleID: "com.1password.1password", appName: "1Password", isExcluded: true)
+        var context = FocusContext(timestamp: Date(timeIntervalSince1970: 1_700_000_000), pid: 1, bundleID: "com.1password.1password", appName: "1Password", isExcluded: true)
         #expect(context.summary == "1Password (excluded, not read)")
         context.isExcluded = false
         context.accessibilityAvailable = false

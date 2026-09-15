@@ -33,7 +33,12 @@ public final class FocusTracker {
         var name: String
     }
 
-    public nonisolated init() {}
+    /// Stamps each context read.
+    private let clock: any MentorClock
+
+    public nonisolated init(clock: any MentorClock) {
+        self.clock = clock
+    }
 
     public func setOnChange(_ handler: (@Sendable (FocusChange) -> Void)?) {
         onChange = handler
@@ -182,7 +187,7 @@ public final class FocusTracker {
     // MARK: Reading
 
     private func read(_ app: RunningApp) -> FocusContext {
-        var context = FocusContext(pid: app.pid, bundleID: app.bundleID, appName: app.name)
+        var context = FocusContext(timestamp: clock.date, pid: app.pid, bundleID: app.bundleID, appName: app.name)
         if ExcludedApps.matches(bundleID: app.bundleID, excluded: excludedBundleIDs) {
             context.isExcluded = true
             return context

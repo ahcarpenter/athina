@@ -44,13 +44,17 @@ public actor ReplayClaudeClient: ClaudeClient {
     public nonisolated let latency: Latency
     /// Set when the fixtures could not be loaded: every call is refused with it.
     public nonisolated let unavailableReason: String?
+    /// What a recorded latency is waited out on, so a replay on a faster
+    /// clock answers faster too.
+    private let clock: any MentorClock
     private var nextIndex: [String: Int] = [:]
     public private(set) var served: [Served] = []
 
-    public init(entries: [Entry], allowStale: Bool = false, latency: Latency = .immediate) {
+    public init(entries: [Entry], allowStale: Bool = false, latency: Latency = .immediate, clock: any MentorClock = SystemClock()) {
         self.entries = entries
         self.allowStale = allowStale
         self.latency = latency
+        self.clock = clock
         unavailableReason = nil
     }
 
@@ -58,6 +62,7 @@ public actor ReplayClaudeClient: ClaudeClient {
         entries = []
         allowStale = false
         latency = .immediate
+        clock = SystemClock()
         unavailableReason = reason
     }
 
@@ -69,12 +74,14 @@ public actor ReplayClaudeClient: ClaudeClient {
 
     /// Loads every fixture in `directory`. Throws when the directory or a
     /// fixture cannot be read, or when there is nothing to replay.
-    public static func load(from directory: URL, allowStale: Bool = false, latency: Latency = .immediate) throws -> ReplayClaudeClient {
+    public static func load(
+        from directory: URL, allowStale: Bool = false, latency: Latency = .immediate, clock: any MentorClock = SystemClock()
+    ) throws -> ReplayClaudeClient {
         let loaded = try CallFixtureFiles.load(from: directory)
         guard !loaded.isEmpty else { throw ReplayLoadError.empty(directory.path) }
         return ReplayClaudeClient(
             entries: loaded.map { Entry(name: $0.name, fixture: $0.fixture) },
-            allowStale: allowStale, latency: latency
+            allowStale: allowStale, latency: latency, clock: clock
         )
     }
 
@@ -101,7 +108,7 @@ public actor ReplayClaudeClient: ClaudeClient {
             ))
         }
         if latency == .recorded, entry.fixture.latency > 0 {
-            try await Task.sleep(for: .seconds(min(entry.fixture.latency, timeout)))
+            try await clock.sleep(for: .seconds(min(entry.fixture.latency, timeout)))
         }
         return try entry.fixture.result.get()
     }

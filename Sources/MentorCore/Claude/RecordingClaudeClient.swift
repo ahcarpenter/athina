@@ -14,37 +14,40 @@ public actor RecordingClaudeClient: ClaudeClient {
     public nonisolated let directory: URL
     private let inner: any ClaudeClient
     private let prices: PriceTable
+    /// Stamps each recording and times its call; a recording always runs on real time.
+    private let clock: any MentorClock
     /// The files written so far this run, oldest first.
     public private(set) var written: [URL] = []
 
-    public init(wrapping inner: any ClaudeClient, directory: URL, prices: PriceTable) {
+    public init(wrapping inner: any ClaudeClient, directory: URL, prices: PriceTable, clock: any MentorClock = SystemClock()) {
         self.inner = inner
         self.directory = directory
         self.prices = prices
+        self.clock = clock
     }
 
     public func send(_ request: MessagesRequest, call: CallIdentity, apiKey: String, timeout: TimeInterval) async throws -> MessagesResponse {
-        let started = Date()
-        let clock = ContinuousClock.now
+        let started = clock.date
         var thrown: (any Error)?
-        let result: Result<MessagesResponse, ClaudeClientError>
-        do {
-            result = .success(try await inner.send(request, call: call, apiKey: apiKey, timeout: timeout))
-        } catch let error as ClaudeClientError {
-            thrown = error
-            result = .failure(error)
-        } catch {
-            thrown = error
-            result = .failure(.transport(error.localizedDescription))
+        var result: Result<MessagesResponse, ClaudeClientError> = .failure(.transport("the call did not run"))
+        let elapsed = await clock.measure {
+            do {
+                result = .success(try await inner.send(request, call: call, apiKey: apiKey, timeout: timeout))
+            } catch let error as ClaudeClientError {
+                thrown = error
+                result = .failure(error)
+            } catch {
+                thrown = error
+                result = .failure(.transport(error.localizedDescription))
+            }
         }
-        let elapsed = ContinuousClock.now - clock
         let usage = (try? result.get().usage) ?? Usage()
         let fixture = CallFixture(
             identity: call,
             recordedAt: started,
             request: request,
             result: result,
-            latency: Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18,
+            latency: elapsed.timeInterval,
             cost: prices.cost(of: usage, model: request.model) ?? 0
         )
         do {

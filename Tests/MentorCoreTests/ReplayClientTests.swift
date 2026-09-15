@@ -140,21 +140,29 @@ import Testing
         #expect(!summary.allowStale)
     }
 
+    /// On a test clock: an immediate replay never waits on it, a recorded one
+    /// answers exactly when the clock reaches the recorded latency, and the
+    /// call's timeout caps that wait.
     @Test func recordedLatencyIsWaitedOutOnlyWhenAsked() async throws {
-        let entries = [Self.entry("t", kind: "triage", result: .success(Self.response("{}")), latency: 0.2)]
-        let clock = ContinuousClock()
-        let immediate = try await clock.measure {
-            _ = try await ReplayClaudeClient(entries: entries).send(Self.unrelatedRequest, call: Self.identity("triage"), apiKey: "", timeout: 30)
-        }
-        #expect(immediate < .milliseconds(150))
-        let recorded = try await clock.measure {
-            _ = try await ReplayClaudeClient(entries: entries, latency: .recorded).send(Self.unrelatedRequest, call: Self.identity("triage"), apiKey: "", timeout: 30)
-        }
-        #expect(recorded >= .milliseconds(190))
-        let capped = try await clock.measure {
-            _ = try await ReplayClaudeClient(entries: entries, latency: .recorded).send(Self.unrelatedRequest, call: Self.identity("triage"), apiKey: "", timeout: 0.01)
-        }
-        #expect(capped < .milliseconds(150))
+        let entries = [Self.entry("t", kind: "triage", result: .success(Self.response("{}")), latency: 20)]
+        let clock = AdjustableClock(startingAt: Date(timeIntervalSince1970: 1_789_000_000))
+        _ = try await ReplayClaudeClient(entries: entries, clock: clock)
+            .send(Self.unrelatedRequest, call: Self.identity("triage"), apiKey: "", timeout: 30)
+        #expect(clock.sleeperCount == 0)
+
+        let recorded = ReplayClaudeClient(entries: entries, latency: .recorded, clock: clock)
+        let answer = Task { try await recorded.send(Self.unrelatedRequest, call: Self.identity("triage"), apiKey: "", timeout: 30) }
+        await clock.waitForSleepers()
+        clock.advance(by: .seconds(19))
+        #expect(clock.sleeperCount == 1)
+        clock.advance(by: .seconds(1))
+        #expect(try await answer.value.text == "{}")
+
+        let capped = ReplayClaudeClient(entries: entries, latency: .recorded, clock: clock)
+        let cut = Task { try await capped.send(Self.unrelatedRequest, call: Self.identity("triage"), apiKey: "", timeout: 5) }
+        await clock.waitForSleepers()
+        clock.advance(by: .seconds(5))
+        #expect(try await cut.value.text == "{}")
     }
 
     @Test func aReplayThatCannotStartRefusesEveryCall() async throws {

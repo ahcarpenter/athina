@@ -310,7 +310,7 @@ import Testing
         #expect(result.followUpsDeleted == 1)
         #expect(result.deletedAnything)
         #expect(try await journal.recentFollowUps(limit: 10).map(\.question) == ["new"])
-        try await journal.clear()
+        try await journal.clear(at: t0)
         #expect(try await journal.recentFollowUps(limit: 10).isEmpty)
     }
 

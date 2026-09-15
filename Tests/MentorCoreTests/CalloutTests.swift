@@ -18,7 +18,7 @@ import Testing
     }
 
     private func liveFocus(pid: Int32 = 42, window title: String? = "main.swift", frame: CGRect? = nil) -> FocusContext {
-        FocusContext(pid: pid, bundleID: "com.apple.dt.Xcode", appName: "Xcode", windowTitle: title, windowFrame: frame ?? window)
+        FocusContext(timestamp: t0, pid: pid, bundleID: "com.apple.dt.Xcode", appName: "Xcode", windowTitle: title, windowFrame: frame ?? window)
     }
 
     private func live(
@@ -274,6 +274,34 @@ import Testing
         var later = live
         later.now = t0 + 200 + CalloutAnchor.maxFrameAge + 1
         #expect(CalloutAnchor.resolve(region, for: observation, live: later, confirmedAt: witness.confirmedAt) == .failure(.stale(age: CalloutAnchor.maxFrameAge + 1)))
+    }
+
+    /// The app checks a callout once a second on its clock. A near duplicate
+    /// a minute in confirms the screen, and the callout comes down the first
+    /// check after two minutes pass with nothing confirming it again.
+    @Test func aCalloutAgesOutOnTheClockOnceNothingConfirmsItsScreen() {
+        let clock = AdjustableClock(startingAt: t0)
+        var observation = Fixtures.observation(id: 1, at: t0, text: "one\ntwo\nthree")
+        observation.focus.windowFrame = CGRect(x: 0, y: 0, width: 2560, height: 1600)
+        var witness = CalloutWitness(region: spot, original: observation)
+        let region = CalloutRegion(rect: spot, note: "n")
+        var rejection: CalloutRejection?
+        while rejection == nil {
+            let live = CalloutAnchor.Live(
+                frontmostPID: 42, focus: observation.focus,
+                displays: [DisplayBounds(id: 1, bounds: observation.frame.screenRect)], now: clock.date
+            )
+            if case .failure(let reason) = CalloutAnchor.resolve(region, for: observation, live: live, confirmedAt: witness.confirmedAt) {
+                rejection = reason
+                break
+            }
+            if clock.date == t0 + 60 {
+                witness.noteDroppedCapture(at: clock.date)
+            }
+            clock.advance(by: .seconds(1))
+        }
+        #expect(rejection == .stale(age: CalloutAnchor.maxFrameAge + 1))
+        #expect(clock.date == t0 + 60 + CalloutAnchor.maxFrameAge + 1)
     }
 
     @Test func anotherWindowsFrameStopsConfirmationUntilAWitnessReturns() {

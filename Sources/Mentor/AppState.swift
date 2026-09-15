@@ -130,6 +130,18 @@ final class AppState {
     /// call is refused while it is set.
     var recordingUnavailableReason: String?
 
+    // MARK: Clock
+
+    /// Real time, or a replay's clock, from the launch arguments.
+    let clockMode: ClockMode
+    /// The one time source everything in the app reads.
+    let clock: any MentorClock
+    /// Moves a replay's clock ahead. Nil outside a replay, so nothing else can.
+    let clockControl: AdjustableClock?
+    /// How far a replay's clock has been moved ahead, for the menu and the
+    /// debug panel; the clock itself is not observable.
+    private(set) var clockMovedAhead: TimeInterval = 0
+
     private let store: SettingsStore
     private let keyStore: any KeyStore
     private let isSample: Bool
@@ -143,15 +155,14 @@ final class AppState {
     private var resourceTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
     private var toastTask: Task<Void, Never>?
-    private var toastDeadline: Date?
-    private var toastRemaining: TimeInterval?
+    private var toastCountdown = ToastCountdown()
     /// Whether the pointer is over the toast, kept through an exchange so a
     /// countdown given back afterwards does not run under it.
     private var toastHovered = false
     /// The toast the user has talked to: a transcript was matched to an
     /// answer or a question was asked. A press that heard nothing does not count.
     private var talkedToSuggestionID: Int64?
-    private let toast = ToastController()
+    private let toast: ToastController
     private let callouts = CalloutController()
     private var calloutTask: Task<Void, Never>?
     /// What says the screen under the callout is unchanged, and since when.
@@ -162,13 +173,17 @@ final class AppState {
     /// newest kept frame; nil once a newer frame is kept.
     private var lastNearDuplicateAt: Date?
     private var screenObserver: (any NSObjectProtocol)?
-    private let listener = SpeechListener()
+    private let listener: SpeechListener
     private var listeningLimitTask: Task<Void, Never>?
     /// Finishes the transcript after the key comes up; cancelled with the exchange.
     private var transcriptTask: Task<Void, Never>?
 
     private init() {
         clientMode = ModelClientMode(arguments: CommandLine.arguments)
+        clockMode = ClockMode(arguments: CommandLine.arguments, clientMode: clientMode)
+        (clock, clockControl) = clockMode.makeClock()
+        toast = ToastController(clock: clock)
+        listener = SpeechListener(clock: clock)
         journalURL = Journal.defaultURL(in: AppPaths.dataDirectory(for: clientMode))
         let launch = SettingsStore.forLaunch(clientMode)
         store = launch.store
@@ -188,10 +203,16 @@ final class AppState {
     init(
         sampleWithSettings settings: SensingSettings,
         clientMode: ModelClientMode = .live,
+        clockMode: ClockMode = .system,
         speechAvailability: SpeechListener.Availability = .available(locale: "English (US)")
     ) {
         store = SettingsStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("mentor-sample-settings.json"))
         self.clientMode = clientMode
+        self.clockMode = clockMode
+        // A sample's time stands still, so a render reads the same however long it takes.
+        (clock, clockControl) = clockMode.makeClock(base: AdjustableClock(startingAt: Date()))
+        toast = ToastController(clock: clock)
+        listener = SpeechListener(clock: clock)
         let dataDirectory = AppPaths.dataDirectory(for: clientMode)
         journalURL = Journal.defaultURL(in: dataDirectory)
         settingsURL = SettingsStore.defaultURL(in: dataDirectory)
@@ -234,16 +255,18 @@ final class AppState {
         }
         AppState.log.notice("journal open at \(self.journalURL.path, privacy: .public)")
         self.journal = journal
-        let tracker = FocusTracker()
+        let clock = clock
+        let tracker = FocusTracker(clock: clock)
         self.tracker = tracker
-        let pipeline = SensingPipeline(settings: settings, journal: journal, tracker: tracker)
+        let pipeline = SensingPipeline(settings: settings, journal: journal, tracker: tracker, clock: clock)
         self.pipeline = pipeline
         let mentorSettings = settings.mentor
         let keyStore = keyStore
-        let clientSetup = clientMode.makeClient(prices: settings.mentor.prices)
+        let clientSetup = clientMode.makeClient(prices: settings.mentor.prices, clock: clock)
         replaySummary = clientSetup.replay
         recordingUnavailableReason = clientSetup.recordingUnavailableReason
         AppState.log.notice("model calls: \(self.clientModeLog, privacy: .public)")
+        AppState.log.notice("clock: \(self.clockLog, privacy: .public)")
         toast.onAction = { [weak self] id, feedback in
             self?.respond(to: id, with: feedback)
         }
@@ -258,10 +281,13 @@ final class AppState {
         }
 
         eventTask = Task { [weak self] in
+            // A replay's clock carries on from its journal before anything runs on it.
+            await self?.startReplayClock(journal: journal)
             let stream = await pipeline.events()
             let mentorStream = await pipeline.events()
             let mentor = MentorLoop(
-                settings: mentorSettings, journal: journal, client: clientSetup.client, keyStore: keyStore, events: mentorStream
+                settings: mentorSettings, journal: journal, client: clientSetup.client, keyStore: keyStore, events: mentorStream,
+                clock: clock
             )
             // Sensing starts before the loop attaches: the loop's first key
             // read can wait on the keychain prompt, and its stream buffers.
@@ -284,6 +310,19 @@ final class AppState {
                 previous = current
             }
         }
+    }
+
+    private func startReplayClock(journal: Journal) async {
+        guard let clockControl else { return }
+        var newest: Date?
+        do {
+            newest = try await journal.newestTimestamp()
+        } catch {
+            AppState.log.error("clock starts at real time, the journal's newest time is unreadable: \(String(describing: error), privacy: .public)")
+        }
+        clockMode.startReplay(clockControl, journalNewest: newest)
+        clockMovedAhead = clockControl.movedAhead.timeInterval
+        AppState.log.notice("clock: \(self.clockLog, privacy: .public)")
     }
 
     private func attach(mentor: MentorLoop, journal: Journal) async {
@@ -487,7 +526,7 @@ final class AppState {
         if feedback == .tellMeMore, existing == .tellMeMore { return nil }
         if let index = suggestionHistory.firstIndex(where: { $0.id == suggestionID }) {
             suggestionHistory[index].feedback = feedback
-            suggestionHistory[index].feedbackAt = Date()
+            suggestionHistory[index].feedbackAt = clock.date
         }
         let suggestion = suggestionHistory.first { $0.id == suggestionID }
         switch feedback {
@@ -495,15 +534,15 @@ final class AppState {
             if let suggestion {
                 let snooze = Snooze(
                     bundleID: suggestion.bundleID, appName: suggestion.appName,
-                    category: suggestion.category, until: Date().addingTimeInterval(settings.mentor.notNowSnooze)
+                    category: suggestion.category, until: clock.date.addingTimeInterval(settings.mentor.notNowSnooze)
                 )
-                settings.mentor.snoozes = SuppressionRules.adding(snooze, to: settings.mentor.snoozes, now: Date())
+                settings.mentor.snoozes = SuppressionRules.adding(snooze, to: settings.mentor.snoozes, now: clock.date)
             }
         case .never:
             if let suggestion {
                 let rule = NeverRule(
                     bundleID: suggestion.bundleID, appName: suggestion.appName,
-                    category: suggestion.category, createdAt: Date()
+                    category: suggestion.category, createdAt: clock.date
                 )
                 settings.mentor.neverRules = SuppressionRules.adding(rule, to: settings.mentor.neverRules)
             }
@@ -588,9 +627,9 @@ final class AppState {
     /// countdown the press interrupted resumes.
     private func settlePress(_ match: TranscriptMatcher.Match?, for suggestion: Suggestion) {
         let outcome = TalkBackPress.outcome(
-            match: match, toastTalkedTo: talkedToSuggestionID == suggestion.id, countdownRemaining: toastRemaining
+            match: match, toastTalkedTo: talkedToSuggestionID == suggestion.id, countdownRemaining: toastCountdown.held
         )
-        toastRemaining = nil
+        toastCountdown.cancel()
         switch outcome {
         case .talkedTo:
             talkedToSuggestionID = suggestion.id
@@ -598,7 +637,9 @@ final class AppState {
             endHold()
             guard let countdown, activeSuggestion?.id == suggestion.id else { return }
             if toastHovered {
-                toastRemaining = countdown
+                // Held again under the pointer, with what it had.
+                toastCountdown.run(for: countdown, from: clock.date)
+                toastCountdown.hold(at: clock.date)
             } else {
                 scheduleToastExpiry(for: suggestion.id, after: countdown)
             }
@@ -611,13 +652,10 @@ final class AppState {
         toastHovered = hovering
         guard let active = activeSuggestion, !talkBack.keepsToastUp else { return }
         if hovering {
-            // cancelToastExpiry clears toastRemaining, so record the remainder after it.
-            guard let deadline = toastDeadline else { return }
-            let remaining = max(2, deadline.timeIntervalSinceNow)
-            cancelToastExpiry()
-            toastRemaining = remaining
-        } else if let remaining = toastRemaining {
-            toastRemaining = nil
+            guard toastCountdown.deadline != nil else { return }
+            toastTask?.cancel()
+            toastCountdown.hold(at: clock.date)
+        } else if let remaining = toastCountdown.held {
             scheduleToastExpiry(for: active.id, after: remaining)
         }
     }
@@ -626,10 +664,15 @@ final class AppState {
         // An exchange in progress keeps the toast up; nothing schedules its end.
         guard !talkBack.keepsToastUp else { return }
         toastTask?.cancel()
-        toastDeadline = Date().addingTimeInterval(timeout)
+        toastCountdown.run(for: timeout, from: clock.date)
+        guard let deadline = toastCountdown.deadline else { return }
+        let clock = clock
         toastTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(timeout))
-            guard !Task.isCancelled, let self, self.activeSuggestion?.id == suggestionID else { return }
+            try? await clock.sleep(untilDate: deadline)
+            // Still this countdown: not held, cancelled, or run again meanwhile.
+            guard !Task.isCancelled, let self, self.activeSuggestion?.id == suggestionID,
+                  self.toastCountdown.deadline == deadline
+            else { return }
             self.respond(to: suggestionID, with: .expired)
         }
     }
@@ -637,8 +680,7 @@ final class AppState {
     private func cancelToastExpiry() {
         toastTask?.cancel()
         toastTask = nil
-        toastDeadline = nil
-        toastRemaining = nil
+        toastCountdown.cancel()
     }
 
     // MARK: Callouts
@@ -652,20 +694,20 @@ final class AppState {
         stopCalloutWatch()
         guard let region = suggestion.region else { return }
         guard settings.mentor.showCallouts else {
-            lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: .notShown, reason: "callouts are off in Settings")
+            lastCallout = CalloutRecord(at: clock.date, suggestionID: suggestion.id, region: region, status: .notShown, reason: "callouts are off in Settings")
             return
         }
         calloutTask = Task { [weak self] in
             guard let self else { return }
             guard let observation = await self.observationForCallout(suggestion) else {
-                self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: .notShown, reason: "the frame is no longer in the journal")
+                self.lastCallout = CalloutRecord(at: self.clock.date, suggestionID: suggestion.id, region: region, status: .notShown, reason: "the frame is no longer in the journal")
                 return
             }
             var witness = CalloutWitness(region: region.rect, original: observation)
             // A frame kept since the suggestion was made already says whether the text is still there.
             if let latest = self.latestObservation, latest.id != observation.id {
                 guard witness.observe(latest) else {
-                    self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: .notShown, reason: CalloutRejection.contentChanged.label)
+                    self.lastCallout = CalloutRecord(at: self.clock.date, suggestionID: suggestion.id, region: region, status: .notShown, reason: CalloutRejection.contentChanged.label)
                     return
                 }
             }
@@ -686,7 +728,7 @@ final class AppState {
                         self.toast.bringToFront()
                     }
                     if self.lastCallout?.status != .shown || self.lastCallout?.suggestionID != suggestion.id || self.lastCallout?.placement != placement {
-                        self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, placement: placement, status: .shown)
+                        self.lastCallout = CalloutRecord(at: self.clock.date, suggestionID: suggestion.id, region: region, placement: placement, status: .shown)
                     }
                     if !shown {
                         shown = true
@@ -697,13 +739,13 @@ final class AppState {
                     }
                 case .failure(let rejection):
                     self.callouts.dismiss()
-                    let record = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: shown ? .takenDown : .notShown, reason: rejection.label)
+                    let record = CalloutRecord(at: self.clock.date, suggestionID: suggestion.id, region: region, status: shown ? .takenDown : .notShown, reason: rejection.label)
                     self.lastCallout = record
                     self.calloutWitness = nil
                     AppState.log.notice("callout for suggestion \(suggestion.id) \(record.summary, privacy: .public)")
                     return
                 }
-                try? await Task.sleep(for: .seconds(1))
+                try? await self.clock.sleep(for: .seconds(1))
             }
         }
     }
@@ -724,7 +766,7 @@ final class AppState {
         }
         callouts.dismiss()
         stopCalloutWatch()
-        let record = CalloutRecord(at: Date(), suggestionID: active.id, region: region, status: .takenDown, reason: CalloutRejection.contentChanged.label)
+        let record = CalloutRecord(at: clock.date, suggestionID: active.id, region: region, status: .takenDown, reason: CalloutRejection.contentChanged.label)
         lastCallout = record
         AppState.log.notice("callout for suggestion \(active.id) \(record.summary, privacy: .public)")
     }
@@ -734,7 +776,7 @@ final class AppState {
     private func noteCadence(_ status: CadenceStatus) {
         defer { lastDroppedCount = status.droppedCount }
         guard status.droppedCount > lastDroppedCount else { return }
-        let at = status.lastCaptureAt ?? Date()
+        let at = status.lastCaptureAt ?? clock.date
         lastNearDuplicateAt = at
         guard var witness = calloutWitness else { return }
         witness.noteDroppedCapture(at: at)
@@ -754,7 +796,7 @@ final class AppState {
             frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier,
             focus: await tracker?.peekCurrent(),
             displays: NSScreen.currentDisplays,
-            now: Date()
+            now: clock.date
         )
         return CalloutAnchor.resolve(region, for: observation, live: live, confirmedAt: confirmedAt)
     }
@@ -763,7 +805,7 @@ final class AppState {
         guard callouts.isVisible, let record = lastCallout else { return }
         callouts.dismiss()
         stopCalloutWatch()
-        lastCallout = CalloutRecord(at: Date(), suggestionID: record.suggestionID, region: record.region, status: .takenDown, reason: CalloutRejection.displayChanged.label)
+        lastCallout = CalloutRecord(at: clock.date, suggestionID: record.suggestionID, region: record.region, status: .takenDown, reason: CalloutRejection.displayChanged.label)
     }
 
     /// Persists that the callout was drawn and mirrors it into the history.
@@ -869,8 +911,9 @@ final class AppState {
             Task { await mentor?.withdrawFollowUp() }
         }
         setTalkBack(.listening(partial: ""))
+        let clock = clock
         listeningLimitTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(SpeechListener.maxDuration))
+            try? await clock.sleep(for: .seconds(SpeechListener.maxDuration))
             guard !Task.isCancelled, let self, case .listening = self.talkBack else { return }
             self.pushToTalkReleased()
         }
@@ -892,9 +935,8 @@ final class AppState {
             toast.showNote("Nothing to reply to yet: Mentor has not made a suggestion.")
             return nil
         }
-        let remaining = toastDeadline.map { max(2, $0.timeIntervalSinceNow) } ?? toastRemaining
-        cancelToastExpiry()
-        toastRemaining = remaining
+        toastTask?.cancel()
+        toastCountdown.hold(at: clock.date)
         return suggestion
     }
 
@@ -978,13 +1020,13 @@ final class AppState {
         setTalkBack(.idle)
         settlePress(match, for: suggestion)
         guard let text, let match else {
-            lastTranscript = TranscriptRecord(at: Date(), text: text ?? "", handling: "nothing heard")
+            lastTranscript = TranscriptRecord(at: clock.date, text: text ?? "", handling: "nothing heard")
             toast.showNote("Mentor did not catch that.")
             return
         }
         switch match {
         case .answer(let feedback):
-            lastTranscript = TranscriptRecord(at: Date(), text: text, handling: "answered: \(feedback.label)")
+            lastTranscript = TranscriptRecord(at: clock.date, text: text, handling: "answered: \(feedback.label)")
             AppState.log.notice("transcript answered \(feedback.rawValue, privacy: .public)")
             if feedback == .tellMeMore { toast.expand() }
             respond(to: suggestion.id, with: feedback)
@@ -992,7 +1034,7 @@ final class AppState {
                 Task { await mentor?.setTalkingBack(true) }
             }
         case .question(let question):
-            lastTranscript = TranscriptRecord(at: Date(), text: text, handling: "asked the mentor")
+            lastTranscript = TranscriptRecord(at: clock.date, text: text, handling: "asked the mentor")
             AppState.log.notice("transcript asked the mentor")
             setTalkBack(.thinking(question: question))
             guard let mentor else {
@@ -1046,13 +1088,55 @@ final class AppState {
     }
 
     /// A short word beside the menu bar icon while calls are not plain live
-    /// ones, so a replay is never mistaken for the real thing.
+    /// ones, so a replay is never mistaken for the real thing, with how fast
+    /// its clock runs when that is not real time.
     var clientModeBadge: String? {
         switch clientMode {
         case .live: nil
         case .record: "Recording"
-        case .replay, .invalid: "Replay"
+        case .replay, .invalid: clockScale.map { "Replay \(Formatting.multiplier($0))" } ?? "Replay"
         }
+    }
+
+    // MARK: Clock control
+
+    /// How many times real time a replay's clock runs, or nil at real time.
+    var clockScale: Double? {
+        guard let clockControl, clockControl.scale != 1 else { return nil }
+        return clockControl.scale
+    }
+
+    /// One line for the menu on the clock, or nil while it is plain real time.
+    var clockLine: String? {
+        if case .refused(let reason) = clockMode { return "Clock: real time, \(reason)" }
+        guard clockControl != nil else { return nil }
+        var parts: [String] = []
+        if let scale = clockScale { parts.append("\(Formatting.multiplier(scale)) real time") }
+        if clockMovedAhead > 0 { parts.append("moved ahead \(ClockInterval.description(of: clockMovedAhead))") }
+        return parts.isEmpty ? nil : "Clock: \(parts.joined(separator: ", "))"
+    }
+
+    /// For the log at launch.
+    private var clockLog: String {
+        switch clockMode {
+        case .system: "real time"
+        case .refused(let reason): "real time, refused: \(reason)"
+        case .replay(let scale, _):
+            "replay clock at \(Formatting.multiplier(scale)) real time, moved ahead \(ClockInterval.description(of: clockMovedAhead)), now \(ClockFormat.dayAndTime(clock.date))"
+        }
+    }
+
+    /// Moves a replay's clock ahead by `seconds`, as if that much time went by
+    /// at once with the Mac awake in whatever mode Mentor is in: a wait due in
+    /// it ends, and while watching it counts as active use. False, changing
+    /// nothing, outside a replay or for an interval `ClockMode` does not accept.
+    @discardableResult
+    func advanceClock(by seconds: TimeInterval) -> Bool {
+        guard let clockControl, ClockMode.accepts(advance: seconds) else { return false }
+        clockControl.advance(by: .seconds(seconds))
+        clockMovedAhead = clockControl.movedAhead.timeInterval
+        AppState.log.notice("clock moved ahead \(ClockInterval.description(of: seconds), privacy: .public): \(self.clockLog, privacy: .public)")
+        return true
     }
 
     /// One line for the menu saying where calls go, or nil when they are live.
