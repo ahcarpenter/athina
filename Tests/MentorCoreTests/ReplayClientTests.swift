@@ -4,7 +4,7 @@ import Testing
 
 /// Recording, replaying, and choosing between them at launch, at the client
 /// level. `ReplayLoopTests` runs the whole loop on top of these.
-@Suite struct ReplayClientTests {
+@Suite(.timeLimit(.minutes(1))) struct ReplayClientTests {
     private static func response(_ text: String, model: String = "claude-haiku-4-5-20251001", usage: Usage = Usage(inputTokens: 900, outputTokens: 30)) -> MessagesResponse {
         MessagesResponse(id: "msg_\(text.count)", model: model, stopReason: "end_turn", content: [ResponseBlock(type: "text", text: text)], usage: usage)
     }
