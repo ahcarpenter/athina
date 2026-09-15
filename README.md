@@ -642,7 +642,7 @@ disables Add Context at the cap, refuses a name another context already uses,
 and caps both fields as they are typed with a note at the limit, so nothing
 saved is dropped or cut on the way in. With the switch on and no context
 declared, nothing is inside anything: no triage call is made at all, and the
-settings section, the menu, and the debug panel all say so.
+Contexts pane, the menu, and the debug panel all say so.
 
 To keep an app from being looked at at all, exclude it in Settings > Privacy >
 Excluded apps: while an excluded app is frontmost nothing is captured, so

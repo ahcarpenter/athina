@@ -264,7 +264,7 @@ private extension TalkBackState {
     }
 }
 
-/// The toast's content, observable so "Tell me more", the exchange, and the
+/// The toast's content, observable so Tell Me More, the exchange, and the
 /// listening state can change in place.
 @MainActor
 @Observable
