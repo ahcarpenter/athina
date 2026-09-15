@@ -671,7 +671,7 @@ it. Active use is time spent capturing the screen: a break, a pause, a
 sleeping Mac, an excluded app, missing permissions, or a closed app counts for
 nothing, so coming back never buys a call over the few screens since. The count is kept
 in the journal, so a relaunch carries on from it. It is a third tier with its own model and effort picker (`claude-opus-5`
-at low effort by default, Haiku offered too), its own versioned prompt and
+at low effort by default; Haiku 4.5, Sonnet 5, and Fable 5.1 are offered too), its own versioned prompt and
 schema, and no screenshot: summarising does not need one. `refreshGate` in
 `MentorScheduler` is the single decision, and it holds while the loop is off,
 paused, idle, on an excluded app, waiting for permissions, without a key, over
