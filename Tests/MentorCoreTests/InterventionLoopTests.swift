@@ -108,7 +108,6 @@ import Testing
         #expect(followUp.error == nil)
         #expect(followUp.model == "claude-sonnet-5")
         #expect(followUp.promptVersion == MentorPrompts.version)
-        #expect(!followUp.spoken)
 
         let request = try #require(await h.client.sent.last?.request)
         #expect(request.model == "claude-sonnet-5")
@@ -146,7 +145,6 @@ import Testing
             return
         }
         #expect(published == followUp)
-        #expect(await h.loop.noteFollowUpSpoken(id: followUp.id)?.spoken == true)
     }
 
     @Test func aHeldFollowUpIsJournaledWithTheReasonAndNeverSent() async throws {
@@ -200,16 +198,14 @@ import Testing
         #expect(!MentorVerdict.Payload(title: "T", body: "B", explanation: "", category: .risk, confidence: 1).isBlank)
     }
 
-    @Test func deliveryFlagsArePersistedThroughTheLoop() async throws {
+    @Test func theCalloutFlagIsPersistedThroughTheLoop() async throws {
         let h = try await MentorLoopTests.Harness()
         let suggestion = try await journaledSuggestion(h)
-        let shown = await h.loop.noteDelivery(suggestionID: suggestion.id, calloutShown: true)
+        #expect(suggestion.calloutShown == false)
+        let shown = await h.loop.noteCalloutShown(suggestionID: suggestion.id)
         #expect(shown?.calloutShown == true)
-        #expect(shown?.spoken == false)
-        let spoken = await h.loop.noteDelivery(suggestionID: suggestion.id, spoken: true)
-        #expect(spoken?.calloutShown == true)
-        #expect(spoken?.spoken == true)
-        #expect(await h.loop.noteDelivery(suggestionID: 404, spoken: true) == nil)
+        #expect(try await h.journal.suggestion(id: suggestion.id)?.calloutShown == true)
+        #expect(await h.loop.noteCalloutShown(suggestionID: 404) == nil)
     }
 }
 

@@ -94,24 +94,19 @@ private struct HistoryRow: View {
     }
 }
 
-/// Small marks for how a suggestion was delivered: a callout drawn, read
-/// aloud, talked back to.
+/// Small marks for how a suggestion was delivered: a callout drawn, talked
+/// back to.
 private struct DeliveryMarks: View {
     let suggestion: Suggestion
     let talkedBack: Bool
 
     var body: some View {
-        if suggestion.calloutShown || suggestion.spoken || talkedBack {
+        if suggestion.calloutShown || talkedBack {
             HStack(spacing: 5) {
                 if suggestion.calloutShown {
                     Image(systemName: "rectangle.dashed")
                         .help("A callout was drawn on screen")
                         .accessibilityLabel("Callout shown")
-                }
-                if suggestion.spoken {
-                    Image(systemName: "speaker.wave.2")
-                        .help("Read aloud")
-                        .accessibilityLabel("Spoken")
                 }
                 if talkedBack {
                     Image(systemName: "mic")
@@ -199,7 +194,6 @@ private struct SuggestionDetail: View {
                     } else {
                         detailRow("Callout", "None: the suggestion did not point at one spot")
                     }
-                    detailRow("Spoken", suggestion.spoken ? "Yes" : "No")
                 }
                 .font(.callout)
                 let exchange = state.exchange(for: suggestion.id)
@@ -213,7 +207,7 @@ private struct SuggestionDetail: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 exchangeLine("You", entry.question, at: entry.timestamp)
                                 if let answer = entry.answer {
-                                    exchangeLine("Mentor", answer + (entry.spoken ? " (spoken)" : ""), at: nil)
+                                    exchangeLine("Mentor", answer, at: nil)
                                 } else {
                                     exchangeLine("Mentor", "No answer: \(entry.error ?? "unknown error").", at: nil)
                                 }

@@ -121,7 +121,6 @@ public struct FollowUp: Codable, Equatable, Sendable, Identifiable {
     public var error: String?
     public var model: String
     public var promptVersion: Int
-    public var spoken: Bool
 
     public init(
         id: Int64 = 0,
@@ -131,8 +130,7 @@ public struct FollowUp: Codable, Equatable, Sendable, Identifiable {
         answer: String? = nil,
         error: String? = nil,
         model: String,
-        promptVersion: Int,
-        spoken: Bool = false
+        promptVersion: Int
     ) {
         self.id = id
         self.suggestionID = suggestionID
@@ -142,20 +140,5 @@ public struct FollowUp: Codable, Equatable, Sendable, Identifiable {
         self.error = error
         self.model = model
         self.promptVersion = promptVersion
-        self.spoken = spoken
-    }
-}
-
-/// Whether anything may be spoken aloud right now. Speech follows the
-/// sensing mode: nothing is said while paused, idle, on an excluded app,
-/// waiting for permissions, or stopped.
-public enum SpeechGate {
-    public static func maySpeak(mode: SensingMode) -> Bool {
-        mode.isActive
-    }
-
-    /// Whether a delivered suggestion or answer is read out without being asked.
-    public static func speaksAutomatically(settings: MentorSettings, mode: SensingMode) -> Bool {
-        settings.speakSuggestions && maySpeak(mode: mode)
     }
 }

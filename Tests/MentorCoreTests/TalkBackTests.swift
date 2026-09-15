@@ -77,25 +77,6 @@ import Testing
     }
 }
 
-@Suite struct SpeechGateTests {
-    @Test(arguments: [SensingMode.paused, .idle, .excluded, .waitingForPermissions, .stopped])
-    func nothingIsSpokenUnlessSensing(mode: SensingMode) {
-        var settings = MentorSettings()
-        settings.speakSuggestions = true
-        #expect(!SpeechGate.maySpeak(mode: mode))
-        #expect(!SpeechGate.speaksAutomatically(settings: settings, mode: mode))
-    }
-
-    @Test(arguments: [SensingMode.watching, .accessibilityOnly, .screenOnly])
-    func speechFollowsTheSettingWhileSensing(mode: SensingMode) {
-        var settings = MentorSettings()
-        #expect(SpeechGate.maySpeak(mode: mode))
-        #expect(!SpeechGate.speaksAutomatically(settings: settings, mode: mode))
-        settings.speakSuggestions = true
-        #expect(SpeechGate.speaksAutomatically(settings: settings, mode: mode))
-    }
-}
-
 @Suite struct FollowUpPromptTests {
     private let t0 = Date(timeIntervalSince1970: 1_700_000_000)
 
@@ -172,21 +153,18 @@ import Testing
 }
 
 @Suite struct InterventionSettingsTests {
-    @Test func defaultsAreCalloutsOnSpeechOffAndNoTalkBackKey() throws {
+    @Test func defaultsAreCalloutsOnAndNoTalkBackKey() throws {
         let settings = MentorSettings()
         #expect(settings.showCallouts)
-        #expect(!settings.speakSuggestions)
         #expect(settings.pushToTalkHotKey == nil)
         let decoded = try JSONDecoder().decode(MentorSettings.self, from: Data(#"{"enabled": true}"#.utf8))
         #expect(decoded.showCallouts)
-        #expect(!decoded.speakSuggestions)
         #expect(decoded.pushToTalkHotKey == nil)
     }
 
     @Test func theTalkBackKeyRoundTripsAndIsClearedWhenUnusable() throws {
         var settings = SensingSettings()
         settings.mentor.pushToTalkHotKey = HotKey(keyCode: 17, modifiers: [.control, .option, .command])
-        settings.mentor.speakSuggestions = true
         settings.mentor.showCallouts = false
         let data = try JSONEncoder().encode(settings)
         let decoded = try JSONDecoder().decode(SensingSettings.self, from: data)
@@ -267,28 +245,22 @@ import Testing
         )
     }
 
-    @Test func aSuggestionRoundTripsItsRegionAndDeliveryFlags() async throws {
+    @Test func aSuggestionRoundTripsItsRegionAndCalloutFlag() async throws {
         let journal = try Journal.inMemory()
         let region = CalloutRegion(rect: CGRect(x: 10, y: 20, width: 300, height: 24), note: "this flag")
         let stored = try await journal.record(suggestion(region: region))
         let fetched = try #require(try await journal.suggestion(id: stored.id))
         #expect(fetched.region == region)
         #expect(!fetched.calloutShown)
-        #expect(!fetched.spoken)
 
-        let shown = try await journal.updateDelivery(suggestionID: stored.id, calloutShown: true, spoken: false)
+        let shown = try await journal.noteCalloutShown(suggestionID: stored.id)
         #expect(shown?.calloutShown == true)
-        #expect(shown?.spoken == false)
-        // Flags only ever turn on.
-        let spoken = try await journal.updateDelivery(suggestionID: stored.id, calloutShown: false, spoken: true)
-        #expect(spoken?.calloutShown == true)
-        #expect(spoken?.spoken == true)
-        #expect(try await journal.updateDelivery(suggestionID: 404, calloutShown: true, spoken: true) == nil)
+        #expect(try await journal.noteCalloutShown(suggestionID: 404) == nil)
         let plain = try await journal.record(suggestion())
         #expect(try await journal.suggestion(id: plain.id)?.region == nil)
     }
 
-    @Test func followUpsRoundTripInOrderAndMarkSpoken() async throws {
+    @Test func followUpsRoundTripInOrder() async throws {
         let journal = try Journal.inMemory()
         let s = try await journal.record(suggestion())
         let first = try await journal.record(FollowUp(suggestionID: s.id, timestamp: t0 + 10, question: "why", answer: "Because.", model: "m", promptVersion: 5))
@@ -297,10 +269,6 @@ import Testing
         #expect(first.id > 0 && second.id > first.id)
         #expect(try await journal.followUps(suggestionID: s.id) == [first, second])
         #expect(try await journal.recentFollowUps(limit: 10) == [other, second, first])
-        let spoken = try await journal.markFollowUpSpoken(id: first.id)
-        #expect(spoken?.spoken == true)
-        #expect(try await journal.followUps(suggestionID: s.id).first?.spoken == true)
-        #expect(try await journal.markFollowUpSpoken(id: 404) == nil)
     }
 
     @Test func followUpsExpireWithTextAndGoWithClear() async throws {
@@ -315,8 +283,8 @@ import Testing
         #expect(try await journal.recentFollowUps(limit: 10).isEmpty)
     }
 
-    /// A journal written before this phase has no region, callout, spoken,
-    /// or follow-up columns; opening it adds them without touching the rows.
+    /// A journal written before this phase has no region, callout, or
+    /// follow-up columns; opening it adds them without touching the rows.
     @Test func anOlderJournalGainsTheNewColumnsOnOpen() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mentor-tests-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -339,8 +307,7 @@ import Testing
         #expect(old.title == "old")
         #expect(old.region == nil)
         #expect(!old.calloutShown)
-        #expect(!old.spoken)
-        let updated = try await journal.updateDelivery(suggestionID: old.id, calloutShown: true, spoken: true)
+        let updated = try await journal.noteCalloutShown(suggestionID: old.id)
         #expect(updated?.calloutShown == true)
         let region = CalloutRegion(rect: CGRect(x: 1, y: 1, width: 10, height: 10), note: "n")
         let fresh = try await journal.record(suggestion(region: region))

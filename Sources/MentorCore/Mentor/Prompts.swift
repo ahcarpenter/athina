@@ -199,8 +199,10 @@ public enum MentorPrompts {
     // MARK: Follow-up
 
     /// The mentor tier answering something the user said about a suggestion
-    /// while holding the talk-back key. The answer is read aloud and shown in
-    /// the toast, so it is short prose, never a list.
+    /// while holding the talk-back key. The answer is shown in the toast, so
+    /// it is short prose, never a list. The prompt still says it may be read
+    /// aloud: reading suggestions aloud is deferred, and changing this text
+    /// would stale every recorded fixture for nothing.
     public static let followUpSystem = """
     You are Mentor, a live mentor for someone working at their Mac. A moment ago you made the suggestion \
     described in the message, and the user has now said something about it, transcribed on their Mac while \

@@ -109,7 +109,6 @@ final class AppState {
     // MARK: Callouts and voice state
 
     private(set) var talkBack: TalkBackState = .idle
-    private(set) var isSpeaking = false
     var lastCallout: CalloutRecord?
     var lastTranscript: TranscriptRecord?
     /// Whether the system recognizer can transcribe the current locale on this Mac.
@@ -157,7 +156,6 @@ final class AppState {
     /// newest kept frame; nil once a newer frame is kept.
     private var lastNearDuplicateAt: Date?
     private var screenObserver: (any NSObjectProtocol)?
-    private let speech = SpeechSynthesizer()
     private let listener = SpeechListener()
     private var listeningLimitTask: Task<Void, Never>?
 
@@ -244,14 +242,7 @@ final class AppState {
         toast.onHover = { [weak self] hovering in
             self?.toastHoverChanged(hovering)
         }
-        toast.onSpeakToggle = { [weak self] in
-            self?.toggleSpeaking()
-        }
         toast.setTalkBackKey(talkBackKey)
-        speech.onSpeakingChange = { [weak self] speaking in
-            self?.isSpeaking = speaking
-            self?.toast.setSpeaking(speaking)
-        }
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
@@ -306,7 +297,6 @@ final class AppState {
         resourceTask?.cancel()
         saveTask?.cancel()
         cancelTalkBack()
-        speech.stop()
         if let active = activeSuggestion {
             await respond(to: active.id, with: .expired)?.value
         }
@@ -341,7 +331,6 @@ final class AppState {
         isPaused.toggle()
         let paused = isPaused
         AppState.log.notice("pause toggled: \(paused)")
-        speech.stop()
         cancelTalkBack()
         Task { await pipeline?.setPaused(paused) }
     }
@@ -464,7 +453,7 @@ final class AppState {
     // MARK: Suggestions
 
     /// Records feedback for a suggestion, whether it came from the toast, the
-    /// history window, or a spoken answer. A non-answer (expiry or closing the
+    /// history window, or a transcript. A non-answer (expiry or closing the
     /// toast) is recorded once and never overwrites anything: closing a
     /// re-shown toast just closes it. Tell me more is recorded once too;
     /// re-expanding a folded toast is only a view change. Returns the task
@@ -523,9 +512,6 @@ final class AppState {
             suggestionHistory.removeLast(suggestionHistory.count - AppState.historyLimit)
         }
         show(suggestion, autoExpires: true)
-        if SpeechGate.speaksAutomatically(settings: settings.mentor, mode: mode) {
-            speak(suggestion)
-        }
     }
 
     private func show(_ suggestion: Suggestion, autoExpires: Bool) {
@@ -535,7 +521,6 @@ final class AppState {
         cancelToastExpiry()
         cancelTalkBack()
         activeSuggestion = suggestion
-        toast.setSpeechAllowed(SpeechGate.maySpeak(mode: mode))
         toast.show(suggestion, expanded: false, exchange: exchange(for: suggestion.id))
         if autoExpires {
             scheduleToastExpiry(for: suggestion.id, after: settings.mentor.toastTimeout)
@@ -543,13 +528,12 @@ final class AppState {
         placeCallout(for: suggestion)
     }
 
-    /// Everything that goes with the toast goes with it: the callout, speech,
-    /// and a recording in progress.
+    /// Everything that goes with the toast goes with it: the callout and a
+    /// recording in progress.
     private func takeDown() {
         toast.dismiss()
         callouts.dismiss()
         stopCalloutWatch()
-        speech.stop()
         cancelTalkBack()
         activeSuggestion = nil
     }
@@ -640,7 +624,7 @@ final class AppState {
                         shown = true
                         AppState.log.notice("callout shown for suggestion \(suggestion.id) at \(Formatting.rect(placement.screenRect), privacy: .public)")
                         if !suggestion.calloutShown {
-                            await self.noteDelivery(suggestionID: suggestion.id, calloutShown: true)
+                            await self.noteCalloutShown(suggestionID: suggestion.id)
                         }
                     }
                 case .failure(let rejection):
@@ -714,37 +698,15 @@ final class AppState {
         lastCallout = CalloutRecord(at: Date(), suggestionID: record.suggestionID, region: record.region, status: .takenDown, reason: CalloutRejection.displayChanged.label)
     }
 
-    /// Persists a delivery flag and mirrors it into the history.
-    private func noteDelivery(suggestionID: Int64, calloutShown: Bool = false, spoken: Bool = false) async {
+    /// Persists that the callout was drawn and mirrors it into the history.
+    private func noteCalloutShown(suggestionID: Int64) async {
         guard let mentor else { return }
-        guard let updated = await mentor.noteDelivery(suggestionID: suggestionID, calloutShown: calloutShown, spoken: spoken) else { return }
+        guard let updated = await mentor.noteCalloutShown(suggestionID: suggestionID) else { return }
         if let index = suggestionHistory.firstIndex(where: { $0.id == suggestionID }) {
             suggestionHistory[index].calloutShown = updated.calloutShown
-            suggestionHistory[index].spoken = updated.spoken
         }
         if activeSuggestion?.id == suggestionID {
             activeSuggestion?.calloutShown = updated.calloutShown
-            activeSuggestion?.spoken = updated.spoken
-        }
-    }
-
-    // MARK: Speech
-
-    private func speak(_ suggestion: Suggestion) {
-        guard SpeechGate.maySpeak(mode: mode) else { return }
-        speech.speak([suggestion.title, suggestion.body])
-        if !suggestion.spoken {
-            Task { await noteDelivery(suggestionID: suggestion.id, spoken: true) }
-        }
-    }
-
-    /// The toast's speaker button: stops speech in progress, otherwise reads
-    /// the suggestion, whatever the Speak suggestions setting says.
-    func toggleSpeaking() {
-        if speech.isSpeaking {
-            speech.stop()
-        } else if let active = activeSuggestion {
-            speak(active)
         }
     }
 
@@ -797,7 +759,7 @@ final class AppState {
             toast.showNote("Mentor needs Microphone and Speech Recognition to hear you. Grant them in Permissions.")
             return
         }
-        guard SpeechGate.maySpeak(mode: mode) else {
+        guard mode.isActive else {
             toast.showNote("Mentor is \(mode.label.lowercased()), so it is not listening.")
             return
         }
@@ -824,7 +786,7 @@ final class AppState {
     /// The suggestion a reply is about: the toast that is up, or the most
     /// recent suggestion brought back as a toast that stays until it is
     /// closed. An exchange keeps the toast up, like expanding it, so its
-    /// countdown stops, and anything being spoken stops. Nil, with a note,
+    /// countdown stops. Nil, with a note,
     /// when Mentor has not made a suggestion yet.
     private func suggestionToTalkTo() -> Suggestion? {
         let suggestion: Suggestion
@@ -838,7 +800,6 @@ final class AppState {
             return nil
         }
         cancelToastExpiry()
-        speech.stop()
         return suggestion
     }
 
@@ -849,7 +810,7 @@ final class AppState {
 
     /// The debug panel's Talk back field: typed words take the path a released
     /// key does, from transcript matching to the follow-up call, the answer in
-    /// the toast, and speech. It is how the follow-up path is checked, and a
+    /// the toast. It is how the follow-up path is checked, and a
     /// follow-up fixture recorded, on a Mac without a microphone grant.
     func talkBack(typed text: String) {
         guard canTalkBackTyped, let suggestion = suggestionToTalkTo() else { return }
@@ -889,8 +850,7 @@ final class AppState {
     }
 
     /// What a transcript, heard or typed, does: one of the toast's answers, or
-    /// one follow-up question whose answer lands in the toast and is spoken
-    /// when Speak suggestions is on.
+    /// one follow-up question whose answer lands in the toast.
     private func act(on text: String?, for suggestion: Suggestion) async {
         guard let text, let match = TranscriptMatcher.match(text) else {
             lastTranscript = TranscriptRecord(at: Date(), text: text ?? "", handling: "nothing heard")
@@ -918,12 +878,6 @@ final class AppState {
             guard activeSuggestion?.id == suggestion.id else { return }
             setTalkBack(.idle)
             toast.setExchange(exchange(for: suggestion.id))
-            if let answer = followUp.answer, SpeechGate.speaksAutomatically(settings: settings.mentor, mode: mode) {
-                speech.speak([answer])
-                if let spoken = await mentor.noteFollowUpSpoken(id: followUp.id) {
-                    upsert(spoken)
-                }
-            }
         }
     }
 
@@ -1070,10 +1024,7 @@ final class AppState {
         case .modeChanged(let newMode):
             mode = newMode
             AppState.log.notice("mode: \(newMode.rawValue, privacy: .public)")
-            let allowed = SpeechGate.maySpeak(mode: newMode)
-            toast.setSpeechAllowed(allowed)
-            if !allowed {
-                speech.stop()
+            if !newMode.isActive {
                 cancelTalkBack()
             }
             refreshPermissions()

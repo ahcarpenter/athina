@@ -14,7 +14,6 @@ final class ToastController {
 
     var onAction: ((Int64, SuggestionFeedback) -> Void)?
     var onHover: ((Bool) -> Void)?
-    var onSpeakToggle: (() -> Void)?
 
     private var panel: NSPanel?
     private var hosting: NSHostingView<ToastView>?
@@ -67,14 +66,6 @@ final class ToastController {
 
     func setExchange(_ exchange: [FollowUp]) {
         model.exchange = exchange
-    }
-
-    func setSpeaking(_ speaking: Bool) {
-        model.isSpeaking = speaking
-    }
-
-    func setSpeechAllowed(_ allowed: Bool) {
-        model.speechAllowed = allowed
     }
 
     func setTalkBackKey(_ key: String?) {
@@ -179,8 +170,6 @@ final class ToastController {
             self.onAction?(suggestion.id, feedback)
         }, onHover: { [weak self] hovering in
             self?.onHover?(hovering)
-        }, onSpeakToggle: { [weak self] in
-            self?.onSpeakToggle?()
         }, onSizeChange: { [weak self] in
             self?.relayout()
         })
@@ -192,11 +181,17 @@ final class ToastController {
         return panel
     }
 
-    /// Top right of the screen, just under the menu bar.
+    /// Top right of the screen, just under the menu bar. The width is the
+    /// toast's fixed width; only the height comes from the content, and a
+    /// degenerate reading mid-update (SwiftUI can report zero while it
+    /// re-lays out) keeps the frame it had, so the panel never jumps off
+    /// the edge of the screen while its content changes.
     private func place(_ panel: NSPanel, on screen: NSScreen?) {
         guard let screen else { return }
         panel.contentView?.layoutSubtreeIfNeeded()
-        let size = panel.contentView?.fittingSize ?? CGSize(width: ToastController.width, height: 120)
+        let fitted = panel.contentView?.fittingSize ?? .zero
+        guard fitted.height >= 40 else { return }
+        let size = CGSize(width: ToastController.width + 2, height: fitted.height)
         let frame = screen.visibleFrame
         let origin = CGPoint(
             x: frame.maxX - size.width - ToastController.margin,
@@ -218,9 +213,6 @@ final class ToastModel {
     var talkBack: TalkBackState = .idle
     /// A short line for the user, inside the toast or on its own.
     var note: String?
-    var isSpeaking = false
-    /// False while speech is gated off (paused, idle, excluded app).
-    var speechAllowed = true
     /// The talk-back hotkey, shown in the button bar once it is set and voice is usable.
     var talkBackKey: String?
 }
@@ -229,7 +221,6 @@ struct ToastView: View {
     @Bindable var model: ToastModel
     let onAction: (SuggestionFeedback) -> Void
     var onHover: (Bool) -> Void = { _ in }
-    var onSpeakToggle: () -> Void = {}
     var onSizeChange: @MainActor @Sendable () -> Void = {}
 
     var body: some View {
@@ -241,8 +232,6 @@ struct ToastView: View {
                     exchange: model.exchange,
                     talkBack: model.talkBack,
                     note: model.note,
-                    isSpeaking: model.isSpeaking,
-                    speechAllowed: model.speechAllowed,
                     talkBackKey: model.talkBackKey,
                     onToggle: {
                         // Expanding reports "tell me more"; AppState records it once
@@ -251,8 +240,7 @@ struct ToastView: View {
                         model.expanded.toggle()
                         if !wasExpanded { onAction(.tellMeMore) }
                     },
-                    onAction: onAction,
-                    onSpeakToggle: onSpeakToggle
+                    onAction: onAction
                 )
             } else if let note = model.note {
                 ToastNote(text: note)
@@ -303,12 +291,9 @@ struct ToastContent: View {
     var exchange: [FollowUp] = []
     var talkBack: TalkBackState = .idle
     var note: String?
-    var isSpeaking = false
-    var speechAllowed = true
     var talkBackKey: String?
     let onToggle: () -> Void
     let onAction: (SuggestionFeedback) -> Void
-    var onSpeakToggle: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -337,16 +322,6 @@ struct ToastContent: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: 0)
-                    Button(action: onSpeakToggle) {
-                        Image(systemName: isSpeaking ? "stop.circle" : "speaker.wave.2.fill")
-                            .font(.system(size: isSpeaking ? 13 : 11, weight: .semibold))
-                            .frame(width: 20, height: 20)
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(isSpeaking ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
-                    .disabled(!speechAllowed)
-                    .help(speakHelp)
-                    .accessibilityLabel(isSpeaking ? "Stop speaking" : "Speak this suggestion")
                     Button {
                         onAction(.dismissed)
                     } label: {
@@ -436,11 +411,6 @@ struct ToastContent: View {
         }
     }
 
-    private var speakHelp: String {
-        if isSpeaking { return "Stop speaking" }
-        if !speechAllowed { return "Nothing is spoken while Mentor is paused, idle, or on an excluded app" }
-        return "Speak this suggestion"
-    }
 }
 
 /// A scroll view as tall as its content up to `maxHeight`, then scrolling.

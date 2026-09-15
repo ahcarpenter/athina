@@ -105,8 +105,7 @@ struct MentorSettingsTab: View {
 
 // MARK: - Voice
 
-/// Speaking suggestions and talking back: the switch, the hotkey, and what
-/// the two need on this Mac.
+/// Talking back: the hotkey and what it needs on this Mac.
 struct VoiceSection: View {
     @Environment(AppState.self) private var state
     @Environment(\.openWindow) private var openWindow
@@ -114,15 +113,6 @@ struct VoiceSection: View {
     var body: some View {
         @Bindable var state = state
         Section {
-            Toggle(isOn: $state.settings.mentor.speakSuggestions) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Speak suggestions")
-                    Text("Reads each new suggestion aloud with the system voice, on this Mac. The speaker button on a toast plays one again. Nothing is spoken while Mentor is paused, idle, or on an excluded app.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
             LabeledContent {
                 HStack(spacing: 10) {
                     if state.isRunning, state.settings.mentor.pushToTalkHotKey != nil {
@@ -179,9 +169,9 @@ struct VoiceSection: View {
                 }
             }
         } header: {
-            Text("Voice")
+            Text("Talking back")
         } footer: {
-            Text("Hold the hotkey and speak. \"Tell me more\", \"not now\", and \"never for this\" answer the toast; anything else goes to the mentor model as one follow-up question, on the mentor model and effort above, and the answer comes back in the toast, spoken when Speak suggestions is on. Audio and transcripts stay on this Mac; only the words you spoke, the suggestion, and the recognized text of the screen it was made from go to the model.")
+            Text("Hold the hotkey and speak. \"Tell me more\", \"not now\", and \"never for this\" answer the toast; anything else goes to the mentor model as one follow-up question, on the mentor model and effort above, and the answer comes back in the toast. Audio and transcripts stay on this Mac; only the words you spoke, the suggestion, and the recognized text of the screen it was made from go to the model.")
         }
     }
 }

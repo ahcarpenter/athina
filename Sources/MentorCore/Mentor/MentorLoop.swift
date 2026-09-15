@@ -18,7 +18,7 @@ public actor MentorLoop {
     public static let triageMaxTokens = 200
     /// Mentor replies include adaptive thinking, which counts against this.
     public static let mentorMaxTokens = 6000
-    /// A follow-up answer is a few spoken sentences, plus the same thinking.
+    /// A follow-up answer is a few short sentences, plus the same thinking.
     public static let followUpMaxTokens = 3000
     /// How many journal rows feed the event summaries and the rolling window.
     public static let eventLookback = 40
@@ -134,25 +134,14 @@ public actor MentorLoop {
         return updated
     }
 
-    /// Records that a callout was drawn for a suggestion, or that it was read
-    /// aloud. Returns the suggestion as journaled, or nil when it is unknown.
+    /// Records that a callout was drawn for a suggestion. Returns the
+    /// suggestion as journaled, or nil when it is unknown.
     @discardableResult
-    public func noteDelivery(suggestionID: Int64, calloutShown: Bool = false, spoken: Bool = false) async -> Suggestion? {
+    public func noteCalloutShown(suggestionID: Int64) async -> Suggestion? {
         do {
-            return try await journal.updateDelivery(suggestionID: suggestionID, calloutShown: calloutShown, spoken: spoken)
+            return try await journal.noteCalloutShown(suggestionID: suggestionID)
         } catch {
-            MentorLoop.log.error("delivery not journaled: \(String(describing: error), privacy: .public)")
-            return nil
-        }
-    }
-
-    /// Records that a follow-up answer was read aloud.
-    @discardableResult
-    public func noteFollowUpSpoken(id: Int64) async -> FollowUp? {
-        do {
-            return try await journal.markFollowUpSpoken(id: id)
-        } catch {
-            MentorLoop.log.error("follow-up delivery not journaled: \(String(describing: error), privacy: .public)")
+            MentorLoop.log.error("callout not journaled: \(String(describing: error), privacy: .public)")
             return nil
         }
     }

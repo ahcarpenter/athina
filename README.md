@@ -9,9 +9,9 @@ it currently thinks you are doing. The **mentor loop** subscribes to that
 stream and asks Claude, in two tiers, whether there is a genuinely more helpful
 way to approach what you are doing; when there is, a small toast says so and
 learns from your answer. **Callouts and voice** let a suggestion point at the
-spot on screen it is about, read itself aloud, and take a spoken reply: an
-answer to the toast, or a question the mentor tier answers. Halt-and-redirect
-and learned suppression are later phases.
+spot on screen it is about and take a spoken reply: an answer to the toast, or
+a question the mentor tier answers. Reading suggestions aloud is deferred.
+Halt-and-redirect and learned suppression are later phases.
 
 ## Requirements
 
@@ -292,13 +292,14 @@ Sources/MentorCore            library, fully testable
                               text, follow-up message), Prompts (versioned system prompts and output
                               schemas), Suggestion, FollowUp and ModelCallRecord, Callout (CalloutRegion,
                               CalloutAnchor: frame-to-screen mapping and every rule that refuses a
-                              callout), TalkBack (TranscriptMatcher, SpeechGate), MentorLoop (orchestration)
+                              callout), TalkBack (TranscriptMatcher, FollowUp, TalkBackState),
+                              MentorLoop (orchestration)
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory)
 Sources/Mentor                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
-                              Overlay/CalloutController (click-through overlay), Voice/SpeechSynthesizer
-                              and Voice/SpeechListener (on-device speech out and in), HotKeyCenter (Carbon,
-                              press and release), Developer/ScriptedInterventionClient, Snapshots
+                              Overlay/CalloutController (click-through overlay), Voice/SpeechListener
+                              (on-device speech recognition), HotKeyCenter (Carbon, press and release),
+                              Snapshots
 Tests/MentorCoreTests         Swift Testing suites for the pure parts, with JSON fixtures under Fixtures/
 ```
 
@@ -345,13 +346,12 @@ oldest thumbnails and finally the oldest observations and events until it fits.
 
 The mentor loop adds two tables: `suggestions` (every suggestion shown, with
 the user's feedback, the region it pointed at if any, and whether a callout
-was drawn and whether it was spoken) and `model_calls` (one row per API call:
+was drawn) and `model_calls` (one row per API call:
 tier, model, prompt version and size, token counts, estimated cost, latency,
 outcome, the model's one-line reason, and whether it was replayed; never the
 prompt text). A moment held at the context boundary is recorded there as the
 `outOfContext` outcome. Talking back adds `follow_ups` (one row per question:
-the transcript, the answer or why there is none, the model, and whether the
-answer was spoken). All three expire with `textRetention` and are emptied by
+the transcript, the answer or why there is none, and the model). All three expire with `textRetention` and are emptied by
 Clear Journal. Columns added after a table shipped are added to an existing
 journal on open, so older files keep working.
 
@@ -500,19 +500,6 @@ records for each suggestion whether one was drawn, and the debug panel's
 Mentor card shows the last callout decision with the region in frame pixels
 and in screen points.
 
-### Voice out
-
-With "Speak suggestions" on in Settings > Mentor (off by default), a delivered
-suggestion's title and body are read aloud with `AVSpeechSynthesizer` and the
-system default voice, entirely on this Mac. Speech stops when the toast is
-dismissed, answered, or expires, when the pause hotkey fires, and when the
-sensing mode leaves the active states: nothing is spoken while paused, idle,
-on an excluded app, or waiting for permissions (`SpeechGate`). The toast has
-a small speaker button that reads the suggestion again, or stops it, whatever
-the setting says; it is disabled while speech is gated off. A follow-up
-answer (see Talking back) is spoken the same way when the setting is on. The
-history window records whether each suggestion and answer was spoken.
-
 ### Talking back
 
 A push-to-talk hotkey, recorded in Settings > Mentor the same way as the pause
@@ -546,7 +533,7 @@ suggestion (title, body, explanation), the exchange so far on that suggestion,
 the recognized text of the screen the suggestion was made from when the
 journal still has it, and the transcript, on the mentor model and effort,
 with structured output `{"answer": string}`. The answer appears in the toast's
-exchange area and is spoken when Speak suggestions is on. The call is
+exchange area. The call is
 journaled in the model call log with the `followUp` tier and counted against
 the hourly spend cap like every other call; the same gates that hold both
 tiers (off, paused, idle, excluded app, no key, the cap, a call in flight)
@@ -559,7 +546,7 @@ with it.
 
 The Mentor card also has a **Talk back** field. Words typed there and sent take
 exactly the path a released key does, from transcript matching to the
-follow-up call, the answer in the toast, and speech, so the whole path can be
+follow-up call and the answer in the toast, so the whole path can be
 checked, in a replay or while recording a follow-up fixture, on a Mac where
 Microphone and Speech Recognition are not granted.
 
@@ -624,8 +611,7 @@ counted (see Iterating without the network).
   of the app has network code.
 - **Audio and transcripts stay on this Mac.** The microphone is open only
   while the talk-back key is held, and only the system's on-device recognizer
-  ever hears it; audio is never stored. Spoken suggestions are synthesized
-  here. The one exception is deliberate: a transcript you spoke while holding
+  ever hears it; audio is never stored. The one exception is deliberate: a transcript you spoke while holding
   the key (or typed into the debug panel's Talk back field), when it is not
   one of the toast's answers, is sent to the mentor tier as your follow-up
   question, together with the suggestion it is about,
@@ -719,11 +705,11 @@ gates, mentorship context rules and placement, spend accounting, snooze and
 never-for-this rules, the rolling window, request and response coding against
 fixture JSON, recording, redaction, replay matching and stale refusal, launch
 flags, a replay's separate files, callout mapping and every anchor rejection,
-transcript matching, the follow-up prompt and gate, the speech gate, the whole
-loop against a scripted client, follow-ups included, and the whole loop against
+transcript matching, the follow-up prompt and gate, the toast rule for voice
+input, the whole loop against a scripted client, follow-ups included, and the whole loop against
 the committed replay fixtures, replayed strictly, a region and a follow-up
 answer included) and Vision OCR on a drawn bitmap, so they need no permissions,
 display, network, microphone, or API key. A committed fixture that is stale, or
 a tier with no committed fixture, fails the run (see The committed fixtures).
 The snapshot run covers the callout over the sample frame, the listening and
-answered toasts, and the voice settings.
+answered toasts, and the talk-back settings.

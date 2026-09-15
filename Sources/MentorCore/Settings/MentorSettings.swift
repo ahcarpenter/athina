@@ -52,12 +52,10 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     /// How long "Not now" keeps that category quiet for that app.
     public var notNowSnooze: TimeInterval = 3600
 
-    // MARK: Callouts and voice
+    // MARK: Callouts and talking back
 
     /// Draw a callout on screen when a suggestion points at one spot.
     public var showCallouts = true
-    /// Read each delivered suggestion aloud with the system voice.
-    public var speakSuggestions = false
     /// Held to talk back to the current suggestion. Nil until one is recorded.
     public var pushToTalkHotKey: HotKey?
 
@@ -82,7 +80,7 @@ public struct MentorSettings: Codable, Equatable, Sendable {
         case onlyMentorInsideContexts, contexts
         case mentorWindowDuration, mentorWindowTokenBudget, sendThumbnail
         case minimumConfidence, toastTimeout, notNowSnooze
-        case showCallouts, speakSuggestions, pushToTalkHotKey
+        case showCallouts, pushToTalkHotKey
         case hourlySpendCap, prices
         case neverRules, snoozes
     }
@@ -107,7 +105,6 @@ public struct MentorSettings: Codable, Equatable, Sendable {
         toastTimeout = try c.decodeIfPresent(TimeInterval.self, forKey: .toastTimeout) ?? d.toastTimeout
         notNowSnooze = try c.decodeIfPresent(TimeInterval.self, forKey: .notNowSnooze) ?? d.notNowSnooze
         showCallouts = try c.decodeIfPresent(Bool.self, forKey: .showCallouts) ?? d.showCallouts
-        speakSuggestions = try c.decodeIfPresent(Bool.self, forKey: .speakSuggestions) ?? d.speakSuggestions
         pushToTalkHotKey = try c.decodeIfPresent(HotKey.self, forKey: .pushToTalkHotKey)
         hourlySpendCap = try c.decodeIfPresent(Double.self, forKey: .hourlySpendCap) ?? d.hourlySpendCap
         prices = try c.decodeIfPresent(PriceTable.self, forKey: .prices) ?? d.prices

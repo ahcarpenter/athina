@@ -241,7 +241,6 @@ extension AppState {
             suggestions[0].region = CalloutRegion(rect: block.imageRect.insetBy(dx: -6, dy: -5), note: "this capture call")
             suggestions[0].calloutShown = true
         }
-        suggestions[0].spoken = true
         state.suggestionHistory = suggestions
         state.activeSuggestion = suggestions.first
         state.followUps = SampleSuggestions.followUps(now: now, suggestionID: 3) + SampleSuggestions.followUps(now: now, suggestionID: 4)
@@ -451,7 +450,7 @@ enum SampleSuggestions {
                     id: 7, suggestionID: 4, timestamp: now.addingTimeInterval(-20),
                     question: "does that work with tags as well",
                     answer: "Yes. Tag the tests you care about with a Tag you declare once, then run swift test --filter with the tag name in the same way; the suite name filter and the tag filter both narrow the run to seconds.",
-                    model: "claude-fable-5-1", promptVersion: MentorPrompts.version, spoken: true
+                    model: "claude-fable-5-1", promptVersion: MentorPrompts.version
                 ),
             ]
         case 3:
