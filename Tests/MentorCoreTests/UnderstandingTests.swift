@@ -241,9 +241,19 @@ import Testing
 
     // MARK: Expiry
 
+    /// A calendar in which `t0` is noon, so the idle-gap cases stay on one day
+    /// whatever time zone the tests run in.
+    private var middayCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        let secondsIntoUTCDay = Int(t0.timeIntervalSince1970) % 86400
+        calendar.timeZone = TimeZone(secondsFromGMT: 43200 - secondsIntoUTCDay) ?? .current
+        return calendar
+    }
+
     @Test func staysCurrentWhileActivityIsRecentAndTheDayIsTheSame() {
         #expect(UnderstandingExpiry.of(
-            writtenAt: t0, now: t0.addingTimeInterval(3600), idleGap: 4 * 3600, lastActivityAt: nil
+            writtenAt: t0, now: t0.addingTimeInterval(3600), idleGap: 4 * 3600, lastActivityAt: nil,
+            calendar: middayCalendar
         ) == nil)
     }
 
@@ -252,14 +262,16 @@ import Testing
     @Test func staysCurrentWhileTheUserKeepsWorkingLongAfterTheLastWrite() {
         let now = t0.addingTimeInterval(5 * 3600)
         #expect(UnderstandingExpiry.of(
-            writtenAt: t0, now: now, idleGap: 4 * 3600, lastActivityAt: now.addingTimeInterval(-60)
+            writtenAt: t0, now: now, idleGap: 4 * 3600, lastActivityAt: now.addingTimeInterval(-60),
+            calendar: middayCalendar
         ) == nil)
     }
 
     @Test func expiresAfterTheIdleGapSinceTheLastActivity() {
         let lastActive = t0.addingTimeInterval(3600)
         let expiry = UnderstandingExpiry.of(
-            writtenAt: t0, now: lastActive.addingTimeInterval(4 * 3600 + 1), idleGap: 4 * 3600, lastActivityAt: lastActive
+            writtenAt: t0, now: lastActive.addingTimeInterval(4 * 3600 + 1), idleGap: 4 * 3600, lastActivityAt: lastActive,
+            calendar: middayCalendar
         )
         #expect(expiry == .idleGap(4 * 3600))
     }
@@ -268,9 +280,12 @@ import Testing
     /// runs from the write itself; activity before the write does not count.
     @Test func expiresAfterTheIdleGapSinceTheWriteWhenNothingWasObservedAfterIt() {
         let now = t0.addingTimeInterval(4 * 3600 + 1)
-        #expect(UnderstandingExpiry.of(writtenAt: t0, now: now, idleGap: 4 * 3600, lastActivityAt: nil) == .idleGap(4 * 3600))
         #expect(UnderstandingExpiry.of(
-            writtenAt: t0, now: now, idleGap: 4 * 3600, lastActivityAt: t0.addingTimeInterval(-600)
+            writtenAt: t0, now: now, idleGap: 4 * 3600, lastActivityAt: nil, calendar: middayCalendar
+        ) == .idleGap(4 * 3600))
+        #expect(UnderstandingExpiry.of(
+            writtenAt: t0, now: now, idleGap: 4 * 3600, lastActivityAt: t0.addingTimeInterval(-600),
+            calendar: middayCalendar
         ) == .idleGap(4 * 3600))
     }
 
