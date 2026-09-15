@@ -1316,7 +1316,7 @@ final class AppState {
     var understandingLine: String? {
         guard mentorStatus.availability.formsUnderstanding else { return nil }
         guard let goal = mentorStatus.understanding?.content.primaryGoal else {
-            return "Goal: still working it out"
+            return "Goal: not worked out yet"
         }
         return "Goal: \(Formatting.clipped(goal.goal, to: 64))"
     }

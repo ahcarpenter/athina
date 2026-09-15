@@ -454,13 +454,17 @@ public struct MentorStatus: Equatable, Sendable {
         /// Counting toward `next`. `hold` is why the refresh gate last held,
         /// while that is still the reason in force.
         case counting(next: Date, hold: RefreshHoldRecord?)
+        /// A refresh call is in flight now.
+        case refreshing
     }
 
     /// The refresh's standing in `mode`, derived from the current state rather
     /// than from the refresh gate's last look, which may predate a pause, a
-    /// reset, or a new record. A not-due hold is in force only while its time
-    /// is still the next refresh.
+    /// reset, or a new record. A refresh call in flight is the standing whatever
+    /// the mode, since it runs to its end. A not-due hold is in force only while
+    /// its time is still the next refresh.
     public func refreshStanding(mode: SensingMode) -> RefreshStanding {
+        if inFlight == .understanding { return .refreshing }
         guard mode.capturesFrames else { return .notCounting(mode) }
         guard let next = nextRefreshAt else { return .notStarted }
         var hold = lastRefreshHold

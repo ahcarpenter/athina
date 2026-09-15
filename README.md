@@ -368,6 +368,7 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 | `menubar-width` | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
 | `menubar-mark` | Mentor's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
+| `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models, and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
 every check it made, and the directory holding its evidence (transcript,
@@ -906,10 +907,10 @@ oldest timeline entries first, then the oldest mentor history, then concerns,
 then the weakest goals, always keeping the strongest goal. It expires after
 `understandingIdleGap` with no activity (4 hours) and always at a new day;
 expiry and reset are journaled.
-**Reset Understanding**, in Settings > Models and in the debug panel, forgets
-every revision at once. Revisions are inserted rather than updated, so the
-journal keeps the trail of how the reading developed, and the current one
-survives a relaunch.
+**Reset Understanding…**, in Settings > Models and in the debug panel, asks
+first and then forgets every revision at once. Revisions are inserted rather
+than updated, so the journal keeps the trail of how the reading developed, and
+the current one survives a relaunch.
 
 **What it costs.** The common case is free: a mentor call was going to happen
 anyway and the record rides along in its reply, paying only for the extra
@@ -1035,9 +1036,10 @@ cached tokens, estimated cost and latency, spend this hour, the cadence state
 with the current slowdown, the last callout decision with its region in frame
 pixels and screen points, and the last transcript with what was done with it),
 the Understanding card (revision, when and how it was last written, the
-inferred goals with their evidence and confidence, the timeline, what has been
-said and answered, open concerns, when the next refresh is due or why it is
-held, size against the budget, cost since it began, and Reset Understanding),
+inferred goals with their evidence and confidence, what has been done and
+said so far, open concerns, the refresh interval, when the next refresh is
+due, running, or why it is held, size against the budget, what refresh calls
+have cost since it began, the last refresh call, and Reset Understanding…),
 focused element (role, title, description, text), cadence settings and
 counters, journal size and path. Centre: the latest kept frame with OCR boxes
 overlaid and the recognized text below; selecting an observation in the
@@ -1127,6 +1129,10 @@ particular to this app:
   carries the color, the words stay in a label color. Text uses system text
   styles and label colors, never fixed point sizes or tertiary text for
   anything that must be read.
+- **What cannot be undone asks first.** Clear Journal… and Reset
+  Understanding… open a confirmation that names what is lost; the confirming
+  button is plain, since it is what the person chose, and Cancel is always
+  there.
 - **Permissions explain before they ask.** The window never prompts on its own,
   each permission has one button, and the purpose strings in
   `Resources/Info.plist` say the same as the window in one sentence.

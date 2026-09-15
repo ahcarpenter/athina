@@ -77,6 +77,18 @@ extension View {
         formStyle(.grouped)
             .frame(width: SettingsView.paneWidth, height: height)
     }
+
+    /// Opens a `mentor-settings:<pane>` link in this text as that Settings
+    /// pane, so text names a place elsewhere in Settings by linking to it.
+    func settingsPaneLinks() -> some View {
+        environment(\.openURL, OpenURLAction { url in
+            guard url.scheme == "mentor-settings", let pane = SettingsPane(rawValue: url.absoluteString.replacingOccurrences(of: "mentor-settings:", with: "")) else {
+                return .systemAction
+            }
+            pane.select()
+            return .handled
+        })
+    }
 }
 
 // MARK: - Capture
@@ -245,7 +257,7 @@ struct JournalSettings: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Every observation, thumbnail, event, suggestion, follow-up question, and model call record is deleted, along with what Mentor understands of your goals. You can't undo this action.")
+            Text("Every observation, thumbnail, event, suggestion, follow-up question, and model call record is deleted, along with Mentor's understanding of what you are working toward. You can't undo this action.")
         }
         .task {
             await state.refreshJournalStats()
@@ -631,7 +643,9 @@ struct DurationRow: View {
                     }
                 }
                 .labelsHidden()
-                .fixedSize()
+                // As wide as its longest unit, so the field and stepper of
+                // duration rows in one section line up whichever unit each shows.
+                .frame(width: 84, alignment: .trailing)
                 .onChange(of: unit) { _, _ in push() }
             }
         } label: {

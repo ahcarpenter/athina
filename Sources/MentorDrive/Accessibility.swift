@@ -51,7 +51,12 @@ enum Accessibility {
             }
 
         case "texts":
-            let interesting = ["AXStaticText", "AXButton", "AXCheckBox", "AXTextField", "AXTextArea", "AXMenuItem", "AXMenuBarItem"]
+            // AXUnknown is in the list because that is the role SwiftUI gives a
+            // row whose parts are combined into one element, which is how
+            // VoiceOver reads most of Mentor's rows.
+            let interesting = [
+                "AXStaticText", "AXButton", "AXCheckBox", "AXTextField", "AXTextArea", "AXMenuItem", "AXMenuBarItem", "AXUnknown",
+            ]
             for root in roots() {
                 var found: [AXUIElement] = []
                 findAll(root, { interesting.contains(role($0)) }, into: &found)
@@ -95,7 +100,11 @@ enum Accessibility {
             default:
                 let newValue = try invocation.positional(4)
                 AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-                let status = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, newValue as CFTypeRef)
+                // A number goes in as a number: a scroll bar's value, for one,
+                // refuses a string, and scrolling a SwiftUI pane to what a
+                // scenario wants to see is setting that value.
+                let payload: CFTypeRef = Double(newValue).map { NSNumber(value: $0) as CFTypeRef } ?? (newValue as CFTypeRef)
+                let status = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, payload)
                 say("set \(role(element)) -> \(status.rawValue) now value=\"\(value(element).prefix(200))\"")
             }
 

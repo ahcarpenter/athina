@@ -5,54 +5,83 @@ import SwiftUI
 /// of its own, how large it may grow, how long it survives, and how to forget it.
 struct UnderstandingSection: View {
     @Environment(AppState.self) private var state
-    @State private var resetting = false
 
     var body: some View {
         @Bindable var state = state
         Section {
+            // A goal is a sentence, so it reads as the row's subtitle, leading
+            // and wrapping, rather than as a ragged value against the trailing edge.
             if let record = state.mentorStatus.understanding, let goal = record.content.primaryGoal {
-                LabeledContent("Currently") {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text(goal.goal)
-                            .multilineTextAlignment(.trailing)
-                            .fixedSize(horizontal: false, vertical: true)
-                        Text("revision \(record.revision), \(record.content.estimatedTokens) tokens, \(Formatting.dollars(record.cumulativeCost)) so far")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                LabeledContent {
+                    Text("Revision \(record.revision)")
+                } label: {
+                    Text("Current goal")
+                    Text(goal.goal)
+                    Text("\(Formatting.tokens(record.content.estimatedTokens)) tokens, \(Formatting.dollars(record.cumulativeCost)) in refresh calls")
                 }
+                .accessibilityElement(children: .combine)
             } else {
-                LabeledContent("Currently") {
-                    Text("nothing worked out yet")
-                        .foregroundStyle(.secondary)
+                LabeledContent("Current goal") {
+                    Text("Not worked out yet")
                 }
+                .accessibilityElement(children: .combine)
             }
-            NumberRow(
+            DurationRow(
                 "Refresh at most every", value: $state.settings.mentor.understandingRefreshInterval,
-                range: MentorSettings.refreshIntervalRange, step: 300, unit: .seconds,
-                help: "Every mentor call rewrites the understanding on the way past, for free. This is how long it may go unrefreshed, counting only time you are active, before a call of its own is made."
+                help: "Every mentor call also rewrites the understanding, at no extra cost. After this much active use with no mentor call, Mentor makes a refresh call of its own."
             )
             IntRow(
                 "Size limit", value: $state.settings.mentor.understandingTokenBudget,
                 range: MentorSettings.understandingTokenBudgetRange, step: 100, unit: .tokens,
-                help: "The record is trimmed to fit, oldest timeline entries first, so it can never grow without bound."
+                help: "When the understanding grows past this, its oldest entries are dropped first and its strongest goal is always kept."
             )
-            DurationRow("Forget after no activity for", value: $state.settings.mentor.understandingIdleGap)
+            DurationRow(
+                "Forget after no activity for", value: $state.settings.mentor.understandingIdleGap,
+                help: "It is also forgotten when a new day starts."
+            )
             HStack {
-                Button("Reset Understanding") {
-                    resetting = true
-                    Task {
-                        await state.resetUnderstanding()
-                        resetting = false
-                    }
-                }
-                .disabled(state.mentorStatus.understanding == nil || resetting)
                 Spacer()
+                ResetUnderstandingButton()
             }
         } header: {
             Text("Understanding")
         } footer: {
-            Text("Mentor keeps a short written record of what you appear to be working toward and what has happened, so it can judge what you are doing against your goal instead of the last ten minutes alone. It is written by the model, kept in the journal, cleared by Clear Journal, and always forgotten at a new day.")
+            // The link opens the Journal pane in place rather than describing where it is.
+            Text("Mentor keeps a short written record of what you appear to be working toward and what has happened so far, so it can judge what you do against that goal rather than recent screens alone. The model writes it, and it stays in the journal on this Mac until it is forgotten, reset here, or cleared with the journal in [Journal settings](mentor-settings:journal).")
+                .settingsPaneLinks()
+        }
+    }
+}
+
+/// Reset Understanding, in Settings and in the debug panel. It forgets every
+/// revision at once and nothing brings them back, so it asks first.
+struct ResetUnderstandingButton: View {
+    @Environment(AppState.self) private var state
+    @State private var confirming = false
+    @State private var resetting = false
+
+    var body: some View {
+        Button("Reset Understanding…", role: .destructive) {
+            confirming = true
+        }
+        .disabled(state.mentorStatus.understanding == nil || resetting)
+        // Resetting is what the person just chose, so the confirming button
+        // is the plain default and Cancel stays available, as for Clear Journal.
+        .confirmationDialog(
+            "Reset the understanding?",
+            isPresented: $confirming,
+            titleVisibility: .visible
+        ) {
+            Button("Reset Understanding") {
+                resetting = true
+                Task {
+                    await state.resetUnderstanding()
+                    resetting = false
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Mentor forgets the goals, history, and concerns it has worked out, and starts a new understanding from what you do next. You can't undo this action.")
         }
     }
 }
