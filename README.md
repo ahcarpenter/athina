@@ -49,7 +49,8 @@ UI changes get checked without a person at the screen; it needs no permissions
 and never reads the keychain. Each view renders in a borderless window placed
 below the desktop picture, where the window server still composites glass and
 controls and ScreenCaptureKit still captures it, so nothing appears on screen
-and a tall Settings pane renders whole. Replay mode has renders of its own.
+(the run puts no item in the menu bar either) and a tall Settings pane renders
+whole. Replay mode has renders of its own.
 `open build/Mentor.app --args --open debug` (or `settings`, `settings:<pane>`
 for `general`, `contexts`, `models`, `capture`, `journal`, or `privacy`,
 `permissions`, `history`) launches the app with that window already open, which
@@ -1062,7 +1063,9 @@ particular to this app:
   the app menu's About and Quit. Menu items use title case and an ellipsis only
   where more input follows, and no standard keyboard shortcut is repurposed.
   The icon is a template SF Symbol per sensing mode, with a word beside it only
-  in replay or recording.
+  in replay or recording. The item keeps one width in every mode: the symbol is
+  drawn centred in an image as wide as the widest mode symbol (`MenuBarIcon`),
+  so switching to an excluded app never shifts the menu bar extras beside it.
 - **The toast is a non-activating panel, not a notification.** It floats under
   the menu bar on Liquid Glass and never takes keyboard focus, with corners
   concentric with its small capsule buttons. Because it cannot be focused, the
@@ -1115,5 +1118,6 @@ fixtures). The snapshot run covers every window and Settings pane with sample
 data, their empty states (no suggestions, no frames, no contexts, contexts at
 the cap), the callout over the sample frame, the toast collapsed, expanded,
 listening, thinking, answered, and as a note, the context editor with a
-duplicate name, and the transient status messages (a connection test, a refused
-or recording shortcut, on-device recognition unavailable).
+duplicate name, the transient status messages (a connection test, a refused
+or recording shortcut, on-device recognition unavailable), and the menu bar
+item's label in every sensing mode, live and in replay.
