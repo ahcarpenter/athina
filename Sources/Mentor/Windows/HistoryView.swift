@@ -18,32 +18,19 @@ struct HistoryView: View {
 
     var body: some View {
         HSplitView {
-            VStack(spacing: 0) {
-                HStack {
-                    Text("Suggestions")
-                        .font(.headline)
-                    Text("\(state.suggestionHistory.count)")
-                        .foregroundStyle(.secondary)
-                        .font(.callout)
-                        .monospacedDigit()
-                    Spacer()
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                Divider()
-                List(state.suggestionHistory, selection: $selectedID) { suggestion in
-                    HistoryRow(suggestion: suggestion)
-                        .tag(suggestion.id)
-                }
-                .listStyle(.inset)
-                .overlay {
-                    if state.suggestionHistory.isEmpty {
-                        ContentUnavailableView(
-                            "No suggestions yet",
-                            systemImage: "lightbulb",
-                            description: Text("Suggestions appear here as Mentor makes them.")
-                        )
-                    }
+            List(state.suggestionHistory, selection: $selectedID) { suggestion in
+                HistoryRow(suggestion: suggestion)
+                    .tag(suggestion.id)
+            }
+            .listStyle(.inset)
+            .accessibilityLabel("Suggestions")
+            .overlay {
+                if state.suggestionHistory.isEmpty {
+                    ContentUnavailableView(
+                        "No Suggestions Yet",
+                        systemImage: "lightbulb",
+                        description: Text("When Mentor notices a more helpful way to do something, the suggestion appears here with your answer to it.")
+                    )
                 }
             }
             .frame(minWidth: 320, idealWidth: 360)
@@ -51,13 +38,14 @@ struct HistoryView: View {
                 if let selected {
                     SuggestionDetail(suggestion: selected)
                 } else {
-                    ContentUnavailableView("Select a suggestion", systemImage: "text.alignleft")
+                    ContentUnavailableView("No Suggestion Selected", systemImage: "text.alignleft")
                 }
             }
             .frame(minWidth: 380, maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(nsColor: .windowBackgroundColor))
         }
         .frame(minWidth: 760, minHeight: 440)
+        .navigationSubtitle(Plural.count(state.suggestionHistory.count, "suggestion", "suggestions"))
     }
 }
 
@@ -71,16 +59,17 @@ private struct HistoryRow: View {
                 .foregroundStyle(.tint)
                 .frame(width: 18)
                 .padding(.top, 2)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(suggestion.title)
                     .lineLimit(2)
                 HStack(spacing: 6) {
                     Text(Formatting.dayAndTime(suggestion.timestamp))
                         .monospacedDigit()
-                    Text("·")
+                    Text("·").accessibilityHidden(true)
                     Text(suggestion.appName)
                         .lineLimit(1)
-                    Text("·")
+                    Text("·").accessibilityHidden(true)
                     Text(suggestion.category.label)
                     DeliveryMarks(suggestion: suggestion, talkedBack: state.followUps.contains { $0.suggestionID == suggestion.id })
                 }
@@ -91,6 +80,7 @@ private struct HistoryRow: View {
             FeedbackPill(feedback: suggestion.feedback, isShowing: state.activeSuggestion?.id == suggestion.id)
         }
         .padding(.vertical, 3)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -114,7 +104,7 @@ private struct DeliveryMarks: View {
                         .accessibilityLabel("Talked back to")
                 }
             }
-            .foregroundStyle(.tertiary)
+            .foregroundStyle(.secondary)
         }
     }
 }
@@ -127,13 +117,7 @@ struct FeedbackPill: View {
 
     var body: some View {
         if let label = feedback?.label ?? (isShowing ? "Showing" : nil) {
-            Text(label)
-                .font(.caption.weight(.medium))
-                .padding(.horizontal, 7)
-                .padding(.vertical, 2)
-                .background(color.opacity(0.16), in: Capsule())
-                .foregroundStyle(color)
-                .fixedSize()
+            StatusBadge(text: label, tint: color)
         }
     }
 
@@ -158,14 +142,15 @@ private struct SuggestionDetail: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
                         Label(suggestion.category.label, systemImage: suggestion.category.symbol)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tint)
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(.secondary)
                         FeedbackPill(feedback: suggestion.feedback, isShowing: state.activeSuggestion?.id == suggestion.id)
                         Spacer()
                     }
                     Text(suggestion.title)
                         .font(.title2.weight(.semibold))
                         .textSelection(.enabled)
+                        .accessibilityAddTraits(.isHeader)
                         .fixedSize(horizontal: false, vertical: true)
                     Text(suggestion.body)
                         .font(.body)
@@ -209,8 +194,8 @@ private struct SuggestionDetail: View {
                     Divider()
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Talk back")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .font(.headline)
+                            .accessibilityAddTraits(.isHeader)
                         ForEach(exchange) { entry in
                             VStack(alignment: .leading, spacing: 4) {
                                 exchangeLine("You", entry.question, at: entry.timestamp)
@@ -225,11 +210,11 @@ private struct SuggestionDetail: View {
                 }
                 if suggestion.feedback == nil || suggestion.feedback?.isNonAnswer == true || suggestion.feedback == .tellMeMore {
                     HStack(spacing: 8) {
-                        Button("Not now") { state.respond(to: suggestion.id, with: .notNow) }
-                        Button("Never for this") { state.respond(to: suggestion.id, with: .never) }
+                        Button("Not Now") { state.respond(to: suggestion.id, with: .notNow) }
+                            .help("Hide \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName) for a while")
+                        Button("Never for This") { state.respond(to: suggestion.id, with: .never) }
                             .help("Stop \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName)")
                     }
-                    .controlSize(.small)
                 }
             }
             .padding(20)
@@ -251,7 +236,7 @@ private struct SuggestionDetail: View {
                 Spacer(minLength: 8)
                 Text(Formatting.dayAndTime(time))
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
         }

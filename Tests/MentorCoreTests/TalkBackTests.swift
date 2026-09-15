@@ -71,6 +71,58 @@ import Testing
     }
 }
 
+@Suite struct ToastClickTests {
+    static let talkingBack: [TalkBackState] = [
+        .listening(partial: ""), .waiting(question: "which line do you mean"), .thinking(question: "which line do you mean"),
+    ]
+
+    @Test func aClickElsewhereClosesTheToastUnlessTheUserIsTalkingBack() {
+        #expect(ToastClick.elsewhere.dismissesToast(talkBack: .idle))
+        for state in ToastClickTests.talkingBack {
+            #expect(!ToastClick.elsewhere.dismissesToast(talkBack: state))
+        }
+    }
+
+    @Test func aClickOnTheToastKeepsItUpSoItsButtonsWork() {
+        #expect(!ToastClick.onToast.dismissesToast(talkBack: .idle))
+    }
+
+    /// Opening Mentor's menu with the pointer is how its Answer Suggestion
+    /// submenu is reached, so it must not close the toast that submenu answers.
+    @Test func openingMentorsMenuKeepsTheToastUpForTheAnswerSubmenu() {
+        #expect(!ToastClick.onMenuBarItem.dismissesToast(talkBack: .idle))
+        for state in ToastClickTests.talkingBack {
+            #expect(!ToastClick.onMenuBarItem.dismissesToast(talkBack: state))
+        }
+    }
+
+    /// A menu bar item's window as macOS 27 reports it in process, on a
+    /// 1728x1117 screen with a 33-point menu bar.
+    static let menuBarItem = CGRect(x: 1142, y: 1084, width: 79, height: 33)
+
+    /// A pointer click on the item reaches Mentor with no window, only a
+    /// screen location, so the location alone must find the item, including
+    /// the screen's top row, where the pointer is pinned against the edge.
+    @Test func aClickInsideTheMenuBarItemIsOnIt() {
+        for location in [CGPoint(x: 1181, y: 1100), CGPoint(x: 1181, y: 1117), CGPoint(x: 1142, y: 1085)] {
+            #expect(ToastClick(onToast: false, location: location, menuBarItems: [ToastClickTests.menuBarItem]) == .onMenuBarItem)
+        }
+    }
+
+    /// The point just under the bar and the next item's first point are not
+    /// Mentor's item, so they close the toast like any other click.
+    @Test func aClickBesideOrUnderTheMenuBarItemIsElsewhere() {
+        for location in [CGPoint(x: 1181, y: 1084), CGPoint(x: 1221, y: 1100), CGPoint(x: 1141, y: 1100), CGPoint(x: 400, y: 600)] {
+            #expect(ToastClick(onToast: false, location: location, menuBarItems: [ToastClickTests.menuBarItem]) == .elsewhere)
+        }
+        #expect(ToastClick(onToast: false, location: CGPoint(x: 1181, y: 1100), menuBarItems: []) == .elsewhere)
+    }
+
+    @Test func aClickOnTheToastIsOnItWhereverItIs() {
+        #expect(ToastClick(onToast: true, location: CGPoint(x: 1500, y: 1000), menuBarItems: [ToastClickTests.menuBarItem]) == .onToast)
+    }
+}
+
 /// The captain's rule for when a press counts: a toast is talked to only
 /// once a transcript matched an answer or a question was asked. An
 /// accidental tap, or a recording cut short, is not an exchange.
