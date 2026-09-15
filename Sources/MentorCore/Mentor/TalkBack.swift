@@ -112,20 +112,6 @@ public enum TalkBackPress {
         if match != nil || toastTalkedTo { return .talkedTo }
         return .notAnExchange(countdown: countdownRemaining)
     }
-
-    /// What bringing a suggestion back as a toast does to the toast that is up.
-    public enum BringBack: Equatable, Sendable {
-        /// It is the toast already up: it comes to the front with its
-        /// recording, pending answer, and exchange intact.
-        case bringToFront
-        /// A different toast, or none, is up: the new one takes the screen
-        /// and any exchange on the old one is cut short.
-        case replace
-    }
-
-    public static func bringingBack(_ suggestionID: Int64, over activeID: Int64?) -> BringBack {
-        activeID == suggestionID ? .bringToFront : .replace
-    }
 }
 
 /// What push-to-talk is doing, shown in the toast.

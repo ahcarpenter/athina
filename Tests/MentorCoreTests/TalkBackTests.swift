@@ -91,15 +91,6 @@ import Testing
         #expect(TalkBackPress.outcome(match: nil, toastTalkedTo: true, countdownRemaining: nil) == .talkedTo)
         #expect(TalkBackPress.outcome(match: TranscriptMatcher.match("um"), toastTalkedTo: true, countdownRemaining: nil) == .talkedTo)
     }
-
-    /// Show Last Suggestion on the toast that is already up, say while its
-    /// answer is on the way, only brings it to the front: the exchange on it
-    /// is never cut short. A different toast, or none, is replaced as usual.
-    @Test func bringingBackTheToastThatIsUpKeepsItsExchange() {
-        #expect(TalkBackPress.bringingBack(7, over: 7) == .bringToFront)
-        #expect(TalkBackPress.bringingBack(7, over: 3) == .replace)
-        #expect(TalkBackPress.bringingBack(7, over: nil) == .replace)
-    }
 }
 
 @Suite struct ClockFormatTests {

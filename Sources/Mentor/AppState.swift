@@ -530,9 +530,12 @@ final class AppState {
     }
 
     private func show(_ suggestion: Suggestion, autoExpires: Bool) {
-        if case .bringToFront = TalkBackPress.bringingBack(suggestion.id, over: activeSuggestion?.id) {
+        if let active = activeSuggestion, active.id == suggestion.id {
             cancelToastExpiry()
             toast.bringToFront()
+            if !callouts.isVisible {
+                placeCallout(for: suggestion)
+            }
             return
         }
         if let active = activeSuggestion {
