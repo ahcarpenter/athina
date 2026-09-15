@@ -303,6 +303,13 @@ public struct MentorVerdict: Codable, Equatable, Sendable {
         public var confidence: Double
         public var region: Region?
 
+        /// True when the title or the body has no words. The schema requires
+        /// both fields, and a model can still fill them with empty strings.
+        public var isBlank: Bool {
+            title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+
         public init(title: String, body: String, explanation: String, category: SuggestionCategory, confidence: Double, region: Region? = nil) {
             self.title = title
             self.body = body

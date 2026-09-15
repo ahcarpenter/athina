@@ -360,7 +360,12 @@ public actor MentorLoop {
                 record.detail = verdict.reason.withPlainDashes
                 if let payload = verdict.suggestion {
                     let title = payload.title.withPlainDashes
-                    if payload.confidence < settings.minimumConfidence {
+                    if payload.isBlank {
+                        // Structured output guarantees the fields exist, not
+                        // that they say anything; a toast with no words is noise.
+                        record.outcome = .error
+                        record.detail = "the mentor reply had a \(payload.category.rawValue) suggestion with an empty title or body"
+                    } else if payload.confidence < settings.minimumConfidence {
                         record.outcome = .belowConfidence
                         record.detail = "\(title) (confidence \(Int((payload.confidence * 100).rounded()))%)"
                     } else if let reason = settings.suppression(for: payload.category, bundleID: observation.focus.bundleID, now: now) {

@@ -184,6 +184,22 @@ import Testing
         #expect(try await h.journal.followUps(suggestionID: suggestion.id).count == 2)
     }
 
+    /// Recorded live on 2026-09-14: Sonnet 5 answered a real risk with every
+    /// text field empty. Such a reply is logged as an error and never shown.
+    @Test func aSuggestionWithNoWordsIsLoggedAndNeverShown() async throws {
+        let h = try await MentorLoopTests.Harness()
+        await h.client.enqueue(json: Self.yes)
+        await h.client.enqueue(json: #"{"reason": "rm -rf on an empty variable", "suggestion": {"title": "", "body": " ", "explanation": "", "category": "risk", "confidence": 0.9, "region": null}}"#)
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
+        let status = await h.loop.currentStatus()
+        #expect(status.lastMentor?.outcome == .error)
+        #expect(status.lastMentor?.detail == "the mentor reply had a risk suggestion with an empty title or body")
+        #expect(try await h.journal.recentSuggestions(limit: 5).isEmpty)
+        #expect(try await h.journal.recentEvents(limit: 5).allSatisfy { $0.kind != .suggested })
+        #expect(MentorVerdict.Payload(title: "T", body: "", explanation: "", category: .risk, confidence: 1).isBlank)
+        #expect(!MentorVerdict.Payload(title: "T", body: "B", explanation: "", category: .risk, confidence: 1).isBlank)
+    }
+
     @Test func deliveryFlagsArePersistedThroughTheLoop() async throws {
         let h = try await MentorLoopTests.Harness()
         let suggestion = try await journaledSuggestion(h)
@@ -315,7 +331,8 @@ import Testing
         #expect(placement.note == expectedRegion.note)
 
         // A follow-up about it is answered from the recording, journaled as a replay, and never billed.
-        let followUp = await loop.askFollowUp(about: suggestion, question: "which line do you mean")
+        // A whole-second time, so the journal round trip compares equal.
+        let followUp = await loop.askFollowUp(about: suggestion, question: "which line do you mean", at: Date(timeIntervalSince1970: 1_789_000_000))
         #expect(followUp.answer == recordedAnswer.answer.withPlainDashes.trimmingCharacters(in: .whitespacesAndNewlines))
         #expect(followUp.error == nil)
         let call = try #require(try await journal.recentModelCalls(limit: 1).first)

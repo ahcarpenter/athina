@@ -201,11 +201,14 @@ replay directory, and a replay without one refuses that kind of call by name.
 
 `Tests/MentorCoreTests/Fixtures/Replay` is a small set recorded live from a
 staged, synthetic scenario (see its README), never from anyone's real work, on
-the cheapest models that exercise every call kind. `ReplayLoopTests` runs the
-whole loop against it: every triage fixture in turn, the mentor calls they
-lead to, the suggestion, its feedback, the journal rows, zero spend, and the
-cycle starting over. The same tests fail when a file carries anything shaped
-like a key, or an em dash.
+the cheapest models whose answers are worth replaying for every call kind (its
+README names them). `ReplayLoopTests` runs the whole loop against it: every
+triage fixture in turn, the mentor calls they lead to, the suggestion, its
+feedback, the journal rows, zero spend, and the cycle starting over.
+`ReplayInterventionTests` replays the mentor reply's region into a placed
+callout and the recorded follow-up answer. The same tests fail when a file
+carries anything shaped like a key, or an em dash, and when the set has no
+shown suggestion with a region or no follow-up answer.
 
 They also fail when the set is not current: a fixture recorded with another
 prompt version than `MentorPrompts.version`, or a tier with no fixture, fails
@@ -225,9 +228,14 @@ scenario and an empty journal:
    documents in the fixture directory's `scenario/` folder work), and add every
    other running app to Settings > Privacy > Excluded apps.
 3. Run `make record RECORD_DIR=recordings`, drive it through a moment worth a
-   look that yields a shown suggestion, a quiet moment, a Test Connection, and
-   one call of every other kind, then quit.
-4. Read every file, text and screenshot, replace the fixture directory's
+   look that yields a shown suggestion pointing at one spot, a quiet moment, a
+   follow-up question typed into the debug panel's Talk back field, a Test
+   Connection, and one call of every other kind, then quit. Drive it without
+   keystrokes (TextEdit scripting and accessibility actions), so no other app
+   takes the front and reaches a request's event history; raise the idle
+   threshold for the session so sensing does not stop behind it.
+4. Read every file, text and screenshot, and every reply for quality (a model
+   can fill a required field with an empty string), replace the fixture directory's
    recordings with the ones you keep, update its README, delete the rest, put
    the journal and settings back, and run `make fixture-status` and
    `swift test`.
@@ -402,8 +410,9 @@ each kept observation it runs, in order:
    (adaptive on Sonnet 5, Opus 5, and Fable 5.1); no thinking configuration is
    sent.
 
-5. **Delivery.** A suggestion under `minimumConfidence` or in a snoozed or
-   never-for-this category is logged and dropped. Otherwise it is journaled and
+5. **Delivery.** A suggestion under `minimumConfidence`, in a snoozed or
+   never-for-this category, or with an empty title or body is logged and
+   dropped. Otherwise it is journaled and
    shown as a toast: a floating, non-activating panel under the menu bar that
    never takes keyboard focus and auto-dismisses after `toastTimeout` (60 s;
    the countdown pauses while the pointer is over it). Closing it with the x,
