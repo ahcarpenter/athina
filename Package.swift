@@ -38,8 +38,10 @@ let package = Package(
             linkerSettings: [.linkedFramework("ApplicationServices")]
         ),
         .testTarget(
+            // MentorCore so the harness's journal queries are checked against a
+            // journal the app itself just created, not a hand-written schema.
             name: "MentorE2ETests",
-            dependencies: ["MentorE2E"]
+            dependencies: ["MentorE2E", "MentorCore"]
         ),
         .testTarget(
             name: "MentorCoreTests",

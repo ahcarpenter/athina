@@ -401,7 +401,9 @@ only and never looks an app up by name.
 
 The maths and parsing behind them are a plain library (`Sources/MentorE2E`)
 with unit tests: the journal queries, the menu bar geometry, the capture-race
-report, and the drive tool's argument handling.
+report, and the drive tool's argument handling. The queries are run against a
+journal `Journal` itself creates, so a column renamed in the app fails the
+suite rather than every scenario.
 
 ### What the harness already handles, so a scenario need not
 

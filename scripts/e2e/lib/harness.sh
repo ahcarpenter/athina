@@ -147,7 +147,8 @@ new_home() {
 # owner's own apps are excluded, so a replayed callout never lands on his work,
 # and the toast lives long enough to survive a wait for idle input.
 seed_settings() {
-	local home="$1" overrides="${2:-{\}}"
+	local home="$1" overrides="${2:-}"
+	[ -n "$overrides" ] || overrides='{}'
 	HOME_DIR="$home" OVERRIDES="$overrides" SETTINGS_SEED="$SETTINGS_SEED" python3 - <<'PY'
 import json, os, pathlib
 base = json.loads(pathlib.Path(os.environ["SETTINGS_SEED"]).read_text())
@@ -224,8 +225,8 @@ cleanup() {
 	set +e
 	log "cleanup"
 	local pid
-	for pid in "${HELPER_PIDS[@]:-}"; do stop_pid "$pid"; done
-	for pid in "${STAGED_PIDS[@]:-}"; do stop_pid "$pid"; done
+	for pid in ${HELPER_PIDS[@]+"${HELPER_PIDS[@]}"}; do stop_pid "$pid"; done
+	for pid in ${STAGED_PIDS[@]+"${STAGED_PIDS[@]}"}; do stop_pid "$pid"; done
 	stop_pid "$MENTOR_PID"
 	prefs_restore
 	if [ -n "$HOME_DIR" ] && [ "${KEEP_HOME:-0}" != 1 ]; then
@@ -418,7 +419,7 @@ write_evidence() {
 result_line() {
 	local name="$1" result="$2" seconds="$3" detail="$4"
 	NAME="$name" RESULT="$result" SECONDS_TAKEN="$seconds" DETAIL="$detail" EVIDENCE="$RUN_DIR" \
-		CHECKS="$(printf '%s\n' "${CHECK_LINES[@]:-}")" python3 - <<'PY'
+		CHECKS="$(printf '%s\n' ${CHECK_LINES[@]+"${CHECK_LINES[@]}"})" python3 - <<'PY'
 import json, os
 print(json.dumps({
     "scenario": os.environ["NAME"],

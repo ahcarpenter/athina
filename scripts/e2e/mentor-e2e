@@ -12,6 +12,13 @@
 # nothing is billed. See README, "End-to-end harness".
 set -euo pipefail
 
+# mapfile and the array forms below need bash 4; macOS still ships 3.2 as
+# /bin/bash, so say so rather than fail somewhere in the middle of a run.
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+	echo "mentor-e2e needs bash 4 or newer (this is ${BASH_VERSION:-unknown})" >&2
+	exit 1
+fi
+
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=lib/harness.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/harness.sh"
@@ -175,13 +182,14 @@ run_scenario() (
 	new_home "$HOME_DIR"
 	seed_settings "$HOME_DIR" "$SCENARIO_SETTINGS"
 
-	local args=("${SCENARIO_ARGS[@]:-}")
+	local args=()
+	[ ${#SCENARIO_ARGS[@]} -gt 0 ] && args+=("${SCENARIO_ARGS[@]}")
 	[ -n "$TIME_SCALE" ] && args+=(--time-scale "$TIME_SCALE")
 	local started result detail
 	started=$(date +%s)
 
 	scenario_stage
-	launch_mentor "$HOME_DIR" "${args[@]}"
+	launch_mentor "$HOME_DIR" ${args[@]+"${args[@]}"}
 	watch_announcements
 	watch_clicks
 	wait_first_observation 90 || log "WARNING: no capture yet; the home may not be warm"
@@ -205,7 +213,8 @@ run_scenario() (
 )
 
 cmd_journal() {
-	local query="$1" home="${2:-}"
+	local query="${1:-}" home="${2:-}"
+	[ -n "$query" ] || { usage; exit 64; }
 	if [ -z "$home" ]; then
 		home="$(find "$RUNS_ROOT" -maxdepth 2 -name 'journal.sqlite' -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1)"
 		[ -n "$home" ] || die "no run journal found; pass --home <dir>"
@@ -240,11 +249,11 @@ main() {
 	mkdir -p "$RUNS_ROOT"
 	case "$command" in
 	list) cmd_list ;;
-	warm) cmd_warm "${rest[@]:-}" ;;
-	run) cmd_run "${rest[@]:-}" ;;
-	journal) cmd_journal "${rest[@]:-}" ;;
+	warm) cmd_warm ${rest[@]+"${rest[@]}"} ;;
+	run) cmd_run ${rest[@]+"${rest[@]}"} ;;
+	journal) cmd_journal ${rest[@]+"${rest[@]}"} ;;
 	doctor) cmd_doctor ;;
-	clean) cmd_clean "${rest[@]:-}" ;;
+	clean) cmd_clean ${rest[@]+"${rest[@]}"} ;;
 	"" | -h | --help | help) usage ;;
 	*) usage; exit 64 ;;
 	esac
