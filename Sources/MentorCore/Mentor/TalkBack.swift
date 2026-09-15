@@ -147,6 +147,25 @@ public enum TalkBackState: Equatable, Sendable {
     }
 }
 
+/// Where a mouse-down landed while a toast is up, and whether that closes it.
+/// A click elsewhere closes the toast, the way a notification banner goes away
+/// when you click elsewhere. A click on the toast works its buttons, and a
+/// click on Mentor's own menu bar item opens the menu whose Answer Suggestion
+/// submenu answers the toast, so neither is a click elsewhere.
+public enum ToastClick: Equatable, Sendable {
+    case onToast
+    case onMenuBarItem
+    /// Any other window, Mentor's or another app's, or the desktop.
+    case elsewhere
+
+    public func dismissesToast(talkBack: TalkBackState) -> Bool {
+        switch self {
+        case .onToast, .onMenuBarItem: false
+        case .elsewhere: !talkBack.keepsToastUp
+        }
+    }
+}
+
 /// One thing the user said about a suggestion while holding the talk-back
 /// key, and what the mentor tier answered. The question is the transcript,
 /// stored here and nowhere else off this Mac except in the one follow-up

@@ -71,6 +71,32 @@ import Testing
     }
 }
 
+@Suite struct ToastClickTests {
+    static let talkingBack: [TalkBackState] = [
+        .listening(partial: ""), .waiting(question: "which line do you mean"), .thinking(question: "which line do you mean"),
+    ]
+
+    @Test func aClickElsewhereClosesTheToastUnlessTheUserIsTalkingBack() {
+        #expect(ToastClick.elsewhere.dismissesToast(talkBack: .idle))
+        for state in ToastClickTests.talkingBack {
+            #expect(!ToastClick.elsewhere.dismissesToast(talkBack: state))
+        }
+    }
+
+    @Test func aClickOnTheToastKeepsItUpSoItsButtonsWork() {
+        #expect(!ToastClick.onToast.dismissesToast(talkBack: .idle))
+    }
+
+    /// Opening Mentor's menu with the pointer is how its Answer Suggestion
+    /// submenu is reached, so it must not close the toast that submenu answers.
+    @Test func openingMentorsMenuKeepsTheToastUpForTheAnswerSubmenu() {
+        #expect(!ToastClick.onMenuBarItem.dismissesToast(talkBack: .idle))
+        for state in ToastClickTests.talkingBack {
+            #expect(!ToastClick.onMenuBarItem.dismissesToast(talkBack: state))
+        }
+    }
+}
+
 /// The captain's rule for when a press counts: a toast is talked to only
 /// once a transcript matched an answer or a question was asked. An
 /// accidental tap, or a recording cut short, is not an exchange.

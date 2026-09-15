@@ -447,8 +447,9 @@ each kept observation it runs, in order:
    auto-dismisses after `toastTimeout` (60 s;
    the countdown pauses while the pointer is over it). Closing it with the x,
    or a mouse-down in any other window or on the desktop, is journaled as
-   dismissed, a timeout or quitting the app with the toast still up as
-   expired. *Tell Me More* expands the full explanation above the
+   dismissed; a click on Mentor's own menu bar item is not one, since it opens
+   the menu that answers the toast. A timeout, or quitting the app with the
+   toast still up, is journaled as expired. *Tell Me More* expands the full explanation above the
    button bar (scrolling past 300 points) and becomes *Show Less*; the three
    buttons stay pinned to the bottom edge in both states, and an expanded
    toast stays until closed. *Not Now* dismisses and snoozes that category for
@@ -526,9 +527,9 @@ The overlay itself is `CalloutController`: a transparent, borderless,
 non-activating panel above normal windows on the display the frame came from,
 with `ignoresMouseEvents` set, so it never takes focus and never intercepts a
 click, key, or scroll. It draws a tinted rounded box with a soft glow around
-the spot and the note in a material pill beside it, to its right, where the
-rest of a line of text is usually empty (below the box, or above it at the
-bottom of the display, only when there is no room), styled like the toast. Mentor's own windows are excluded from
+the spot and the note beside it on the same Liquid Glass as the toast, to its
+right, where the rest of a line of text is usually empty (below the box, or
+above it at the bottom of the display, only when there is no room). Mentor's own windows are excluded from
 capture, so the overlay never appears in a frame. Settings > General > "Show
 callouts on screen" (on by default) turns callouts off; the history window
 records for each suggestion whether one was drawn, and the debug panel's
