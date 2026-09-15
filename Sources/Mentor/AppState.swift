@@ -153,6 +153,9 @@ final class AppState {
     private var calloutWitness: CalloutWitness?
     /// The pipeline's dropped-capture count when last seen, to notice new near duplicates.
     private var lastDroppedCount = 0
+    /// When the pipeline last dropped a capture as a near duplicate of the
+    /// newest kept frame; nil once a newer frame is kept.
+    private var lastNearDuplicateAt: Date?
     private var screenObserver: (any NSObjectProtocol)?
     private let speech = SpeechSynthesizer()
     private let listener = SpeechListener()
@@ -606,14 +609,18 @@ final class AppState {
             }
             var witness = CalloutWitness(region: region.rect, original: observation)
             // A frame kept since the suggestion was made already says whether the text is still there.
-            if let latest = self.latestObservation, latest.id != observation.id, latest.timestamp > observation.timestamp {
+            if let latest = self.latestObservation, latest.id != observation.id {
                 guard witness.observe(latest) else {
                     self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: .notShown, reason: CalloutRejection.contentChanged.label)
                     return
                 }
             }
+            // Near duplicates of that frame since it was kept confirm the screen too,
+            // so a suggestion brought back on an untouched screen gets its callout.
+            if let lastNearDuplicateAt = self.lastNearDuplicateAt {
+                witness.noteDroppedCapture(at: lastNearDuplicateAt)
+            }
             self.calloutWitness = witness
-            self.lastDroppedCount = self.cadence.droppedCount
             var shown = false
             while !Task.isCancelled {
                 let result = await self.resolveAnchor(region, observation: observation, confirmedAt: self.calloutWitness?.confirmedAt)
@@ -672,8 +679,11 @@ final class AppState {
     /// under the callout is unchanged, when the frame it duplicates is a witness.
     private func noteCadence(_ status: CadenceStatus) {
         defer { lastDroppedCount = status.droppedCount }
-        guard status.droppedCount > lastDroppedCount, var witness = calloutWitness else { return }
-        witness.noteDroppedCapture(at: status.lastCaptureAt ?? Date())
+        guard status.droppedCount > lastDroppedCount else { return }
+        let at = status.lastCaptureAt ?? Date()
+        lastNearDuplicateAt = at
+        guard var witness = calloutWitness else { return }
+        witness.noteDroppedCapture(at: at)
         calloutWitness = witness
     }
 
@@ -1051,6 +1061,7 @@ final class AppState {
             var slim = observation
             slim.frame.jpeg = nil
             prepend(.observation(slim))
+            lastNearDuplicateAt = nil
             checkCalloutContent(against: observation)
         case .focusChanged(let context):
             focus = context
