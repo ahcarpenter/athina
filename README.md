@@ -219,10 +219,12 @@ The menu bar and the debug panel's Replay badges read **Replay 60x** while the
 clock is scaled, and the menu's Clock line and the Mentor card's Clock field
 say how fast it runs, how far it was moved ahead, and, in the card, the date it
 reads. A launch that asked for a replay it could not start keeps the replay's
-journal, and so its clock. Either flag on a live or recording launch, or with a
-value it cannot use, is refused: the app runs on real time, and the menu, the
-Mentor card, and the log say why, so a live or recording run can never use a
-controlled clock.
+journal, and so its clock. Either flag on a live or recording launch is
+refused: the app runs on real time, and the menu, the Mentor card, and the log
+say why, so a live or recording run can never use a controlled clock. A replay
+given a flag value it cannot use says why in the same places, and runs on its
+own clock at real time with nothing added ahead: it still carries on from its
+journal, and the Advance field still moves it.
 
 The tests run on the same kind of clock with no real time at all: an
 `AdjustableClock` made with a start date stands still until a test advances

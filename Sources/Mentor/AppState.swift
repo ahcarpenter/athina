@@ -1108,11 +1108,14 @@ final class AppState {
 
     /// One line for the menu on the clock, or nil while it is plain real time.
     var clockLine: String? {
-        if case .refused(let reason) = clockMode { return "Clock: real time, \(reason)" }
-        guard clockControl != nil else { return nil }
         var parts: [String] = []
-        if let scale = clockScale { parts.append("\(Formatting.multiplier(scale)) real time") }
+        if let scale = clockScale {
+            parts.append("\(Formatting.multiplier(scale)) real time")
+        } else if clockMode.refusal != nil {
+            parts.append("real time")
+        }
         if clockMovedAhead > 0 { parts.append("moved ahead \(ClockInterval.description(of: clockMovedAhead))") }
+        if let refusal = clockMode.refusal { parts.append(refusal) }
         return parts.isEmpty ? nil : "Clock: \(parts.joined(separator: ", "))"
     }
 
@@ -1121,8 +1124,9 @@ final class AppState {
         switch clockMode {
         case .system: "real time"
         case .refused(let reason): "real time, refused: \(reason)"
-        case .replay(let scale, _):
+        case .replay(let scale, _, let refusal):
             "replay clock at \(Formatting.multiplier(scale)) real time, moved ahead \(ClockInterval.description(of: clockMovedAhead)), now \(ClockFormat.dayAndTime(clock.date))"
+                + (refusal.map { ", refused: \($0)" } ?? "")
         }
     }
 

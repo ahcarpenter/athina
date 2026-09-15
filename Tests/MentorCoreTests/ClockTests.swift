@@ -180,12 +180,35 @@ import Testing
 
     @Test(arguments: [["--time-scale"], ["--time-scale", "fast"], ["--time-scale", "0.5"], ["--time-scale", "101"], ["--time-scale", "--open"]])
     func aScaleOutsideTheRangeIsRefused(arguments: [String]) {
-        #expect(ClockMode(arguments: arguments, clientMode: replay) == .refused("--time-scale needs a number from 1 to 100"))
+        #expect(ClockMode(arguments: arguments, clientMode: replay)
+            == .replay(scale: 1, ahead: 0, refusal: "--time-scale needs a number from 1 to 100"))
     }
 
     @Test(arguments: [["--advance-clock"], ["--advance-clock", "soon"], ["--advance-clock", "0"], ["--advance-clock", "31d"], ["--advance-clock", "-5m"]])
     func anAdvanceThatCannotBeUsedIsRefused(arguments: [String]) {
-        #expect(ClockMode(arguments: arguments, clientMode: replay) == .refused("--advance-clock needs an interval such as 15m, 2h, or 1d, up to 30d"))
+        #expect(ClockMode(arguments: arguments, clientMode: replay)
+            == .replay(scale: 1, ahead: 0, refusal: "--advance-clock needs an interval such as 15m, 2h, or 1d, up to 30d"))
+    }
+
+    /// A replay given a clock flag it cannot use says why, and still runs on
+    /// its own clock at real time: carried on from its journal, and no further.
+    @Test func aRefusedFlagInAReplayStillCarriesOnFromItsJournal() async throws {
+        let now = Date(timeIntervalSince1970: 1_789_473_600)
+        let mode = ClockMode(arguments: ["Mentor", "--replay", "/f", "--time-scale", "500", "--advance-clock", "2h"], clientMode: replay)
+        #expect(mode.refusal == "--time-scale needs a number from 1 to 100")
+        let base = AdjustableClock(startingAt: now)
+        let (clock, control) = mode.makeClock(base: base)
+        let adjustable = try #require(control)
+        #expect(clock.rate == 1)
+
+        let journal = try Journal.inMemory()
+        try await journal.record(JournalEvent(timestamp: now + 86400, kind: .stopped))
+        mode.startReplay(adjustable, journalNewest: try await journal.newestTimestamp())
+        #expect(clock.date == now + 86400)
+        base.advance(by: .seconds(10))
+        #expect(clock.date == now + 86410)
+        #expect(ClockMode.refused("x").refusal == "x")
+        #expect(ClockMode.system.refusal == nil)
     }
 
     @Test func aReplaysClockRunsFasterAndIsTheOneThatMoves() throws {

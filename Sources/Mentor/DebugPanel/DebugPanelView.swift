@@ -712,7 +712,7 @@ private struct MentorCard: View {
                         Field(label: field.label, value: field.value, lineLimit: field.lineLimit, truncation: field.truncation)
                     }
                     if let clock = clock(now: now) {
-                        Field(label: "Clock", value: clock, lineLimit: 3)
+                        Field(label: "Clock", value: clock, lineLimit: 4)
                     }
                     Field(label: "Triage gate", value: triageGate(now: now), lineLimit: 4)
                     Field(label: "Context", value: contextVerdict(now: now), lineLimit: 4)
@@ -734,16 +734,16 @@ private struct MentorCard: View {
 
     /// A replay's clock, and a clock flag that was refused; nothing on plain real time.
     private func clock(now: Date) -> String? {
-        if case .refused(let reason) = state.clockMode {
-            return "real time: \(reason)"
+        guard state.clockControl != nil else {
+            return state.clockMode.refusal.map { "real time: \($0)" }
         }
-        guard state.clockControl != nil else { return nil }
         var parts = [state.clockScale.map { "\(Formatting.multiplier($0)) real time" } ?? "real time"]
         if state.clockMovedAhead > 0 {
             parts.append("moved ahead \(ClockInterval.description(of: state.clockMovedAhead))")
         }
         parts.append("reads \(ClockFormat.dayAndTime(now))")
-        return parts.joined(separator: ", ")
+        let line = parts.joined(separator: ", ")
+        return state.clockMode.refusal.map { "\(line)\nrefused: \($0)" } ?? line
     }
 
     private struct ModeField {

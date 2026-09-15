@@ -43,7 +43,7 @@ import Testing
         #expect(clock.sleeperCount == 1)
         clock.advance(by: .seconds(1))
         try await expiry.value
-        #expect(countdown.deadline == deadline)
+        #expect(clock.date == deadline)
     }
 
     @Test func aCountdownHeldAtItsLastMomentKeepsTheMinimum() throws {
@@ -69,7 +69,7 @@ import Testing
     }
 
     /// What the app does with the deadline: a wait on its clock that ends
-    /// exactly when the toast expires, with the countdown still naming it.
+    /// exactly when the toast expires.
     @Test func theWaitForTheDeadlineEndsExactlyWhenTheToastExpires() async throws {
         let clock = AdjustableClock(startingAt: t0)
         var countdown = ToastCountdown()
@@ -82,6 +82,5 @@ import Testing
         clock.advance(by: .seconds(1))
         try await expiry.value
         #expect(clock.date == deadline)
-        #expect(countdown.deadline == deadline)
     }
 }

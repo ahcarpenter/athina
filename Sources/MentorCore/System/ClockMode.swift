@@ -13,15 +13,19 @@ import Foundation
 ///
 /// and the debug panel moves it ahead on demand. A command line that asked for
 /// a replay it could not start keeps the replay's journal, so it gets the
-/// replay's clock too. Either flag on a live or recording launch, or with a
-/// value that cannot be used, is refused: the app runs on real time and says
-/// why, so a live or recording run can never use a controlled clock.
+/// replay's clock too. Either flag on a live or recording launch is refused:
+/// the app runs on real time and says why, so a live or recording run can
+/// never use a controlled clock. A replay's flag with a value that cannot be
+/// used is refused and said the same way, but the replay keeps its own clock
+/// at real time with nothing added ahead, so it still carries on from its
+/// journal and the debug panel still moves it.
 public enum ClockMode: Equatable, Sendable {
     /// Real time.
     case system
-    /// A replay's clock, `scale` times real time and started `ahead` seconds ahead.
-    case replay(scale: Double, ahead: TimeInterval)
-    /// A clock flag that was not accepted; the app runs on real time.
+    /// A replay's clock, `scale` times real time and started `ahead` seconds
+    /// ahead, and why a clock flag was not accepted when one was not.
+    case replay(scale: Double, ahead: TimeInterval, refusal: String? = nil)
+    /// A clock flag outside a replay, which was not accepted; the app runs on real time.
     case refused(String)
 
     public static let scaleFlag = "--time-scale"
@@ -51,7 +55,10 @@ public enum ClockMode: Equatable, Sendable {
         var scale = 1.0
         if let scaleValue {
             guard let text = scaleValue, let parsed = Double(text), ClockMode.scaleRange.contains(parsed) else {
-                self = .refused("\(ClockMode.scaleFlag) needs a number from \(Int(ClockMode.scaleRange.lowerBound)) to \(Int(ClockMode.scaleRange.upperBound))")
+                self = .replay(
+                    scale: 1, ahead: 0,
+                    refusal: "\(ClockMode.scaleFlag) needs a number from \(Int(ClockMode.scaleRange.lowerBound)) to \(Int(ClockMode.scaleRange.upperBound))"
+                )
                 return
             }
             scale = parsed
@@ -59,12 +66,24 @@ public enum ClockMode: Equatable, Sendable {
         var ahead: TimeInterval = 0
         if let advanceValue {
             guard let text = advanceValue, let parsed = ClockInterval.seconds(from: text), ClockMode.accepts(advance: parsed) else {
-                self = .refused("\(ClockMode.advanceFlag) needs an interval such as 15m, 2h, or 1d, up to \(ClockInterval.description(of: ClockMode.maxAdvance))")
+                self = .replay(
+                    scale: 1, ahead: 0,
+                    refusal: "\(ClockMode.advanceFlag) needs an interval such as 15m, 2h, or 1d, up to \(ClockInterval.description(of: ClockMode.maxAdvance))"
+                )
                 return
             }
             ahead = parsed
         }
         self = .replay(scale: scale, ahead: ahead)
+    }
+
+    /// Why a clock flag was not accepted, or nil when none was refused.
+    public var refusal: String? {
+        switch self {
+        case .system: nil
+        case .replay(_, _, let refusal): refusal
+        case .refused(let reason): reason
+        }
     }
 
     /// Whether one step may move a replay's clock ahead by `seconds`.
@@ -79,7 +98,7 @@ public enum ClockMode: Equatable, Sendable {
         switch self {
         case .system, .refused:
             return (base, nil)
-        case .replay(let scale, _):
+        case .replay(let scale, _, _):
             let clock = AdjustableClock(running: base, scale: scale)
             return (clock, clock)
         }
@@ -91,7 +110,7 @@ public enum ClockMode: Equatable, Sendable {
     /// so a relaunch carries on where the last one stopped instead of going
     /// back in time; then `--advance-clock` further.
     public func startReplay(_ clock: AdjustableClock, journalNewest: Date?) {
-        guard case .replay(_, let ahead) = self else { return }
+        guard case .replay(_, let ahead, _) = self else { return }
         if let journalNewest {
             clock.advance(toDate: journalNewest)
         }
