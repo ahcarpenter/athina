@@ -10,7 +10,9 @@ public actor SensingPipeline {
     private let capturer = ScreenCapturer()
     private let recognizer = TextRecognizer()
     private let broadcaster = EventBroadcaster<SensingEvent>()
-    private let signal = AsyncSignal()
+    /// Every date the pipeline stamps and every cadence it waits out.
+    private let clock: any MentorClock
+    private let signal: AsyncSignal
 
     private var scheduler: CaptureScheduler
     private var loopTask: Task<Void, Never>?
@@ -22,14 +24,18 @@ public actor SensingPipeline {
     private var mode: SensingMode = .stopped
     private var cadence = CadenceStatus()
     private var lastFocus: FocusContext?
+    /// The system uptime of the last input event seen, to tell a new one apart.
+    private var lastInputUptime: TimeInterval?
     private var lastKept: (hash: PerceptualHash, windowSignature: String, textSignature: String)?
     private var lastPublishedCadence: Date = .distantPast
     private var lastPublishedSnapshot: CadenceStatus?
 
-    public init(settings: SensingSettings, journal: Journal, tracker: FocusTracker) {
+    public init(settings: SensingSettings, journal: Journal, tracker: FocusTracker, clock: any MentorClock) {
         self.settings = settings
         self.journal = journal
         self.tracker = tracker
+        self.clock = clock
+        signal = AsyncSignal(clock: clock)
         self.scheduler = CaptureScheduler(settings: settings)
     }
 
@@ -50,7 +56,7 @@ public actor SensingPipeline {
             Task { await self.focusDidChange(change) }
         }
         await tracker.start()
-        await journalEvent(JournalEvent(kind: .started))
+        await journalEvent(JournalEvent(timestamp: clock.date, kind: .started))
         loopTask = Task { [weak self] in
             await self?.runLoop()
         }
@@ -61,7 +67,7 @@ public actor SensingPipeline {
         loopTask = nil
         await tracker.stop()
         await tracker.setOnChange(nil)
-        await journalEvent(JournalEvent(kind: .stopped))
+        await journalEvent(JournalEvent(timestamp: clock.date, kind: .stopped))
         setMode(.stopped)
         await broadcaster.finish()
     }
@@ -69,7 +75,7 @@ public actor SensingPipeline {
     public func setPaused(_ paused: Bool) async {
         guard paused != userPaused else { return }
         userPaused = paused
-        await journalEvent(JournalEvent(kind: paused ? .paused : .resumed))
+        await journalEvent(JournalEvent(timestamp: clock.date, kind: paused ? .paused : .resumed))
         await signal.signal()
     }
 
@@ -94,7 +100,7 @@ public actor SensingPipeline {
     }
 
     public func clearJournal() async throws {
-        try await journal.clear()
+        try await journal.clear(at: clock.date)
         lastKept = nil
         if let cleared = try? await journal.recentEvents(limit: 1).first {
             await broadcaster.send(.event(cleared))
@@ -112,6 +118,7 @@ public actor SensingPipeline {
         case .application:
             if previous?.bundleID != change.context.bundleID || previous?.pid != change.context.pid {
                 await journalEvent(JournalEvent(
+                    timestamp: clock.date,
                     kind: .appSwitch,
                     bundleID: change.context.bundleID,
                     appName: change.context.appName,
@@ -120,20 +127,21 @@ public actor SensingPipeline {
             }
             if change.context.isExcluded, previous?.isExcluded != true {
                 await journalEvent(JournalEvent(
-                    kind: .excluded, bundleID: change.context.bundleID, appName: change.context.appName
+                    timestamp: clock.date, kind: .excluded, bundleID: change.context.bundleID, appName: change.context.appName
                 ))
             }
-            scheduler.noteFocusChange(at: Date())
+            scheduler.noteFocusChange(at: clock.date)
             await signal.signal()
         case .window:
             if previous?.windowSignature != change.context.windowSignature {
                 await journalEvent(JournalEvent(
+                    timestamp: clock.date,
                     kind: .windowSwitch,
                     bundleID: change.context.bundleID,
                     appName: change.context.appName,
                     detail: change.context.windowTitle
                 ))
-                scheduler.noteFocusChange(at: Date())
+                scheduler.noteFocusChange(at: clock.date)
                 await signal.signal()
             }
         case .element:
@@ -145,15 +153,21 @@ public actor SensingPipeline {
 
     private func runLoop() async {
         while !Task.isCancelled {
-            let now = Date()
+            let now = clock.date
             refreshPermissionsIfDue(now: now)
             await runRetentionIfDue(now: now)
 
-            let secondsSinceInput = InputActivity.secondsSinceLastInput()
-            // The system counter only says how long ago the last event was, so its timestamp
-            // jitters by milliseconds from poll to poll; a new event moves it by far more.
-            let inputAt = now.addingTimeInterval(-secondsSinceInput)
-            if cadence.lastInputAt.map({ inputAt.timeIntervalSince($0) > 0.25 }) ?? true {
+            // The system counts real seconds since the last event, so a new event is told
+            // apart in real time, which a replay's faster or moved clock does not change.
+            // The counter only says how long ago the last event was, so its time jitters by
+            // milliseconds from poll to poll; a new event moves it by far more.
+            let realSecondsSinceInput = InputActivity.secondsSinceLastInput()
+            let inputUptime = ProcessInfo.processInfo.systemUptime - realSecondsSinceInput
+            // How long ago that was, and the idle threshold, are read on the app's clock.
+            let secondsSinceInput = realSecondsSinceInput * clock.rate
+            if lastInputUptime.map({ inputUptime - $0 > 0.25 }) ?? true {
+                lastInputUptime = inputUptime
+                let inputAt = now.addingTimeInterval(-secondsSinceInput)
                 cadence.lastInputAt = inputAt
                 scheduler.noteInput(at: inputAt)
             }
@@ -191,6 +205,7 @@ public actor SensingPipeline {
             }
             if hadAny || fresh.anyGranted {
                 Task { await journalEvent(JournalEvent(
+                    timestamp: now,
                     kind: .permissionsChanged,
                     detail: "screen \(fresh.screenRecording ? "granted" : "denied"), accessibility \(fresh.accessibility ? "granted" : "denied"), microphone \(fresh.microphone ? "granted" : "denied"), speech \(fresh.speechRecognition ? "granted" : "denied")"
                 )) }
@@ -208,7 +223,7 @@ public actor SensingPipeline {
                 if result.suggestionsDeleted + result.modelCallsDeleted > 0 {
                     detail += ", \(result.suggestionsDeleted) suggestions, \(result.modelCallsDeleted) model calls"
                 }
-                await journalEvent(JournalEvent(kind: .retention, detail: detail))
+                await journalEvent(JournalEvent(timestamp: now, kind: .retention, detail: detail))
             }
         } catch {
             cadence.lastError = "retention: \(error)"
@@ -220,6 +235,7 @@ public actor SensingPipeline {
         guard nowIdle != isIdle else { return }
         isIdle = nowIdle
         await journalEvent(JournalEvent(
+            timestamp: clock.date,
             kind: nowIdle ? .idleStart : .idleEnd,
             detail: nowIdle ? "no input for \(Int(secondsSinceInput))s" : nil
         ))
@@ -257,8 +273,8 @@ public actor SensingPipeline {
     // MARK: Capture
 
     private func performCapture(reason: CaptureReason) async {
-        let startedAt = Date()
-        defer { scheduler.noteCaptureFinished(at: Date()) }
+        let startedAt = clock.date
+        defer { scheduler.noteCaptureFinished(at: clock.date) }
 
         let focus: FocusContext
         if let fresh = await tracker.readCurrent() {

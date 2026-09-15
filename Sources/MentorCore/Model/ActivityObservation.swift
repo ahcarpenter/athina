@@ -26,7 +26,7 @@ public struct FocusContext: Codable, Equatable, Sendable {
     public static let maxValueLength = 4000
 
     public init(
-        timestamp: Date = Date(),
+        timestamp: Date,
         pid: Int32,
         bundleID: String?,
         appName: String,
@@ -276,7 +276,7 @@ public struct JournalEvent: Codable, Equatable, Sendable, Identifiable {
     public var appName: String?
     public var detail: String?
 
-    public init(id: Int64 = 0, timestamp: Date = Date(), kind: Kind, bundleID: String? = nil, appName: String? = nil, detail: String? = nil) {
+    public init(id: Int64 = 0, timestamp: Date, kind: Kind, bundleID: String? = nil, appName: String? = nil, detail: String? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.kind = kind

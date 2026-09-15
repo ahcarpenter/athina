@@ -106,8 +106,9 @@ enum WindowID {
 /// Developer aids on the command line: `Mentor --open debug|settings|permissions|history`
 /// presents that window at launch (for example `open build/Mentor.app --args --open debug`),
 /// `--open settings:models` opens Settings on that pane (`SettingsPane`), `--snapshot <dir>`
-/// is handled by `Snapshots`, and `--replay <dir>`, `--allow-stale-fixtures`, and
-/// `--record [<dir>]` choose where model calls go (`ModelClientMode`).
+/// is handled by `Snapshots`, `--replay <dir>`, `--allow-stale-fixtures`, and
+/// `--record [<dir>]` choose where model calls go (`ModelClientMode`), and
+/// `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock (`ClockMode`).
 enum LaunchArguments {
     private static var openArgument: String? {
         let arguments = CommandLine.arguments
@@ -169,6 +170,9 @@ struct MenuBarContent: View {
     var body: some View {
         Text(state.statusLine)
         if let line = state.clientModeLine {
+            Text(line)
+        }
+        if let line = state.clockLine {
             Text(line)
         }
         if let action = state.menuStatusAction {

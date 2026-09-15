@@ -34,6 +34,8 @@ public struct ProcessResourceUsage: Equatable, Sendable {
 }
 
 public enum ProcessResources {
+    /// CPU seconds are real seconds, so a sample is taken on real time
+    /// whatever clock the rest of the app runs on (`MentorClock`).
     public static func sample(at now: Date = Date()) -> ProcessResourceSample {
         var usage = rusage()
         getrusage(RUSAGE_SELF, &usage)

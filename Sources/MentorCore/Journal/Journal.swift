@@ -488,6 +488,24 @@ public actor Journal {
 
     // MARK: Reads
 
+    /// The latest time anything in the journal is stamped with, or nil when
+    /// it holds nothing: where a replay's clock carries on from (`ClockMode`).
+    public func newestTimestamp() throws -> Date? {
+        try db.query("""
+            SELECT MAX(newest) FROM (
+                SELECT MAX(timestamp) AS newest FROM observations
+                UNION ALL SELECT MAX(timestamp) FROM events
+                UNION ALL SELECT MAX(MAX(timestamp), COALESCE(MAX(feedback_at), 0)) FROM suggestions
+                UNION ALL SELECT MAX(timestamp) FROM follow_ups
+                UNION ALL SELECT MAX(timestamp) FROM model_calls
+                UNION ALL SELECT MAX(updated_at) FROM understanding
+                UNION ALL SELECT MAX(counted_at) FROM refresh_period
+            )
+            """) { row in
+            row.isNull(0) ? nil : Date(timeIntervalSince1970: row.double(0))
+        }.first ?? nil
+    }
+
     /// The newest `limit` observations at or after `since` or with an id above
     /// `cursor`, newest first, without thumbnail bytes. A nil bound matches
     /// nothing on its own.
@@ -589,8 +607,8 @@ public actor Journal {
 
     // MARK: Maintenance
 
-    /// Deletes everything and records a single `journalCleared` event.
-    public func clear() throws {
+    /// Deletes everything and records a single `journalCleared` event at `now`.
+    public func clear(at now: Date) throws {
         try db.execute("BEGIN")
         do {
             try db.execute("DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events; DELETE FROM suggestions; DELETE FROM follow_ups; DELETE FROM model_calls; DELETE FROM understanding; DELETE FROM refresh_period;")
@@ -601,11 +619,11 @@ public actor Journal {
         }
         try db.execute("PRAGMA incremental_vacuum")
         try db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-        try record(JournalEvent(kind: .journalCleared))
+        try record(JournalEvent(timestamp: now, kind: .journalCleared))
     }
 
     /// Applies age limits, then the size cap. Returns what was removed.
-    public func applyRetention(_ policy: RetentionPolicy, now: Date = Date()) throws -> RetentionResult {
+    public func applyRetention(_ policy: RetentionPolicy, now: Date) throws -> RetentionResult {
         var result = RetentionResult(bytesBefore: try usedBytes())
 
         let thumbnailCutoff = policy.thumbnailCutoff(now: now).timeIntervalSince1970

@@ -12,9 +12,10 @@ struct UnderstandingCard: View {
 
     var body: some View {
         Card(title: "Understanding") {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                let now = state.clock.date
                 VStack(alignment: .leading, spacing: 8) {
-                    header(now: context.date)
+                    header(now: now)
                     if let content = record?.content, !content.isEmpty {
                         goals(content)
                         list("Timeline", items: content.timeline, symbol: "list.bullet")
@@ -27,8 +28,8 @@ struct UnderstandingCard: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Divider()
-                    Field(label: "Refresh", value: refresh(now: context.date), lineLimit: 6)
-                    Field(label: "Last call", value: lastCall(now: context.date), lineLimit: 4)
+                    Field(label: "Refresh", value: refresh(now: now), lineLimit: 6)
+                    Field(label: "Last call", value: lastCall(now: now), lineLimit: 4)
                     resetButton
                 }
             }

@@ -62,18 +62,20 @@ private struct DebugStatusBar: View {
     var body: some View {
         HStack(spacing: 14) {
             ModeBadge(mode: state.mode)
-            if let badge = ClientModeBadge(mode: state.clientMode, recordingUnavailableReason: state.recordingUnavailableReason) {
+            if let badge = ClientModeBadge(mode: state.clientMode, recordingUnavailableReason: state.recordingUnavailableReason, clockScale: state.clockScale) {
                 badge
             }
             PermissionChip(title: "Screen Recording", granted: state.permissions.screenRecording)
             PermissionChip(title: "Accessibility", granted: state.permissions.accessibility)
             Divider().frame(height: 16)
             // One tick a second: finer clocks kept the whole window redrawing at ~10% CPU while idle.
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            // Ages read the app's clock, which a replay may run faster or move ahead.
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                let now = state.clock.date
                 HStack(spacing: 14) {
-                    LabeledValue(label: "Last", value: lastCapture(now: context.date))
-                    LabeledValue(label: "Next", value: nextCapture(now: context.date))
-                    LabeledValue(label: "Input", value: lastInput(now: context.date))
+                    LabeledValue(label: "Last", value: lastCapture(now: now))
+                    LabeledValue(label: "Next", value: nextCapture(now: now))
+                    LabeledValue(label: "Input", value: lastInput(now: now))
                 }
             }
             Spacer(minLength: 8)
@@ -114,14 +116,16 @@ private struct DebugStatusBar: View {
     }
 }
 
-/// Says that model calls are replayed or recorded; nothing for live calls.
+/// Says that model calls are replayed or recorded, and how fast a replay's
+/// clock runs when that is not real time, as the menu bar does; nothing for
+/// live calls.
 struct ClientModeBadge: View {
     let title: String
     let symbol: String
     let color: Color
     let help: String
 
-    init?(mode: ModelClientMode, recordingUnavailableReason: String?) {
+    init?(mode: ModelClientMode, recordingUnavailableReason: String?, clockScale: Double? = nil) {
         switch mode {
         case .live:
             return nil
@@ -132,10 +136,11 @@ struct ClientModeBadge: View {
             help = recordingUnavailableReason.map { "Recording is unavailable, so every model call is refused and nothing is sent: \($0)" }
                 ?? "Model calls are live and each one is also written to a fixture file"
         case .replay, .invalid:
-            title = "Replay"
+            title = clockScale.map { "Replay \(Formatting.multiplier($0))" } ?? "Replay"
             symbol = "repeat"
             color = .teal
             help = "Model calls are answered from recordings: nothing reaches the network or is billed"
+                + (clockScale.map { ". The replay's clock runs \(Formatting.multiplier($0)) real time" } ?? "")
         }
     }
 
@@ -680,7 +685,7 @@ private struct MentorCard: View {
         Card(title: "Mentor loop") {
             HStack(spacing: 8) {
                 AvailabilityBadge(availability: state.mentorStatus.availability)
-                if let badge = ClientModeBadge(mode: state.clientMode, recordingUnavailableReason: state.recordingUnavailableReason) {
+                if let badge = ClientModeBadge(mode: state.clientMode, recordingUnavailableReason: state.recordingUnavailableReason, clockScale: state.clockScale) {
                     badge.font(.caption)
                 }
                 if let tier = state.mentorStatus.inFlight {
@@ -690,25 +695,46 @@ private struct MentorCard: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            TimelineView(.periodic(from: .now, by: 1)) { context in
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                let now = state.clock.date
                 // Model reasons can run long; four lines keeps spend and cadence in view.
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(clientModeFields, id: \.label) { field in
                         Field(label: field.label, value: field.value, lineLimit: field.lineLimit, truncation: field.truncation)
                     }
-                    Field(label: "Triage gate", value: triageGate(now: context.date), lineLimit: 4)
-                    Field(label: "Context", value: contextVerdict(now: context.date), lineLimit: 4)
-                    Field(label: "Last triage", value: describe(state.mentorStatus.lastTriage, now: context.date), lineLimit: 4)
-                    Field(label: "Mentor gate", value: mentorGate(now: context.date), lineLimit: 4)
-                    Field(label: "Last mentor", value: describe(state.mentorStatus.lastMentor, now: context.date), lineLimit: 4)
-                    Field(label: "Spend", value: spend(now: context.date))
-                    Field(label: "Cadence", value: cadence(now: context.date))
-                    Field(label: "Callout", value: callout(now: context.date), lineLimit: 6)
-                    Field(label: "Transcript", value: transcript(now: context.date), lineLimit: 4)
+                    if let clock = clock(now: now) {
+                        Field(label: "Clock", value: clock, lineLimit: 4)
+                    }
+                    Field(label: "Triage gate", value: triageGate(now: now), lineLimit: 4)
+                    Field(label: "Context", value: contextVerdict(now: now), lineLimit: 4)
+                    Field(label: "Last triage", value: describe(state.mentorStatus.lastTriage, now: now), lineLimit: 4)
+                    Field(label: "Mentor gate", value: mentorGate(now: now), lineLimit: 4)
+                    Field(label: "Last mentor", value: describe(state.mentorStatus.lastMentor, now: now), lineLimit: 4)
+                    Field(label: "Spend", value: spend(now: now))
+                    Field(label: "Cadence", value: cadence(now: now))
+                    Field(label: "Callout", value: callout(now: now), lineLimit: 6)
+                    Field(label: "Transcript", value: transcript(now: now), lineLimit: 4)
                 }
             }
             TalkBackField()
+            if state.clockControl != nil {
+                ClockAdvanceField()
+            }
         }
+    }
+
+    /// A replay's clock, and a clock flag that was refused; nothing on plain real time.
+    private func clock(now: Date) -> String? {
+        guard state.clockControl != nil else {
+            return state.clockMode.refusal.map { "real time: \($0)" }
+        }
+        var parts = [state.clockScale.map { "\(Formatting.multiplier($0)) real time" } ?? "real time"]
+        if state.clockMovedAhead > 0 {
+            parts.append("moved ahead \(ClockInterval.description(of: state.clockMovedAhead))")
+        }
+        parts.append("reads \(ClockFormat.dayAndTime(now))")
+        let line = parts.joined(separator: ", ")
+        return state.clockMode.refusal.map { "\(line)\nrefused: \($0)" } ?? line
     }
 
     private struct ModeField {
@@ -897,6 +923,52 @@ private struct TalkBackField: View {
     private func send() {
         guard canSend else { return }
         state.talkBack(typed: text)
+        text = ""
+    }
+}
+
+/// Moves a replay's clock ahead by what is typed, as if that much time went
+/// by at once: for checking a snooze, a refresh, the spend hour, or a new day
+/// without waiting for it. Only a replay has one.
+private struct ClockAdvanceField: View {
+    @Environment(AppState.self) private var state
+    @State private var text = ""
+    @State private var refusal: String?
+
+    private var seconds: TimeInterval? {
+        ClockInterval.seconds(from: text).flatMap { ClockMode.accepts(advance: $0) ? $0 : nil }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .center, spacing: 8) {
+                Text("Advance")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 78, alignment: .trailing)
+                TextField("15m, 2h, or 1d", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(advance)
+                    .onChange(of: text) { refusal = nil }
+                    .accessibilityLabel("Advance clock")
+                Button("Move", action: advance)
+                    .disabled(seconds == nil)
+            }
+            if let refusal {
+                StatusLabel(refusal, kind: .warning)
+                    .font(.caption)
+                    .padding(.leading, 86)
+            }
+        }
+        .font(.callout)
+        .controlSize(.small)
+        .help("Moves the replay's clock ahead at once, as if that much time went by with the Mac awake in the mode Mentor is in: waits due in it end, and while watching it counts as active use.")
+    }
+
+    private func advance() {
+        guard let seconds, state.advanceClock(by: seconds) else {
+            refusal = "Type an interval such as 90s, 15m, 2h, or 1d, up to \(ClockInterval.description(of: ClockMode.maxAdvance))."
+            return
+        }
         text = ""
     }
 }
