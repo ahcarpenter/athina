@@ -205,10 +205,11 @@ open build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1d -
   "Advance clock"): type an interval and press Return, and the clock moves
   ahead at once, as if that much time went by with the Mac awake in the mode
   Mentor is in; the seconds since the last input are the system's, so moving
-  ahead never makes sensing idle by itself. Every wait due in it ends: a toast expires, a snooze or the
-  spend cap releases, the next capture falls due. While watching it counts as
-  active use toward the next refresh; while paused or idle it counts nothing;
-  and past midnight the next observation expires the understanding.
+  ahead never makes sensing idle by itself. Every wait due in it ends: a toast
+  expires, a snooze or the spend cap releases, the next capture falls due.
+  While watching it counts as active use toward the next refresh; while paused
+  or idle it counts nothing; and past midnight the next observation expires the
+  understanding.
 
 A replay's clock never starts behind its own journal. A faster or advanced
 session leaves rows stamped ahead of real time, so a relaunch carries on from
@@ -918,19 +919,18 @@ capture with reason, seconds since input, spend this hour against the cap, and
 the app's own CPU and memory. While calls are replayed or recorded, the status
 bar and the Mentor card carry a Replay or Recording badge, the card says where
 calls go (for a replay, the fixtures by kind and their directory, and any stale
-ones), and each replayed call in the log is tagged Replay and not billed. When
-a replay's clock runs faster the badge says how much (Replay 60x), and the
-Mentor card shows what the clock reads and has the Advance field that moves it
-ahead (see A faster clock).
+ones), and each replayed call in the log is tagged Replay and not billed. In a
+replay the Mentor card shows what the clock reads and has the Advance field
+that moves it ahead, and the badge says how much faster the clock runs when it
+does (Replay 60x; see A faster clock).
 
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs `swift test`, the bundle script, and
 `Mentor --snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the
 macOS 26 SDK this package targets, and uploads the rendered PNGs, replay-mode
-renders on a scaled clock included, as the `ui-snapshots` artifact. The tests
-run on a test clock and never sleep, so the whole suite takes well under a
-second. They exercise the pure
+renders on a scaled clock included, as the `ui-snapshots` artifact. No test
+waits on real time (see A faster clock). The tests exercise the pure
 parts (hashing, cadence, journal, retention and its in-place migration,
 settings, the mentor scheduler and every gate, mentorship context rules and
 placement, spend accounting, snooze and never-for-this rules per category, the
@@ -943,8 +943,8 @@ transcript matching, the follow-up prompt and gate, the toast rule for voice
 input, the whole loop against a scripted client, follow-ups included, and the
 whole loop against the committed replay fixtures, replayed strictly, a region
 and a follow-up answer included, and every time-based behavior of the loop on
-the test clock) and Vision OCR on a drawn bitmap, so they need
-no permissions, display, network, microphone, or API key. A committed fixture
+the test clock) and Vision OCR on a drawn bitmap, so they need no permissions,
+display, network, microphone, or API key. A committed fixture
 that is stale, or a tier with no committed fixture, fails the run (see The
 committed fixtures). The snapshot run covers the callout over the sample frame,
 the listening and answered toasts, and the talk-back settings.
