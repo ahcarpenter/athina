@@ -2,15 +2,6 @@ import AppKit
 import MentorCore
 import SwiftUI
 
-/// What push-to-talk is doing, shown in the toast.
-enum TalkBackState: Equatable {
-    case idle
-    /// The key is held; the partial transcript grows as the user speaks.
-    case listening(partial: String)
-    /// The key was released and the question is with the mentor model.
-    case thinking(question: String)
-}
-
 /// Owns the floating suggestion panel: a non-activating window that never
 /// takes keyboard focus, placed under the menu bar at the top right of the
 /// screen the user is working on. With no suggestion up it can show a short
@@ -64,8 +55,14 @@ final class ToastController {
         model.expanded = true
     }
 
+    /// While the user is talking back the toast stays where it is: it is
+    /// brought to the front so no window covers it, and no click, timeout,
+    /// or hover can take it down until the exchange is over.
     func setTalkBack(_ state: TalkBackState) {
         model.talkBack = state
+        if state.keepsToastUp {
+            bringToFront()
+        }
     }
 
     func setExchange(_ exchange: [FollowUp]) {
@@ -144,6 +141,9 @@ final class ToastController {
     private func handleClick(_ event: NSEvent) {
         guard let panel, panel.isVisible, event.window !== panel else { return }
         guard let suggestion = model.suggestion else { return }
+        // A click elsewhere while the user is talking back is part of what
+        // they are doing, not an answer to the toast.
+        guard !model.talkBack.keepsToastUp else { return }
         onAction?(suggestion.id, .dismissed)
     }
 

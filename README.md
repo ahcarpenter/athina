@@ -530,8 +530,11 @@ Audio goes to `SFSpeechRecognizer` for the current locale with
 the locale has no on-device recognizer, Settings and the menu say so plainly
 and the feature stays off rather than falling back to server recognition.
 While the key is held the toast shows a listening indicator and the live
-transcript; the toast being talked to stays up until it is closed, like an
-expanded one.
+transcript. The toast being talked to is never hidden while voice input is
+active: from the key going down until the transcript is handled or the answer
+is shown, it does not expire, a click elsewhere does not dismiss it, and it is
+kept in front of other windows; afterwards it stays up until it is closed,
+like an expanded one.
 
 When the key is released, `TranscriptMatcher` reads the whole utterance,
 lowercased, without punctuation, and with filler words such as "please"

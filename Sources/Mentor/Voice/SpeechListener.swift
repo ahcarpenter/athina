@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import OSLog
 import Speech
 
 /// Captures the microphone while the talk-back key is held and transcribes
@@ -35,8 +36,13 @@ final class SpeechListener {
 
     /// A recording is cut off after this long in case the release is missed.
     static let maxDuration: TimeInterval = 30
-    /// How long to wait for the recognizer's final result after the key is released.
+    /// Audio is captured for this long after the key comes up. People let go
+    /// as the last word ends, and the recognizer needs the whole word.
+    static let releaseGrace: TimeInterval = 0.7
+    /// How long to wait for the recognizer's final result after the audio ends.
     static let finalResultTimeout: TimeInterval = 3
+
+    private static let log = Logger(subsystem: "com.ahcarpenter.mentor", category: "voice")
 
     /// Whether the system recognizer can transcribe the locale on this Mac.
     static func availability(for locale: Locale = .current) -> Availability {
@@ -56,6 +62,8 @@ final class SpeechListener {
     private var task: SFSpeechRecognitionTask?
     private var latest = ""
     private var finished = false
+    private var finishing = false
+    private var partials = 0
     private var waiters: [CheckedContinuation<String?, Never>] = []
 
     /// Starts capturing and transcribing. `onPartial` receives the transcript
@@ -76,6 +84,8 @@ final class SpeechListener {
         request.taskHint = .dictation
         latest = ""
         finished = false
+        finishing = false
+        partials = 0
 
         // Both callbacks below run on the framework's own threads, so they are
         // `@Sendable`: a closure written here would otherwise be inferred to
@@ -84,9 +94,9 @@ final class SpeechListener {
         task = recognizer.recognitionTask(with: request) { @Sendable [weak self] result, error in
             let text = result?.bestTranscription.formattedString
             let isFinal = result?.isFinal ?? false
-            let failed = error != nil
+            let failure = error.map { String(describing: $0) }
             Task { @MainActor [weak self] in
-                self?.handle(text: text, isFinal: isFinal, failed: failed, onPartial: onPartial)
+                self?.handle(text: text, isFinal: isFinal, failure: failure, onPartial: onPartial)
             }
         }
         // The request is appended to from the audio thread only, and read by
@@ -106,15 +116,22 @@ final class SpeechListener {
     /// finalized it, or the best partial one after a bounded wait. Nil when
     /// nothing was recognized.
     func finish() async -> String? {
-        guard isListening else { return nil }
+        guard isListening, !finishing else { return nil }
+        finishing = true
+        // Keep capturing for a moment: the tail of the last word is still
+        // being said when the key comes up.
+        try? await Task.sleep(for: .seconds(SpeechListener.releaseGrace))
         stopAudio()
         request?.endAudio()
+        SpeechListener.log.notice("audio ended after \(self.partials) partial results, \(self.latest.split(separator: " ").count) words so far")
         if finished { return transcript }
         return await withCheckedContinuation { continuation in
             waiters.append(continuation)
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(SpeechListener.finalResultTimeout))
-                self?.complete()
+                guard let self, !self.finished else { return }
+                SpeechListener.log.notice("no final result within \(SpeechListener.finalResultTimeout)s, keeping the latest partial")
+                self.complete()
             }
         }
     }
@@ -133,12 +150,20 @@ final class SpeechListener {
         return text.isEmpty ? nil : text
     }
 
-    private func handle(text: String?, isFinal: Bool, failed: Bool, onPartial: @MainActor (String) -> Void) {
+    private func handle(text: String?, isFinal: Bool, failure: String?, onPartial: @MainActor (String) -> Void) {
         if let text {
+            partials += 1
             latest = text
             onPartial(text)
         }
-        if isFinal || failed {
+        if let failure {
+            // The words themselves stay out of the log; their count and the
+            // recognizer's error say enough about what went wrong.
+            SpeechListener.log.notice("recognizer stopped with \(failure, privacy: .public) after \(self.partials) partial results")
+        } else if isFinal {
+            SpeechListener.log.notice("final result after \(self.partials) partial results, \(self.latest.split(separator: " ").count) words")
+        }
+        if isFinal || failure != nil {
             // An error after the audio ends is how the recognizer reports
             // "nothing more"; the latest partial stands as the transcript.
             complete()

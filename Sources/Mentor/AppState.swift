@@ -557,7 +557,7 @@ final class AppState {
     /// The countdown pauses while the pointer is over the toast and resumes
     /// with the remaining time when it leaves.
     private func toastHoverChanged(_ hovering: Bool) {
-        guard let active = activeSuggestion else { return }
+        guard let active = activeSuggestion, !talkBack.keepsToastUp else { return }
         if hovering {
             // cancelToastExpiry clears toastRemaining, so record the remainder after it.
             guard let deadline = toastDeadline else { return }
@@ -571,6 +571,8 @@ final class AppState {
     }
 
     private func scheduleToastExpiry(for suggestionID: Int64, after timeout: TimeInterval) {
+        // An exchange in progress keeps the toast up; nothing schedules its end.
+        guard !talkBack.keepsToastUp else { return }
         toastTask?.cancel()
         toastDeadline = Date().addingTimeInterval(timeout)
         toastTask = Task { [weak self] in

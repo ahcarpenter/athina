@@ -50,6 +50,17 @@ import Testing
     }
 }
 
+@Suite struct TalkBackStateTests {
+    /// The captain's ask after the live voice check: the toast is never
+    /// hidden while voice input is active.
+    @Test func theToastStaysUpWhileTheUserIsTalkingBack() {
+        #expect(!TalkBackState.idle.keepsToastUp)
+        #expect(TalkBackState.listening(partial: "").keepsToastUp)
+        #expect(TalkBackState.listening(partial: "which line").keepsToastUp)
+        #expect(TalkBackState.thinking(question: "which line do you mean").keepsToastUp)
+    }
+}
+
 @Suite struct ClockFormatTests {
     @Test func timesAre24HourWhateverTheLocalePrefers() {
         var components = DateComponents()

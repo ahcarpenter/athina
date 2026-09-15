@@ -87,6 +87,26 @@ public enum TranscriptMatcher {
     }
 }
 
+/// What push-to-talk is doing, shown in the toast.
+public enum TalkBackState: Equatable, Sendable {
+    case idle
+    /// The key is held; the partial transcript grows as the user speaks.
+    case listening(partial: String)
+    /// The key was released and the question is with the mentor model.
+    case thinking(question: String)
+
+    /// True while the user is talking back: the key is held, or the
+    /// transcript or the answer is in progress. The toast then stays visible
+    /// whatever else happens: it is not dismissed by a click elsewhere, does
+    /// not expire, and is kept in front.
+    public var keepsToastUp: Bool {
+        switch self {
+        case .idle: false
+        case .listening, .thinking: true
+        }
+    }
+}
+
 /// One thing the user said about a suggestion while holding the talk-back
 /// key, and what the mentor tier answered. The question is the transcript,
 /// stored here and nowhere else off this Mac except in the one follow-up
