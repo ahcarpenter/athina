@@ -248,7 +248,7 @@ extension AppState {
         state.lastCallout = CalloutRecord(
             at: now.addingTimeInterval(-38), suggestionID: 4, region: suggestions[0].region ?? CalloutRegion(rect: .zero, note: ""),
             placement: suggestions[0].region.map { CalloutPlacement(displayID: 1, screenRect: CalloutAnchor.screenRect(for: $0.rect, in: frame) ?? .zero, note: $0.note) },
-            outcome: "shown"
+            status: .shown
         )
         state.lastTranscript = TranscriptRecord(at: now.addingTimeInterval(-20), text: "does that work with tags as well", handling: "asked the mentor")
         state.callLog = SampleSuggestions.calls(now: now)
@@ -378,7 +378,7 @@ struct SampleCallout: View {
                 if let block {
                     let spot = block.imageRect.insetBy(dx: -6, dy: -5).applying(CGAffineTransform(scaleX: scale, y: scale))
                     let layout = CalloutLayout(screenRect: spot, display: CGRect(origin: .zero, size: fitted))
-                    CalloutView(box: layout.box, note: "this capture call", noteBelow: layout.noteBelow, size: layout.windowRect.size)
+                    CalloutView(layout: layout, note: "this capture call")
                         .offset(x: layout.windowRect.minX, y: layout.windowRect.minY)
                 }
             }

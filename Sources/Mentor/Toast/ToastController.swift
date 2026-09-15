@@ -338,8 +338,8 @@ struct ToastContent: View {
                     }
                     Spacer(minLength: 0)
                     Button(action: onSpeakToggle) {
-                        Image(systemName: isSpeaking ? "stop.fill" : "speaker.wave.2.fill")
-                            .font(.system(size: 11, weight: .semibold))
+                        Image(systemName: isSpeaking ? "stop.circle" : "speaker.wave.2.fill")
+                            .font(.system(size: isSpeaking ? 13 : 11, weight: .semibold))
                             .frame(width: 20, height: 20)
                     }
                     .buttonStyle(.borderless)
@@ -368,7 +368,7 @@ struct ToastContent: View {
             if expanded {
                 Divider()
                     .padding(.horizontal, 14)
-                ScrollView {
+                FittedScrollView(maxHeight: ToastContent.explanationMaxHeight) {
                     Text(suggestion.explanation)
                         .font(.callout)
                         .textSelection(.enabled)
@@ -377,13 +377,12 @@ struct ToastContent: View {
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
                 }
-                .frame(maxHeight: ToastContent.explanationMaxHeight)
             }
 
             if !exchange.isEmpty || talkBack != .idle {
                 Divider()
                     .padding(.horizontal, 14)
-                ScrollView {
+                FittedScrollView(maxHeight: ToastContent.exchangeMaxHeight, anchor: .bottom) {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(exchange) { entry in
                             ExchangeEntry(entry: entry)
@@ -401,8 +400,6 @@ struct ToastContent: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                 }
-                .defaultScrollAnchor(.bottom)
-                .frame(maxHeight: ToastContent.exchangeMaxHeight)
             }
 
             if let note {
@@ -443,6 +440,31 @@ struct ToastContent: View {
         if isSpeaking { return "Stop speaking" }
         if !speechAllowed { return "Nothing is spoken while Mentor is paused, idle, or on an excluded app" }
         return "Speak this suggestion"
+    }
+}
+
+/// A scroll view as tall as its content up to `maxHeight`, then scrolling.
+/// A plain `ScrollView` inside a panel that sizes to fit keeps whatever height
+/// it had, so an answer that arrives later would be cut off instead of growing
+/// the toast.
+private struct FittedScrollView<Content: View>: View {
+    let maxHeight: CGFloat
+    var anchor: UnitPoint = .top
+    @ViewBuilder let content: Content
+    @State private var contentHeight: CGFloat = 0
+
+    var body: some View {
+        ScrollView {
+            content
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { height in
+                    contentHeight = height
+                }
+        }
+        .defaultScrollAnchor(anchor)
+        .scrollDisabled(contentHeight <= maxHeight)
+        .frame(height: min(max(contentHeight, 1), maxHeight))
     }
 }
 

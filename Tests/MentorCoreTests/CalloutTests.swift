@@ -161,7 +161,7 @@ import Testing
     }
 
     @Test func rejectionLabelsRead() {
-        #expect(CalloutRejection.stale(age: 130.4).label == "frame is 130s old")
+        #expect(CalloutRejection.stale(age: 130.4).label == "screen not confirmed for 130s")
         #expect(CalloutRejection.windowMoved.label == "window moved")
     }
 
@@ -186,42 +186,119 @@ import Testing
 @Suite struct CalloutLayoutTests {
     private let display = CGRect(x: 0, y: 0, width: 1728, height: 1117)
 
-    @Test func theWindowSitsOnWholePointsAndTheBoxKeepsItsExactPlace() {
-        let spot = CGRect(x: 1225.8, y: 639.12, width: 97.2, height: 26.98)
+    /// The box's top-left in screen points, from the window and its local box.
+    private func boxOrigin(_ layout: CalloutLayout) -> CGPoint {
+        CGPoint(x: layout.windowRect.minX + layout.box.minX, y: layout.windowRect.minY + layout.box.minY)
+    }
+
+    @Test func theNoteGoesBesideTheBoxWhenThereIsRoom() {
+        // The rm -rf line the recorded region frames, at the recording's 1.35 points per pixel.
+        let spot = CGRect(x: 5.4, y: 276.75, width: 351, height: 40.5)
         let layout = CalloutLayout(screenRect: spot, display: display)
-        #expect(layout.windowRect.origin == CGPoint(x: 1213, y: 627))
-        #expect(layout.windowRect.size == CGSize(width: 324, height: 106))
+        #expect(layout.notePlacement == .trailing)
+        #expect(layout.windowRect.origin == CGPoint(x: 0, y: 261))
         #expect(layout.windowRect.origin.x.rounded() == layout.windowRect.origin.x)
-        // Box top-left back in screen points is the spot, to the hundredth.
-        #expect(abs(layout.windowRect.minX + layout.box.minX - spot.minX) < 0.001)
-        #expect(abs(layout.windowRect.minY + layout.box.minY - spot.minY) < 0.001)
+        #expect(layout.windowRect.size.width.rounded() == layout.windowRect.size.width)
+        #expect(abs(boxOrigin(layout).x - spot.minX) < 0.001)
+        #expect(abs(boxOrigin(layout).y - spot.minY) < 0.001)
         #expect(layout.box.size == spot.size)
-        #expect(layout.noteBelow)
-        // The note row fits under the box inside the window.
-        #expect(layout.box.maxY + CalloutLayout.gap + CalloutLayout.noteHeight <= layout.windowRect.height)
+        // The note starts past the box, is centred on it, and fits in the window.
+        #expect(layout.noteRect.minX == layout.box.maxX + CalloutLayout.gap)
+        #expect(abs(layout.noteRect.midY - layout.box.midY) < 0.001)
+        #expect(layout.noteRect.maxX <= layout.windowRect.width)
+        #expect(layout.noteRect.minY >= 0 && layout.noteRect.maxY <= layout.windowRect.height)
     }
 
-    @Test func theNoteGoesAboveWhenThereIsNoRoomBelow() {
-        let spot = CGRect(x: 100, y: 1080, width: 200, height: 20)
+    @Test func theNoteGoesBelowWhenTheBoxReachesTheRightEdge() {
+        let spot = CGRect(x: 1500.5, y: 400.25, width: 200, height: 30)
         let layout = CalloutLayout(screenRect: spot, display: display)
-        #expect(!layout.noteBelow)
-        #expect(layout.windowRect.maxY <= display.maxY)
-        #expect(layout.windowRect.minY == 1080 - CalloutLayout.glow - CalloutLayout.gap - CalloutLayout.noteHeight)
-        #expect(abs(layout.windowRect.minY + layout.box.minY - spot.minY) < 0.001)
+        #expect(layout.notePlacement == .below)
+        #expect(layout.windowRect.maxX <= display.maxX)
+        #expect(abs(boxOrigin(layout).x - spot.minX) < 0.001)
+        #expect(abs(boxOrigin(layout).y - spot.minY) < 0.001)
+        #expect(layout.noteRect.minY == layout.box.maxY + CalloutLayout.gap)
+        #expect(layout.noteRect.maxY <= layout.windowRect.height)
     }
 
-    @Test func theWindowStaysOnTheDisplay() {
-        let right = CalloutLayout(screenRect: CGRect(x: 1700, y: 500, width: 20, height: 20), display: display)
-        #expect(right.windowRect.maxX <= display.maxX)
-        #expect(right.windowRect.width == CalloutLayout.minimumWidth + 2 * CalloutLayout.glow)
-        #expect(abs(right.windowRect.minX + right.box.minX - 1700) < 0.001)
-        let left = CalloutLayout(screenRect: CGRect(x: 2, y: 2, width: 20, height: 20), display: display)
-        #expect(left.windowRect.origin == .zero)
-        #expect(left.box.origin == CGPoint(x: 2, y: 2))
-        let second = CalloutLayout(screenRect: CGRect(x: 1740.5, y: -100.25, width: 40, height: 20), display: CGRect(x: 1728, y: -200, width: 2560, height: 1440))
-        #expect(second.windowRect.minX >= 1728)
-        #expect(abs(second.windowRect.minX + second.box.minX - 1740.5) < 0.001)
-        #expect(abs(second.windowRect.minY + second.box.minY + 100.25) < 0.001)
+    @Test func theNoteGoesAboveAtTheBottomRightCorner() {
+        let spot = CGRect(x: 1500, y: 1080, width: 200, height: 20)
+        let layout = CalloutLayout(screenRect: spot, display: display)
+        #expect(layout.notePlacement == .above)
+        #expect(layout.windowRect.maxY <= display.maxY)
+        #expect(layout.noteRect.maxY == layout.box.minY - CalloutLayout.gap)
+        #expect(layout.noteRect.minY >= 0)
+        #expect(abs(boxOrigin(layout).y - spot.minY) < 0.001)
+    }
+
+    @Test func theWindowStaysOnItsDisplay() {
+        let corner = CalloutLayout(screenRect: CGRect(x: 2, y: 2, width: 20, height: 20), display: display)
+        #expect(corner.windowRect.origin == .zero)
+        #expect(corner.box.origin == CGPoint(x: 2, y: 2))
+        let second = CalloutLayout(
+            screenRect: CGRect(x: 1740.5, y: -100.25, width: 40, height: 20),
+            display: CGRect(x: 1728, y: -200, width: 2560, height: 1440)
+        )
+        #expect(second.windowRect.minX >= 1728 && second.windowRect.minY >= -200)
+        #expect(abs(boxOrigin(second).x - 1740.5) < 0.001)
+        #expect(abs(boxOrigin(second).y + 100.25) < 0.001)
+    }
+}
+
+@Suite struct CalloutWitnessTests {
+    private let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+    // Frames the second line of the fixture observation's text.
+    private let spot = CGRect(x: 6, y: 16, width: 108, height: 20)
+
+    @Test func witnessFramesAndNearDuplicatesKeepTheScreenConfirmed() {
+        let original = Fixtures.observation(id: 1, at: t0, text: "one\ntwo\nthree")
+        var witness = CalloutWitness(region: spot, original: original)
+        #expect(witness.confirmedAt == t0)
+        witness.noteDroppedCapture(at: t0 + 30)
+        #expect(witness.confirmedAt == t0 + 30)
+        let kept1 = witness.observe(Fixtures.observation(id: 2, at: t0 + 90, text: "one\ntwo\nthree"))
+        #expect(kept1)
+        #expect(witness.confirmedAt == t0 + 90)
+        witness.noteDroppedCapture(at: t0 + 200)
+        #expect(witness.confirmedAt == t0 + 200)
+
+        // Confirmation keeps a callout up past the frame's own age, and no further.
+        var observation = original
+        observation.focus.windowFrame = CGRect(x: 0, y: 0, width: 2560, height: 1600)
+        let live = CalloutAnchor.Live(
+            frontmostPID: 42, focus: observation.focus,
+            displays: [DisplayBounds(id: 1, bounds: observation.frame.screenRect)], now: t0 + 300
+        )
+        let region = CalloutRegion(rect: spot, note: "n")
+        #expect(CalloutAnchor.resolve(region, for: observation, live: live).isFailure)
+        #expect(CalloutAnchor.resolve(region, for: observation, live: live, confirmedAt: witness.confirmedAt).isSuccess)
+        var later = live
+        later.now = t0 + 200 + CalloutAnchor.maxFrameAge + 1
+        #expect(CalloutAnchor.resolve(region, for: observation, live: later, confirmedAt: witness.confirmedAt) == .failure(.stale(age: CalloutAnchor.maxFrameAge + 1)))
+    }
+
+    @Test func anotherWindowsFrameStopsConfirmationUntilAWitnessReturns() {
+        let original = Fixtures.observation(id: 1, at: t0, text: "one\ntwo\nthree")
+        var witness = CalloutWitness(region: spot, original: original)
+        let kept2 = witness.observe(Fixtures.observation(id: 2, at: t0 + 10, window: "other.swift", text: "x"))
+        #expect(kept2)
+        #expect(!witness.newestKeptIsWitness)
+        // Near duplicates of the other window's frame confirm nothing here.
+        witness.noteDroppedCapture(at: t0 + 60)
+        #expect(witness.confirmedAt == t0)
+        let kept3 = witness.observe(Fixtures.observation(id: 3, at: t0 + 70, text: "one\ntwo\nthree"))
+        #expect(kept3)
+        witness.noteDroppedCapture(at: t0 + 80)
+        #expect(witness.confirmedAt == t0 + 80)
+    }
+
+    @Test func aFrameWithTheTextGoneTakesTheCalloutDown() {
+        let original = Fixtures.observation(id: 1, at: t0, text: "one\ntwo\nthree")
+        var witness = CalloutWitness(region: spot, original: original)
+        let kept4 = witness.observe(original)
+        #expect(kept4)
+        let kept5 = witness.observe(Fixtures.observation(id: 2, at: t0 + 5, text: "two\nthree\nfour"))
+        #expect(!kept5)
+        #expect(witness.confirmedAt == t0)
     }
 }
 
@@ -238,4 +315,6 @@ extension Result where Success: Equatable, Failure: Equatable {
         if case .success = self { return true }
         return false
     }
+
+    var isFailure: Bool { !isSuccess }
 }

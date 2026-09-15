@@ -462,7 +462,8 @@ the recorded reason:
 
 - the region is inside the frame and at least a few pixels in each dimension;
 - the display the frame came from is still attached with the same bounds;
-- the frame is no older than two minutes (`CalloutAnchor.maxFrameAge`);
+- the screen under the spot was last confirmed unchanged no more than two
+  minutes ago (`CalloutAnchor.maxFrameAge`; see below for what confirms it);
 - the observation recorded the window's frame, which needs Accessibility;
 - the same process is frontmost and a fresh accessibility read shows the same
   window (bundle identifier and title) with its frame within two points of
@@ -473,11 +474,16 @@ While a callout is up the app repeats the check once a second, and takes the
 callout down the moment a check fails: the window moved, another window or app
 came to the front, the display configuration changed, or the frame aged out.
 A window can also change without moving: a terminal scrolls, a document is
-edited. The sensing pipeline's next kept frame of the same window is the
-witness for that: the recognized text the region framed must still be there
-within a few pixels (`CalloutAnchor.contentStillMatches`), or the callout
-comes down with "content under the spot changed". Between frames the box
-marks where the spot was in the frame the model saw. The callout also goes
+edited. `CalloutWitness` watches for that. Every frame the sensing pipeline
+keeps of the same window must still show the recognized text the region
+framed within a few pixels (`CalloutAnchor.contentStillMatches`), or the
+callout comes down with "content under the spot changed". Such a frame also
+confirms the screen, and so does each capture the pipeline then drops as a
+near duplicate of it, because it drops one only when the picture, the window,
+and the focused text are all unchanged. Staleness counts from the latest
+confirmation, so a callout over a screen nobody touches stays up with its
+toast, through a follow-up question, while one that nothing has confirmed for
+two minutes comes down. The callout also goes
 away whenever the toast does, for any reason. Menu > Show Last Suggestion
 re-shows the callout only when its anchor still passes.
 
@@ -485,8 +491,9 @@ The overlay itself is `CalloutController`: a transparent, borderless,
 non-activating panel above normal windows on the display the frame came from,
 with `ignoresMouseEvents` set, so it never takes focus and never intercepts a
 click, key, or scroll. It draws a tinted rounded box with a soft glow around
-the spot and the note in a material pill beside it (below, or above when there
-is no room), styled like the toast. Mentor's own windows are excluded from
+the spot and the note in a material pill beside it, to its right, where the
+rest of a line of text is usually empty (below the box, or above it at the
+bottom of the display, only when there is no room), styled like the toast. Mentor's own windows are excluded from
 capture, so the overlay never appears in a frame. Settings > Mentor > "Show
 callouts on screen" (on by default) turns callouts off; the history window
 records for each suggestion whether one was drawn, and the debug panel's

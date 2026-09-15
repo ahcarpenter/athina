@@ -47,7 +47,7 @@ public struct CalloutPlacement: Equatable, Sendable {
 public enum CalloutRejection: Error, Equatable, Sendable {
     /// The region is not inside the frame the model saw, or is too small to point at.
     case outsideFrame
-    /// The frame is older than `CalloutAnchor.maxFrameAge`.
+    /// The screen was last confirmed unchanged longer than `CalloutAnchor.maxFrameAge` ago.
     case stale(age: TimeInterval)
     /// The window's frame was not readable at capture time or is not now.
     case noWindowFrame
@@ -67,7 +67,7 @@ public enum CalloutRejection: Error, Equatable, Sendable {
     public var label: String {
         switch self {
         case .outsideFrame: "region outside the frame"
-        case .stale(let age): "frame is \(Int(age))s old"
+        case .stale(let age): "screen not confirmed for \(Int(age))s"
         case .noWindowFrame: "window frame unavailable"
         case .windowNotFrontmost: "window no longer frontmost"
         case .windowChanged: "a different window is frontmost"
@@ -83,8 +83,9 @@ public enum CalloutRejection: Error, Equatable, Sendable {
 /// screen still shows what the frame showed there. Pure, so every rule is
 /// unit-tested; the app supplies the live readings.
 public enum CalloutAnchor {
-    /// A frame older than this is not drawn on: content scrolls and windows
-    /// change faster than the mentor tier answers.
+    /// A callout is not drawn when the screen under it was last confirmed
+    /// unchanged longer ago than this: content scrolls and windows change
+    /// faster than the mentor tier answers.
     public static let maxFrameAge: TimeInterval = 120
     /// Regions smaller than this in either dimension, in frame pixels, are
     /// noise rather than a spot.
@@ -127,17 +128,21 @@ public enum CalloutAnchor {
     /// Whether the region may be drawn right now, and where. Checks run from
     /// the cheapest to the most specific so the reason names the first thing
     /// that is wrong.
+    /// `confirmedAt` is the latest time the screen was seen unchanged
+    /// (`CalloutWitness`); staleness counts from it, and from the frame
+    /// itself when there is none.
     public static func resolve(
         _ region: CalloutRegion,
         for observation: ActivityObservation,
-        live: Live
+        live: Live,
+        confirmedAt: Date? = nil
     ) -> Result<CalloutPlacement, CalloutRejection> {
         let frame = observation.frame
         guard let screenRect = screenRect(for: region.rect, in: frame) else { return .failure(.outsideFrame) }
         guard let display = live.displays.first(where: { $0.id == frame.displayID }),
               display.bounds == frame.screenRect
         else { return .failure(.displayChanged) }
-        let age = live.now.timeIntervalSince(observation.timestamp)
+        let age = live.now.timeIntervalSince(max(observation.timestamp, confirmedAt ?? observation.timestamp))
         if age > maxFrameAge { return .failure(.stale(age: age)) }
         guard let capturedWindow = observation.focus.windowFrame else { return .failure(.noWindowFrame) }
         guard live.frontmostPID == observation.focus.pid, let focus = live.focus, focus.pid == observation.focus.pid else {
@@ -189,41 +194,112 @@ public enum CalloutAnchor {
 /// origin and size are whole points, because a window is placed on whole
 /// points anyway; the box keeps its exact fractional position inside it, so
 /// rounding the window never moves the box.
+///
+/// The note goes beside the box, to its right, where the rest of a line of
+/// text usually is empty. Only when the display has no room there does it go
+/// below the box, or above it at the bottom of the display, where it covers
+/// the next line.
 public struct CalloutLayout: Equatable, Sendable {
-    /// Room around the box for its stroke and glow.
+    public enum NotePlacement: Equatable, Sendable {
+        case trailing
+        case below
+        case above
+    }
+
+    /// Room around the box and the note for the stroke, glow, and shadow.
     public static let glow: CGFloat = 12
     /// Space between the box and the note.
-    public static let gap: CGFloat = 6
-    /// Height reserved for the note row, enough for two lines.
+    public static let gap: CGFloat = 8
+    /// Height reserved for the note, enough for two lines.
     public static let noteHeight: CGFloat = 48
-    /// The window is at least this wide so a note has room beside a small box.
-    public static let minimumWidth: CGFloat = 300
     /// A note wider than this wraps.
     public static let noteMaxWidth: CGFloat = 320
 
     public var windowRect: CGRect
     public var box: CGRect
-    public var noteBelow: Bool
+    /// Where the note may be drawn, in window coordinates. The note is aligned
+    /// to its leading edge, and to its vertical centre beside the box or its
+    /// edge nearest the box otherwise.
+    public var noteRect: CGRect
+    public var notePlacement: NotePlacement
 
-    public init(screenRect: CGRect, display: CGRect) {
+    public init(screenRect spot: CGRect, display: CGRect) {
         let glow = CalloutLayout.glow
-        let noteBand = CalloutLayout.gap + CalloutLayout.noteHeight
-        noteBelow = screenRect.maxY + glow + noteBand <= display.maxY || screenRect.minY - glow - noteBand < display.minY
-        var origin = CGPoint(
-            x: (screenRect.minX - glow).rounded(.down),
-            y: (noteBelow ? screenRect.minY - glow : screenRect.minY - glow - noteBand).rounded(.down)
+        let gap = CalloutLayout.gap
+        let noteWidth = CalloutLayout.noteMaxWidth
+        let noteHeight = CalloutLayout.noteHeight
+        let note: CGRect
+        if spot.maxX + gap + noteWidth + glow <= display.maxX {
+            notePlacement = .trailing
+            note = CGRect(x: spot.maxX + gap, y: spot.midY - noteHeight / 2, width: noteWidth, height: noteHeight)
+        } else if spot.maxY + gap + noteHeight + glow <= display.maxY || spot.minY - gap - noteHeight - glow < display.minY {
+            notePlacement = .below
+            note = CGRect(x: spot.minX, y: spot.maxY + gap, width: noteWidth, height: noteHeight)
+        } else {
+            notePlacement = .above
+            note = CGRect(x: spot.minX, y: spot.minY - gap - noteHeight, width: noteWidth, height: noteHeight)
+        }
+        // Everything drawn, with room for the glow, then whole points, then kept on the display.
+        let content = spot.union(note).insetBy(dx: -glow, dy: -glow)
+        var origin = CGPoint(x: content.minX.rounded(.down), y: content.minY.rounded(.down))
+        let size = CGSize(
+            width: min(ceil(content.maxX - origin.x), display.width.rounded(.down)),
+            height: min(ceil(content.maxY - origin.y), display.height.rounded(.down))
         )
-        // Sized from the floored origin, so the fraction it dropped is kept.
-        let bottom = noteBelow ? screenRect.maxY + noteBand : screenRect.maxY
-        let width = min(ceil(max(screenRect.maxX - origin.x + glow, CalloutLayout.minimumWidth + 2 * glow)), display.width.rounded(.down))
-        let height = ceil(bottom - origin.y + glow)
-        origin.x = min(max(origin.x, display.minX), display.maxX - width)
-        origin.y = min(max(origin.y, display.minY), max(display.minY, display.maxY - height))
-        windowRect = CGRect(origin: origin, size: CGSize(width: width, height: height))
-        box = CGRect(
-            x: screenRect.minX - origin.x, y: screenRect.minY - origin.y,
-            width: screenRect.width, height: screenRect.height
-        )
+        origin.x = min(max(origin.x, display.minX), display.maxX - size.width)
+        origin.y = min(max(origin.y, display.minY), display.maxY - size.height)
+        windowRect = CGRect(origin: origin, size: size)
+        box = spot.offsetBy(dx: -origin.x, dy: -origin.y)
+        noteRect = note.offsetBy(dx: -origin.x, dy: -origin.y)
+    }
+}
+
+/// What says the screen under a callout still shows what the model saw, and
+/// since when. A kept frame of the same window that still shows the framed
+/// text in place is a witness. So is a capture the sensing pipeline dropped
+/// as a near duplicate of the newest kept frame while that frame is a
+/// witness: it dropped it because the screen, the window, and the focused
+/// text had not changed. The callout's staleness is counted from the latest
+/// such confirmation, so a callout on a screen nobody touches stays up while
+/// its toast does, and one whose text scrolled away comes down.
+public struct CalloutWitness: Equatable, Sendable {
+    public let region: CGRect
+    public let original: ActivityObservation
+    /// The latest time the screen was seen unchanged.
+    public private(set) var confirmedAt: Date
+    /// Whether the newest kept frame is a witness, so a near duplicate of it
+    /// confirms the screen too.
+    public private(set) var newestKeptIsWitness = true
+
+    public init(region: CGRect, original: ActivityObservation) {
+        self.region = region
+        self.original = original
+        confirmedAt = original.timestamp
+    }
+
+    /// A kept frame arrived. Returns false when it shows the framed text
+    /// moved or changed, which takes the callout down.
+    public mutating func observe(_ observation: ActivityObservation) -> Bool {
+        guard observation.id != original.id else { return true }
+        let sameWindow = observation.focus.windowSignature == original.focus.windowSignature
+            && observation.frame.width == original.frame.width && observation.frame.height == original.frame.height
+        guard sameWindow else {
+            // Another window's frame says nothing about this one, and its
+            // near duplicates are not duplicates of a witness.
+            newestKeptIsWitness = false
+            return true
+        }
+        guard CalloutAnchor.contentStillMatches(region: region, original: original, latest: observation) else { return false }
+        newestKeptIsWitness = true
+        confirmedAt = max(confirmedAt, observation.timestamp)
+        return true
+    }
+
+    /// The pipeline dropped a capture made at `time` as a near duplicate of
+    /// the newest kept frame.
+    public mutating func noteDroppedCapture(at time: Date) {
+        guard newestKeptIsWitness else { return }
+        confirmedAt = max(confirmedAt, time)
     }
 }
 

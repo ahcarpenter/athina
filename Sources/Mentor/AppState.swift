@@ -6,12 +6,25 @@ import SwiftUI
 
 /// The last callout decision, for the debug panel.
 struct CalloutRecord: Equatable {
+    enum Status: String {
+        case shown
+        case notShown = "not shown"
+        case takenDown = "taken down"
+    }
+
     var at: Date
     var suggestionID: Int64
     var region: CalloutRegion
     /// Where it was drawn, or nil when it was not.
     var placement: CalloutPlacement?
-    var outcome: String
+    var status: Status
+    /// Why it was not shown or was taken down.
+    var reason: String?
+
+    /// "taken down: window moved", for the log.
+    var summary: String {
+        reason.map { "\(status.rawValue): \($0)" } ?? status.rawValue
+    }
 }
 
 /// The last thing heard over push-to-talk, for the debug panel.
@@ -136,8 +149,10 @@ final class AppState {
     private let toast = ToastController()
     private let callouts = CalloutController()
     private var calloutTask: Task<Void, Never>?
-    /// The observation the callout on screen was made from, for the content check.
-    private var calloutObservation: ActivityObservation?
+    /// What says the screen under the callout is unchanged, and since when.
+    private var calloutWitness: CalloutWitness?
+    /// The pipeline's dropped-capture count when last seen, to notice new near duplicates.
+    private var lastDroppedCount = 0
     private var screenObserver: (any NSObjectProtocol)?
     private let speech = SpeechSynthesizer()
     private let listener = SpeechListener()
@@ -580,19 +595,28 @@ final class AppState {
         stopCalloutWatch()
         guard let region = suggestion.region else { return }
         guard settings.mentor.showCallouts else {
-            lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, placement: nil, outcome: "not shown: callouts are off in Settings")
+            lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: .notShown, reason: "callouts are off in Settings")
             return
         }
         calloutTask = Task { [weak self] in
             guard let self else { return }
             guard let observation = await self.observationForCallout(suggestion) else {
-                self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, placement: nil, outcome: "not shown: the frame is no longer in the journal")
+                self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: .notShown, reason: "the frame is no longer in the journal")
                 return
             }
-            self.calloutObservation = observation
+            var witness = CalloutWitness(region: region.rect, original: observation)
+            // A frame kept since the suggestion was made already says whether the text is still there.
+            if let latest = self.latestObservation, latest.id != observation.id, latest.timestamp > observation.timestamp {
+                guard witness.observe(latest) else {
+                    self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: .notShown, reason: CalloutRejection.contentChanged.label)
+                    return
+                }
+            }
+            self.calloutWitness = witness
+            self.lastDroppedCount = self.cadence.droppedCount
             var shown = false
             while !Task.isCancelled {
-                let result = await self.resolveAnchor(region, observation: observation)
+                let result = await self.resolveAnchor(region, observation: observation, confirmedAt: self.calloutWitness?.confirmedAt)
                 guard !Task.isCancelled, self.activeSuggestion?.id == suggestion.id else { return }
                 switch result {
                 case .success(let placement):
@@ -600,7 +624,9 @@ final class AppState {
                         self.callouts.show(placement)
                         self.toast.bringToFront()
                     }
-                    self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, placement: placement, outcome: "shown")
+                    if self.lastCallout?.status != .shown || self.lastCallout?.suggestionID != suggestion.id || self.lastCallout?.placement != placement {
+                        self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, placement: placement, status: .shown)
+                    }
                     if !shown {
                         shown = true
                         AppState.log.notice("callout shown for suggestion \(suggestion.id) at \(Formatting.rect(placement.screenRect), privacy: .public)")
@@ -610,9 +636,10 @@ final class AppState {
                     }
                 case .failure(let rejection):
                     self.callouts.dismiss()
-                    let outcome = shown ? "taken down: \(rejection.label)" : "not shown: \(rejection.label)"
-                    self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, placement: nil, outcome: outcome)
-                    AppState.log.notice("callout for suggestion \(suggestion.id) \(outcome, privacy: .public)")
+                    let record = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: shown ? .takenDown : .notShown, reason: rejection.label)
+                    self.lastCallout = record
+                    self.calloutWitness = nil
+                    AppState.log.notice("callout for suggestion \(suggestion.id) \(record.summary, privacy: .public)")
                     return
                 }
                 try? await Task.sleep(for: .seconds(1))
@@ -623,19 +650,31 @@ final class AppState {
     private func stopCalloutWatch() {
         calloutTask?.cancel()
         calloutTask = nil
-        calloutObservation = nil
+        calloutWitness = nil
     }
 
-    /// A newer frame of the same window is the cheapest witness that the
-    /// framed text is still where it was; when it is not, the callout comes down.
+    /// Every kept frame goes to the witness: one of the same window that no
+    /// longer shows the framed text in place takes the callout down.
     private func checkCalloutContent(against latest: ActivityObservation) {
-        guard callouts.isVisible, let original = calloutObservation, let active = activeSuggestion, let region = active.region else { return }
-        guard !CalloutAnchor.contentStillMatches(region: region.rect, original: original, latest: latest) else { return }
+        guard var witness = calloutWitness, let active = activeSuggestion, let region = active.region else { return }
+        if witness.observe(latest) {
+            calloutWitness = witness
+            return
+        }
         callouts.dismiss()
         stopCalloutWatch()
-        let outcome = "taken down: \(CalloutRejection.contentChanged.label)"
-        lastCallout = CalloutRecord(at: Date(), suggestionID: active.id, region: region, placement: nil, outcome: outcome)
-        AppState.log.notice("callout for suggestion \(active.id) \(outcome, privacy: .public)")
+        let record = CalloutRecord(at: Date(), suggestionID: active.id, region: region, status: .takenDown, reason: CalloutRejection.contentChanged.label)
+        lastCallout = record
+        AppState.log.notice("callout for suggestion \(active.id) \(record.summary, privacy: .public)")
+    }
+
+    /// A capture the pipeline dropped as a near duplicate confirms the screen
+    /// under the callout is unchanged, when the frame it duplicates is a witness.
+    private func noteCadence(_ status: CadenceStatus) {
+        defer { lastDroppedCount = status.droppedCount }
+        guard status.droppedCount > lastDroppedCount, var witness = calloutWitness else { return }
+        witness.noteDroppedCapture(at: status.lastCaptureAt ?? Date())
+        calloutWitness = witness
     }
 
     /// The observation the suggestion was made from: the latest one when it
@@ -646,21 +685,21 @@ final class AppState {
         return try? await journal?.observation(id: id)
     }
 
-    private func resolveAnchor(_ region: CalloutRegion, observation: ActivityObservation) async -> Result<CalloutPlacement, CalloutRejection> {
+    private func resolveAnchor(_ region: CalloutRegion, observation: ActivityObservation, confirmedAt: Date?) async -> Result<CalloutPlacement, CalloutRejection> {
         let live = CalloutAnchor.Live(
             frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier,
             focus: await tracker?.peekCurrent(),
             displays: NSScreen.currentDisplays,
             now: Date()
         )
-        return CalloutAnchor.resolve(region, for: observation, live: live)
+        return CalloutAnchor.resolve(region, for: observation, live: live, confirmedAt: confirmedAt)
     }
 
     private func displayConfigurationChanged() {
         guard callouts.isVisible, let record = lastCallout else { return }
         callouts.dismiss()
         stopCalloutWatch()
-        lastCallout = CalloutRecord(at: Date(), suggestionID: record.suggestionID, region: record.region, placement: nil, outcome: "taken down: \(CalloutRejection.displayChanged.label)")
+        lastCallout = CalloutRecord(at: Date(), suggestionID: record.suggestionID, region: record.region, status: .takenDown, reason: CalloutRejection.displayChanged.label)
     }
 
     /// Persists a delivery flag and mirrors it into the history.
@@ -1028,6 +1067,7 @@ final class AppState {
         case .event(let journalEvent):
             prepend(.event(journalEvent))
         case .cadence(let status):
+            noteCadence(status)
             if status != cadence { cadence = status }
         }
     }

@@ -20,7 +20,7 @@ final class CalloutController {
     func show(_ placement: CalloutPlacement) {
         guard let display = NSScreen.screens.first(where: { $0.displayID == placement.displayID }) else { return }
         let layout = CalloutLayout(screenRect: placement.screenRect, display: NSScreen.displayBounds(of: display))
-        let view = CalloutView(box: layout.box, note: placement.note, noteBelow: layout.noteBelow, size: layout.windowRect.size)
+        let view = CalloutView(layout: layout, note: placement.note)
         let panel = panel ?? makePanel()
         if let hosting {
             hosting.rootView = view
@@ -77,10 +77,19 @@ final class CalloutController {
 struct CalloutView: View {
     static let cornerRadius: CGFloat = 8
 
-    let box: CGRect
+    let layout: CalloutLayout
     let note: String
-    let noteBelow: Bool
-    let size: CGSize
+
+    private var box: CGRect { layout.box }
+
+    /// Beside the box the pill is centred on it; below or above, it hugs the box.
+    private var noteAlignment: Alignment {
+        switch layout.notePlacement {
+        case .trailing: .leading
+        case .below: .topLeading
+        case .above: .bottomLeading
+        }
+    }
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -95,12 +104,12 @@ struct CalloutView: View {
                 .frame(width: box.width, height: box.height)
                 .offset(x: box.minX, y: box.minY)
             notePill
-                .fixedSize()
-                .frame(maxWidth: CalloutLayout.noteMaxWidth, alignment: .leading)
-                .offset(x: box.minX, y: noteBelow ? box.maxY + CalloutLayout.gap : max(0, box.minY - CalloutLayout.gap - CalloutLayout.noteHeight))
-                .frame(height: CalloutLayout.noteHeight, alignment: noteBelow ? .top : .bottom)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: layout.noteRect.width, alignment: .leading)
+                .frame(width: layout.noteRect.width, height: layout.noteRect.height, alignment: noteAlignment)
+                .offset(x: layout.noteRect.minX, y: layout.noteRect.minY)
         }
-        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .frame(width: layout.windowRect.width, height: layout.windowRect.height, alignment: .topLeading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Mentor callout: \(note)")
     }

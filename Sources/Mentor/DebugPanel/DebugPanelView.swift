@@ -708,7 +708,7 @@ private struct MentorCard: View {
                     Field(label: "Last mentor", value: describe(state.mentorStatus.lastMentor, now: context.date), lineLimit: 4)
                     Field(label: "Spend", value: spend(now: context.date))
                     Field(label: "Cadence", value: cadence(now: context.date))
-                    Field(label: "Callout", value: callout(now: context.date), lineLimit: 4)
+                    Field(label: "Callout", value: callout(now: context.date), lineLimit: 6)
                     Field(label: "Transcript", value: transcript(now: context.date), lineLimit: 4)
                 }
             }
@@ -772,7 +772,9 @@ private struct MentorCard: View {
     /// pixels the model answered in and the screen points it mapped to.
     private func callout(now: Date) -> String {
         guard let record = state.lastCallout else { return "none yet" }
-        var text = "\(record.outcome) \(Formatting.age(record.at, now: now)), \"\(record.region.note)\"\nframe \(Formatting.rect(record.region.rect)) px"
+        var text = "\(record.status.rawValue) \(Formatting.age(record.at, now: now))"
+        if let reason = record.reason { text += ": \(reason)" }
+        text += "\n\"\(record.region.note)\", frame \(Formatting.rect(record.region.rect)) px"
         if let placement = record.placement {
             text += "\nscreen \(Formatting.rect(placement.screenRect)) pt on display \(placement.displayID)"
         }
@@ -882,7 +884,7 @@ private struct TalkBackField: View {
             Text("Talk back")
                 .foregroundStyle(.secondary)
                 .frame(width: 78, alignment: .trailing)
-            TextField("Type what you would say", text: $text)
+            TextField("Type a reply", text: $text)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(send)
                 .accessibilityLabel("Talk back")
