@@ -919,6 +919,7 @@ final class AppState {
             toast.showNote(reason)
             return
         }
+        refreshPermissions()
         guard permissions.voiceGranted else {
             let missing = Permission.optional.filter { !permissions.isGranted($0) }
             let asking = missing.contains { undeterminedPermissions.contains($0) }

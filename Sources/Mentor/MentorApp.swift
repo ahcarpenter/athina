@@ -122,7 +122,7 @@ enum LaunchArguments {
     /// The Settings pane `--open settings:<pane>` names, if any.
     static var settingsPane: SettingsPane? {
         guard let argument = openArgument, argument.hasPrefix("settings:") else { return nil }
-        return SettingsPane(argument: String(argument.dropFirst("settings:".count)))
+        return SettingsPane(rawValue: String(argument.dropFirst("settings:".count)))
     }
 }
 
@@ -215,7 +215,6 @@ struct MenuBarContent: View {
         Divider()
         Button("Suggestions") { open(WindowID.history) }
         Button("Debug Panel") { open(WindowID.debug) }
-            .keyboardShortcut("d")
         Button("Permissions…") { open(WindowID.permissions) }
         Button("Settings…") {
             NSApp.activate()

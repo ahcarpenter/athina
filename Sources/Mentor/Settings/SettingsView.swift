@@ -33,16 +33,6 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         }
     }
 
-    /// The pane a launch argument names. Earlier tab names still work:
-    /// `mentor` opens General, and `cadence` and `frames` open Capture.
-    init?(argument: String) {
-        switch argument {
-        case "mentor": self = .general
-        case "cadence", "frames": self = .capture
-        default: self.init(rawValue: argument)
-        }
-    }
-
     /// Makes this the pane the Settings window shows, now or when it next opens.
     func select() {
         UserDefaults.standard.set(rawValue, forKey: SettingsPane.storageKey)
@@ -255,7 +245,7 @@ struct JournalSettings: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Every observation, thumbnail, event, suggestion, follow-up question, and model call record is deleted. You can't undo this action.")
+            Text("Every observation, thumbnail, event, suggestion, follow-up question, and model call record is deleted, along with what Mentor understands of your goals. You can't undo this action.")
         }
         .task {
             await state.refreshJournalStats()

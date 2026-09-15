@@ -59,6 +59,9 @@ final class ToastController {
 
     func expand() {
         model.expanded = true
+        if let suggestion = model.suggestion {
+            ToastController.announce(suggestion.explanation, priority: .high)
+        }
     }
 
     /// While the user is talking back the toast stays where it is: it is
