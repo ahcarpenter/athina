@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import MentorCore
 import OSLog
 import Speech
 
@@ -56,6 +57,8 @@ final class SpeechListener {
         return .available(locale: name)
     }
 
+    /// What the release grace and the wait for a final result are waited out on.
+    private let clock: any MentorClock
     private(set) var isListening = false
     private var engine: AVAudioEngine?
     private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -68,6 +71,10 @@ final class SpeechListener {
     private var finishing = false
     private var partials = 0
     private var waiters: [CheckedContinuation<String?, Never>] = []
+
+    init(clock: any MentorClock) {
+        self.clock = clock
+    }
 
     /// Starts capturing and transcribing. `onPartial` receives the transcript
     /// as it grows, on the main actor.
@@ -127,7 +134,7 @@ final class SpeechListener {
         let session = session
         // Keep capturing for a moment: the tail of the last word is still
         // being said when the key comes up.
-        try? await Task.sleep(for: .seconds(SpeechListener.releaseGrace))
+        try? await clock.sleep(for: .seconds(SpeechListener.releaseGrace))
         guard session == self.session else { return nil }
         stopAudio()
         request?.endAudio()
@@ -135,8 +142,9 @@ final class SpeechListener {
         if finished { return transcript }
         return await withCheckedContinuation { continuation in
             waiters.append(continuation)
+            let clock = clock
             Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(SpeechListener.finalResultTimeout))
+                try? await clock.sleep(for: .seconds(SpeechListener.finalResultTimeout))
                 guard let self, self.session == session, !self.finished else { return }
                 SpeechListener.log.notice("no final result within \(SpeechListener.finalResultTimeout)s, keeping the latest partial")
                 self.complete()

@@ -380,6 +380,8 @@ public struct MentorStatus: Equatable, Sendable {
     }
 
     public var availability: Availability
+    /// The sensing mode the loop last heard, which every gate reads.
+    public var mode: SensingMode
     public var lastGate: GateRecord?
     public var lastContext: ContextRecord?
     public var lastTriage: ModelCallRecord?
@@ -412,15 +414,17 @@ public struct MentorStatus: Equatable, Sendable {
         lastRefresh: ModelCallRecord? = nil,
         nextRefreshAt: Date? = nil,
         spendThisHour: Double = 0,
-        hourStart: Date = SpendMeter.hourStart(of: Date()),
+        hourStart: Date = .distantPast,
         callsThisHour: Int = 0,
         cadenceMultiplier: Double = 1,
         nextTriageAt: Date? = nil,
         nextMentorAt: Date? = nil,
         inFlight: ModelTier? = nil,
-        pendingFollowUp: PendingFollowUp? = nil
+        pendingFollowUp: PendingFollowUp? = nil,
+        mode: SensingMode = .stopped
     ) {
         self.availability = availability
+        self.mode = mode
         self.lastGate = lastGate
         self.lastContext = lastContext
         self.lastTriage = lastTriage

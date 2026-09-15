@@ -172,17 +172,21 @@ enum Snapshots {
 // MARK: - Sample state
 
 extension AppState {
-    /// Realistic data for snapshots and previews. Nothing here touches the pipeline.
-    static func sample(speechAvailability: SpeechListener.Availability = .available(locale: "English (US)")) -> AppState {
+    /// Realistic data for snapshots and previews, stamped around `now` (the
+    /// sample's own clock when nil). Nothing here touches the pipeline.
+    static func sample(
+        at now: Date? = nil,
+        speechAvailability: SpeechListener.Availability = .available(locale: "English (US)")
+    ) -> AppState {
         var settings = SensingSettings()
         settings.mentor.onlyMentorInsideContexts = true
         settings.mentor.contexts = SampleSuggestions.contexts
         // The oldest sample suggestion was answered Never for This.
         settings.mentor.neverRules = [
-            NeverRule(bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .correctness, createdAt: Date().addingTimeInterval(-7990)),
+            NeverRule(bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .correctness, createdAt: (now ?? Date()).addingTimeInterval(-7990)),
         ]
         let state = AppState(sampleWithSettings: settings, speechAvailability: speechAvailability)
-        let now = Date()
+        let now = now ?? state.clock.date
         let focus = FocusContext(
             timestamp: now,
             pid: ProcessInfo.processInfo.processIdentifier,
@@ -225,7 +229,7 @@ extension AppState {
             lastCaptureReason: .inputSettled,
             nextDueAt: now.addingTimeInterval(2.6),
             nextDueReason: .floor,
-            lastInputAt: Date().addingTimeInterval(-4),
+            lastInputAt: now.addingTimeInterval(-4),
             keptCount: 128,
             droppedCount: 341,
             lastDropDistance: 2
@@ -243,7 +247,7 @@ extension AppState {
             .event(JournalEvent(id: 12, timestamp: now.addingTimeInterval(-9), kind: .windowSwitch, bundleID: "com.apple.dt.Xcode", appName: "Xcode", detail: "SensingPipeline.swift - mentor")),
             .observation(ActivityObservation(id: 127, timestamp: now.addingTimeInterval(-14), focus: focus, frame: frame, textBlocks: [], reason: .focusChange)),
             .event(JournalEvent(id: 11, timestamp: now.addingTimeInterval(-15), kind: .appSwitch, bundleID: "com.apple.dt.Xcode", appName: "Xcode", detail: "from Safari")),
-            .observation(ActivityObservation(id: 126, timestamp: now.addingTimeInterval(-31), focus: FocusContext(pid: 1, bundleID: "com.apple.Safari", appName: "Safari", windowTitle: "ScreenCaptureKit | Apple Developer Documentation"), frame: frame, textBlocks: Array(sampleFrame.blocks.prefix(4)), reason: .floor)),
+            .observation(ActivityObservation(id: 126, timestamp: now.addingTimeInterval(-31), focus: FocusContext(timestamp: now.addingTimeInterval(-31), pid: 1, bundleID: "com.apple.Safari", appName: "Safari", windowTitle: "ScreenCaptureKit | Apple Developer Documentation"), frame: frame, textBlocks: Array(sampleFrame.blocks.prefix(4)), reason: .floor)),
             .event(JournalEvent(id: 10, timestamp: now.addingTimeInterval(-64), kind: .idleEnd)),
             .event(JournalEvent(id: 9, timestamp: now.addingTimeInterval(-420), kind: .idleStart, detail: "no input for 60s")),
             .event(JournalEvent(id: 8, timestamp: now.addingTimeInterval(-900), kind: .excluded, bundleID: "com.1password.1password", appName: "1Password")),
@@ -255,7 +259,7 @@ extension AppState {
         for i in 0..<12 {
             timeline.append(.observation(ActivityObservation(
                 id: Int64(110 - i), timestamp: now.addingTimeInterval(-7300 - Double(i) * 47),
-                focus: FocusContext(pid: 2, bundleID: "com.github.wez.wezterm", appName: "WezTerm", windowTitle: "zsh - mentor"),
+                focus: FocusContext(timestamp: now.addingTimeInterval(-7300 - Double(i) * 47), pid: 2, bundleID: "com.github.wez.wezterm", appName: "WezTerm", windowTitle: "zsh - mentor"),
                 frame: frame, textBlocks: [], reason: i % 3 == 0 ? .focusChange : .floor
             )))
         }
@@ -333,12 +337,18 @@ extension AppState {
     }
 
     /// The sample in replay mode: every call in the log answered from the
-    /// committed fixtures and nothing billed.
+    /// committed fixtures and nothing billed, on a clock running 60 times real
+    /// time that was moved ahead a day and two hours, so the clock badge shows.
     static func sampleReplay() -> AppState {
-        let live = sample()
         let directory = URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent("workspace/mentor/Tests/MentorCoreTests/Fixtures/Replay", isDirectory: true)
-        let state = AppState(sampleWithSettings: live.settings, clientMode: .replay(directory: directory, allowStale: false))
+        let state = AppState(
+            sampleWithSettings: sample().settings,
+            clientMode: .replay(directory: directory, allowStale: false),
+            clockMode: .replay(scale: 60, ahead: 0)
+        )
+        state.advanceClock(by: 26 * 3600)
+        let live = sample(at: state.clock.date)
         state.focus = live.focus
         state.latestObservation = live.latestObservation
         state.latestImage = live.latestImage

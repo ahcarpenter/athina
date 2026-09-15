@@ -3,27 +3,39 @@ import Testing
 @testable import MentorCore
 
 /// Drives `MentorLoop` end to end with a scripted client: sensing events in,
-/// model calls out, suggestions and journal rows as the result.
-@Suite struct MentorLoopTests {
+/// model calls out, suggestions and journal rows as the result. Everything
+/// runs on a test clock, so nothing here waits on real time: a behavior that
+/// takes minutes or hours is proven by advancing the clock, and every wait
+/// for the loop is a wait for an event it publishes.
+@Suite(.timeLimit(.minutes(1))) struct MentorLoopTests {
     struct Harness {
+        /// Where every harness clock starts: noon, on the UTC calendar the loop
+        /// is given, so a record written any test age ago is still today.
+        static let start = Date(timeIntervalSince1970: 1_789_473_600)
+
         let journal: Journal
         let client: ScriptedClaudeClient
         let keyStore: InMemoryKeyStore
+        let clock: AdjustableClock
         let loop: MentorLoop
         let input: AsyncStream<SensingEvent>.Continuation
         let output: AsyncStream<MentorEvent>
+        /// Everything the loop publishes, for waiting on its state without polling.
+        private let updates: AsyncStream<MentorEvent>
 
         /// `screens`, then `understanding`, when given, are journaled before the
         /// loop starts, so the loop seeds from them exactly as it would after a
         /// relaunch. The screens get ids 1, 2, and so on, in order. `activeUse`
         /// is how long the user worked right after the record was written, with
-        /// nothing counted since, as the loop would have kept the count.
+        /// nothing counted since, as the loop would have kept the count. The
+        /// clock starts at `start`.
         init(
             settings: MentorSettings = MentorSettings(),
             key: String? = "sk-ant-test",
             screens: [ActivityObservation] = [],
             understanding: UnderstandingRecord? = nil,
-            activeUse: TimeInterval? = nil
+            activeUse: TimeInterval? = nil,
+            start: Date = Harness.start
         ) async throws {
             let journal = try Journal.inMemory()
             for screen in screens { try await journal.record(screen) }
@@ -36,97 +48,98 @@ import Testing
                     ))
                 }
             }
-            await self.init(settings: settings, key: key, journal: journal, client: ScriptedClaudeClient())
+            let clock = AdjustableClock(startingAt: start)
+            await self.init(settings: settings, key: key, journal: journal, client: ScriptedClaudeClient(clock: clock), clock: clock)
         }
 
-        /// A loop over a journal and client that already exist, as a relaunch finds them.
+        /// A loop over a journal, client, and clock that already exist, as a relaunch finds them.
         init(
             settings: MentorSettings = MentorSettings(),
             key: String? = "sk-ant-test",
             journal: Journal,
-            client: ScriptedClaudeClient
+            client: ScriptedClaudeClient,
+            clock: AdjustableClock
         ) async {
             self.journal = journal
             self.client = client
+            self.clock = clock
             keyStore = InMemoryKeyStore(key: key)
             let (stream, continuation) = AsyncStream<SensingEvent>.makeStream()
             input = continuation
             loop = MentorLoop(
                 settings: settings, journal: journal, client: client, keyStore: keyStore, events: stream,
-                calendar: MentorLoopTests.middayCalendar
+                clock: clock, calendar: MentorLoopTests.calendar
             )
             output = await loop.events()
+            updates = await loop.events()
             await loop.start()
+            // Handled before init returns, so a test that moves the clock
+            // first moves it with the loop already watching.
             input.yield(.modeChanged(.watching))
+            await waitUntil { $0.mode == .watching }
         }
 
         /// Sends an observation and waits until the loop has gated it through
         /// both the triage and the refresh gate, made the expected number of
-        /// calls, and has nothing in flight.
+        /// calls, and has nothing in flight. The observation arrives a
+        /// millisecond after whatever came before it, so the refresh gate's
+        /// verdict on it is told apart from the last one by its time.
         func observe(_ observation: ActivityObservation, expectCalls: Int) async {
-            let sentAt = Date()
+            clock.advance(by: .milliseconds(1))
+            let sentAt = clock.date
             input.yield(.observation(observation))
-            for _ in 0..<250 {
-                let status = await loop.currentStatus()
-                if status.lastGate?.observationID == observation.id, status.inFlight == nil,
-                   Self.refreshGateRan(status, since: sentAt),
-                   await client.sent.count >= expectCalls {
-                    return
-                }
-                try? await Task.sleep(for: .milliseconds(20))
+            await waitUntil(calls: expectCalls) { status in
+                status.lastGate?.observationID == observation.id && status.inFlight == nil
+                    && Self.refreshGateRan(status, since: sentAt)
             }
         }
 
-        /// Polls the loop's status until `condition` holds, for up to five seconds.
-        func waitUntil(_ condition: (MentorStatus) -> Bool) async {
-            for _ in 0..<250 {
-                if condition(await loop.currentStatus()) { return }
-                try? await Task.sleep(for: .milliseconds(20))
+        /// Waits until `condition` holds of the loop's status and at least
+        /// `calls` requests were sent, checking again after every event the
+        /// loop publishes. The suite's time limit ends a wait that never ends.
+        func waitUntil(calls: Int = 0, _ condition: (MentorStatus) -> Bool) async {
+            var events = updates.makeAsyncIterator()
+            while true {
+                if condition(await loop.currentStatus()), await client.sent.count >= calls { return }
+                guard await events.next() != nil else { return }
             }
         }
 
         /// The refresh gate runs last for every observation, so a hold or a
         /// call of its own since the observation was sent means the loop has
         /// finished with it.
-        private static func refreshGateRan(_ status: MentorStatus, since sentAt: Date) -> Bool {
+        static func refreshGateRan(_ status: MentorStatus, since sentAt: Date) -> Bool {
             if let hold = status.lastRefreshHold, hold.at >= sentAt { return true }
             if let call = status.lastRefresh, call.timestamp >= sentAt { return true }
             return false
         }
 
+        /// Every event published so far, up to and including the first that
+        /// matches `predicate`.
         func drain(until predicate: (MentorEvent) -> Bool) async -> [MentorEvent] {
             var seen: [MentorEvent] = []
-            let deadline = Date().addingTimeInterval(5)
-            while Date() < deadline {
-                let next = await withTaskGroup(of: MentorEvent?.self) { group in
-                    group.addTask {
-                        var iterator = output.makeAsyncIterator()
-                        return await iterator.next()
-                    }
-                    group.addTask {
-                        try? await Task.sleep(for: .milliseconds(500))
-                        return nil
-                    }
-                    let first = await group.next() ?? nil
-                    group.cancelAll()
-                    return first
-                }
-                guard let next else { return seen }
-                seen.append(next)
-                if predicate(next) { return seen }
+            for await event in output {
+                seen.append(event)
+                if predicate(event) { break }
             }
             return seen
+        }
+
+        /// A loop over the same journal, client, and clock, started once
+        /// `closed` has passed on the clock, as the app is opened again after
+        /// sitting closed. Stop this loop first, as quitting does.
+        func relaunched(settings: MentorSettings = MentorSettings(), after closed: Duration = .zero) async -> Harness {
+            clock.advance(by: closed)
+            return await Harness(settings: settings, journal: journal, client: client, clock: clock)
         }
     }
 
     private let t0 = Date(timeIntervalSince1970: 1_700_000_000)
 
-    /// A calendar in which this instant is noon, so a record written any test
-    /// age ago is still on today's date whatever the wall clock says.
-    static var middayCalendar: Calendar {
+    /// The calendar every harness loop decides a new day on.
+    static var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        let secondsIntoUTCDay = Int(Date().timeIntervalSince1970) % 86400
-        calendar.timeZone = TimeZone(secondsFromGMT: 43200 - secondsIntoUTCDay) ?? .current
+        calendar.timeZone = TimeZone(identifier: "UTC") ?? .current
         return calendar
     }
 
@@ -166,7 +179,7 @@ import Testing
                 goals: [Understanding.Goal(goal: goal, evidence: "two hours in the same files", confidence: 0.8)],
                 timeline: ["opened the editor"]
             ),
-            at: Date().addingTimeInterval(-age), model: "claude-opus-5", source: .periodic,
+            at: Harness.start.addingTimeInterval(-age), model: "claude-opus-5", source: .periodic,
             cost: 0.02, promptVersion: MentorPrompts.version, coveredThroughObservationID: coveredThrough
         )
     }
@@ -175,12 +188,12 @@ import Testing
         let h = try await Harness()
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
         let jpeg = Data(repeating: 0xFF, count: 100)
-        await h.observe(Fixtures.observation(id: 1, at: Date(), reason: .floor, jpeg: jpeg), expectCalls: 0)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date, reason: .floor, jpeg: jpeg), expectCalls: 0)
         #expect(await h.client.sent.isEmpty)
         let status = await h.loop.currentStatus()
         #expect(status.lastGate?.hold == .notAChangeMoment(.floor))
 
-        await h.observe(Fixtures.observation(id: 2, at: Date(), reason: .focusChange, jpeg: jpeg), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 2, at: h.clock.date, reason: .focusChange, jpeg: jpeg), expectCalls: 1)
         let sent = await h.client.sent
         #expect(sent.count == 1)
         let request = try #require(sent.first?.request)
@@ -205,10 +218,10 @@ import Testing
         let h = try await Harness()
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.suggestion(), model: "claude-opus-5", usage: Usage(inputTokens: 2000, outputTokens: 300, cacheCreationInputTokens: 700, cacheReadInputTokens: 0))
-        let older = try await h.journal.record(Fixtures.observation(at: Date().addingTimeInterval(-60), window: "old.swift", text: "older screen"))
+        let older = try await h.journal.record(Fixtures.observation(at: h.clock.date.addingTimeInterval(-60), window: "old.swift", text: "older screen"))
         _ = older
         let jpeg = Data(repeating: 0xFF, count: 100)
-        let latest = try await h.journal.record(Fixtures.observation(at: Date(), text: "latest screen", jpeg: jpeg))
+        let latest = try await h.journal.record(Fixtures.observation(at: h.clock.date, text: "latest screen", jpeg: jpeg))
         await h.observe(latest, expectCalls: 2)
 
         let sent = await h.client.sent
@@ -275,7 +288,7 @@ import Testing
         let h = try await Harness(settings: Self.enforcing(contexts: contexts))
         await h.client.enqueue(json: Self.triage(true, context: "writing Swift"))
         await h.client.enqueue(json: Self.suggestion())
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
 
         let triage = try #require(await h.client.sent.first?.request)
         // No extra call: the same triage request carries the question.
@@ -300,7 +313,7 @@ import Testing
     @Test func outOfContextStopsAtTriageAndIsRecordedAsSuch() async throws {
         let h = try await Harness(settings: Self.enforcing())
         await h.client.enqueue(json: Self.triage(true, context: nil))
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
 
         // Triage ran, the mentor tier never did, and nothing was shown.
         #expect(await h.client.sent.count == 1)
@@ -317,7 +330,7 @@ import Testing
     @Test func anUndeclaredContextNameIsOutOfContext() async throws {
         let h = try await Harness(settings: Self.enforcing())
         await h.client.enqueue(json: Self.triage(true, context: "cooking"))
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
         #expect(await h.client.sent.count == 1)
         let status = await h.loop.currentStatus()
         #expect(status.lastTriage?.outcome == .outOfContext)
@@ -329,7 +342,7 @@ import Testing
     @Test func enforcingWithNoContextDeclaredMakesNoModelCallAtAll() async throws {
         let h = try await Harness(settings: Self.enforcing(contexts: []))
         await h.client.enqueue(json: Self.triage(true, context: nil))
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 0)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 0)
         #expect(await h.client.sent.isEmpty)
         let status = await h.loop.currentStatus()
         #expect(status.lastGate?.hold == .noContextsDeclared)
@@ -340,7 +353,7 @@ import Testing
     @Test func beingInsideAContextStillLeavesTriagesOwnJudgementInCharge() async throws {
         let h = try await Harness(settings: Self.enforcing())
         await h.client.enqueue(json: Self.triage(false, context: "writing Swift"))
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
         let status = await h.loop.currentStatus()
         #expect(status.lastTriage?.outcome == .quiet)
         #expect(status.lastContext?.placement.contextName == "writing Swift")
@@ -352,7 +365,7 @@ import Testing
         settings.contexts = [MentorshipContext(name: "writing Swift")]
         let h = try await Harness(settings: settings)
         await h.client.enqueue(json: Self.no)
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
         let triage = try #require(await h.client.sent.first?.request)
         #expect(triage.system.first?.text == MentorPrompts.triageBase)
         #expect(triage.outputConfig?.format?.schema == MentorPrompts.triageSchema(contexts: []))
@@ -372,7 +385,7 @@ import Testing
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
         let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
         await h.client.enqueue(json: Self.triage(true, context: nil))
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
 
         // Triage ran and nothing else did: not the mentor tier, not a refresh.
         #expect(await h.client.sent.count == 1)
@@ -391,7 +404,7 @@ import Testing
         // the refresh of its own runs as it would with the switch off.
         await h.client.enqueue(json: Self.triage(false, context: "writing Swift"))
         await h.client.enqueue(json: Self.refresh, model: "claude-opus-5")
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
         #expect(await h.client.sent.count == 2)
         #expect(await h.loop.currentStatus().lastRefreshHold == nil)
         let record = try #require(await h.loop.currentUnderstanding())
@@ -400,7 +413,7 @@ import Testing
 
         // Another app comes to the front before triage can place it: the
         // refresh waits for that verdict rather than trusting the last app's.
-        await h.observe(Fixtures.observation(id: 2, at: Date(), app: "Safari", bundleID: "com.apple.Safari", window: "Docs"), expectCalls: 2)
+        await h.observe(Fixtures.observation(id: 2, at: h.clock.date, app: "Safari", bundleID: "com.apple.Safari", window: "Docs"), expectCalls: 2)
         #expect(await h.client.sent.count == 2)
         #expect(await h.loop.currentStatus().lastRefreshHold?.hold == .notPlacedInAContext)
     }
@@ -409,7 +422,7 @@ import Testing
         let settings = Self.enforcing()
         let h = try await Harness(settings: settings)
         await h.client.enqueue(json: Self.triage(false, context: "writing Swift"))
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
         #expect(await h.loop.currentStatus().lastContext?.placement.contextName == "writing Swift")
 
         var unrelated = settings
@@ -432,7 +445,7 @@ import Testing
         let h = try await Harness(settings: settings)
         await h.client.enqueue(json: Self.yes, model: "claude-sonnet-5")
         await h.client.enqueue(json: Self.silence, model: "claude-fable-5-1")
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
         let sent = await h.client.sent
         #expect(sent[0].request.model == "claude-sonnet-5")
         #expect(sent[0].request.outputConfig?.effort == .xhigh)
@@ -448,7 +461,7 @@ import Testing
         let h = try await Harness(settings: settings)
         await h.client.enqueue(json: Self.yes)
         await h.client.enqueue(json: Self.silence)
-        await h.observe(Fixtures.observation(id: 1, at: Date(), jpeg: Data(repeating: 1, count: 50)), expectCalls: 2)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date, jpeg: Data(repeating: 1, count: 50)), expectCalls: 2)
         let mentor = try #require(await h.client.sent.last?.request)
         #expect(mentor.imageByteCount == 0)
         #expect(mentor.messages[0].content.count == 1)
@@ -463,7 +476,7 @@ import Testing
         let h = try await Harness(settings: settings)
         await h.client.enqueue(json: Self.yes)
         await h.client.enqueue(json: Self.suggestion(confidence: 0.5))
-        await h.observe(Fixtures.observation(id: 1, at: Date(), text: "one"), expectCalls: 2)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date, text: "one"), expectCalls: 2)
         let status = await h.loop.currentStatus()
         #expect(status.lastMentor?.outcome == .belowConfidence)
         #expect(status.lastMentor?.detail == "Use --filter (confidence 50%)")
@@ -472,11 +485,11 @@ import Testing
 
     @Test func suppressedCategoriesAreToldToTheModelAndDroppedIfRaisedAnyway() async throws {
         var settings = MentorSettings()
-        settings.neverRules = [NeverRule(bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .tool, createdAt: Date())]
+        settings.neverRules = [NeverRule(bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .tool, createdAt: Harness.start)]
         let h = try await Harness(settings: settings)
         await h.client.enqueue(json: Self.yes)
         await h.client.enqueue(json: Self.suggestion(category: "tool", confidence: 0.95))
-        await h.observe(Fixtures.observation(id: 1, at: Date(), text: "one"), expectCalls: 2)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date, text: "one"), expectCalls: 2)
         let status = await h.loop.currentStatus()
         #expect(status.lastMentor?.outcome == .suppressed)
         let mentorRequest = try #require(await h.client.sent.last?.request)
@@ -491,7 +504,7 @@ import Testing
     @Test func nothingIsSentWithoutAKeyAndKeyChangesAreNoticed() async throws {
         let h = try await Harness(key: nil)
         await h.client.enqueue(json: Self.no)
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 0)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 0)
         #expect(await h.client.sent.isEmpty)
         let status = await h.loop.currentStatus()
         #expect(status.availability == .noAPIKey)
@@ -500,30 +513,59 @@ import Testing
         try h.keyStore.save("sk-ant-new")
         await h.loop.apiKeyChanged()
         #expect(await h.loop.currentStatus().availability == .ready)
-        await h.observe(Fixtures.observation(id: 2, at: Date(), window: "b", text: "b"), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 2, at: h.clock.date, window: "b", text: "b"), expectCalls: 1)
         #expect(await h.client.sent.first?.apiKey == "sk-ant-new")
     }
 
-    @Test func spendCapStopsCallsAndSeedsFromTheJournal() async throws {
+    /// A harness whose journal already holds `spent` dollars of calls this
+    /// hour, as a relaunch finds them, on a clock started at `start`.
+    private func harness(spent: Double, cap: Double, at start: Date) async throws -> Harness {
         var settings = MentorSettings()
-        settings.hourlySpendCap = 0.05
+        settings.hourlySpendCap = cap
         let journal = try Journal.inMemory()
+        let clock = AdjustableClock(startingAt: start)
         try await journal.record(ModelCallRecord(
-            timestamp: Date(), tier: .mentor, model: "claude-fable-5-1", promptVersion: 1, promptCharacters: 10, imageBytes: 0,
-            usage: Usage(), cost: 0.06, latency: 1, outcome: .suggested, detail: nil
+            timestamp: start, tier: .mentor, model: "claude-fable-5-1", promptVersion: 1, promptCharacters: 10, imageBytes: 0,
+            usage: Usage(), cost: spent, latency: 1, outcome: .suggested, detail: nil
         ))
-        let client = ScriptedClaudeClient()
-        let (stream, continuation) = AsyncStream<SensingEvent>.makeStream()
-        let loop = MentorLoop(settings: settings, journal: journal, client: client, keyStore: InMemoryKeyStore(key: "k"), events: stream)
-        await loop.start()
-        continuation.yield(.modeChanged(.watching))
-        let status = await loop.currentStatus()
+        return await Harness(settings: settings, journal: journal, client: ScriptedClaudeClient(clock: clock), clock: clock)
+    }
+
+    @Test func spendCapStopsCallsAndSeedsFromTheJournal() async throws {
+        let h = try await harness(spent: 0.06, cap: 0.05, at: Harness.start)
+        let status = await h.loop.currentStatus()
         #expect(status.spendThisHour == 0.06)
         if case .capReached = status.availability {} else { Issue.record("expected the cap to be reached") }
-        continuation.yield(.observation(Fixtures.observation(id: 1, at: Date())))
-        try await Task.sleep(for: .milliseconds(200))
-        #expect(await client.sent.isEmpty)
-        if case .spendCapReached = await loop.currentStatus().lastGate?.hold {} else { Issue.record("expected a spend cap hold") }
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 0)
+        #expect(await h.client.sent.isEmpty)
+        if case .spendCapReached = await h.loop.currentStatus().lastGate?.hold {} else { Issue.record("expected a spend cap hold") }
+    }
+
+    /// The cap holds every call until the clock hour turns, not an hour after
+    /// the spend, and then releases at once.
+    @Test func theSpendCapReleasesAtTheTopOfTheHour() async throws {
+        let nextHour = SpendMeter.nextHourStart(after: Harness.start)
+        // Ten minutes before the hour turns, with this hour already over the cap.
+        let h = try await harness(spent: 0.06, cap: 0.05, at: nextHour.addingTimeInterval(-600))
+        #expect(await h.loop.currentStatus().availability == .capReached(until: nextHour))
+        await h.client.enqueue(json: Self.no)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 0)
+        #expect(await h.loop.currentStatus().lastGate?.hold == .spendCapReached(until: nextHour))
+
+        h.clock.advance(toDate: nextHour.addingTimeInterval(-1))
+        await h.observe(Fixtures.observation(id: 2, at: h.clock.date, window: "b", text: "b"), expectCalls: 0)
+        #expect(await h.client.sent.isEmpty)
+        #expect(await h.loop.currentStatus().lastGate?.hold == .spendCapReached(until: nextHour))
+
+        h.clock.advance(toDate: nextHour)
+        await h.observe(Fixtures.observation(id: 3, at: h.clock.date, window: "c", text: "c"), expectCalls: 1)
+        #expect(await h.client.sent.count == 1)
+        let status = await h.loop.currentStatus()
+        #expect(status.lastGate?.hold == nil)
+        #expect(status.availability == .ready)
+        // Only the call just made counts toward the new hour.
+        #expect(status.callsThisHour == 1)
+        #expect(status.spendThisHour < 0.05)
     }
 
     @Test(arguments: [
@@ -535,7 +577,7 @@ import Testing
     func errorsRefusalsAndGarbageAreRecordedNotShown(response: Result<MessagesResponse, ClaudeClientError>, outcome: ModelCallOutcome, detail: String) async throws {
         let h = try await Harness()
         await h.client.enqueue(response)
-        await h.observe(Fixtures.observation(id: 1, at: Date(), text: "one"), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date, text: "one"), expectCalls: 1)
         let status = await h.loop.currentStatus()
         #expect(status.lastTriage?.outcome == outcome)
         #expect(status.lastTriage?.detail == detail)
@@ -548,7 +590,7 @@ import Testing
     @Test func feedbackIsJournaledAndPublished() async throws {
         let h = try await Harness()
         let stored = try await h.journal.record(Suggestion(
-            timestamp: Date(), bundleID: "com.a", appName: "A", windowTitle: nil, category: .workflow,
+            timestamp: h.clock.date, bundleID: "com.a", appName: "A", windowTitle: nil, category: .workflow,
             title: "T", body: "B", explanation: "E", confidence: 0.8, observationID: nil, model: "m", promptVersion: 1
         ))
         let updated = await h.loop.recordFeedback(suggestionID: stored.id, feedback: .never)
@@ -573,7 +615,7 @@ import Testing
             let (stream, _) = AsyncStream<SensingEvent>.makeStream()
             let loop = MentorLoop(
                 settings: MentorSettings(), journal: journal, client: ScriptedClaudeClient(),
-                keyStore: InMemoryKeyStore(key: "sk-ant-test"), events: stream
+                keyStore: InMemoryKeyStore(key: "sk-ant-test"), events: stream, clock: AdjustableClock(startingAt: now)
             )
             let stored = try await journal.record(Suggestion(
                 timestamp: now, bundleID: "com.a", appName: "A", windowTitle: nil, category: .workflow,
@@ -613,7 +655,7 @@ import Testing
         let h = try await Harness()
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.silence, model: "claude-opus-5")
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 2)
 
         let record = try #require(await h.loop.currentUnderstanding())
         #expect(record.revision == 1)
@@ -639,7 +681,7 @@ import Testing
         let h = try await Harness(understanding: Self.existing(age: 60))
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.silence, model: "claude-opus-5")
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 2)
 
         let sent = await h.client.sent
         let mentor = try #require(sent.last?.request)
@@ -671,7 +713,7 @@ import Testing
         let h = try await Harness()
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.silence, model: "claude-opus-5")
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 2)
 
         let sent = await h.client.sent
         let triage = try #require(sent.first?.request)
@@ -695,7 +737,7 @@ import Testing
         let h = try await Harness()
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.silenceWithoutUnderstanding, model: "claude-opus-5")
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 2)
         #expect(await h.loop.currentUnderstanding() == nil)
         #expect(await h.loop.currentStatus().lastMentor?.outcome == .nothingToSay)
     }
@@ -709,7 +751,7 @@ import Testing
             json: #"{"reason": "r", "suggestion": {"title": "Use --filter", "body": "b", "explanation": "e", "category": "shortcut", "confidence": 0.9, "judged_goal": null}, "updated_understanding": "not an object"}"#,
             model: "claude-opus-5"
         )
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 2)
         #expect(await h.loop.currentStatus().lastMentor?.outcome == .suggested)
         #expect(await h.loop.currentUnderstanding() == nil)
     }
@@ -723,7 +765,7 @@ import Testing
         let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.refresh, model: "claude-opus-5", usage: Usage(inputTokens: 3000, outputTokens: 500))
-        await h.observe(Fixtures.observation(at: Date()), expectCalls: 2)
+        await h.observe(Fixtures.observation(at: h.clock.date), expectCalls: 2)
 
         let record = try #require(await h.loop.currentUnderstanding())
         #expect(record.source == .periodic)
@@ -765,13 +807,13 @@ import Testing
         let h = try await Harness(settings: settings, understanding: Self.existing(age: 72 * 60), activeUse: 12 * 60)
         for minute in 1...12 {
             try await h.journal.record(Fixtures.observation(
-                at: Date().addingTimeInterval(Double(-72 * 60 + minute * 60)),
+                at: h.clock.date.addingTimeInterval(Double(-72 * 60 + minute * 60)),
                 window: "prebreak-\(minute).swift", text: "prebreak work screen \(minute)"
             ))
         }
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.refresh, model: "claude-opus-5")
-        await h.observe(Fixtures.observation(at: Date(), text: "back at the desk"), expectCalls: 2)
+        await h.observe(Fixtures.observation(at: h.clock.date, text: "back at the desk"), expectCalls: 2)
         guard case .text(let message)? = await h.client.sent.last?.request.messages[0].content.last else {
             Issue.record("expected a text refresh message")
             return
@@ -789,11 +831,11 @@ import Testing
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.upperBound
         let h = try await Harness(settings: settings, understanding: Self.existing(age: 14 * 60, coveredThrough: 0))
         try await h.journal.record(Fixtures.observation(
-            at: Date().addingTimeInterval(-13 * 60), window: "early.swift", text: "work just after the record was written"
+            at: h.clock.date.addingTimeInterval(-13 * 60), window: "early.swift", text: "work just after the record was written"
         ))
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.silence, model: "claude-opus-5")
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date(), text: "the screen now")), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date, text: "the screen now")), expectCalls: 2)
         guard case .text(let message)? = await h.client.sent.last?.request.messages[0].content.last else {
             Issue.record("expected a text mentor message")
             return
@@ -814,7 +856,7 @@ import Testing
         let dense = String(repeating: "word ", count: 200)
         let covered = (0..<5).map { i in
             Fixtures.observation(
-                at: Date().addingTimeInterval(-300 + Double(i) * 20), window: "before\(i).swift", text: "before \(i) \(dense)"
+                at: Harness.start.addingTimeInterval(-300 + Double(i) * 20), window: "before\(i).swift", text: "before \(i) \(dense)"
             )
         }
         let h = try await Harness(
@@ -822,12 +864,12 @@ import Testing
         )
         for i in 0..<5 {
             try await h.journal.record(Fixtures.observation(
-                at: Date().addingTimeInterval(-100 + Double(i) * 15), window: "after\(i).swift", text: "after \(i) \(dense)"
+                at: h.clock.date.addingTimeInterval(-100 + Double(i) * 15), window: "after\(i).swift", text: "after \(i) \(dense)"
             ))
         }
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.silence, model: "claude-opus-5")
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date(), text: "the screen now")), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date, text: "the screen now")), expectCalls: 2)
         guard case .text(let message)? = await h.client.sent.last?.request.messages[0].content.last else {
             Issue.record("expected a text mentor message")
             return
@@ -843,13 +885,13 @@ import Testing
     /// returning the text of its message.
     private func mentorMessageAfterRelaunch(_ h: Harness) async throws -> String? {
         await h.loop.stop()
-        let relaunched = await Harness(journal: h.journal, client: h.client)
+        let relaunched = await h.relaunched()
         await h.client.setDelay(.zero)
         let sentBefore = await h.client.sent.count
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.silence, model: "claude-opus-5")
         await relaunched.observe(
-            try await h.journal.record(Fixtures.observation(at: Date(), text: "the screen now")), expectCalls: sentBefore + 2
+            try await h.journal.record(Fixtures.observation(at: h.clock.date, text: "the screen now")), expectCalls: sentBefore + 2
         )
         guard case .text(let message)? = await h.client.sent.last?.request.messages[0].content.last else { return nil }
         return message
@@ -864,13 +906,17 @@ import Testing
         await h.client.setDelay(.milliseconds(300))
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.silence, model: "claude-opus-5")
-        let read = try await h.journal.record(Fixtures.observation(at: Date()))
+        let read = try await h.journal.record(Fixtures.observation(at: h.clock.date))
         h.input.yield(.observation(read))
-        await h.waitUntil { $0.inFlight == .mentor }
+        // Each call is held in flight until the clock moves past its delay.
+        await h.clock.waitForSleepers()
+        h.clock.advance(by: .milliseconds(300))
+        await h.clock.waitForSleepers()
         #expect(await h.loop.currentStatus().inFlight == .mentor)
         let late = try await h.journal.record(Fixtures.observation(
-            at: Date().addingTimeInterval(-3600), window: "late.swift", text: "captured early, journaled late"
+            at: h.clock.date.addingTimeInterval(-3600), window: "late.swift", text: "captured early, journaled late"
         ))
+        h.clock.advance(by: .milliseconds(300))
         await h.waitUntil { $0.lastMentor != nil && $0.inFlight == nil }
 
         let record = try #require(await h.loop.currentUnderstanding())
@@ -891,13 +937,16 @@ import Testing
         await h.client.setDelay(.milliseconds(300))
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.refresh, model: "claude-opus-5")
-        let read = try await h.journal.record(Fixtures.observation(at: Date()))
+        let read = try await h.journal.record(Fixtures.observation(at: h.clock.date))
         h.input.yield(.observation(read))
-        await h.waitUntil { $0.inFlight == .understanding }
+        await h.clock.waitForSleepers()
+        h.clock.advance(by: .milliseconds(300))
+        await h.clock.waitForSleepers()
         #expect(await h.loop.currentStatus().inFlight == .understanding)
         let late = try await h.journal.record(Fixtures.observation(
-            at: Date().addingTimeInterval(-3600), window: "late.swift", text: "captured early, journaled late"
+            at: h.clock.date.addingTimeInterval(-3600), window: "late.swift", text: "captured early, journaled late"
         ))
+        h.clock.advance(by: .milliseconds(300))
         await h.waitUntil { $0.lastRefresh != nil && $0.inFlight == nil }
 
         let record = try #require(await h.loop.currentUnderstanding())
@@ -918,12 +967,12 @@ import Testing
         let total = MentorLoop.windowLookback + 5
         for i in 0..<total {
             try await h.journal.record(Fixtures.observation(
-                at: Date().addingTimeInterval(-390 + Double(i)), window: "w\(i).swift", text: "screen \(i)"
+                at: h.clock.date.addingTimeInterval(-390 + Double(i)), window: "w\(i).swift", text: "screen \(i)"
             ))
         }
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.refresh, model: "claude-opus-5")
-        await h.observe(Fixtures.observation(at: Date()), expectCalls: 2)
+        await h.observe(Fixtures.observation(at: h.clock.date), expectCalls: 2)
         guard case .text(let message)? = await h.client.sent.last?.request.messages[0].content.last else {
             Issue.record("expected a text refresh message")
             return
@@ -940,12 +989,12 @@ import Testing
         let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(.failure(.api(status: 529, type: "overloaded_error", message: "Overloaded")))
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
         #expect(await h.loop.currentStatus().lastRefresh?.outcome == .error)
         #expect(await h.loop.currentUnderstanding()?.revision == 1)
 
         // The record is as overdue as before, but the attempt was just made.
-        await h.observe(Fixtures.observation(id: 2, at: Date(), window: "other.swift"), expectCalls: 2)
+        await h.observe(Fixtures.observation(id: 2, at: h.clock.date, window: "other.swift"), expectCalls: 2)
         #expect(await h.client.sent.count == 2)
         guard case .notDue = await h.loop.currentStatus().lastRefreshHold?.hold ?? .callInFlight else {
             Issue.record("expected the failed refresh to hold the gate for a whole interval")
@@ -962,7 +1011,7 @@ import Testing
             json: #"{"reason": "Nothing known", "understanding": {"goals": [], "timeline": [], "mentor_history": [], "open_concerns": []}}"#,
             model: "claude-opus-5"
         )
-        await h.observe(Fixtures.observation(at: Date()), expectCalls: 2)
+        await h.observe(Fixtures.observation(at: h.clock.date), expectCalls: 2)
         let status = await h.loop.currentStatus()
         #expect(status.lastRefresh?.outcome == .error)
         #expect(status.lastRefresh?.detail == "the refresh reply carried no understanding")
@@ -972,7 +1021,7 @@ import Testing
     @Test func noRefreshCallIsMadeBeforeTheIntervalHasPassed() async throws {
         let h = try await Harness()
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
-        await h.observe(Fixtures.observation(at: Date()), expectCalls: 1)
+        await h.observe(Fixtures.observation(at: h.clock.date), expectCalls: 1)
         #expect(await h.client.sent.count == 1)
         guard case .notDue = await h.loop.currentStatus().lastRefreshHold?.hold ?? .callInFlight else {
             Issue.record("expected the refresh to be held as not due")
@@ -987,12 +1036,12 @@ import Testing
         // Due, exactly as in the test above, but the session is not available.
         let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
         h.input.yield(.modeChanged(.paused))
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 0)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 0)
         #expect(await h.client.sent.isEmpty)
         #expect(await h.loop.currentStatus().lastRefreshHold?.hold == .unavailable(.paused))
 
         h.input.yield(.modeChanged(.idle))
-        await h.observe(Fixtures.observation(id: 2, at: Date(), window: "other.swift"), expectCalls: 0)
+        await h.observe(Fixtures.observation(id: 2, at: h.clock.date, window: "other.swift"), expectCalls: 0)
         #expect(await h.client.sent.isEmpty)
         #expect(await h.loop.currentStatus().lastRefreshHold?.hold == .unavailable(.idle))
         // Nothing was spent and the record is untouched.
@@ -1006,7 +1055,7 @@ import Testing
     @Test func comingBackFromLunchBuysNoRefreshOverTheScreensSince() async throws {
         let h = try await Harness(understanding: Self.existing(age: 3600), activeUse: 300)
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
-        let back = Date()
+        let back = h.clock.date
         await h.observe(Fixtures.observation(id: 1, at: back), expectCalls: 1)
 
         #expect(await h.client.sent.count == 1)
@@ -1017,15 +1066,17 @@ import Testing
             Issue.record("expected the refresh to be held as not due")
             return
         }
-        #expect(abs(until.timeIntervalSince(back) - 600) < 5)
+        // The observation arrived a millisecond after `back`, which counts.
+        // The triage call's spend stretches it by a fraction of a second too.
+        #expect(abs(until.timeIntervalSince(back) - 600) < 1)
         #expect(status.nextRefreshAt == until)
         let kept = try #require(try await h.journal.refreshPeriod())
-        #expect(kept.activeUse >= 300 && kept.activeUse < 305)
+        #expect(abs(kept.activeUse - 300) < 0.01)
     }
 
     /// While the loop runs, the count stands still from the moment the user
-    /// goes idle until they are back, and the next refresh moves later by as
-    /// long as they were away.
+    /// goes idle until they are back, and the next refresh moves later by
+    /// exactly as long as they were away.
     @Test func timeSpentIdleWhileRunningIsNotCounted() async throws {
         let h = try await Harness(understanding: Self.existing(age: 60), activeUse: 60)
         await h.waitUntil { $0.nextRefreshAt != nil }
@@ -1036,36 +1087,38 @@ import Testing
         #expect(await h.loop.currentStatus().nextRefreshAt == nil)
         let wentIdle = try #require(try await h.journal.refreshPeriod())
 
-        try await Task.sleep(for: .milliseconds(300))
+        // Ten minutes away from the keyboard.
+        h.clock.advance(by: .seconds(600))
         h.input.yield(.modeChanged(.watching))
         await h.waitUntil { $0.nextRefreshAt != nil }
         let cameBack = try #require(try await h.journal.refreshPeriod())
         #expect(cameBack.activeUse == wentIdle.activeUse)
-        #expect(cameBack.countedAt.timeIntervalSince(wentIdle.countedAt) >= 0.25)
+        #expect(cameBack.countedAt.timeIntervalSince(wentIdle.countedAt) == 600)
         let after = try #require(await h.loop.currentStatus().nextRefreshAt)
-        #expect(after.timeIntervalSince(before) >= 0.25)
+        #expect(after.timeIntervalSince(before) == 600)
     }
 
     /// A relaunch carries the count on: what was counted before the quit still
-    /// counts, and the time the app was closed does not.
+    /// counts, and the hour the app was closed does not.
     @Test func aRelaunchCarriesTheCountOnWithoutTheTimeTheAppWasClosed() async throws {
         let h = try await Harness(understanding: Self.existing(age: 3600), activeUse: 840)
         await h.waitUntil { $0.nextRefreshAt != nil }
         await h.loop.stop()
         let atQuit = try #require(try await h.journal.refreshPeriod())
-        #expect(atQuit.activeUse >= 840 && atQuit.activeUse < 845)
+        #expect(atQuit.activeUse == 840)
 
-        let relaunched = await Harness(journal: h.journal, client: h.client)
+        let relaunched = await h.relaunched(after: .seconds(3600))
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
-        let back = Date()
+        let back = h.clock.date
         await relaunched.observe(Fixtures.observation(id: 1, at: back), expectCalls: 1)
         #expect(await h.client.sent.count == 1)
         guard case .notDue(let until) = await relaunched.loop.currentStatus().lastRefreshHold?.hold ?? .callInFlight else {
             Issue.record("expected the refresh to be held as not due")
             return
         }
-        // One more minute of the fifteen, not a whole interval again.
-        #expect(abs(until.timeIntervalSince(back) - 60) < 5)
+        // One more minute of the fifteen, not a whole interval again, give
+        // or take what the triage call's spend stretches it by.
+        #expect(abs(until.timeIntervalSince(back) - 60) < 1)
         #expect(try await h.journal.refreshPeriod()?.startedAt == atQuit.startedAt)
     }
 
@@ -1075,7 +1128,7 @@ import Testing
     @Test func pausingOrResettingDropsTheLastRefreshHold() async throws {
         let h = try await Harness(understanding: Self.existing(age: 60), activeUse: 60)
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
         let held = await h.loop.currentStatus()
         guard case .notDue(let until) = held.lastRefreshHold?.hold ?? .callInFlight else {
             Issue.record("expected the refresh to be held as not due")
@@ -1095,7 +1148,7 @@ import Testing
             Issue.record("expected the count to resume with no hold until the next observation gates")
             return
         }
-        await h.observe(Fixtures.observation(id: 2, at: Date(), window: "other.swift"), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 2, at: h.clock.date, window: "other.swift"), expectCalls: 1)
         #expect(await h.loop.currentStatus().lastRefreshHold != nil)
 
         await h.loop.resetUnderstanding()
@@ -1111,7 +1164,7 @@ import Testing
         let h = try await Harness(understanding: Self.existing(age: 60))
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.suggestion(category: category, judgedGoal: judgedGoal), model: "claude-opus-5")
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 2)
         let events = await h.drain { if case .suggestion = $0 { return true } else { return false } }
         guard case .suggestion(let suggestion)? = events.last else { return nil }
         // Everything shown is journaled with it.
@@ -1150,7 +1203,7 @@ import Testing
             json: Self.suggestion(category: "less_efficient", judgedGoal: nil, understanding: rewritten),
             model: "claude-opus-5"
         )
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 2)
         let events = await h.drain { if case .suggestion = $0 { return true } else { return false } }
         guard case .suggestion(let suggestion)? = events.last else {
             Issue.record("expected a suggestion")
@@ -1169,12 +1222,12 @@ import Testing
     @Test func neverForThisSuppressesTheOneGoalKindItWasSetFor() async throws {
         var settings = MentorSettings()
         settings.neverRules = [NeverRule(
-            bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .wontAchieveGoal, createdAt: Date()
+            bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .wontAchieveGoal, createdAt: Harness.start
         )]
         let h = try await Harness(settings: settings, understanding: Self.existing(age: 60))
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.suggestion(category: "wont_achieve_goal", judgedGoal: "g"), model: "claude-opus-5")
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 2)
         #expect(await h.loop.currentStatus().lastMentor?.outcome == .suppressed)
         // And the model was told not to raise it in the first place.
         guard case .text(let mentorText)? = await h.client.sent.last?.request.messages[0].content.last else {
@@ -1187,12 +1240,12 @@ import Testing
     @Test func neverForOneGoalKindLeavesItsSiblingsAlone() async throws {
         var settings = MentorSettings()
         settings.neverRules = [NeverRule(
-            bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .wontAchieveGoal, createdAt: Date()
+            bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .wontAchieveGoal, createdAt: Harness.start
         )]
         let h = try await Harness(settings: settings, understanding: Self.existing(age: 60))
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.suggestion(category: "less_efficient", judgedGoal: "g"), model: "claude-opus-5")
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 2)
         #expect(await h.loop.currentStatus().lastMentor?.outcome == .suggested)
     }
 
@@ -1202,7 +1255,7 @@ import Testing
     @Test(arguments: [false, true])
     func aGoalKindRaisedWithNoGoalToJudgeAgainstIsDroppedAndJournaled(recordWithoutGoals: Bool) async throws {
         let goalless = UnderstandingRecord.first(
-            content: Understanding(timeline: ["opened the editor"]), at: Date().addingTimeInterval(-60),
+            content: Understanding(timeline: ["opened the editor"]), at: Harness.start.addingTimeInterval(-60),
             model: "claude-opus-5", source: .periodic, cost: 0, promptVersion: MentorPrompts.version
         )
         let h = try await Harness(understanding: recordWithoutGoals ? goalless : nil)
@@ -1210,7 +1263,7 @@ import Testing
         await h.client.enqueue(
             json: Self.suggestion(category: "wont_achieve_goal", judgedGoal: "get the release out"), model: "claude-opus-5"
         )
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 2)
 
         #expect(await h.loop.currentStatus().lastMentor?.outcome == .suppressed)
         let call = try #require(try await h.journal.recentModelCalls(limit: 5).first { $0.tier == .mentor })
@@ -1228,7 +1281,7 @@ import Testing
         var off = MentorSettings()
         off.enabled = false
         #expect(await !(try Harness(settings: off)).loop.currentStatus().availability.formsUnderstanding)
-        #expect(MentorStatus.Availability.capReached(until: Date()).formsUnderstanding)
+        #expect(MentorStatus.Availability.capReached(until: Harness.start).formsUnderstanding)
     }
 
     /// Reset pressed while a mentor call is in flight: the reply's rewritten
@@ -1238,19 +1291,15 @@ import Testing
         await h.client.setDelay(.milliseconds(400))
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.silence, model: "claude-opus-5")
-        h.input.yield(.observation(Fixtures.observation(at: Date())))
-        var waited = 0
-        while await h.loop.currentStatus().inFlight != .mentor, waited < 250 {
-            try await Task.sleep(for: .milliseconds(20))
-            waited += 1
-        }
+        h.input.yield(.observation(Fixtures.observation(at: h.clock.date)))
+        await h.clock.waitForSleepers()
+        h.clock.advance(by: .milliseconds(400))
+        await h.clock.waitForSleepers()
         #expect(await h.loop.currentStatus().inFlight == .mentor)
 
         await h.loop.resetUnderstanding()
-        while await h.loop.currentStatus().inFlight != nil, waited < 500 {
-            try await Task.sleep(for: .milliseconds(20))
-            waited += 1
-        }
+        h.clock.advance(by: .milliseconds(400))
+        await h.waitUntil { $0.lastMentor != nil && $0.inFlight == nil }
         #expect(await h.loop.currentStatus().lastMentor?.outcome == .nothingToSay)
         #expect(await h.loop.currentUnderstanding() == nil)
         #expect(try await h.journal.latestUnderstanding() == nil)
@@ -1260,7 +1309,7 @@ import Testing
         let h = try await Harness()
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.silence, model: "claude-opus-5")
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 2)
         #expect(await h.loop.currentUnderstanding() != nil)
 
         await h.loop.resetUnderstanding()
@@ -1284,7 +1333,7 @@ import Testing
         // The record was long overdue, but the reset cleared the period with it,
         // so the next observation triages and nothing refreshes.
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
-        await h.observe(Fixtures.observation(at: Date()), expectCalls: 1)
+        await h.observe(Fixtures.observation(at: h.clock.date), expectCalls: 1)
         #expect(await h.client.sent.count == 1)
         #expect(!(try await h.journal.recentModelCalls(limit: 10)).contains { $0.tier == .understanding })
         guard case .notDue = await h.loop.currentStatus().lastRefreshHold?.hold ?? .callInFlight else {
@@ -1306,7 +1355,7 @@ import Testing
         await h.loop.updateSettings(settings)
 
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
-        await h.observe(Fixtures.observation(at: Date()), expectCalls: 1)
+        await h.observe(Fixtures.observation(at: h.clock.date), expectCalls: 1)
         #expect(await h.loop.currentUnderstanding() == nil)
         let events = try await h.journal.recentEvents(limit: 10)
         #expect(events.contains { $0.kind == .understanding && ($0.detail ?? "").contains("expired") })
@@ -1329,11 +1378,11 @@ import Testing
         settings.understandingIdleGap = 600
         await h.loop.updateSettings(settings)
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 1)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 1)
         #expect(await h.loop.currentUnderstanding() == nil)
 
         await h.loop.stop()
-        let relaunched = await Harness(settings: settings, journal: h.journal, client: h.client)
+        let relaunched = await h.relaunched(settings: settings)
         #expect(await relaunched.loop.currentUnderstanding() == nil)
         #expect(await relaunched.loop.currentStatus().understanding == nil)
         let expiries = try await h.journal.recentEvents(limit: 20).filter {
@@ -1349,11 +1398,11 @@ import Testing
         settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.upperBound
         let h = try await Harness(settings: settings, understanding: Self.existing(age: 1200))
         await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
-        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
         // The record is now older than the gap, but the user was active a moment ago.
         settings.understandingIdleGap = 600
         await h.loop.updateSettings(settings)
-        await h.observe(Fixtures.observation(id: 2, at: Date(), window: "other.swift"), expectCalls: 1)
+        await h.observe(Fixtures.observation(id: 2, at: h.clock.date, window: "other.swift"), expectCalls: 1)
         #expect(await h.loop.currentUnderstanding()?.revision == 1)
         #expect(!(try await h.journal.recentEvents(limit: 10)).contains { $0.kind == .understanding })
     }
@@ -1368,14 +1417,14 @@ import Testing
         let h = try await Harness(settings: settings)
         try await h.journal.record(UnderstandingRecord.first(
             content: Understanding(goals: [Understanding.Goal(goal: "carried over", evidence: "e", confidence: 0.9)]),
-            at: Date().addingTimeInterval(-7200), model: "claude-opus-5", source: .periodic,
+            at: h.clock.date.addingTimeInterval(-7200), model: "claude-opus-5", source: .periodic,
             cost: 0.01, promptVersion: MentorPrompts.version
         ))
-        try await h.journal.record(Fixtures.observation(at: Date().addingTimeInterval(-observationAge)))
+        try await h.journal.record(Fixtures.observation(at: h.clock.date.addingTimeInterval(-observationAge)))
         let (stream, continuation) = AsyncStream<SensingEvent>.makeStream()
         let loop = MentorLoop(
             settings: settings, journal: h.journal, client: h.client, keyStore: h.keyStore, events: stream,
-            calendar: Self.middayCalendar
+            clock: h.clock, calendar: Self.calendar
         )
         await loop.start()
         continuation.yield(.modeChanged(.watching))
@@ -1392,14 +1441,14 @@ import Testing
         // Store a record last written well beyond the idle gap.
         try await h.journal.record(UnderstandingRecord.first(
             content: Understanding(goals: [Understanding.Goal(goal: "stale goal", evidence: "e", confidence: 0.9)]),
-            at: Date().addingTimeInterval(-7200), model: "claude-opus-5", source: .periodic,
+            at: h.clock.date.addingTimeInterval(-7200), model: "claude-opus-5", source: .periodic,
             cost: 0.01, promptVersion: MentorPrompts.version
         ))
         // A fresh loop over the same journal seeds from it and expires it.
         let (stream, continuation) = AsyncStream<SensingEvent>.makeStream()
         let loop = MentorLoop(
             settings: settings, journal: h.journal, client: h.client, keyStore: h.keyStore, events: stream,
-            calendar: Self.middayCalendar
+            clock: h.clock, calendar: Self.calendar
         )
         await loop.start()
         continuation.yield(.modeChanged(.watching))
@@ -1413,13 +1462,13 @@ import Testing
         let h = try await Harness()
         let content = Understanding(goals: [Understanding.Goal(goal: "carried over", evidence: "e", confidence: 0.9)])
         try await h.journal.record(UnderstandingRecord.first(
-            content: content, at: Date().addingTimeInterval(-60), model: "claude-opus-5",
+            content: content, at: h.clock.date.addingTimeInterval(-60), model: "claude-opus-5",
             source: .periodic, cost: 0.01, promptVersion: MentorPrompts.version
         ))
         let (stream, continuation) = AsyncStream<SensingEvent>.makeStream()
         let loop = MentorLoop(
             settings: MentorSettings(), journal: h.journal, client: h.client, keyStore: h.keyStore, events: stream,
-            calendar: Self.middayCalendar
+            clock: h.clock, calendar: Self.calendar
         )
         await loop.start()
         continuation.yield(.modeChanged(.watching))
@@ -1427,6 +1476,139 @@ import Testing
         #expect(record.content.primaryGoal?.goal == "carried over")
         #expect(record.cumulativeCost == 0.01)
         await loop.stop()
+    }
+
+    // MARK: Time on the clock
+
+    /// The refresh interval has to be spent in use: a pause and a stretch with
+    /// the lid closed count for nothing in between, and the refresh comes due
+    /// the moment the last of the fifteen minutes is used.
+    @Test func aRefreshComesDueAfterAnIntervalOfActiveUseAcrossAPauseAndASleep() async throws {
+        let interval = MentorSettings().understandingRefreshInterval
+        let h = try await Harness(understanding: Self.existing(age: 0), activeUse: 0)
+        // A triage call that costs nothing, so no spend stretches the interval.
+        await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001", usage: Usage())
+
+        // Five minutes of work.
+        h.clock.advance(by: .seconds(300))
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
+        let worked = try #require(try await h.journal.refreshPeriod())
+        #expect(abs(worked.activeUse - 300) < 0.01)
+
+        // Half an hour paused counts nothing.
+        h.input.yield(.modeChanged(.paused))
+        await h.waitUntil { $0.nextRefreshAt == nil }
+        h.clock.advance(by: .seconds(1800))
+        h.input.yield(.modeChanged(.watching))
+        await h.waitUntil { $0.nextRefreshAt != nil }
+        let resumed = try #require(try await h.journal.refreshPeriod())
+        #expect(resumed.activeUse == worked.activeUse)
+        let dueAfterPause = try #require(await h.loop.currentStatus().nextRefreshAt)
+        #expect(abs(dueAfterPause.timeIntervalSince(h.clock.date) - (interval - worked.activeUse)) < 0.01)
+
+        // An hour with the lid closed, never paused, counts nothing either.
+        h.clock.advance(by: .seconds(3600), awake: false)
+        await h.observe(Fixtures.observation(id: 2, at: h.clock.date), expectCalls: 1)
+        let woke = try #require(try await h.journal.refreshPeriod())
+        #expect(abs(woke.activeUse - 300) < 0.01)
+
+        // Nine minutes and fifty-nine seconds more of work: not yet.
+        h.clock.advance(by: .seconds(599))
+        await h.observe(Fixtures.observation(id: 3, at: h.clock.date), expectCalls: 1)
+        guard case .notDue(let until) = await h.loop.currentStatus().lastRefreshHold?.hold ?? .callInFlight else {
+            Issue.record("expected the refresh to be held as not due")
+            return
+        }
+        #expect(until.timeIntervalSince(h.clock.date) < 1)
+
+        // The last second of use makes it due.
+        h.clock.advance(by: .seconds(1))
+        await h.client.enqueue(json: Self.refresh, model: "claude-opus-5")
+        await h.observe(Fixtures.observation(id: 4, at: h.clock.date), expectCalls: 2)
+        #expect(await h.client.sent.last?.call.kind == ModelTier.understanding.rawValue)
+        #expect(await h.loop.currentStatus().lastRefresh?.outcome == .refreshed)
+        let record = try #require(await h.loop.currentUnderstanding())
+        #expect(record.revision == 2)
+        #expect(record.source == .periodic)
+    }
+
+    /// Not now keeps that category quiet in that app until the snooze runs
+    /// out, and the same suggestion is shown once it has.
+    @Test func aNotNowSnoozeReleasesWhenItRunsOut() async throws {
+        var settings = MentorSettings()
+        // Not now pressed just now on a shortcut in Xcode, as the app records it.
+        let until = Harness.start.addingTimeInterval(settings.notNowSnooze)
+        settings.snoozes = [Snooze(bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .shortcut, until: until)]
+        let h = try await Harness(settings: settings)
+        await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
+        await h.client.enqueue(json: Self.suggestion(category: "shortcut"), model: "claude-opus-5")
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
+        #expect(await h.loop.currentStatus().lastMentor?.detail == "Use --filter (snoozed until \(until.formatted(date: .omitted, time: .shortened)))")
+
+        // Three minutes before it runs out it still holds.
+        h.clock.advance(toDate: until.addingTimeInterval(-180))
+        await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
+        await h.client.enqueue(json: Self.suggestion(category: "shortcut"), model: "claude-opus-5")
+        await h.observe(Fixtures.observation(id: 2, at: h.clock.date, window: "b.swift", text: "b"), expectCalls: 4)
+        #expect(await h.loop.currentStatus().lastMentor?.outcome == .suppressed)
+
+        // Once it has run out the suggestion is shown.
+        h.clock.advance(toDate: until)
+        await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
+        await h.client.enqueue(json: Self.suggestion(category: "shortcut"), model: "claude-opus-5")
+        await h.observe(Fixtures.observation(id: 3, at: h.clock.date, window: "c.swift", text: "c"), expectCalls: 6)
+        #expect(await h.loop.currentStatus().lastMentor?.outcome == .suggested)
+        #expect(try await h.journal.recentSuggestions(limit: 5).map(\.title) == ["Use --filter"])
+    }
+
+    /// A record written late in the evening expires at the first activity
+    /// after midnight, however recently the user was active.
+    @Test func theUnderstandingExpiresAtTheFirstActivityOfANewDay() async throws {
+        let midnight = Self.calendar.startOfDay(for: Harness.start).addingTimeInterval(86400)
+        let evening = midnight.addingTimeInterval(-600)
+        let written = UnderstandingRecord.first(
+            content: Understanding(goals: [Understanding.Goal(goal: "ship the release", evidence: "e", confidence: 0.9)]),
+            at: evening, model: "claude-opus-5", source: .mentorCall, cost: 0, promptVersion: MentorPrompts.version
+        )
+        let h = try await Harness(understanding: written, activeUse: 0, start: evening)
+        await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
+
+        h.clock.advance(toDate: midnight.addingTimeInterval(-60))
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
+        #expect(await h.loop.currentUnderstanding()?.revision == 1)
+
+        h.clock.advance(toDate: midnight.addingTimeInterval(60))
+        await h.observe(Fixtures.observation(id: 2, at: h.clock.date), expectCalls: 1)
+        #expect(await h.loop.currentUnderstanding() == nil)
+        #expect(await h.loop.currentStatus().understanding == nil)
+        let expiries = try await h.journal.recentEvents(limit: 10).filter { $0.kind == .understanding }
+        #expect(expiries.map(\.detail) == ["expired after revision 1: a new day started"])
+        #expect(try await h.journal.latestUnderstanding() == nil)
+    }
+
+    /// Away for longer than the idle gap, the record expires at the first
+    /// activity back; away for just under it, it survives.
+    @Test func theUnderstandingExpiresAfterTheIdleGapWithNoActivity() async throws {
+        let gap = MentorSettings().understandingIdleGap
+        let h = try await Harness(understanding: Self.existing(age: 0), activeUse: 0)
+        await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
+        await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
+
+        h.input.yield(.modeChanged(.idle))
+        await h.waitUntil { $0.nextRefreshAt == nil }
+        h.clock.advance(by: .seconds(gap - 1))
+        h.input.yield(.modeChanged(.watching))
+        await h.observe(Fixtures.observation(id: 2, at: h.clock.date), expectCalls: 1)
+        #expect(await h.loop.currentUnderstanding()?.revision == 1)
+
+        h.input.yield(.modeChanged(.idle))
+        await h.waitUntil { $0.nextRefreshAt == nil }
+        h.clock.advance(by: .seconds(gap + 1))
+        h.input.yield(.modeChanged(.watching))
+        await h.observe(Fixtures.observation(id: 3, at: h.clock.date), expectCalls: 1)
+        #expect(await h.loop.currentUnderstanding() == nil)
+        let expiry = try await h.journal.recentEvents(limit: 10).first { $0.kind == .understanding }
+        #expect(expiry?.detail == "expired after revision 1: no activity for 4h")
     }
 
     @Test func anOversizedUnderstandingIsTrimmedToTheBudgetBeforeItIsStored() async throws {
@@ -1440,7 +1622,7 @@ import Testing
         """
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: #"{"reason": "r", "suggestion": null, "updated_understanding": \#(big)}"#, model: "claude-opus-5")
-        await h.observe(try await h.journal.record(Fixtures.observation(at: Date())), expectCalls: 2)
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date)), expectCalls: 2)
 
         let record = try #require(await h.loop.currentUnderstanding())
         #expect(record.content.estimatedTokens <= 200)
@@ -1475,7 +1657,7 @@ import Testing
         #expect(try await journal.modelCalls(since: now + 1).isEmpty)
         #expect(try await journal.modelCalls(since: now) == [call])
 
-        try await journal.clear()
+        try await journal.clear(at: now + 1000)
         #expect(try await journal.recentSuggestions(limit: 5).isEmpty)
         #expect(try await journal.recentModelCalls(limit: 5).isEmpty)
     }
@@ -1508,7 +1690,7 @@ import Testing
         #expect(trimmed.understandingDeleted == 1)
         #expect(try await journal.latestUnderstanding() == second)
 
-        try await journal.clear()
+        try await journal.clear(at: now + 1000)
         #expect(try await journal.latestUnderstanding() == nil)
     }
 
@@ -1603,7 +1785,7 @@ import Testing
 
         // And new rows can use the column that was just added.
         let stored = try await journal.record(Suggestion(
-            timestamp: Date(), bundleID: nil, appName: "Xcode", windowTitle: nil, category: .lessEfficient,
+            timestamp: Date(timeIntervalSince1970: 1_700_000_000), bundleID: nil, appName: "Xcode", windowTitle: nil, category: .lessEfficient,
             title: "new one", body: "b", explanation: "e", confidence: 0.8, judgedGoal: "the goal",
             observationID: nil, model: "m", promptVersion: MentorPrompts.version
         ))
@@ -1693,7 +1875,7 @@ import Testing
         #expect(try await journal.refreshPeriod() == nil)
 
         try await journal.storeRefreshPeriod(counted)
-        try await journal.clear()
+        try await journal.clear(at: now + 1000)
         #expect(try await journal.refreshPeriod() == nil)
 
         // Text retention takes one that began before its cutoff.

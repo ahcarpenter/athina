@@ -5,6 +5,8 @@ REPLAY_DIR ?= Tests/MentorCoreTests/Fixtures/Replay
 RECORD_DIR ?=
 ## Set to 1 to replay fixtures recorded with an older prompt version, only while iterating on prompts locally
 ALLOW_STALE ?=
+## Set to run a replay's clock that many times faster than real time (see README, "A faster clock")
+TIME_SCALE ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/mentor/recordings
 
@@ -26,7 +28,7 @@ run-replay: build
 	@pkill -x Mentor 2>/dev/null || true
 	@dir="$(REPLAY_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
 	test -d "$$dir" || { echo "run-replay: no fixture directory at $$dir" >&2; exit 1; }; \
-	open build/Mentor.app --args --replay "$$(cd "$$dir" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures)
+	open build/Mentor.app --args --replay "$$(cd "$$dir" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures) $(if $(TIME_SCALE),--time-scale $(TIME_SCALE))
 
 ## Build and launch the app live, writing every model call to a fixture file.
 ## This spends API credits: use it only to record fixtures on purpose.

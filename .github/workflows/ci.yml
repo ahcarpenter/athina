@@ -19,6 +19,9 @@ jobs:
           sudo xcode-select -s "$latest"
           swift --version
       - name: Unit tests
+        # The suite runs on a test clock and takes seconds once built; a wait
+        # that never ends fails the job here rather than at the six-hour limit.
+        timeout-minutes: 20
         run: swift test
       - name: Build app bundle
         run: scripts/bundle.sh release

@@ -92,9 +92,11 @@ public enum ModelClientMode: Equatable, Sendable {
     /// invalid command line get a replay client that refuses every call with
     /// the reason; a recording whose directory cannot be written gets a
     /// `RefusingClaudeClient`, which is not a replay. Either way the problem
-    /// shows up in the call log and nothing goes live.
+    /// shows up in the call log and nothing goes live. `clock` is what a
+    /// replayed latency is waited out on and a recording is stamped with.
     public func makeClient(
         prices: PriceTable,
+        clock: any MentorClock = SystemClock(),
         latency: ReplayClaudeClient.Latency = .recorded,
         promptVersion: Int = MentorPrompts.version,
         live: @Sendable () -> any ClaudeClient = { AnthropicClient() }
@@ -109,11 +111,11 @@ public enum ModelClientMode: Equatable, Sendable {
                 let reason = "cannot record to \(directory.path): \(error.localizedDescription)"
                 return Setup(client: RefusingClaudeClient(reason: reason), replay: nil, recordingUnavailableReason: reason)
             }
-            return Setup(client: RecordingClaudeClient(wrapping: live(), directory: directory, prices: prices), replay: nil)
+            return Setup(client: RecordingClaudeClient(wrapping: live(), directory: directory, prices: prices, clock: clock), replay: nil)
         case .replay(let directory, let allowStale):
             let client: ReplayClaudeClient
             do {
-                client = try ReplayClaudeClient.load(from: directory, allowStale: allowStale, latency: latency)
+                client = try ReplayClaudeClient.load(from: directory, allowStale: allowStale, latency: latency, clock: clock)
             } catch {
                 client = .unavailable(String(describing: error))
             }

@@ -26,6 +26,8 @@ public enum ScreenCaptureError: Error, CustomStringConvertible {
 /// excluding Mentor's own windows so the debug panel never captures itself.
 public actor ScreenCapturer {
     private var content: SCShareableContent?
+    /// The window server's list changes in real time, so it is cached for
+    /// real seconds whatever clock the rest of the app runs on (`MentorClock`).
     private var contentFetchedAt: Date = .distantPast
     private let contentMaxAge: TimeInterval = 30
 

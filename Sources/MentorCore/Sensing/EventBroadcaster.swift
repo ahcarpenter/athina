@@ -41,11 +41,16 @@ public actor EventBroadcaster<Element: Sendable> {
 }
 
 /// Lets a sleeping loop be woken early. `wait(for:)` returns when signaled or
-/// after the timeout, whichever comes first.
+/// after the timeout on `clock`, whichever comes first.
 actor AsyncSignal {
+    private let clock: any MentorClock
     private var waiter: CheckedContinuation<Void, Never>?
     private var pending = false
     private var generation = 0
+
+    init(clock: any MentorClock) {
+        self.clock = clock
+    }
 
     func signal() {
         if let waiter {
@@ -63,8 +68,8 @@ actor AsyncSignal {
         }
         generation += 1
         let current = generation
-        let timer = Task {
-            try? await Task.sleep(for: timeout)
+        let timer = Task { [clock] in
+            try? await clock.sleep(for: timeout)
             self.timeOut(generation: current)
         }
         await withCheckedContinuation { continuation in

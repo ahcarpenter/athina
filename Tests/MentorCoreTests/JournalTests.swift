@@ -84,9 +84,10 @@ import Testing
 
     @Test func clearRemovesEverythingAndRecordsEvent() async throws {
         let journal = try Journal.inMemory()
-        try await journal.record(makeObservation(at: Date()))
-        try await journal.record(JournalEvent(kind: .appSwitch))
-        try await journal.clear()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        try await journal.record(makeObservation(at: now))
+        try await journal.record(JournalEvent(timestamp: now, kind: .appSwitch))
+        try await journal.clear(at: now + 5)
         let stats = try await journal.stats()
         #expect(stats.observationCount == 0)
         #expect(stats.thumbnailCount == 0)
