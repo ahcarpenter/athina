@@ -60,8 +60,11 @@ final class SpeechListener {
     private var engine: AVAudioEngine?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
+    /// Counts recordings, so a recognizer callback or a timeout left over
+    /// from an earlier one cannot touch the current one.
+    private var session = 0
     private var latest = ""
-    private var finished = false
+    private var finished = true
     private var finishing = false
     private var partials = 0
     private var waiters: [CheckedContinuation<String?, Never>] = []
@@ -78,6 +81,9 @@ final class SpeechListener {
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else { throw Failure.noInput }
 
+        cancel()
+        session += 1
+        let session = session
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.requiresOnDeviceRecognition = true
@@ -96,7 +102,7 @@ final class SpeechListener {
             let isFinal = result?.isFinal ?? false
             let failure = error.map { String(describing: $0) }
             Task { @MainActor [weak self] in
-                self?.handle(text: text, isFinal: isFinal, failure: failure, onPartial: onPartial)
+                self?.handle(session: session, text: text, isFinal: isFinal, failure: failure, onPartial: onPartial)
             }
         }
         // The request is appended to from the audio thread only, and read by
@@ -118,9 +124,11 @@ final class SpeechListener {
     func finish() async -> String? {
         guard isListening, !finishing else { return nil }
         finishing = true
+        let session = session
         // Keep capturing for a moment: the tail of the last word is still
         // being said when the key comes up.
         try? await Task.sleep(for: .seconds(SpeechListener.releaseGrace))
+        guard session == self.session else { return nil }
         stopAudio()
         request?.endAudio()
         SpeechListener.log.notice("audio ended after \(self.partials) partial results, \(self.latest.split(separator: " ").count) words so far")
@@ -129,18 +137,17 @@ final class SpeechListener {
             waiters.append(continuation)
             Task { @MainActor [weak self] in
                 try? await Task.sleep(for: .seconds(SpeechListener.finalResultTimeout))
-                guard let self, !self.finished else { return }
+                guard let self, self.session == session, !self.finished else { return }
                 SpeechListener.log.notice("no final result within \(SpeechListener.finalResultTimeout)s, keeping the latest partial")
                 self.complete()
             }
         }
     }
 
-    /// Stops capturing and drops whatever was heard.
+    /// Stops capturing and drops whatever was heard; a `finish` still waiting
+    /// on the recognizer returns nil.
     func cancel() {
-        guard isListening else { return }
         stopAudio()
-        task?.cancel()
         latest = ""
         complete()
     }
@@ -150,7 +157,8 @@ final class SpeechListener {
         return text.isEmpty ? nil : text
     }
 
-    private func handle(text: String?, isFinal: Bool, failure: String?, onPartial: @MainActor (String) -> Void) {
+    private func handle(session: Int, text: String?, isFinal: Bool, failure: String?, onPartial: @MainActor (String) -> Void) {
+        guard session == self.session, !finished else { return }
         if let text {
             partials += 1
             latest = text
@@ -177,9 +185,12 @@ final class SpeechListener {
         engine = nil
     }
 
+    /// Settles the recording's transcript: the recognizer is cancelled so it
+    /// reports nothing further, and whoever is waiting gets the words so far.
     private func complete() {
         guard !finished else { return }
         finished = true
+        task?.cancel()
         task = nil
         request = nil
         let result = transcript

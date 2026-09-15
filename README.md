@@ -519,9 +519,12 @@ and the feature stays off rather than falling back to server recognition.
 While the key is held the toast shows a listening indicator and the live
 transcript. The toast being talked to is never hidden while voice input is
 active: from the key going down until the transcript is handled or the answer
-is shown, it does not expire, a click elsewhere does not dismiss it, and it is
-kept in front of other windows; afterwards it stays up until it is closed,
-like an expanded one.
+is shown, it does not expire, a click elsewhere does not dismiss it, it is
+kept in front of other windows, and a new suggestion waits for the exchange to
+end (see below); afterwards it stays up until it is closed, like an expanded
+one. Each recording is its own session: a recognizer result or timeout left
+over from an earlier one is ignored, so a re-press never hears the previous
+question again.
 
 When the key is released, `TranscriptMatcher` reads the whole utterance,
 lowercased, without punctuation, and with filler words such as "please"
@@ -533,16 +536,28 @@ suggestion (title, body, explanation), the exchange so far on that suggestion,
 the recognized text of the screen the suggestion was made from when the
 journal still has it, and the transcript, on the mentor model and effort,
 with structured output `{"answer": string}`. The answer appears in the toast's
-exchange area. The call is
+exchange area; an empty answer is journaled as an error and the toast says
+so. The call is
 journaled in the model call log with the `followUp` tier and counted against
 the hourly spend cap like every other call; the same gates that hold both
-tiers (off, paused, idle, excluded app, no key, the cap, a call in flight)
-hold a follow-up, which is then journaled with the reason and never sent. The
-key does nothing with no suggestion to talk back to except a brief note in the
-toast area, and with no toast up it brings the most recent suggestion back to
-talk to. The history window shows the full exchange under each suggestion,
-and the debug panel's Mentor card shows the last transcript and what was done
-with it.
+tiers (off, paused, idle, excluded app, no key, the cap) hold a follow-up,
+which is then journaled with the reason and never sent
+(`MentorScheduler.followUpGate`). A question released while another call is
+in flight is not refused: the toast says it is waiting, and it is asked as
+soon as that call returns. At most one question waits; pressing the key again
+withdraws it and the new question takes its place, and closing the toast or
+pausing withdraws it too, in neither case journaling anything. The key does
+nothing with no suggestion to talk back to except a brief note in the toast
+area, and with no toast up it brings the most recent suggestion back to talk
+to. The history window shows the full exchange under each suggestion, and the
+debug panel's Mentor card shows the last transcript and what was done with it.
+
+A suggestion the mentor tier finishes while an exchange is in progress never
+replaces the toast being talked to. `MentorScheduler.publishGate` holds it,
+leaving the toast, the recording, and the pending answer untouched; when the
+exchange ends the held suggestion is shown normally if it is at most 30 s old
+(the same staleness bound as a queued observation), otherwise it is journaled
+as expired without being shown.
 
 The Mentor card also has a **Talk back** field. Words typed there and sent take
 exactly the path a released key does, from transcript matching to the

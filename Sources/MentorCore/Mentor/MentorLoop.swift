@@ -46,6 +46,16 @@ public actor MentorLoop {
     private var apiKey: String?
     /// Tiers with a call in progress; a Test Connection can overlap a tier call.
     private var inFlight: Set<ModelTier> = []
+    /// The user is talking back to the toast that is up (`setTalkingBack`).
+    private var talkingBack = false
+    /// A suggestion made while the user was talking back, waiting for the exchange to end.
+    private var heldSuggestion: Suggestion?
+    /// The one question waiting for the call in flight to return; a newer one takes its place.
+    private struct PendingQuestion {
+        var record: MentorStatus.PendingFollowUp
+        var continuation: CheckedContinuation<Bool, Never>
+    }
+    private var pendingQuestion: PendingQuestion?
     private var consumeTask: Task<Void, Never>?
 
     public init(
@@ -90,7 +100,27 @@ public actor MentorLoop {
     public func stop() async {
         consumeTask?.cancel()
         consumeTask = nil
+        dropPendingQuestion()
         await broadcaster.finish()
+    }
+
+    /// Call as an exchange with the toast begins and ends: from the key going
+    /// down until the transcript is handled or the answer is shown. While it
+    /// is on, a new suggestion is held rather than shown; when it goes off,
+    /// the held one is shown if it is still fresh, otherwise it expires unseen.
+    public func setTalkingBack(_ active: Bool, at now: Date = Date()) async {
+        guard talkingBack != active else { return }
+        talkingBack = active
+        guard !active, let held = heldSuggestion else { return }
+        heldSuggestion = nil
+        await publish(held, now: now)
+    }
+
+    /// Drops the question waiting for the call in flight, if any: the user
+    /// closed the toast, moved on, or is asking something else.
+    public func withdrawFollowUp() async {
+        guard dropPendingQuestion() else { return }
+        await publishStatus()
     }
 
     public func updateSettings(_ newSettings: MentorSettings) async {
@@ -195,6 +225,7 @@ public actor MentorLoop {
             mode: mode,
             hasAPIKey: apiKey != nil,
             callInFlight: !inFlight.isEmpty,
+            talkingBack: talkingBack,
             spendFraction: spend.fraction(now: now),
             cadenceMultiplier: spend.cadenceMultiplier(now: now),
             nextHourStart: SpendMeter.nextHourStart(after: now)
@@ -404,7 +435,25 @@ public actor MentorLoop {
             timestamp: shownAt, kind: .suggested, bundleID: stored.bundleID, appName: stored.appName,
             detail: "\(stored.category.label): \(stored.title)"
         ))
-        await broadcaster.send(.suggestion(stored))
+        await publish(stored, now: Date())
+    }
+
+    /// Shows a journaled suggestion, holds it while the user is talking back,
+    /// or expires it when it was held too long.
+    private func publish(_ suggestion: Suggestion, now: Date) async {
+        switch scheduler.publishGate(madeAt: suggestion.timestamp, conditions: conditions(now: now), now: now) {
+        case .show:
+            await broadcaster.send(.suggestion(suggestion))
+        case .hold:
+            if let older = heldSuggestion {
+                await recordFeedback(suggestionID: older.id, feedback: .expired, at: now)
+            }
+            heldSuggestion = suggestion
+            MentorLoop.log.notice("suggestion \(suggestion.id) held while the user talks back")
+        case .expired(let age):
+            MentorLoop.log.notice("suggestion \(suggestion.id) expired unseen after \(Int(age))s")
+            await recordFeedback(suggestionID: suggestion.id, feedback: .expired, at: now)
+        }
     }
 
     /// The spot the model pointed at, kept only when it saw the image and the
@@ -421,13 +470,28 @@ public actor MentorLoop {
     /// model at the mentor tier's effort. The exchange is journaled as a
     /// follow-up row and the call as a model call, counted against the hour's
     /// spend like every other call. A held question is journaled with the
-    /// reason and never sent.
-    public func askFollowUp(about suggestion: Suggestion, question: String, at now: Date = Date()) async -> FollowUp {
+    /// reason and never sent. A question asked while a call is in flight
+    /// waits for it to return and is then asked; only one waits at a time,
+    /// and a newer question, or `withdrawFollowUp`, drops it, in which case
+    /// this returns nil and nothing is journaled.
+    public func askFollowUp(about suggestion: Suggestion, question: String, at now: Date = Date()) async -> FollowUp? {
         var followUp = FollowUp(
             suggestionID: suggestion.id, timestamp: now, question: question,
             model: settings.mentorModel, promptVersion: MentorPrompts.version
         )
-        if case .hold(let hold) = scheduler.followUpGate(conditions: conditions(now: now)) {
+        var gate = scheduler.followUpGate(conditions: conditions(now: now))
+        while gate == .wait {
+            let record = MentorStatus.PendingFollowUp(suggestionID: suggestion.id, question: question, since: now)
+            let asked = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                dropPendingQuestion()
+                pendingQuestion = PendingQuestion(record: record, continuation: continuation)
+                status.pendingFollowUp = record
+                Task { await self.publishStatus() }
+            }
+            guard asked else { return nil }
+            gate = scheduler.followUpGate(conditions: conditions(now: now))
+        }
+        if case .hold(let hold) = gate {
             followUp.error = hold.label
             return await finish(followUp, about: suggestion)
         }
@@ -469,9 +533,15 @@ public actor MentorLoop {
                 followUp.error = record.detail
             } else if let reply = MentorLoop.decode(FollowUpReply.self, from: response) {
                 let answer = reply.answer.withPlainDashes.trimmingCharacters(in: .whitespacesAndNewlines)
-                record.outcome = .answered
-                record.detail = String(answer.prefix(160))
-                followUp.answer = answer
+                if answer.isEmpty {
+                    record.outcome = .error
+                    record.detail = "the follow-up reply had an empty answer"
+                    followUp.error = record.detail
+                } else {
+                    record.outcome = .answered
+                    record.detail = String(answer.prefix(160))
+                    followUp.answer = answer
+                }
             } else {
                 record.outcome = response.isTruncated ? .truncated : .error
                 record.detail = "could not parse the follow-up reply"
@@ -526,6 +596,11 @@ public actor MentorLoop {
         }
         let latency = Date().timeIntervalSince(started)
         inFlight.remove(tier)
+        if inFlight.isEmpty, let pending = pendingQuestion {
+            pendingQuestion = nil
+            status.pendingFollowUp = nil
+            pending.continuation.resume(returning: true)
+        }
         let usage = (try? result.get().usage) ?? Usage()
         let replayed = client.isReplay
         let record = ModelCallRecord(
@@ -565,6 +640,16 @@ public actor MentorLoop {
         )
         await broadcaster.send(.call(stored))
         return stored
+    }
+
+    /// Resumes the waiting question, if any, as dropped. True when there was one.
+    @discardableResult
+    private func dropPendingQuestion() -> Bool {
+        guard let pending = pendingQuestion else { return false }
+        pendingQuestion = nil
+        status.pendingFollowUp = nil
+        pending.continuation.resume(returning: false)
+        return true
     }
 
     static func decode<T: Decodable>(_ type: T.Type, from response: MessagesResponse) -> T? {

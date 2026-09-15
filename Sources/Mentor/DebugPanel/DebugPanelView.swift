@@ -785,6 +785,8 @@ private struct MentorCard: View {
         switch state.talkBack {
         case .listening(let partial):
             return partial.isEmpty ? "listening…" : "listening: \"\(partial)\""
+        case .waiting(let question):
+            return "waiting for the call in flight to ask: \"\(question)\""
         case .thinking(let question):
             return "asking the mentor: \"\(question)\""
         case .idle:

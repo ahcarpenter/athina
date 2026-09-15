@@ -92,17 +92,30 @@ public enum TalkBackState: Equatable, Sendable {
     case idle
     /// The key is held; the partial transcript grows as the user speaks.
     case listening(partial: String)
+    /// The key was released while a call was in flight; the question is
+    /// asked when that call returns.
+    case waiting(question: String)
     /// The key was released and the question is with the mentor model.
     case thinking(question: String)
 
     /// True while the user is talking back: the key is held, or the
     /// transcript or the answer is in progress. The toast then stays visible
     /// whatever else happens: it is not dismissed by a click elsewhere, does
-    /// not expire, and is kept in front.
+    /// not expire, is kept in front, and a new suggestion waits for the
+    /// exchange to end rather than replacing it.
     public var keepsToastUp: Bool {
         switch self {
         case .idle: false
-        case .listening, .thinking: true
+        case .listening, .waiting, .thinking: true
+        }
+    }
+
+    /// True when the key may start a question: nothing is in progress, or
+    /// one is waiting its turn and the new one takes its place.
+    public var acceptsAQuestion: Bool {
+        switch self {
+        case .idle, .waiting: true
+        case .listening, .thinking: false
         }
     }
 }

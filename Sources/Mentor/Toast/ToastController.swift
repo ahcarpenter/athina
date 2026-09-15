@@ -367,8 +367,10 @@ struct ToastContent: View {
                             EmptyView()
                         case .listening(let partial):
                             ListeningRow(partial: partial)
+                        case .waiting(let question):
+                            ThinkingRow(question: question, status: "Mentor is finishing another call, your question is next…")
                         case .thinking(let question):
-                            ThinkingRow(question: question)
+                            ThinkingRow(question: question, status: "Mentor is thinking…")
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -499,9 +501,11 @@ struct ListeningRow: View {
     }
 }
 
-/// The key was released and the question is with the mentor model.
+/// The key was released and the question is with the mentor model, or
+/// waiting for its current call to return.
 struct ThinkingRow: View {
     let question: String
+    let status: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -510,9 +514,10 @@ struct ThinkingRow: View {
                 ProgressView()
                     .controlSize(.small)
                     .frame(width: 44, alignment: .trailing)
-                Text("Mentor is thinking…")
+                Text(status)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }

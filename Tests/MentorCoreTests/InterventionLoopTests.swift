@@ -99,7 +99,7 @@ import Testing
         )
         let before = await h.loop.currentStatus()
 
-        let followUp = await h.loop.askFollowUp(about: suggestion, question: "does that work with tags", at: t0)
+        let followUp = try #require(await h.loop.askFollowUp(about: suggestion, question: "does that work with tags", at: t0))
         #expect(followUp.id > 0)
         #expect(followUp.timestamp == t0)
         #expect(followUp.suggestionID == suggestion.id)
@@ -157,7 +157,7 @@ import Testing
         await h.observe(Fixtures.observation(id: 2, at: Date(), window: "b", text: "b"), expectCalls: 1)
         #expect(await h.loop.currentStatus().lastGate?.hold == .paused)
 
-        let followUp = await h.loop.askFollowUp(about: suggestion, question: "why", at: t0)
+        let followUp = try #require(await h.loop.askFollowUp(about: suggestion, question: "why", at: t0))
         #expect(followUp.answer == nil)
         #expect(followUp.error == "paused")
         #expect(await h.client.sent.count == 1)
@@ -172,14 +172,141 @@ import Testing
         await h.observe(Fixtures.observation(at: Date()), expectCalls: 1)
         let suggestion = try await journaledSuggestion(h)
         await h.client.enqueue(.failure(.api(status: 529, type: "overloaded_error", message: "Overloaded")))
-        let failed = await h.loop.askFollowUp(about: suggestion, question: "why")
+        let failed = try #require(await h.loop.askFollowUp(about: suggestion, question: "why"))
         #expect(failed.error == "overloaded_error (HTTP 529): Overloaded")
         #expect(try await h.journal.recentModelCalls(limit: 1).first?.outcome == .error)
 
         await h.client.enqueue(json: "not json")
-        let garbage = await h.loop.askFollowUp(about: suggestion, question: "again")
+        let garbage = try #require(await h.loop.askFollowUp(about: suggestion, question: "again"))
         #expect(garbage.error == "could not parse the follow-up reply")
-        #expect(try await h.journal.followUps(suggestionID: suggestion.id).count == 2)
+
+        await h.client.enqueue(json: #"{"answer": " \n "}"#)
+        let empty = try #require(await h.loop.askFollowUp(about: suggestion, question: "once more"))
+        #expect(empty.answer == nil)
+        #expect(empty.error == "the follow-up reply had an empty answer")
+        #expect(try await h.journal.recentModelCalls(limit: 1).first?.outcome == .error)
+        #expect(try await h.journal.recentEvents(limit: 1).first?.detail == "\"once more\" (the follow-up reply had an empty answer)")
+        #expect(try await h.journal.followUps(suggestionID: suggestion.id).count == 3)
+    }
+
+    /// Polls until the condition holds, or for two seconds.
+    private func waitUntil(_ condition: () async -> Bool) async {
+        for _ in 0..<200 {
+            if await condition() { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    private func isSuggestion(_ event: MentorEvent) -> Bool {
+        if case .suggestion = event { return true } else { return false }
+    }
+
+    /// The captain's sequence: S1 is up and being talked to, S2 arrives from
+    /// a mentor call that was already under way, the answer lands. S2 never
+    /// replaces S1 mid-exchange; it is shown once the exchange ends.
+    @Test func aSuggestionThatArrivesMidExchangeWaitsForTheAnswerToLand() async throws {
+        let h = try await MentorLoopTests.Harness()
+        let s1 = try await journaledSuggestion(h)
+        await h.loop.setTalkingBack(true)
+
+        await h.client.enqueue(json: Self.yes)
+        await h.client.enqueue(json: Self.suggestion(region: "null"))
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
+        let s2 = try #require(try await h.journal.recentSuggestions(limit: 1).first)
+        #expect(s2.id != s1.id)
+        #expect(s2.title == "Use --filter")
+
+        await h.client.enqueue(json: #"{"answer": "Line 12."}"#)
+        let followUp = try #require(await h.loop.askFollowUp(about: s1, question: "which line", at: t0))
+        #expect(followUp.answer == "Line 12.")
+
+        await h.loop.setTalkingBack(false)
+        // One pass over everything published: S2 appears once, and only after the answer did.
+        let events = await h.drain(until: isSuggestion)
+        let answered = events.firstIndex { if case .followUp = $0 { return true } else { return false } }
+        let shownAt = events.firstIndex(where: isSuggestion)
+        #expect(events.filter(isSuggestion).count == 1)
+        guard let answered, let shownAt, case .suggestion(let shown) = events[shownAt] else {
+            Issue.record("expected the answer, then the held suggestion once the exchange ended")
+            return
+        }
+        #expect(answered < shownAt)
+        #expect(shown.id == s2.id)
+        #expect(try await h.journal.suggestion(id: s2.id)?.feedback == nil)
+    }
+
+    @Test func aHeldSuggestionThatOutlivedTheExchangeExpiresUnseen() async throws {
+        let h = try await MentorLoopTests.Harness()
+        await h.loop.setTalkingBack(true)
+        await h.client.enqueue(json: Self.yes)
+        await h.client.enqueue(json: Self.suggestion(region: "null"))
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 2)
+        let held = try #require(try await h.journal.recentSuggestions(limit: 1).first)
+
+        await h.loop.setTalkingBack(false, at: Date().addingTimeInterval(MentorScheduler.maxObservationAge + 1))
+        let events = await h.drain { if case .feedback = $0 { return true } else { return false } }
+        #expect(!events.contains(where: isSuggestion))
+        guard case .feedback(let expired)? = events.last else {
+            Issue.record("expected the held suggestion to expire")
+            return
+        }
+        #expect(expired.id == held.id)
+        #expect(expired.feedback == .expired)
+        #expect(try await h.journal.suggestion(id: held.id)?.feedback == .expired)
+        #expect(try await h.journal.recentEvents(limit: 1).first?.detail == "Expired: Use --filter")
+    }
+
+    /// A question released while a call is in flight is not refused: it waits
+    /// for that call to return, is then asked, and is journaled as an error
+    /// only if its own call fails.
+    @Test func aQuestionAskedDuringACallWaitsForItAndIsThenAnswered() async throws {
+        let h = try await MentorLoopTests.Harness()
+        let suggestion = try await journaledSuggestion(h)
+        await h.client.setDelay(.milliseconds(400))
+        await h.client.enqueue(json: Self.no)
+        await h.client.enqueue(json: #"{"answer": "After the call."}"#)
+        h.input.yield(.observation(Fixtures.observation(id: 1, at: Date())))
+        await waitUntil { await h.loop.currentStatus().inFlight != nil }
+        #expect(await h.loop.currentStatus().inFlight == .triage)
+
+        let asked = Task { await h.loop.askFollowUp(about: suggestion, question: "which line", at: t0) }
+        await waitUntil { await h.loop.currentStatus().pendingFollowUp != nil }
+        let pending = try #require(await h.loop.currentStatus().pendingFollowUp)
+        #expect(pending.question == "which line")
+        #expect(pending.suggestionID == suggestion.id)
+        #expect(pending.since == t0)
+        #expect(await h.client.sent.map(\.call.kind) == ["triage"])
+
+        let followUp = try #require(await asked.value)
+        #expect(followUp.answer == "After the call.")
+        #expect(followUp.error == nil)
+        #expect(await h.client.sent.map(\.call.kind) == ["triage", "followUp"])
+        #expect(await h.loop.currentStatus().pendingFollowUp == nil)
+        #expect(try await h.journal.followUps(suggestionID: suggestion.id) == [followUp])
+        #expect(try await h.journal.recentModelCalls(limit: 2).allSatisfy { $0.outcome != .error })
+    }
+
+    @Test func aNewerWaitingQuestionReplacesTheOlderAndAWithdrawnOneIsDropped() async throws {
+        let h = try await MentorLoopTests.Harness()
+        let suggestion = try await journaledSuggestion(h)
+        await h.client.setDelay(.milliseconds(400))
+        await h.client.enqueue(json: Self.no)
+        h.input.yield(.observation(Fixtures.observation(id: 1, at: Date())))
+        await waitUntil { await h.loop.currentStatus().inFlight != nil }
+
+        let older = Task { await h.loop.askFollowUp(about: suggestion, question: "first", at: t0) }
+        await waitUntil { await h.loop.currentStatus().pendingFollowUp?.question == "first" }
+        let newer = Task { await h.loop.askFollowUp(about: suggestion, question: "second", at: t0 + 1) }
+        #expect(await older.value == nil)
+        #expect(await h.loop.currentStatus().pendingFollowUp?.question == "second")
+
+        await h.loop.withdrawFollowUp()
+        #expect(await newer.value == nil)
+        #expect(await h.loop.currentStatus().pendingFollowUp == nil)
+        await waitUntil { await h.loop.currentStatus().inFlight == nil }
+        #expect(await h.client.sent.map(\.call.kind) == ["triage"])
+        #expect(try await h.journal.followUps(suggestionID: suggestion.id).isEmpty)
+        #expect(try await h.journal.recentEvents(limit: 5).allSatisfy { $0.kind != .talkBack })
     }
 
     /// Recorded live on 2026-09-14: Sonnet 5 answered a real risk with every
@@ -328,7 +455,7 @@ import Testing
 
         // A follow-up about it is answered from the recording, journaled as a replay, and never billed.
         // A whole-second time, so the journal round trip compares equal.
-        let followUp = await loop.askFollowUp(about: suggestion, question: "which line do you mean", at: Date(timeIntervalSince1970: 1_789_000_000))
+        let followUp = try #require(await loop.askFollowUp(about: suggestion, question: "which line do you mean", at: Date(timeIntervalSince1970: 1_789_000_000)))
         #expect(followUp.answer == recordedAnswer.answer.withPlainDashes.trimmingCharacters(in: .whitespacesAndNewlines))
         #expect(followUp.error == nil)
         let call = try #require(try await journal.recentModelCalls(limit: 1).first)

@@ -7,13 +7,18 @@ import Foundation
 /// yes-or-no between triage's verdict and the mentor tier. The declared
 /// mentorship contexts are enforced in these two functions and nowhere else:
 /// an enforced but empty list holds triage, and an out-of-context placement
-/// holds the mentor tier.
+/// holds the mentor tier. Two smaller ones follow the calls: `publishGate`
+/// decides whether a finished suggestion may be shown now, and `followUpGate`
+/// whether a question the user asked may be sent.
 public struct MentorScheduler: Equatable, Sendable {
     /// What the loop knows about the world when it asks a gate.
     public struct Conditions: Equatable, Sendable {
         public var mode: SensingMode
         public var hasAPIKey: Bool
         public var callInFlight: Bool
+        /// The user is talking back to the toast that is up: the key is held,
+        /// or the transcript or the answer is in progress.
+        public var talkingBack: Bool
         /// Spend this hour as a fraction of the cap (1 or more means capped).
         public var spendFraction: Double
         /// How much slower the cadences currently run because of spend.
@@ -25,6 +30,7 @@ public struct MentorScheduler: Equatable, Sendable {
             mode: SensingMode,
             hasAPIKey: Bool,
             callInFlight: Bool = false,
+            talkingBack: Bool = false,
             spendFraction: Double = 0,
             cadenceMultiplier: Double = 1,
             nextHourStart: Date
@@ -32,6 +38,7 @@ public struct MentorScheduler: Equatable, Sendable {
             self.mode = mode
             self.hasAPIKey = hasAPIKey
             self.callInFlight = callInFlight
+            self.talkingBack = talkingBack
             self.spendFraction = spendFraction
             self.cadenceMultiplier = cadenceMultiplier
             self.nextHourStart = nextHourStart
@@ -109,10 +116,22 @@ public struct MentorScheduler: Equatable, Sendable {
         case hold(MentorHold)
     }
 
+    /// Whether a suggestion the mentor tier has just made may be shown.
+    public enum PublishGate: Equatable, Sendable {
+        case show
+        /// The user is talking back to the toast that is up; another toast
+        /// would cut the exchange off, so this one waits for it to end.
+        case hold
+        /// It waited out an exchange and describes a screen that is gone.
+        case expired(age: TimeInterval)
+    }
+
     /// Whether a follow-up question may go to the mentor tier. A held
-    /// question is journaled with the reason and never sent.
+    /// question is journaled with the reason and never sent; a waiting one
+    /// is asked once the call in flight returns.
     public enum FollowUpGate: Equatable, Sendable {
         case run
+        case wait
         case hold(Hold)
     }
 
@@ -203,14 +222,28 @@ public struct MentorScheduler: Equatable, Sendable {
         lastMentorAt = now
     }
 
+    // MARK: Publish gate
+
+    /// The yes-or-no between a finished mentor call and the toast. A
+    /// suggestion made while the user is talking back is held so the toast
+    /// being talked to, the recording, and the pending answer stay as they
+    /// are; when the exchange ends it is shown, unless it waited longer than
+    /// `maxObservationAge`, in which case it expires unseen.
+    public func publishGate(madeAt: Date, conditions: Conditions, now: Date) -> PublishGate {
+        if conditions.talkingBack { return .hold }
+        let age = now.timeIntervalSince(madeAt)
+        if age > MentorScheduler.maxObservationAge { return .expired(age: age) }
+        return .show
+    }
+
     // MARK: Follow-up gate
 
     /// The user asked, so there is no debounce and no context question: only
     /// what blocks every tier (off, paused, idle, excluded, no key, the spend
-    /// cap) and a call already in flight hold it.
+    /// cap) holds it, and a call already in flight makes it wait its turn.
     public func followUpGate(conditions: Conditions) -> FollowUpGate {
         if let hold = availabilityHold(conditions: conditions) { return .hold(hold) }
-        if conditions.callInFlight { return .hold(.callInFlight) }
+        if conditions.callInFlight { return .wait }
         return .run
     }
 

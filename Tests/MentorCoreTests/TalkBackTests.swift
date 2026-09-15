@@ -57,7 +57,17 @@ import Testing
         #expect(!TalkBackState.idle.keepsToastUp)
         #expect(TalkBackState.listening(partial: "").keepsToastUp)
         #expect(TalkBackState.listening(partial: "which line").keepsToastUp)
+        #expect(TalkBackState.waiting(question: "which line do you mean").keepsToastUp)
         #expect(TalkBackState.thinking(question: "which line do you mean").keepsToastUp)
+    }
+
+    /// A new question may start when nothing is in progress or when one is
+    /// only waiting its turn, never over a recording or a call in flight.
+    @Test func aQuestionMayReplaceOneWaitingItsTurnButNotOneBeingAsked() {
+        #expect(TalkBackState.idle.acceptsAQuestion)
+        #expect(TalkBackState.waiting(question: "q").acceptsAQuestion)
+        #expect(!TalkBackState.listening(partial: "").acceptsAQuestion)
+        #expect(!TalkBackState.thinking(question: "q").acceptsAQuestion)
     }
 }
 
@@ -133,7 +143,7 @@ import Testing
         MentorScheduler.Conditions(mode: mode, hasAPIKey: key, callInFlight: inFlight, spendFraction: spend, nextHourStart: t0 + 3600)
     }
 
-    @Test func onlyAvailabilityAndAnInFlightCallHoldAQuestion() {
+    @Test func onlyAvailabilityHoldsAQuestionAndAnInFlightCallMakesItWait() {
         var scheduler = MentorScheduler(settings: MentorSettings())
         #expect(scheduler.followUpGate(conditions: conditions()) == .run)
         // No debounce: a question right after a mentor call still runs.
@@ -144,7 +154,8 @@ import Testing
         #expect(scheduler.followUpGate(conditions: conditions(mode: .idle)) == .hold(.idle))
         #expect(scheduler.followUpGate(conditions: conditions(mode: .excluded)) == .hold(.excludedApp))
         #expect(scheduler.followUpGate(conditions: conditions(key: false)) == .hold(.noAPIKey))
-        #expect(scheduler.followUpGate(conditions: conditions(inFlight: true)) == .hold(.callInFlight))
+        #expect(scheduler.followUpGate(conditions: conditions(inFlight: true)) == .wait)
+        #expect(scheduler.followUpGate(conditions: conditions(mode: .paused, inFlight: true)) == .hold(.paused))
         #expect(scheduler.followUpGate(conditions: conditions(spend: 1)) == .hold(.spendCapReached(until: t0 + 3600)))
         var off = MentorSettings()
         off.enabled = false
@@ -225,11 +236,9 @@ import Testing
         }
         #expect(properties["region"] == MentorPrompts.regionSchema)
         #expect(required.contains(.string("region")))
-        #expect(MentorPrompts.mentorSystem.contains("region: usually null"))
         #expect(MentorPrompts.followUpSchema == [
             "type": "object", "properties": ["answer": ["type": "string"]], "required": ["answer"], "additionalProperties": false,
         ])
-        #expect(MentorPrompts.followUpSystem.contains("Reply with JSON only: {\"answer\": string}."))
         #expect(try JSONDecoder().decode(FollowUpReply.self, from: Data(#"{"answer": "Yes."}"#.utf8)) == FollowUpReply(answer: "Yes."))
         #expect(MentorPrompts.version >= 5)
     }

@@ -158,6 +158,8 @@ final class AppState {
     private var screenObserver: (any NSObjectProtocol)?
     private let listener = SpeechListener()
     private var listeningLimitTask: Task<Void, Never>?
+    /// Finishes the transcript after the key comes up; cancelled with the exchange.
+    private var transcriptTask: Task<Void, Never>?
 
     private init() {
         clientMode = ModelClientMode(arguments: CommandLine.arguments)
@@ -731,19 +733,41 @@ final class AppState {
         if isRunning, !pushToTalkRegistered { return "Talk back: \(key.displayString) could not be registered" }
         switch talkBack {
         case .listening: return "Talk back: listening…"
+        case .waiting: return "Talk back: waiting for the mentor's current call…"
         case .thinking: return "Talk back: asking the mentor…"
         case .idle: return "Talk back: hold \(key.displayString)"
         }
     }
 
+    /// The loop hears when an exchange begins and ends, so a suggestion that
+    /// arrives in between waits instead of replacing the toast being talked to.
     private func setTalkBack(_ state: TalkBackState) {
+        let wasTalking = talkBack.keepsToastUp
         talkBack = state
         toast.setTalkBack(state)
+        if state.keepsToastUp != wasTalking {
+            let talking = state.keepsToastUp
+            Task { await mentor?.setTalkingBack(talking) }
+        }
     }
 
-    /// The key went down: bring up the suggestion to talk to, and listen.
+    /// The toast says when the question is waiting for the mentor's current
+    /// call to return, and when it has been asked.
+    private func syncTalkBack(with status: MentorStatus) {
+        switch talkBack {
+        case .thinking(let question) where status.pendingFollowUp?.question == question:
+            setTalkBack(.waiting(question: question))
+        case .waiting(let question) where status.pendingFollowUp == nil:
+            setTalkBack(.thinking(question: question))
+        case .idle, .listening, .waiting, .thinking:
+            break
+        }
+    }
+
+    /// The key went down: bring up the suggestion to talk to, and listen. A
+    /// question still waiting its turn is withdrawn; the new one takes its place.
     private func pushToTalkPressed() {
-        guard case .idle = talkBack else { return }
+        guard talkBack.acceptsAQuestion else { return }
         guard activeSuggestion != nil || !suggestionHistory.isEmpty else {
             toast.showNote("Nothing to reply to yet: Mentor has not made a suggestion.")
             return
@@ -775,6 +799,9 @@ final class AppState {
             return
         }
         AppState.log.notice("listening for suggestion \(suggestion.id)")
+        if case .waiting = talkBack {
+            Task { await mentor?.withdrawFollowUp() }
+        }
         setTalkBack(.listening(partial: ""))
         listeningLimitTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(SpeechListener.maxDuration))
@@ -805,7 +832,7 @@ final class AppState {
 
     /// Whether the debug panel's Talk back field may send now.
     var canTalkBackTyped: Bool {
-        talkBack == .idle && (activeSuggestion != nil || !suggestionHistory.isEmpty)
+        talkBack.acceptsAQuestion && (activeSuggestion != nil || !suggestionHistory.isEmpty)
     }
 
     /// The debug panel's Talk back field: typed words take the path a released
@@ -824,17 +851,30 @@ final class AppState {
         listeningLimitTask?.cancel()
         listeningLimitTask = nil
         let suggestion = activeSuggestion
-        Task { [weak self] in
+        transcriptTask = Task { [weak self] in
             guard let self else { return }
             let text = await self.listener.finish()
+            guard !Task.isCancelled else { return }
+            self.transcriptTask = nil
             await self.handleTranscript(text, for: suggestion)
         }
     }
 
+    /// Ends the exchange: the recording is dropped, a transcript still being
+    /// finalized is ignored, and a question waiting its turn is withdrawn. A
+    /// follow-up call already in flight completes and its answer is journaled.
     private func cancelTalkBack() {
         listeningLimitTask?.cancel()
         listeningLimitTask = nil
+        transcriptTask?.cancel()
+        transcriptTask = nil
         listener.cancel()
+        switch talkBack {
+        case .waiting, .thinking:
+            Task { await mentor?.withdrawFollowUp() }
+        case .idle, .listening:
+            break
+        }
         if talkBack != .idle {
             setTalkBack(.idle)
         }
@@ -873,9 +913,11 @@ final class AppState {
                 setTalkBack(.idle)
                 return
             }
-            let followUp = await mentor.askFollowUp(about: suggestion, question: question)
+            guard let followUp = await mentor.askFollowUp(about: suggestion, question: question) else { return }
             upsert(followUp)
-            guard activeSuggestion?.id == suggestion.id else { return }
+            guard activeSuggestion?.id == suggestion.id,
+                  talkBack == .thinking(question: question) || talkBack == .waiting(question: question)
+            else { return }
             setTalkBack(.idle)
             toast.setExchange(exchange(for: suggestion.id))
         }
@@ -1040,11 +1082,15 @@ final class AppState {
         switch event {
         case .status(let status):
             if status != mentorStatus { mentorStatus = status }
+            syncTalkBack(with: status)
         case .suggestion(let suggestion):
             present(suggestion)
         case .feedback(let suggestion):
             if let index = suggestionHistory.firstIndex(where: { $0.id == suggestion.id }) {
                 suggestionHistory[index] = suggestion
+            } else {
+                let index = suggestionHistory.firstIndex { $0.timestamp < suggestion.timestamp } ?? suggestionHistory.endIndex
+                suggestionHistory.insert(suggestion, at: index)
             }
         case .followUp(let followUp):
             upsert(followUp)

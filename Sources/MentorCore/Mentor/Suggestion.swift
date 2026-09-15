@@ -300,6 +300,19 @@ public struct MentorStatus: Equatable, Sendable {
         }
     }
 
+    /// A follow-up question waiting for the call in flight to return before it is asked.
+    public struct PendingFollowUp: Equatable, Sendable {
+        public var suggestionID: Int64
+        public var question: String
+        public var since: Date
+
+        public init(suggestionID: Int64, question: String, since: Date) {
+            self.suggestionID = suggestionID
+            self.question = question
+            self.since = since
+        }
+    }
+
     public var availability: Availability
     public var lastGate: GateRecord?
     public var lastContext: ContextRecord?
@@ -313,6 +326,7 @@ public struct MentorStatus: Equatable, Sendable {
     public var nextTriageAt: Date?
     public var nextMentorAt: Date?
     public var inFlight: ModelTier?
+    public var pendingFollowUp: PendingFollowUp?
 
     public init(
         availability: Availability = .noAPIKey,
@@ -327,7 +341,8 @@ public struct MentorStatus: Equatable, Sendable {
         cadenceMultiplier: Double = 1,
         nextTriageAt: Date? = nil,
         nextMentorAt: Date? = nil,
-        inFlight: ModelTier? = nil
+        inFlight: ModelTier? = nil,
+        pendingFollowUp: PendingFollowUp? = nil
     ) {
         self.availability = availability
         self.lastGate = lastGate
@@ -342,6 +357,7 @@ public struct MentorStatus: Equatable, Sendable {
         self.nextTriageAt = nextTriageAt
         self.nextMentorAt = nextMentorAt
         self.inFlight = inFlight
+        self.pendingFollowUp = pendingFollowUp
     }
 }
 
