@@ -1069,6 +1069,42 @@ import Testing
         #expect(try await h.journal.refreshPeriod()?.startedAt == atQuit.startedAt)
     }
 
+    /// The gate's last hold is dropped when the mode changes and on Reset
+    /// Understanding, since it was reached under a state that no longer holds,
+    /// so the standing a readout shows never names a refresh that is not coming.
+    @Test func pausingOrResettingDropsTheLastRefreshHold() async throws {
+        let h = try await Harness(understanding: Self.existing(age: 60), activeUse: 60)
+        await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
+        await h.observe(Fixtures.observation(id: 1, at: Date()), expectCalls: 1)
+        let held = await h.loop.currentStatus()
+        guard case .notDue(let until) = held.lastRefreshHold?.hold ?? .callInFlight else {
+            Issue.record("expected the refresh to be held as not due")
+            return
+        }
+        #expect(held.refreshStanding(mode: .watching) == .counting(next: until, hold: held.lastRefreshHold))
+
+        h.input.yield(.modeChanged(.paused))
+        await h.waitUntil { $0.nextRefreshAt == nil }
+        let paused = await h.loop.currentStatus()
+        #expect(paused.lastRefreshHold == nil)
+        #expect(paused.refreshStanding(mode: .paused) == .notCounting(.paused))
+
+        h.input.yield(.modeChanged(.watching))
+        await h.waitUntil { $0.nextRefreshAt != nil }
+        guard case .counting(_, nil) = await h.loop.currentStatus().refreshStanding(mode: .watching) else {
+            Issue.record("expected the count to resume with no hold until the next observation gates")
+            return
+        }
+        await h.observe(Fixtures.observation(id: 2, at: Date(), window: "other.swift"), expectCalls: 1)
+        #expect(await h.loop.currentStatus().lastRefreshHold != nil)
+
+        await h.loop.resetUnderstanding()
+        let reset = await h.loop.currentStatus()
+        #expect(reset.lastRefreshHold == nil)
+        #expect(reset.understanding == nil)
+        #expect(reset.refreshStanding(mode: .watching) == .notStarted)
+    }
+
     /// Runs one mentor call against an existing understanding and returns the
     /// suggestion it produced, for the per-kind cases below.
     private func suggest(category: String, judgedGoal: String?) async throws -> Suggestion? {

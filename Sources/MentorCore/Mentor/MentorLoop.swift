@@ -283,6 +283,9 @@ public actor MentorLoop {
             if newMode == .paused {
                 await expireHeldSuggestion(now: Date())
             }
+            // The refresh gate's last hold was reached in the old mode; the
+            // next observation gates again in this one.
+            status.lastRefreshHold = nil
             await publishStatus()
         case .observation(let observation):
             await expireUnderstandingIfNeeded(now: Date())
@@ -774,6 +777,7 @@ public actor MentorLoop {
         understanding = nil
         lastResetAt = now
         await setPeriod(nil)
+        status.lastRefreshHold = nil
         do {
             try await journal.clearUnderstanding()
         } catch {

@@ -439,6 +439,30 @@ public struct MentorStatus: Equatable, Sendable {
         self.inFlight = inFlight
         self.pendingFollowUp = pendingFollowUp
     }
+
+    /// Where the periodic refresh stands now, for a readout.
+    public enum RefreshStanding: Equatable, Sendable {
+        /// The mode counts no active use, so no refresh is due until it does.
+        case notCounting(SensingMode)
+        /// Nothing is counting: there is no record, and the count starts from
+        /// zero with the next screen, as after a launch, an expiry, or a reset.
+        case notStarted
+        /// Counting toward `next`. `hold` is why the refresh gate last held,
+        /// while that is still the reason in force.
+        case counting(next: Date, hold: RefreshHoldRecord?)
+    }
+
+    /// The refresh's standing in `mode`, derived from the current state rather
+    /// than from the refresh gate's last look, which may predate a pause, a
+    /// reset, or a new record. A not-due hold is in force only while its time
+    /// is still the next refresh.
+    public func refreshStanding(mode: SensingMode) -> RefreshStanding {
+        guard mode.capturesFrames else { return .notCounting(mode) }
+        guard let next = nextRefreshAt else { return .notStarted }
+        var hold = lastRefreshHold
+        if case .notDue(let until)? = hold?.hold, until != next { hold = nil }
+        return .counting(next: next, hold: hold)
+    }
 }
 
 /// Everything the mentor loop publishes.

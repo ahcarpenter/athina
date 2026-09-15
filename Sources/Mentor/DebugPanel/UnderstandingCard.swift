@@ -140,17 +140,21 @@ struct UnderstandingCard: View {
     // MARK: Text
 
     private func refresh(now: Date) -> String {
-        let status = state.mentorStatus
         let mentor = state.settings.mentor
         var parts: [String] = []
-        if let next = status.nextRefreshAt {
+        var held: MentorStatus.RefreshHoldRecord?
+        switch state.mentorStatus.refreshStanding(mode: state.mode) {
+        case .notCounting(let mode):
+            parts.append("\(mode.label.lowercased()), so nothing counts and no refresh is due")
+        case .notStarted:
+            parts.append("no record, the count starts from zero with the next screen")
+        case .counting(let next, let hold):
             parts.append("next \(Formatting.countdown(to: next, now: now))")
-        } else {
-            parts.append("waiting for activity")
+            held = hold
         }
         parts.append("every \(Formatting.duration(mentor.understandingRefreshInterval)) of active use")
-        if let hold = status.lastRefreshHold {
-            parts.append("held \(Formatting.age(hold.at, now: now)): \(hold.hold.label)")
+        if let held {
+            parts.append("held \(Formatting.age(held.at, now: now)): \(held.hold.label)")
         }
         if let record {
             parts.append("\(record.content.estimatedTokens) of \(state.settings.mentor.understandingTokenBudget) tokens")

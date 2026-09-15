@@ -372,4 +372,53 @@ import Testing
         tooSlow.understandingRefreshInterval = 999_999
         #expect(tooSlow.validated().understandingRefreshInterval == MentorSettings.refreshIntervalRange.upperBound)
     }
+
+    // MARK: Standing
+
+    /// A status as the loop leaves it once the gate held a counting period as
+    /// not due until `next`.
+    private func heldNotDue(until next: Date) -> MentorStatus {
+        MentorStatus(
+            lastRefreshHold: MentorStatus.RefreshHoldRecord(at: t0, hold: .notDue(until: next)),
+            nextRefreshAt: next
+        )
+    }
+
+    @Test func aHoldStillInForceIsShownWithTheNextRefresh() {
+        let next = t0.addingTimeInterval(600)
+        let status = heldNotDue(until: next)
+        for mode in SensingMode.allCases where mode.capturesFrames {
+            #expect(status.refreshStanding(mode: mode) == .counting(next: next, hold: status.lastRefreshHold))
+        }
+        var outside = status
+        outside.lastRefreshHold = MentorStatus.RefreshHoldRecord(at: t0, hold: .outOfContext(.noMatch(reason: "")))
+        #expect(outside.refreshStanding(mode: .watching) == .counting(next: next, hold: outside.lastRefreshHold))
+    }
+
+    /// A mode that counts no use says so, whatever the gate last held, and
+    /// however much of the interval was counted before it.
+    @Test func whileTheModeCountsNoUseNoRefreshIsDue() {
+        var status = heldNotDue(until: t0.addingTimeInterval(600))
+        for mode in SensingMode.allCases where !mode.capturesFrames {
+            #expect(status.refreshStanding(mode: mode) == .notCounting(mode))
+        }
+        status.nextRefreshAt = nil
+        #expect(status.refreshStanding(mode: .paused) == .notCounting(.paused))
+    }
+
+    /// With no count running, as after Reset Understanding, an old not-due
+    /// hold is never shown.
+    @Test func withNoCountRunningNothingIsHeldOrDue() {
+        var status = heldNotDue(until: t0.addingTimeInterval(600))
+        status.nextRefreshAt = nil
+        #expect(status.refreshStanding(mode: .watching) == .notStarted)
+    }
+
+    /// Once the next refresh moves, as after a pause, a new record, or a
+    /// changed interval, a not-due hold naming the old time is not in force.
+    @Test func aNotDueHoldNamingAnotherTimeIsNotShown() {
+        var status = heldNotDue(until: t0.addingTimeInterval(600))
+        status.nextRefreshAt = t0.addingTimeInterval(745)
+        #expect(status.refreshStanding(mode: .watching) == .counting(next: t0.addingTimeInterval(745), hold: nil))
+    }
 }
