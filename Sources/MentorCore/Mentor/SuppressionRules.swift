@@ -45,7 +45,7 @@ public enum SuppressionRules {
         public var label: String {
             switch self {
             case .never: "never for this app"
-            case .snoozed(let until): "snoozed until \(until.formatted(date: .omitted, time: .shortened))"
+            case .snoozed(let until): "snoozed until \(ClockFormat.time(until))"
             }
         }
     }

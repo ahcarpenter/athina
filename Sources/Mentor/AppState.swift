@@ -118,9 +118,14 @@ final class AppState {
 
     /// Whether the permissions window should open at launch.
     let needsPermissionsOnboarding: Bool
-    /// The live files, or a replay's own (`AppPaths.dataDirectory(for:)`).
+    /// The live files, or a replay's own (`LaunchFiles`).
     let journalURL: URL
     let settingsURL: URL
+    /// Where this launch keeps its files, the settings it started from, and
+    /// any file flag that was refused.
+    let launchFiles: LaunchFiles
+    /// Keeps a replay's data directory its own while the app runs.
+    private let dataDirectoryLock: DataDirectoryLock?
 
     // MARK: Model client mode
 
@@ -175,6 +180,8 @@ final class AppState {
     /// newest kept frame; nil once a newer frame is kept.
     private var lastNearDuplicateAt: Date?
     private var screenObserver: (any NSObjectProtocol)?
+    /// Listens for another process moving a replay's clock (`ClockRemote`).
+    private var clockRemoteObserver: (any NSObjectProtocol)?
     private let listener: SpeechListener
     private var listeningLimitTask: Task<Void, Never>?
     /// Finishes the transcript after the key comes up; cancelled with the exchange.
@@ -186,15 +193,18 @@ final class AppState {
         (clock, clockControl) = clockMode.makeClock()
         toast = ToastController(clock: clock)
         listener = SpeechListener(clock: clock)
-        journalURL = Journal.defaultURL(in: AppPaths.dataDirectory(for: clientMode))
-        let launch = SettingsStore.forLaunch(clientMode)
-        store = launch.store
-        settingsURL = launch.store.url
+        var files = LaunchFiles(arguments: CommandLine.arguments, clientMode: clientMode)
+        dataDirectoryLock = files.claim(clientMode: clientMode)
+        let launchSettings = files.loadSettings()
+        launchFiles = files
+        journalURL = Journal.defaultURL(in: files.dataDirectory)
+        store = files.store
+        settingsURL = files.store.url
         // Neither a replay nor a snapshot render needs a key, so neither reads
         // the keychain, and its per-build access prompt never blocks them.
         keyStore = clientMode.isOffline || Snapshots.isActive ? InMemoryKeyStore() : KeychainKeyStore()
         isSample = false
-        settings = launch.settings
+        settings = launchSettings
         let status = PermissionProbe.current()
         permissions = status
         undeterminedPermissions = Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
@@ -216,9 +226,11 @@ final class AppState {
         (clock, clockControl) = clockMode.makeClock(base: AdjustableClock(startingAt: Date()))
         toast = ToastController(clock: clock)
         listener = SpeechListener(clock: clock)
-        let dataDirectory = AppPaths.dataDirectory(for: clientMode)
-        journalURL = Journal.defaultURL(in: dataDirectory)
-        settingsURL = SettingsStore.defaultURL(in: dataDirectory)
+        // A fixed per-launch name, so a replay render reads the same every time.
+        launchFiles = LaunchFiles(arguments: [], clientMode: clientMode, launchName: "launch-4242-5a1e0c9d")
+        dataDirectoryLock = nil
+        journalURL = Journal.defaultURL(in: launchFiles.dataDirectory)
+        settingsURL = launchFiles.store.url
         keyStore = clientMode.isOffline ? InMemoryKeyStore() : InMemoryKeyStore(key: "sk-ant-sample-key-0000-7Q2x")
         isSample = true
         self.settings = settings
@@ -271,6 +283,7 @@ final class AppState {
         recordingUnavailableReason = clientSetup.recordingUnavailableReason
         AppState.log.notice("model calls: \(self.clientModeLog, privacy: .public)")
         AppState.log.notice("clock: \(self.clockLog, privacy: .public)")
+        AppState.log.notice("files: \(self.launchFilesLog, privacy: .public)")
         toast.onAction = { [weak self] id, feedback in
             self?.respond(to: id, with: feedback)
         }
@@ -282,6 +295,14 @@ final class AppState {
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.displayConfigurationChanged() }
+        }
+        if ClockRemote.listens(in: clockMode) {
+            clockRemoteObserver = DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name(ClockRemote.name), object: ClockRemote.object(for: getpid()), queue: .main
+            ) { [weak self] notification in
+                let request = ClockRemote.seconds(from: notification.userInfo)
+                MainActor.assumeIsolated { self?.advanceClock(onRequest: request) }
+            }
         }
 
         eventTask = Task { [weak self] in
@@ -355,6 +376,9 @@ final class AppState {
         stopCalloutWatch()
         if let screenObserver {
             NotificationCenter.default.removeObserver(screenObserver)
+        }
+        if let clockRemoteObserver {
+            DistributedNotificationCenter.default().removeObserver(clockRemoteObserver)
         }
         try? store.save(settings)
         await mentor?.stop()
@@ -1226,6 +1250,32 @@ final class AppState {
         clockMovedAhead = clockControl.movedAhead.timeInterval
         AppState.log.notice("clock moved ahead \(ClockInterval.description(of: seconds), privacy: .public): \(self.clockLog, privacy: .public)")
         return true
+    }
+
+    /// Moves a replay's clock ahead for another process (`ClockRemote`).
+    private func advanceClock(onRequest request: Result<TimeInterval, ClockRemote.Refusal>) {
+        switch request {
+        case .success(let seconds):
+            if !advanceClock(by: seconds) {
+                AppState.log.error("clock advance request refused: this launch has no replay clock")
+            }
+        case .failure(let refusal):
+            AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
+        }
+    }
+
+    // MARK: Launch files
+
+    /// One line for the menu when a file flag was refused, or nil.
+    var launchFilesLine: String? {
+        launchFiles.refusals.isEmpty ? nil : "Refused: \(launchFiles.refusals.joined(separator: "; "))"
+    }
+
+    /// For the log at launch.
+    private var launchFilesLog: String {
+        var line = "data in \(launchFiles.dataDirectory.path)\(launchFiles.isPerLaunch ? " (this launch only)" : ""), settings from \(launchFiles.settingsSource.path)"
+        if !launchFiles.refusals.isEmpty { line += ", refused: \(launchFiles.refusals.joined(separator: "; "))" }
+        return line
     }
 
     /// One line for the menu saying where calls go, or nil when they are live.

@@ -3,14 +3,25 @@
 # Each line is the CPU share over the preceding interval (100 = one core),
 # not a lifetime average, so a launch burst does not colour later samples.
 # top prints all samples when it finishes, so lines are numbered, not timed.
-# Usage: scripts/measure.sh [seconds] [interval]
+# Usage: [MENTOR_PID=<pid>] scripts/measure.sh [seconds] [interval]
+# With several Mentors running (another checkout's, a replay lane), name the
+# one to sample with MENTOR_PID (`make measure PID=<pid>`); the pid of a lane
+# launched with make is in build/<lane>.pid.
 set -euo pipefail
 duration="${1:-60}"
 interval="${2:-2}"
-pid="$(pgrep -x Mentor | head -n1 || true)"
+pid="${MENTOR_PID:-}"
 if [ -z "$pid" ]; then
-  echo "Mentor is not running (make run)" >&2
-  exit 1
+  running="$(pgrep -x Mentor || true)"
+  if [ -z "$running" ]; then
+    echo "Mentor is not running (make run)" >&2
+    exit 1
+  fi
+  if [ "$(echo "$running" | wc -l)" -gt 1 ]; then
+    echo "several Mentors are running ($(echo $running)); choose one with MENTOR_PID=<pid>" >&2
+    exit 1
+  fi
+  pid="$running"
 fi
 samples=$((duration / interval))
 echo "pid $pid, sampling every ${interval}s for ${duration}s"

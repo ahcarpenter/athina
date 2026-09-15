@@ -7,6 +7,14 @@ RECORD_DIR ?=
 ALLOW_STALE ?=
 ## Set to run a replay's clock that many times faster than real time (see README, "A faster clock")
 TIME_SCALE ?=
+## A replay's data directory, for its journal and settings: a new one per launch unless given (see README, "Replays side by side")
+DATA_DIR ?=
+## A settings file a replay starts from instead of the live settings, read and never written
+SETTINGS ?=
+## Names the replay's pid file, build/<LANE>.pid: `make run-replay` replaces only the replay its own lane launched
+LANE ?= replay
+## The pid `make measure` samples when several Mentors are running
+PID ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/mentor/recordings
 
@@ -23,27 +31,34 @@ build:
 mark:
 	swift scripts/mark-assets.swift .
 
-## Build and launch the app (quits a running copy first)
+## Build and launch the app, replacing only the copy this checkout's `make run`
+## or `make record` launched before (scripts/launch.sh); every other Mentor keeps running
 run: build
-	@pkill -x Mentor 2>/dev/null || true
-	open build/Mentor.app
+	@scripts/launch.sh live
 
 ## Build and launch the app answering every model call from recorded fixtures:
 ## no network, no API key, no spend (see README, "Iterating without the network").
-## A leading ~ in REPLAY_DIR or RECORD_DIR is expanded here, because zsh leaves it after `=`.
+## Replaces only the replay this checkout's lane launched before, in a data directory
+## of its own. A leading ~ in REPLAY_DIR, RECORD_DIR, DATA_DIR, or SETTINGS is
+## expanded here, because zsh leaves it after `=`.
 run-replay: build
-	@pkill -x Mentor 2>/dev/null || true
 	@dir="$(REPLAY_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
 	test -d "$$dir" || { echo "run-replay: no fixture directory at $$dir" >&2; exit 1; }; \
-	open build/Mentor.app --args --replay "$$(cd "$$dir" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures) $(if $(TIME_SCALE),--time-scale $(TIME_SCALE))
+	data="$(DATA_DIR)"; case "$$data" in "~"|"~/"*) data="$$HOME$${data#\~}";; esac; \
+	if [ -n "$$data" ]; then mkdir -p "$$data" && data="$$(cd "$$data" && pwd)" || exit 1; fi; \
+	settings="$(SETTINGS)"; case "$$settings" in "~"|"~/"*) settings="$$HOME$${settings#\~}";; esac; \
+	if [ -n "$$settings" ]; then test -f "$$settings" || { echo "run-replay: no settings file at $$settings" >&2; exit 1; }; \
+		settings="$$(cd "$$(dirname "$$settings")" && pwd)/$$(basename "$$settings")"; fi; \
+	scripts/launch.sh "$(LANE)" --replay "$$(cd "$$dir" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures) $(if $(TIME_SCALE),--time-scale $(TIME_SCALE)) \
+		$${data:+--data-dir "$$data"} $${settings:+--settings "$$settings"}
 
 ## Build and launch the app live, writing every model call to a fixture file.
 ## This spends API credits: use it only to record fixtures on purpose.
+## Replaces only the copy this checkout's `make run` or `make record` launched before.
 record: build
-	@pkill -x Mentor 2>/dev/null || true
 	@dir="$(RECORD_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
 	if [ -n "$$dir" ]; then mkdir -p -m 700 "$$dir" && dir="$$(cd "$$dir" && pwd)" || exit 1; fi; \
-	open build/Mentor.app --args --record $${dir:+"$$dir"}
+	scripts/launch.sh live --record $${dir:+"$$dir"}
 
 ## Delete the app's own recordings directory and every recorded call in it
 clear-recordings:
@@ -59,9 +74,10 @@ fixture-status:
 test:
 	swift test
 
-## Sample the running app's CPU and memory for a while (see scripts/measure.sh)
+## Sample the running app's CPU and memory for a while (see scripts/measure.sh);
+## PID=<pid> names the Mentor to sample when several are running
 measure:
-	scripts/measure.sh
+	MENTOR_PID="$(PID)" scripts/measure.sh
 
 clean:
 	rm -rf .build build

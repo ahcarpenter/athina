@@ -158,3 +158,41 @@ public enum ClockInterval {
         return parts.joined(separator: " ")
     }
 }
+
+/// Moves a replay's clock from another process, with no accessibility: a
+/// distributed notification named `name`, whose object is the replay's
+/// process id as text and whose user info holds `intervalKey` with an interval
+/// as the debug panel's Advance field takes it (`15m`, `2h`, `1d`).
+/// `scripts/advance-clock.sh <pid> <interval>` posts one. Only a replay
+/// listens, and only for its own pid, so it can never reach a live or
+/// recording launch or another replay.
+public enum ClockRemote {
+    public static let name = "com.ahcarpenter.mentor.advance-clock"
+    public static let intervalKey = "interval"
+
+    /// Whether a launch in `mode` listens at all.
+    public static func listens(in mode: ClockMode) -> Bool {
+        if case .replay = mode { return true }
+        return false
+    }
+
+    /// The object a replay with process id `pid` listens for.
+    public static func object(for pid: Int32) -> String {
+        String(pid)
+    }
+
+    /// The seconds a request asks for, or why it is refused.
+    public static func seconds(from userInfo: [AnyHashable: Any]?) -> Result<TimeInterval, Refusal> {
+        guard let text = userInfo?[intervalKey] as? String else {
+            return .failure(Refusal(reason: "no \(intervalKey) in the request"))
+        }
+        guard let seconds = ClockInterval.seconds(from: text), ClockMode.accepts(advance: seconds) else {
+            return .failure(Refusal(reason: "\"\(text)\" is not an interval such as 15m, 2h, or 1d, up to \(ClockInterval.description(of: ClockMode.maxAdvance))"))
+        }
+        return .success(seconds)
+    }
+
+    public struct Refusal: Error, Equatable {
+        public var reason: String
+    }
+}

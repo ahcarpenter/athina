@@ -196,18 +196,26 @@ PY
 
 # Replay only, sandboxed, in a scratch home, tracked by pid.
 #
-# Never `make run-replay` and never `pkill -x Mentor`: both stop every Mentor on
-# the Mac, including other lanes' and the owner's own.
+# Never `make run-replay` and never `pkill -x Mentor`: the first stops the lane
+# it launched before, and the second stops every Mentor on the Mac, including
+# other lanes' and the owner's own.
+#
+# `--data-dir` names the run's journal and settings directory, so the run reads
+# its own journal at a known path. Without it a replay makes a new directory per
+# launch inside the home's `replay` (README "Replays side by side"), which is
+# what keeps two runs apart; here the scratch home already does that, and the
+# flag keeps the path predictable for a relaunch in the same home.
 launch_mentor() {
 	local home="$1"
 	shift
 	local profile="$RUN_DIR/isolate.sb"
+	local data="$home/Library/Application Support/mentor/replay"
 	sed "s#__LIVE_SUPPORT__#$LIVE_SUPPORT#" "$E2E_DIR/lib/isolate.sb" >"$profile"
 	CFFIXED_USER_HOME="$home" HOME="$home" \
-		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" "$@" \
+		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" --data-dir "$data" "$@" \
 		>>"$RUN_DIR/app.log" 2>&1 &
 	MENTOR_PID=$!
-	JOURNAL="$home/Library/Application Support/mentor/replay/journal.sqlite"
+	JOURNAL="$data/journal.sqlite"
 	log "launched Mentor pid=$MENTOR_PID (replay, sandboxed, home=$home)"
 	local i
 	for i in $(seq 1 90); do

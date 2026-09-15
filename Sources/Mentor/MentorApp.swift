@@ -133,7 +133,8 @@ enum WindowID {
 /// `--open settings:models` opens Settings on that pane (`SettingsPane`), `--snapshot <dir>`
 /// is handled by `Snapshots`, `--replay <dir>`, `--allow-stale-fixtures`, and
 /// `--record [<dir>]` choose where model calls go (`ModelClientMode`), and
-/// `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock (`ClockMode`).
+/// `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock (`ClockMode`), and
+/// `--data-dir <path>` and `--settings <path>` choose a replay's files (`LaunchFiles`).
 enum LaunchArguments {
     private static var openArgument: String? {
         let arguments = CommandLine.arguments
@@ -198,6 +199,9 @@ struct MenuBarContent: View {
             Text(line)
         }
         if let line = state.clockLine {
+            Text(line)
+        }
+        if let line = state.launchFilesLine {
             Text(line)
         }
         if let action = state.menuStatusAction {

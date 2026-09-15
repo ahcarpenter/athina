@@ -30,14 +30,21 @@ Halt-and-redirect and learned suppression are later phases.
 ```sh
 make build            # builds build/Mentor.app from the SwiftPM binary
 make mark             # rebuilds the app icon and the menu bar mark from the two SVG masters (their outputs are committed, so a plain build never needs it)
-make run              # builds, quits a running copy, and launches the app
+make run              # builds and launches the app, replacing only the copy this checkout's run or record launched
 make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
 make record           # the same, live, writing every model call to a fixture file (spends API credits)
 make clear-recordings # deletes the app's own recordings directory
 make fixture-status   # checks that the committed fixtures are current (fails when not), with no network
 make test             # runs the unit tests (swift test), the loop included, with no network
-make measure          # samples the running app's CPU and memory for 60 seconds
+make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 ```
+
+None of the launch targets quits a Mentor it did not start: each one stops
+only the copy its own lane launched earlier from this checkout, by the pid
+`scripts/launch.sh` wrote to `build/<lane>.pid`, so other checkouts, other
+replays, and a Mentor started any other way keep running. `make run` and
+`make record` share the lane `live`; `make run-replay` uses `replay`, or
+`LANE=<name>` (see Replays side by side).
 
 There is no Xcode project. `Package.swift` defines the targets and
 `scripts/bundle.sh` wraps the release binary in an app bundle with
@@ -56,9 +63,9 @@ whole. Replay mode has renders of its own.
 for `general`, `contexts`, `models`, `capture`, `journal`, or `privacy`,
 `permissions`, `history`) launches the app with that window already open, which
 is how the live panel gets screenshotted from a shell. `--replay <dir>` and
-`--record [<dir>]` choose where model calls go, and `--time-scale <n>` and
-`--advance-clock <interval>` set a replay's clock; see Iterating without the
-network.
+`--record [<dir>]` choose where model calls go, `--time-scale <n>` and
+`--advance-clock <interval>` set a replay's clock, and `--data-dir <path>` and
+`--settings <path>` choose a replay's files; see Iterating without the network.
 
 ### Setup: the Anthropic API key
 
@@ -123,7 +130,8 @@ make run-replay                                   # the committed fixtures
 make run-replay REPLAY_DIR=~/Library/Application\ Support/mentor/recordings
 make run-replay ALLOW_STALE=1                     # also serve stale fixtures, see below
 make run-replay TIME_SCALE=60                     # on a clock 60 times real time, see A faster clock
-open build/Mentor.app --args --replay <dir> --open debug
+make run-replay SETTINGS=check.json DATA_DIR=~/lanes/a LANE=a   # its own settings and files, see Replays side by side
+open -n build/Mentor.app --args --replay <dir> --open debug
 ```
 
 The whole product runs as it does live. Sensing watches the real screen, the
@@ -137,17 +145,19 @@ recorded latency, so the in-flight states look the way they do live. Suggestions
 from replayed answers become toasts, take feedback, and land in the history like
 live ones. Test Connection replays the recorded test call.
 
-**A replay runs against an isolated copy seeded from your live settings.** A
-replay, and a replay that was refused, keeps its journal and settings in
-`~/Library/Application Support/mentor/replay` rather than beside the live ones.
-Every replay launch starts from your live settings, read and never written (or
-from the defaults when there are none), so the apps you excluded stay
-excluded, and your retention and sensing choices hold, exactly as you set them.
-Nothing a replay does, a suggestion and its feedback, a Not Now or Never for
-This, a changed setting, reaches the live journal, the live settings, or the
-prompts of a later live run; a setting changed during a replay lasts until the
-app quits. Delete that directory to clear the replay journal. `--record` is a
-real session and uses the live files.
+**A replay runs against files of its own, seeded from your live settings.** A
+replay, and a replay that was refused, keeps its journal and settings in a data
+directory of its own rather than beside the live ones: by default a new one for
+each launch, `~/Library/Application Support/mentor/replay/launch-<pid>-<random>`,
+or the one `--data-dir` names (see Replays side by side). Every replay launch
+starts from your live settings, read and never written (or from the defaults
+when there are none), unless `--settings` names another file, so the apps you
+excluded stay excluded, and your retention and sensing choices hold, exactly as
+you set them. Nothing a replay does, a suggestion and its feedback, a Not Now
+or Never for This, a changed setting, reaches the live journal, the live
+settings, another replay, or the prompts of a later live run; a setting
+changed during a replay lasts until the app quits. `--record` is a real session
+and uses the live files.
 
 Nothing about a replay can be mistaken for a live call:
 
@@ -192,7 +202,7 @@ can compress:
 
 ```sh
 make run-replay TIME_SCALE=60
-open build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1d --open debug
+open -n build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1d --open debug
 ```
 
 - `--time-scale <n>` runs the replay's clock n times faster than real time,
@@ -209,6 +219,12 @@ open build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1d -
   directives below for long waits.
 - `--advance-clock <interval>` starts the clock that far ahead: `90s`, `15m`,
   `2h`, `1d12h`, up to `30d`.
+- `scripts/advance-clock.sh <pid> <interval>` moves a running replay's clock
+  ahead from a script, exactly as the Advance field below does, with no
+  accessibility and no window. It posts a distributed notification addressed
+  to that pid (`ClockRemote`); only a replay listens, and only for its own pid,
+  so a live or recording Mentor and every other replay ignore it. The replay
+  logs "clock moved ahead" or why it refused.
 - The debug panel's Mentor card has an **Advance** field (accessibility label
   "Advance clock"): type an interval and press Return, and the clock moves
   ahead at once, as if that much time went by with the Mac awake in the mode
@@ -220,9 +236,11 @@ open build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1d -
   understanding.
 
 A replay's clock never starts behind its own journal. A faster or advanced
-session leaves rows stamped ahead of real time, so a relaunch carries on from
-the newest of them, then moves `--advance-clock` further, rather than going
-back in time. Delete the replay directory to start from real time again.
+session leaves rows stamped ahead of real time, so a relaunch with the same
+`--data-dir` carries on from the newest of them, then moves `--advance-clock`
+further, rather than going back in time. A replay in a new directory, the
+default, starts from real time, and no replay ever reads another's journal, so
+a faster clock in one never moves another's.
 
 The menu bar and the debug panel's Replay badges read **Replay 60x** while the
 clock is scaled, and the menu's Clock line and the Mentor card's Clock field
@@ -243,6 +261,52 @@ waiting. No test sleeps: a refresh after fifteen minutes of use across a pause
 and a closed lid, a snooze running out, the spend cap releasing at the top of
 the hour, a toast's paused countdown, a callout aging out, and expiry at a new
 day are each proven in milliseconds.
+
+### Replays side by side
+
+Any number of replays can run at once, from one checkout or several, and none
+of them disturbs another or the live app:
+
+- **Each replay has its own data directory.** With no flag a launch makes a new
+  one, `replay/launch-<pid>-<random>` inside the support directory, so its
+  journal starts empty and its clock at real time. `--data-dir <path>` (`make
+  run-replay DATA_DIR=<path>`) uses that directory instead, and a relaunch with
+  the same one carries on from its journal. A replay holds its directory for
+  as long as it runs, with a lock on `mentor.pid` inside it that holds its
+  pid; a second replay given a directory another one holds takes a new one of
+  its own and says why in the menu, the Mentor card, and the log. Each replay
+  launch that makes a new directory removes finished ones past the newest 10,
+  never one a running replay holds, and never a directory with any other name.
+  The debug panel's Mentor card and the log at launch show which directory a
+  replay uses.
+- **`--settings <path>`** (`make run-replay SETTINGS=<path>`) starts the
+  replay from that settings file instead of the live one. It is read and never
+  written, so a scripted check keeps its settings in a file of its own and
+  never has to swap the live settings. A file that is missing or is not
+  settings is refused, and the replay starts from the live settings, so the
+  apps you excluded stay excluded. Put every app a replayed callout must not
+  cover in that file's excluded apps.
+- **Both flags apply only to a replay.** On a live or recording launch they
+  are refused, like the clock flags: the app uses the live files, and the menu,
+  the Mentor card, and the log say why. The live app's files never move.
+- **Launching never quits another Mentor.** `make run-replay` replaces only the
+  replay its lane (`LANE`, default `replay`) launched from this checkout, so
+  two lanes run side by side:
+
+```sh
+make run-replay LANE=a SETTINGS=/tmp/a/settings.json TIME_SCALE=60
+make run-replay LANE=b SETTINGS=/tmp/b/settings.json
+cat build/a.pid                                   # lane a's pid
+scripts/advance-clock.sh "$(cat build/a.pid)" 2h  # moves only lane a's clock
+```
+
+  An on-screen check drives the app through `scripts/e2e/mentor-e2e` (see
+  End-to-end harness) rather than launching it itself: the harness already runs
+  each check in a scratch home, excludes the owner's apps, and stops only the
+  pids it started. A launch outside make uses `open -n` (a plain `open` can bring an already
+  running Mentor forward instead of starting one) and finds its instance by
+  pid: `lsof -p <pid> | grep journal.sqlite`, or `mentor.pid` in the data
+  directory. Stop a replay with `kill <pid>`, never by name.
 
 ### Record
 
@@ -306,7 +370,7 @@ is added, re-record the committed set live in the same change so the tests
 pass. It is a deliberate `make record` session of a few cents, on a staged
 scenario and an empty journal:
 
-1. Quit Mentor and move the journal aside (keep it to put back). Triage and
+1. Quit the live Mentor and move the journal aside (keep it to put back). Triage and
    mentor requests carry recent journal events and screens, so a recording made
    on a lived-in journal carries that history too.
 2. Stage a synthetic scenario in real windows that fill the display (the
@@ -424,10 +488,9 @@ suite rather than every scenario.
   not UserDefaults, so a run still writes through cfprefsd into the real
   `com.ahcarpenter.mentor` domain. Every run saves that domain and restores it,
   even on failure.
-- **Nothing is stopped by name.** `make run`, `make run-replay`, and
-  `make record` begin with `pkill -x Mentor`, which stops every Mentor on the
-  Mac, including another lane's and the owner's own. The harness launches the
-  binary directly and stops only the pids it started.
+- **Nothing is stopped by name.** The harness launches the binary directly and
+  stops only the pids it started, never a Mentor it did not launch (the make
+  targets stop only their own lane, see Replays side by side).
 - **A sandbox** denies the real `~/Library/Application Support/mentor` and all
   outbound network, so no run can reach live data or make a live call.
 - **Cleanup runs on failure**, through a trap: helpers, taps, staged apps, the
@@ -441,10 +504,12 @@ home.
 
 Runs land in `~/Library/Caches/mentor-e2e/runs/<scenario>-<stamp>/`, or under
 `--out <dir>`; `--keep-home` keeps the scratch home to look inside it.
-Each run has its own home today. Once per-instance replay data directories land
-(the replay-lanes work), `launch_mentor` in `scripts/e2e/lib/harness.sh` is the
-one place that decides where a run's journal and settings live, and is where
-that flag belongs.
+Each run has its own home, and `launch_mentor` in `scripts/e2e/lib/harness.sh`
+is the one place that decides where a run's journal and settings live: it
+passes `--data-dir <home>/Library/Application Support/mentor/replay`, so the
+run reads its own journal at a path it knows. Without that flag a replay makes
+a new directory for each launch (see Replays side by side), which is what keeps
+two replays apart when they share a home.
 
 ## Permissions
 
@@ -476,7 +541,9 @@ when a key is saved (see Privacy model).
 ```
 Sources/MentorCore            library, fully testable
   Settings/                   SensingSettings (every threshold and cadence), MentorSettings (the loop's
-                              section of the same file), SettingsStore (JSON), ExcludedApps, HotKey
+                              section of the same file), SettingsStore (JSON), ExcludedApps, HotKey,
+                              LaunchFiles (a launch's data directory and starting settings: a replay's own
+                              directory, --data-dir, --settings, and the lock that keeps a directory one replay's)
   Model/ActivityObservation   FocusContext, FrameInfo, TextBlock, ActivityObservation, JournalEvent,
                               SensingEvent (the stream the mentor loop consumes), SensingMode, CadenceStatus
   Scheduling/                 CaptureScheduler (pure trigger and cadence state machine),
@@ -504,6 +571,7 @@ Sources/MentorCore            library, fully testable
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory), MentorClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
+                              and ClockRemote (moving a replay's clock from a script)
 Sources/Mentor                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
                               (on-device speech recognition), HotKeyCenter (Carbon, press and release),
@@ -572,9 +640,9 @@ is migrated in place when it is opened: missing tables are created and columns
 added or dropped, so nothing has to be thrown away.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
-to defaults so older files keep working. A replay keeps both files in a
-`replay` directory of its own and starts from the live settings (see Iterating
-without the network).
+to defaults so older files keep working. A replay keeps both files in a data
+directory of its own and starts from the live settings or the file `--settings`
+names (see Replays side by side).
 
 ### Subscription point
 
@@ -1012,8 +1080,8 @@ counted (see Iterating without the network).
   Anthropic key visible in the screen text is redacted, though not inside the
   screenshot. `make clear-recordings` deletes them; Clear Journal does not. A
   replay (`--replay`) sends nothing anywhere, keeps its own journal and
-  settings, and starts from the live settings, so excluded apps stay excluded
-  while replaying.
+  settings, and starts from the live settings (or a `--settings` file it never
+  writes), so excluded apps stay excluded while replaying.
 - **Committed fixtures** carry only staged, synthetic screen content, recorded
   for the purpose, never the captain's or any user's real work. Every recording
   is read, text and screenshot, before it is committed.
@@ -1148,7 +1216,8 @@ accounting, snooze and never-for-this rules per category, the rolling window,
 the understanding's encoding, versioning, bounding and expiry, prompt assembly
 with and without one, request and response coding against fixture JSON,
 recording, redaction, replay matching and stale refusal, launch flags, a
-replay's separate files, the clocks and a replay's clock flags, the toast
+replay's separate files, per-launch directories, their locks and pruning, and
+the replay-only file flags, the clocks and a replay's clock flags, the toast
 countdown, which variant of the mark the menu bar shows and that every variant
 is committed at one size, callout mapping and every anchor rejection, a callout
 aging out, transcript matching, the follow-up prompt and gate, the toast rule

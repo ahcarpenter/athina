@@ -1,0 +1,224 @@
+import Darwin
+import Foundation
+
+/// Where a launch keeps its journal and settings, and the settings file it
+/// starts from, chosen once at launch from the command line.
+///
+/// Live and recording launches use the support directory itself and start
+/// from its settings file, as they always have. A replay, and a replay that
+/// was refused (`ModelClientMode.isOffline`), keeps files of its own so that
+/// nothing it does reaches the live journal, the live settings, or another
+/// replay:
+///
+/// - with no flag, a new directory made for this launch alone inside
+///   `AppPaths.replayRoot`, so two replays never share a journal and a
+///   faster clock in one never moves another's
+/// - `--data-dir <path>`: that directory; a relaunch with the same one
+///   carries on from its journal, clock included
+/// - `--settings <path>`: starts from that settings file instead of the live
+///   one; the file is read and never written
+///
+/// Every replay starts from settings it reads and never writes, and saves what
+/// it changes only to `settings.json` in its data directory. Either flag on a
+/// live or recording launch is refused, like the clock flags: the launch uses
+/// the live files and says why. A flag with no value is refused the same way,
+/// and the replay keeps its own per-launch directory or the live settings.
+public struct LaunchFiles: Equatable, Sendable {
+    public static let dataDirectoryFlag = "--data-dir"
+    public static let settingsFlag = "--settings"
+    /// Finished per-launch directories a replay launch leaves in place, newest
+    /// first, so a check can still read the journal of one that just quit.
+    public static let keptFinishedLaunches = 10
+
+    /// Holds the journal and the settings the launch saves.
+    public var dataDirectory: URL
+    /// True for a directory made for this launch alone, which a later replay
+    /// launch may remove once no running replay holds it.
+    public var isPerLaunch: Bool
+    /// The settings file the launch starts from.
+    public var settingsSource: URL
+    /// Whether `settingsSource` was asked for with `--settings`.
+    public var settingsGiven: Bool
+    /// Why a flag was not accepted, in the order they were found.
+    public var refusals: [String]
+
+    public init(
+        arguments: [String],
+        clientMode: ModelClientMode,
+        supportDirectory: URL = AppPaths.supportDirectory(),
+        launchName: String = LaunchFiles.launchName()
+    ) {
+        func value(after flag: String) -> String?? {
+            guard let index = arguments.firstIndex(of: flag) else { return nil }
+            guard index + 1 < arguments.count else { return .some(nil) }
+            let next = arguments[index + 1]
+            return next.hasPrefix("--") || next.isEmpty ? .some(nil) : .some(next)
+        }
+        let dataValue = value(after: LaunchFiles.dataDirectoryFlag)
+        let settingsValue = value(after: LaunchFiles.settingsFlag)
+        let liveSettings = SettingsStore.defaultURL(in: supportDirectory)
+        refusals = []
+        settingsGiven = false
+        settingsSource = liveSettings
+
+        guard clientMode.isOffline else {
+            dataDirectory = supportDirectory
+            isPerLaunch = false
+            let given = [dataValue.map { _ in LaunchFiles.dataDirectoryFlag }, settingsValue.map { _ in LaunchFiles.settingsFlag }].compactMap { $0 }
+            if !given.isEmpty {
+                refusals.append("\(given.joined(separator: " and ")) \(given.count == 1 ? "applies" : "apply") only to \(ModelClientMode.replayFlag)")
+            }
+            return
+        }
+
+        if let dataValue, let path = dataValue {
+            dataDirectory = ModelClientMode.url(forPath: path)
+            isPerLaunch = false
+        } else {
+            dataDirectory = AppPaths.replayRoot(in: supportDirectory).appendingPathComponent(launchName, isDirectory: true)
+            isPerLaunch = true
+            if dataValue != nil {
+                refusals.append("\(LaunchFiles.dataDirectoryFlag) needs a directory")
+            }
+        }
+        if let settingsValue {
+            if let path = settingsValue {
+                settingsSource = ModelClientMode.url(forPath: path).standardizedFileURL
+                settingsGiven = true
+            } else {
+                refusals.append("\(LaunchFiles.settingsFlag) needs a settings file")
+            }
+        }
+    }
+
+    /// Where the launch saves its settings.
+    public var store: SettingsStore {
+        SettingsStore(url: SettingsStore.defaultURL(in: dataDirectory))
+    }
+
+    /// The settings the launch starts from. A `--settings` file that cannot
+    /// be read or decoded is refused, and the replay starts from the live
+    /// settings instead, so the apps the user excluded stay excluded; the
+    /// defaults stand in only when there is no live settings file either.
+    public mutating func loadSettings(supportDirectory: URL = AppPaths.supportDirectory()) -> SensingSettings {
+        guard settingsGiven else { return SettingsStore(url: settingsSource).load() }
+        do {
+            return try SettingsStore(url: settingsSource).loadStrictly()
+        } catch {
+            refusals.append("\(LaunchFiles.settingsFlag) could not use \(settingsSource.path): \(error.localizedDescription)")
+            settingsSource = SettingsStore.defaultURL(in: supportDirectory)
+            settingsGiven = false
+            return SettingsStore(url: settingsSource).load()
+        }
+    }
+
+    /// Makes the replay's data directory its own for as long as the returned
+    /// lock lives: nothing for a live or recording launch. When another
+    /// running replay holds the directory, this launch takes a new per-launch
+    /// directory instead and says why. A per-launch launch also removes
+    /// finished per-launch directories past the newest `keptFinishedLaunches`.
+    public mutating func claim(
+        clientMode: ModelClientMode,
+        supportDirectory: URL = AppPaths.supportDirectory(),
+        launchName: String = LaunchFiles.launchName()
+    ) -> DataDirectoryLock? {
+        guard clientMode.isOffline else { return nil }
+        do {
+            let lock = try DataDirectoryLock.acquire(in: dataDirectory)
+            if isPerLaunch {
+                LaunchFiles.pruneFinishedLaunches(in: AppPaths.replayRoot(in: supportDirectory), keeping: LaunchFiles.keptFinishedLaunches)
+            }
+            return lock
+        } catch DataDirectoryLock.Failure.inUse(let pid) where !isPerLaunch {
+            let holder = pid.map { "pid \($0)" } ?? "another process"
+            refusals.append("\(dataDirectory.path) is in use by another Mentor (\(holder)), so this replay uses a new directory")
+            dataDirectory = AppPaths.replayRoot(in: supportDirectory).appendingPathComponent(launchName, isDirectory: true)
+            isPerLaunch = true
+            return claim(clientMode: clientMode, supportDirectory: supportDirectory, launchName: launchName)
+        } catch {
+            refusals.append("could not hold \(dataDirectory.path) for this replay: \(error)")
+            return nil
+        }
+    }
+
+    /// A per-launch directory's name: this process's id, then eight random
+    /// hex digits, so a script can find its replay's files by pid.
+    public static func launchName(pid: Int32 = getpid()) -> String {
+        "launch-\(pid)-\(UUID().uuidString.prefix(8).lowercased())"
+    }
+
+    static func isLaunchName(_ name: String) -> Bool {
+        name.wholeMatch(of: /launch-[0-9]+-[0-9a-f]{8}/) != nil
+    }
+
+    /// Removes the per-launch directories in `root` that no running replay
+    /// holds, past the newest `keeping` by creation date. Anything else in
+    /// `root` is left alone.
+    public static func pruneFinishedLaunches(in root: URL, keeping: Int) {
+        let manager = FileManager.default
+        guard let names = try? manager.contentsOfDirectory(atPath: root.path) else { return }
+        var finished: [(url: URL, created: Date, lock: DataDirectoryLock)] = []
+        for name in names where isLaunchName(name) {
+            let url = root.appendingPathComponent(name, isDirectory: true)
+            guard let lock = try? DataDirectoryLock.acquire(in: url, pid: nil, create: false) else { continue }
+            let created = (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+            finished.append((url, created, lock))
+        }
+        for entry in finished.sorted(by: { $0.created > $1.created }).dropFirst(keeping) {
+            try? manager.removeItem(at: entry.url)
+        }
+    }
+}
+
+/// An exclusive hold on a replay's data directory for the life of the process:
+/// an advisory `flock` on `mentor.pid` inside it, which holds the pid. The
+/// system lets go of it when the process exits, however it exits, so a crash
+/// never leaves a directory held.
+public final class DataDirectoryLock: @unchecked Sendable {
+    public static let fileName = "mentor.pid"
+
+    public enum Failure: Error, Equatable {
+        /// Another process holds it; its pid when the file names one.
+        case inUse(pid: Int32?)
+        case system(String)
+    }
+
+    public let url: URL
+    private let descriptor: Int32
+
+    private init(url: URL, descriptor: Int32) {
+        self.url = url
+        self.descriptor = descriptor
+    }
+
+    deinit {
+        close(descriptor)
+    }
+
+    /// Takes the hold, creating the directory unless `create` is false, and
+    /// writes `pid` into the file; a nil `pid` only checks that no one holds
+    /// it and leaves the file as it was.
+    public static func acquire(in directory: URL, pid: Int32? = getpid(), create: Bool = true) throws -> DataDirectoryLock {
+        if create {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        let url = directory.appendingPathComponent(fileName)
+        let descriptor = open(url.path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)
+        guard descriptor >= 0 else { throw Failure.system("cannot open \(url.path): \(String(cString: strerror(errno)))") }
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            let reason = errno
+            let holder = (try? String(contentsOf: url, encoding: .utf8)).flatMap { Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+            close(descriptor)
+            if reason == EWOULDBLOCK { throw Failure.inUse(pid: holder) }
+            throw Failure.system("cannot lock \(url.path): \(String(cString: strerror(reason)))")
+        }
+        guard let pid else { return DataDirectoryLock(url: url, descriptor: descriptor) }
+        let text = Array("\(pid)\n".utf8)
+        guard ftruncate(descriptor, 0) == 0, pwrite(descriptor, text, text.count, 0) == text.count else {
+            let reason = String(cString: strerror(errno))
+            close(descriptor)
+            throw Failure.system("cannot write \(url.path): \(reason)")
+        }
+        return DataDirectoryLock(url: url, descriptor: descriptor)
+    }
+}

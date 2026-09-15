@@ -29,7 +29,7 @@ public actor Journal {
     private let decoder = JSONDecoder()
 
     /// `~/Library/Application Support/mentor/journal.sqlite`, or the same file
-    /// in another data directory (see `AppPaths.dataDirectory(for:)`).
+    /// in another data directory (see `LaunchFiles`).
     public static func defaultURL(in directory: URL = AppPaths.supportDirectory()) -> URL {
         directory.appendingPathComponent("journal.sqlite")
     }
