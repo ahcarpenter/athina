@@ -259,6 +259,8 @@ private struct NowPane: View {
 
                 MentorCard()
 
+                UnderstandingCard()
+
                 Card(title: "Focused element") {
                     if let focus = state.focus, !focus.isExcluded, focus.focusedRole != nil {
                         Field(label: "Role", value: [focus.focusedRole, focus.focusedSubrole].compactMap { $0 }.joined(separator: " / "))
@@ -359,7 +361,7 @@ struct Card<Content: View>: View {
     }
 }
 
-private struct Field: View {
+struct Field: View {
     let label: String
     let value: String
     var lineLimit: Int? = nil
@@ -653,6 +655,7 @@ private struct TimelineRow: View {
             case .suggested: "lightbulb.fill"
             case .feedback: "hand.thumbsup"
             case .talkBack: "mic"
+            case .understanding: "brain"
             }
         }
     }
@@ -668,6 +671,7 @@ private struct TimelineRow: View {
             case .suggested: .yellow
             case .feedback: .green
             case .talkBack: .teal
+            case .understanding: .teal
             default: .secondary
             }
         }
@@ -973,7 +977,7 @@ private struct CallLogRow: View {
             Text(call.tier.label)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(tierColor)
-                .frame(width: 46, alignment: .leading)
+                .frame(width: 78, alignment: .leading)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(call.outcome.label)
@@ -1016,6 +1020,7 @@ private struct CallLogRow: View {
         case .triage: .blue
         case .mentor: .purple
         case .followUp: .teal
+        case .understanding: .teal
         case .test: .secondary
         }
     }

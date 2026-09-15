@@ -28,6 +28,9 @@ public enum ModelCatalog {
     public static let triageChoices: [ClaudeModel] = [haiku45, sonnet5, opus5, fable51]
     /// Models offered for the mentor tier.
     public static let mentorChoices: [ClaudeModel] = [sonnet5, opus5, fable51]
+    /// Models offered for the understanding refresh. Rewriting the record is
+    /// summarising work, so the cheap model is offered here as well.
+    public static let understandingChoices: [ClaudeModel] = [haiku45, sonnet5, opus5, fable51]
 
     public static func model(id: String) -> ClaudeModel? {
         all.first { $0.id == id }

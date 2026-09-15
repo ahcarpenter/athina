@@ -4,7 +4,8 @@ import Testing
 
 /// The mentor loop on a replay client: replays are journaled as replays, cost
 /// nothing, never touch the key or the live files, and the committed fixture
-/// set carries the whole path from triage to a suggestion and its feedback.
+/// set carries the whole path from triage to a suggestion and its feedback,
+/// the understanding each mentor reply rewrites, and a periodic refresh.
 @Suite struct ReplayLoopTests {
     /// Counts reads, so a test can prove the keychain is never asked.
     private final class CountingKeyStore: KeyStore, @unchecked Sendable {
@@ -24,10 +25,15 @@ import Testing
         let input: AsyncStream<SensingEvent>.Continuation
         let output: AsyncStream<MentorEvent>
 
+        /// On a calendar where this instant is noon, so an understanding
+        /// written moments ago is never expired by a day turning over mid-test.
         init(journal: Journal, client: any ClaudeClient, keyStore: any KeyStore = InMemoryKeyStore(), settings: MentorSettings = MentorSettings()) async {
             let (stream, continuation) = AsyncStream<SensingEvent>.makeStream()
             input = continuation
-            loop = MentorLoop(settings: settings, journal: journal, client: client, keyStore: keyStore, events: stream)
+            loop = MentorLoop(
+                settings: settings, journal: journal, client: client, keyStore: keyStore, events: stream,
+                calendar: MentorLoopTests.middayCalendar
+            )
             output = await loop.events()
             await loop.start()
             input.yield(.modeChanged(.watching))
@@ -374,6 +380,16 @@ import Testing
             mentor.contains { ($0.suggestion?.confidence ?? 0) >= MentorSettings().minimumConfidence },
             "a mentor recording must carry a suggestion that is shown"
         )
+        #expect(
+            mentor.allSatisfy { $0.updatedUnderstanding.map { !$0.isEmpty } ?? false },
+            "every mentor recording must rewrite the understanding"
+        )
+        let refreshEntries = loaded.filter { $0.fixture.identity.kind == ModelTier.understanding.rawValue }
+        let refreshes = refreshEntries.compactMap { entry in
+            (try? entry.fixture.result.get()).flatMap { MentorLoop.decode(UnderstandingVerdict.self, from: $0) }
+        }
+        #expect(!refreshes.isEmpty && refreshes.count == refreshEntries.count, "every understanding recording must decode as a refresh")
+        #expect(refreshes.allSatisfy { $0.understanding.primaryGoal != nil }, "an understanding recording must infer a goal")
 
         for entry in loaded {
             let text = try String(contentsOf: directory.appendingPathComponent(entry.name), encoding: .utf8)
@@ -406,6 +422,7 @@ import Testing
             // debounce never holds a moment and the cycle carries on.
             let h = await Harness(journal: journal, client: client, settings: settings)
             let verdict = try #require((try? entry.fixture.result.get()).flatMap { MentorLoop.decode(TriageVerdict.self, from: $0) })
+            let standing = await h.loop.currentUnderstanding()
             let before = await client.served.count
             let expected = before + (verdict.worthALook ? 2 : 1)
             await h.observe(
@@ -424,12 +441,23 @@ import Testing
                 nextMentor += 1
                 #expect(served[before + 1].fixtureName == mentorEntry.name)
                 let reply = try #require((try? mentorEntry.fixture.result.get()).flatMap { MentorLoop.decode(MentorVerdict.self, from: $0) })
-                if let payload = reply.suggestion, payload.confidence >= settings.minimumConfidence {
+                // The reply rewrote the understanding on the way past, for free.
+                let rewritten = try #require(await h.loop.currentUnderstanding())
+                #expect(rewritten.revision == (standing?.revision ?? 0) + 1)
+                #expect(rewritten.source == .mentorCall)
+                #expect(rewritten.cost == 0)
+                let goalWasStanding = standing?.content.primaryGoal != nil
+                if let payload = reply.suggestion, payload.confidence >= settings.minimumConfidence,
+                   payload.category.judgesAgainstGoal, !goalWasStanding {
+                    // A goal kind with no goal to judge against is never shown.
+                    #expect(status.lastMentor?.outcome == .suppressed)
+                } else if let payload = reply.suggestion, payload.confidence >= settings.minimumConfidence {
                     try #require(status.lastMentor?.outcome == .suggested)
                     let suggestion = try #require(await h.nextSuggestion())
                     #expect(suggestion.title == payload.title.withPlainDashes)
                     #expect(suggestion.body == payload.body.withPlainDashes)
                     #expect(suggestion.category == payload.category)
+                    #expect((suggestion.judgedGoal != nil) == payload.category.judgesAgainstGoal)
                     let answered = await h.loop.recordFeedback(suggestionID: suggestion.id, feedback: .tellMeMore)
                     #expect(answered?.feedback == .tellMeMore)
                     shown.append(suggestion)
@@ -463,5 +491,66 @@ import Testing
         let events = try await journal.recentEvents(limit: 50)
         #expect(events.filter { $0.kind == .suggested }.count == shown.count)
         #expect(events.filter { $0.kind == .feedback }.count == shown.count)
+    }
+
+    /// The periodic refresh on the loop the app runs, answered by the
+    /// committed understanding recording: a whole interval with no mentor call
+    /// buys one call of the `understanding` kind, and its reply becomes the
+    /// next revision, replayed, never billed, and never counted as spend.
+    @Test func theCommittedUnderstandingFixtureRefreshesTheRecord() async throws {
+        let directory = try Self.committedFixturesDirectory()
+        let client = try ReplayClaudeClient.load(from: directory, allowStale: false)
+        let entry = try #require(client.entries.first { $0.fixture.identity.kind == ModelTier.understanding.rawValue })
+        let verdict = try #require((try? entry.fixture.result.get()).flatMap { MentorLoop.decode(UnderstandingVerdict.self, from: $0) })
+
+        var settings = MentorSettings()
+        settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
+        // A record written longer ago than the interval, with work all the way
+        // since, so the refresh is due.
+        let journal = try Journal.inMemory()
+        let activeUse = settings.understandingRefreshInterval + 60
+        let written = try await journal.record(UnderstandingRecord.first(
+            content: Understanding(
+                goals: [Understanding.Goal(goal: "rename the trip photos", evidence: "a list of mv commands", confidence: 0.7)],
+                timeline: ["opened the rename list"]
+            ),
+            at: Date().addingTimeInterval(-activeUse),
+            model: "claude-sonnet-5", source: .mentorCall, cost: 0, promptVersion: MentorPrompts.version
+        ))
+        try await journal.storeRefreshPeriod(RefreshPeriod(
+            startedAt: written.updatedAt, activeUse: activeUse, countedAt: written.updatedAt.addingTimeInterval(activeUse)
+        ))
+        let h = await Harness(journal: journal, client: client, settings: settings)
+
+        // The floor cadence is not a change moment, so triage holds and only
+        // the refresh gate can make a call.
+        await h.observe(
+            Fixtures.observation(id: 1, at: Date(), reason: .floor),
+            calls: { await client.served.count }, expectCalls: 1
+        )
+        for _ in 0..<250 where await h.loop.currentStatus().lastRefresh == nil {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+
+        let served = await client.served
+        #expect(served.map(\.call) == [CallIdentity(kind: ModelTier.understanding.rawValue, promptVersion: MentorPrompts.version)])
+        #expect(served.first?.fixtureName == entry.name)
+        let status = await h.loop.currentStatus()
+        #expect(status.lastGate?.hold == .notAChangeMoment(.floor))
+        let call = try #require(status.lastRefresh)
+        #expect(call.tier == .understanding)
+        #expect(call.outcome == .refreshed)
+        #expect(call.detail == verdict.reason.withPlainDashes)
+        #expect(call.replayed && call.cost == 0)
+        #expect(call.model == (try entry.fixture.result.get()).model)
+        #expect(status.spendThisHour == 0)
+        #expect(status.callsThisHour == 0)
+
+        let record = try #require(await h.loop.currentUnderstanding())
+        #expect(record.revision == 2)
+        #expect(record.source == .periodic)
+        #expect(record.cost == 0 && record.cumulativeCost == 0)
+        #expect(record.content == verdict.understanding.bounded(toTokens: settings.understandingTokenBudget))
+        #expect(try await journal.recentModelCalls(limit: 5).map(\.tier) == [.understanding])
     }
 }

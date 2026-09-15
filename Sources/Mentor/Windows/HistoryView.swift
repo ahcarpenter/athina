@@ -171,6 +171,14 @@ private struct SuggestionDetail: View {
                         .font(.body)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
+                    if let goal = suggestion.judgedGoal, !goal.isEmpty {
+                        Label("Judged against: \(goal)", systemImage: "target")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 2)
+                    }
                 }
                 Divider()
                 Text(suggestion.explanation)

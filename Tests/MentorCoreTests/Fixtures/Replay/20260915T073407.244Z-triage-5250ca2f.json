@@ -1,0 +1,77 @@
+{
+  "cost" : 0.001263,
+  "format" : 1,
+  "kind" : "triage",
+  "latency" : 1.7556057919999999,
+  "model" : "claude-haiku-4-5-20251001",
+  "promptVersion" : 10,
+  "recordedAt" : "2026-09-15T07:34:07Z",
+  "request" : {
+    "max_tokens" : 200,
+    "messages" : [
+      {
+        "content" : [
+          {
+            "text" : "Time: 03:34:07\nApp: TextEdit (com.apple.TextEdit)\nWindow: cleanup-script.txt\nTrigger: focus change\nAccessibility: TextEdit: window \"cleanup-script.txt\"; focus AXTextArea; text \"Build machine cleanup, about to paste this into the terminal and run it⏎⏎#!/bin/bash⏎# Free disk space on the build machine before the nightly run.⏎set -u⏎⏎BUIL…\"\n\nStanding understanding: none yet, so judge this snapshot on its own.\n\nRecent events:\n- 35s ago: started\n- 35s ago: app switch TextEdit\n- 35s ago: permissions (screen granted, accessibility granted, microphone granted, speech granted)\n- 35s ago: app switch UserNotificationCenter (from TextEdit)\n- 32s ago: app switch TextEdit (from UserNotificationCenter)\n- 0s ago: window switch TextEdit (cleanup-script.txt)\n\nScreen text (OCR, top to bottom):\n●●●\nBuild machine cleanup, about to paste this into the terminal and run it\nBuild machine cleanup, about to paste this into the terminal and run it\n#!/bin/bash\n# Free disk space on the build machine before the nightly run.\nset -u\nBUILD_ROOT=$(cat ~/.config/nightly/build-root 2>/dev/null)\necho \"Removing old build output under $BUILD_ROOT\"\nrm -rf $BUILD_ROOT/*\necho \"Emptying the download cache\"\nrm -rf ~/Library/Caches/nightly/downloads/*\necho \"Done. Free space now:\"\ndf -h /",
+            "type" : "text"
+          }
+        ],
+        "role" : "user"
+      }
+    ],
+    "model" : "claude-haiku-4-5-20251001",
+    "output_config" : {
+      "format" : {
+        "schema" : {
+          "additionalProperties" : false,
+          "properties" : {
+            "reason" : {
+              "type" : "string"
+            },
+            "worth_a_look" : {
+              "type" : "boolean"
+            }
+          },
+          "required" : [
+            "worth_a_look",
+            "reason"
+          ],
+          "type" : "object"
+        },
+        "type" : "json_schema"
+      }
+    },
+    "system" : [
+      {
+        "cache_control" : {
+          "type" : "ephemeral"
+        },
+        "text" : "You are the triage stage of Mentor, a macOS app that watches what its user is doing and, rarely, offers a live suggestion the way an expert sitting beside them would. You do not write suggestions. You decide whether the stronger mentor model should look at this moment at all.\n\nYou receive one snapshot as text: the frontmost app and window, what the accessibility API says is focused, the screen text recognized by OCR (top to bottom, so layout is lost), a short list of recent events, and, when one exists, a one-paragraph standing understanding of what this user appears to be working toward. The mentor model is expensive and every look costs money, so most snapshots must be a no.\n\nAnswer worth a look only when the snapshot shows a concrete sign that a better approach may exist or that the user may be missing something, for example:\n- repetitive manual work that tools usually automate: retyping, copying between windows, hand-formatting\n- an error, warning, failing build or test, or a confusing state the user seems to be working around instead of fixing\n- a workflow with a well-known faster or more reliable path: a long command sequence that has a shortcut, a manual step that a feature covers\n- a decision point in design or code where common pitfalls apply\n- when a standing understanding is given: the action on screen conflicts with the goal it states. It will not get them there, an available alternative would get them there for less work, or it will get them there and bring a consequence they would not want. Judge against the goal, not against your own preferences, and stay silent when the action is simply a different reasonable path to the same goal.\n\nAnswer not worth a look when:\n- the user is reading, watching, browsing, chatting, or otherwise consuming rather than doing\n- the screen is a transition: loading, a blank document, a login or launch screen, an open menu\n- the content looks personal, financial, medical, or otherwise private\n- the snapshot is routine, competent work with nothing that stands out\n- you are unsure. Silence is the default.\n\nReply with JSON only: {\"worth_a_look\": boolean, \"reason\": string}. Keep the reason to one short sentence in plain text with plain hyphens, naming the concrete sign you saw, or why you passed.",
+        "type" : "text"
+      }
+    ]
+  },
+  "response" : {
+    "content" : [
+      {
+        "text" : "{\"reason\": \"user is about to execute a destructive bash script (rm -rf commands) without visible safeguards or review\", \"worth_a_look\": true}",
+        "type" : "text"
+      }
+    ],
+    "id" : "msg_011Cf4qa19L4AH331K7ciQvL",
+    "model" : "claude-haiku-4-5-20251001",
+    "stop_reason" : "end_turn",
+    "usage" : {
+      "cache_creation_input_tokens" : 0,
+      "cache_read_input_tokens" : 0,
+      "input_tokens" : 1063,
+      "output_tokens" : 40
+    }
+  },
+  "usage" : {
+    "cache_creation_input_tokens" : 0,
+    "cache_read_input_tokens" : 0,
+    "input_tokens" : 1063,
+    "output_tokens" : 40
+  }
+}

@@ -368,6 +368,7 @@ final class AppState {
 
     func clearJournal() async {
         do {
+            await mentor?.resetUnderstanding()
             try await pipeline?.clearJournal()
             timeline.removeAll()
             latestObservation = nil
@@ -382,6 +383,13 @@ final class AppState {
         } catch {
             journalError = "Could not clear the journal: \(error)"
         }
+    }
+
+    /// Forgets what Mentor has worked out so far. The next call starts a new
+    /// understanding from what is actually happening.
+    func resetUnderstanding() async {
+        await mentor?.resetUnderstanding()
+        AppState.log.notice("understanding reset")
     }
 
     func refreshJournalStats() async {
@@ -1125,6 +1133,19 @@ final class AppState {
         case .outside(let exclusion):
             return "Context: out, \(exclusion.label)"
         }
+    }
+
+    /// One line for the menu: what Mentor currently thinks the user is working
+    /// toward, so the inference is visible without opening anything. A goal
+    /// sentence can run long and a menu item widens to fit it, so it is cut
+    /// here; the debug panel shows the whole thing. Nil, so the menu shows no
+    /// goal line, while Mentor is off or has no key and nothing works one out.
+    var understandingLine: String? {
+        guard mentorStatus.availability.formsUnderstanding else { return nil }
+        guard let goal = mentorStatus.understanding?.content.primaryGoal else {
+            return "Goal: still working it out"
+        }
+        return "Goal: \(Formatting.clipped(goal.goal, to: 64))"
     }
 
     // MARK: Private

@@ -22,26 +22,28 @@ enum Snapshots {
         let replay = AppState.sampleReplay()
         let specs: [(name: String, size: CGSize, view: AnyView, state: AppState)] = [
             ("permissions", CGSize(width: 560, height: 760), AnyView(PermissionsView()), state),
-            ("debug-panel", CGSize(width: 1180, height: 760), AnyView(DebugPanelView()), state),
-            ("debug-panel-calls", CGSize(width: 1180, height: 760), AnyView(DebugPanelView(initialSidePage: .calls)), state),
+            ("debug-panel", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), state),
+            ("debug-panel-calls", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), state),
             // The Mentor tab is longer than any window macOS will open, so it
-            // renders as tall as a screen allows and its contexts sections get
-            // a render of their own.
+            // renders as tall as a screen allows and the sections below its
+            // fold, the contexts and the understanding, get renders of their own.
             ("settings-mentor", CGSize(width: 600, height: 1040), AnyView(SettingsView(initialTab: .mentor)), state),
             ("settings-mentor-contexts", CGSize(width: 600, height: 800), AnyView(MentorshipContextsPreview()), state),
             ("settings-mentor-voice", CGSize(width: 600, height: 520), AnyView(VoiceSectionPreview()), state),
+            ("settings-understanding", CGSize(width: 600, height: 420), AnyView(SampleUnderstandingSettings()), state),
             ("settings-cadence", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .cadence)), state),
             ("settings-frames", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .frames)), state),
             ("settings-journal", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .journal)), state),
             ("settings-privacy", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .privacy)), state),
-            ("history", CGSize(width: 860, height: 520), AnyView(HistoryView(initialSelection: 3)), state),
+            // The side-effect suggestion, so the goal it was judged against shows.
+            ("history", CGSize(width: 860, height: 520), AnyView(HistoryView(initialSelection: 5)), state),
             ("toast", CGSize(width: ToastController.width + 2, height: 170), AnyView(SampleToast(expanded: false)), state),
             ("toast-expanded", CGSize(width: ToastController.width + 2, height: 420), AnyView(SampleToast(expanded: true)), state),
-            ("toast-listening", CGSize(width: ToastController.width + 2, height: 260), AnyView(SampleToast(expanded: false, talkBack: .listening(partial: "does that work with tags as"))), state),
-            ("toast-answered", CGSize(width: ToastController.width + 2, height: 360), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: Date(), suggestionID: 4))), state),
+            ("toast-listening", CGSize(width: ToastController.width + 2, height: 260), AnyView(SampleToast(expanded: false, talkBack: .listening(partial: "does that work with tags as"), suggestionID: 4)), state),
+            ("toast-answered", CGSize(width: ToastController.width + 2, height: 360), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: Date(), suggestionID: 4), suggestionID: 4)), state),
             ("callout", CGSize(width: 900, height: 620), AnyView(SampleCallout()), state),
-            ("debug-panel-replay", CGSize(width: 1180, height: 760), AnyView(DebugPanelView()), replay),
-            ("debug-panel-calls-replay", CGSize(width: 1180, height: 760), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
+            ("debug-panel-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), replay),
+            ("debug-panel-calls-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
             ("settings-mentor-replay", CGSize(width: 600, height: 560), AnyView(SettingsView(initialTab: .mentor)), replay),
         ]
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
@@ -236,17 +238,19 @@ extension AppState {
         state.timeline = timeline
 
         var suggestions = SampleSuggestions.make(now: now)
-        // The newest suggestion points at the capture line of the sample frame.
-        if let block = sampleFrame.blocks.first(where: { $0.text.contains("capturer.capture") }) {
-            suggestions[0].region = CalloutRegion(rect: block.imageRect.insetBy(dx: -6, dy: -5), note: "this capture call")
-            suggestions[0].calloutShown = true
+        // The suggestion about the capture path points at the capture line of the sample frame.
+        let region = sampleFrame.blocks.first { $0.text.contains("capturer.capture") }
+            .map { CalloutRegion(rect: $0.imageRect.insetBy(dx: -6, dy: -5), note: "this capture call") }
+        for index in suggestions.indices where suggestions[index].id == 4 {
+            suggestions[index].region = region
+            suggestions[index].calloutShown = region != nil
         }
         state.suggestionHistory = suggestions
         state.activeSuggestion = suggestions.first
         state.followUps = SampleSuggestions.followUps(now: now, suggestionID: 3) + SampleSuggestions.followUps(now: now, suggestionID: 4)
         state.lastCallout = CalloutRecord(
-            at: now.addingTimeInterval(-38), suggestionID: 4, region: suggestions[0].region ?? CalloutRegion(rect: .zero, note: ""),
-            placement: suggestions[0].region.map { CalloutPlacement(displayID: 1, screenRect: CalloutAnchor.screenRect(for: $0.rect, in: frame) ?? .zero, note: $0.note) },
+            at: now.addingTimeInterval(-38), suggestionID: 4, region: region ?? CalloutRegion(rect: .zero, note: ""),
+            placement: region.map { CalloutPlacement(displayID: 1, screenRect: CalloutAnchor.screenRect(for: $0.rect, in: frame) ?? .zero, note: $0.note) },
             status: .shown
         )
         state.lastTranscript = TranscriptRecord(at: now.addingTimeInterval(-20), text: "does that work with tags as well", handling: "asked the mentor")
@@ -264,6 +268,10 @@ extension AppState {
             lastTriage: state.callLog.first { $0.tier == .triage },
             lastMentorHold: nil,
             lastMentor: state.callLog.first { $0.tier == .mentor },
+            understanding: SampleSuggestions.understanding(now: now),
+            lastRefreshHold: MentorStatus.RefreshHoldRecord(at: now.addingTimeInterval(-2.4), hold: .notDue(until: now.addingTimeInterval(511))),
+            lastRefresh: state.callLog.first { $0.tier == .understanding },
+            nextRefreshAt: now.addingTimeInterval(511),
             spendThisHour: 0.1834,
             hourStart: SpendMeter.hourStart(of: now),
             callsThisHour: 23,
@@ -336,15 +344,28 @@ struct VoiceSectionPreview: View {
     }
 }
 
+/// The Understanding settings section on its own, so it is reviewable without
+/// scrolling the Mentor tab past what a window can show.
+struct SampleUnderstandingSettings: View {
+    var body: some View {
+        Form {
+            UnderstandingSection()
+        }
+        .formStyle(.grouped)
+    }
+}
+
 /// A toast rendered on its own, for snapshots.
 struct SampleToast: View {
     let expanded: Bool
     var talkBack: TalkBackState = .idle
     var exchange: [FollowUp] = []
+    /// The sample suggestion to show; the newest when nil.
+    var suggestionID: Int64?
 
     var body: some View {
         let model = ToastModel()
-        model.suggestion = SampleSuggestions.make(now: Date()).first
+        model.suggestion = SampleSuggestions.make(now: Date()).first { suggestionID == nil || $0.id == suggestionID }
         model.expanded = expanded
         model.talkBack = talkBack
         model.exchange = exchange
@@ -401,8 +422,61 @@ enum SampleSuggestions {
         ),
     ]
 
+    static func understanding(now: Date) -> UnderstandingRecord {
+        UnderstandingRecord(
+            id: 9,
+            updatedAt: now.addingTimeInterval(-40),
+            startedAt: now.addingTimeInterval(-7300),
+            revision: 7,
+            promptVersion: MentorPrompts.version,
+            model: "claude-opus-5",
+            source: .mentorCall,
+            cost: 0,
+            cumulativeCost: 0.0412,
+            content: Understanding(
+                goals: [
+                    Understanding.Goal(
+                        goal: "Get the mentor app's capture path fast enough to leave running all day",
+                        evidence: "Two hours in SensingPipeline.swift and CaptureScheduler.swift, repeated make measure runs, and a comment about the 250 ms AX timeout.",
+                        confidence: 0.84
+                    ),
+                    Understanding.Goal(
+                        goal: "Keep the phase-two loop's spend under a dollar an hour",
+                        evidence: "The spend cap was edited twice and the call log is checked after each mentor call.",
+                        confidence: 0.51
+                    ),
+                ],
+                timeline: [
+                    "Read the ScreenCaptureKit documentation in Safari, looking at SCScreenshotManager.",
+                    "Moved to Xcode and rewrote performCapture to re-check the frontmost app after OCR.",
+                    "Ran make measure twice; CPU sat near 0.4% and memory near 62 MB.",
+                    "Went back to the AX reads in performCapture after the second measure run.",
+                ],
+                mentorHistory: [
+                    "Suggested swift test --filter to run one suite; they read the full explanation.",
+                    "Suggested SCScreenshotManager.captureImage(in:); they answered Not now.",
+                    "Suggested reading focus once per capture; still on screen, no answer yet.",
+                ],
+                openConcerns: [
+                    "The size-cap sweep can delete today's text while older thumbnails survive.",
+                    "No measurement yet of what the OCR step costs on a dense screen.",
+                ]
+            )
+        )
+    }
+
     static func make(now: Date) -> [Suggestion] {
         [
+            Suggestion(
+                id: 5, timestamp: now.addingTimeInterval(-12), bundleID: "com.github.wez.wezterm", appName: "WezTerm",
+                windowTitle: "zsh - mentor", category: .unwantedSideEffect,
+                title: "tccutil reset will drop both grants, not just the stale one",
+                body: "Resetting ScreenCapture clears the grant for every build of this bundle id, so the app will ask again from scratch and the running copy stops capturing until you re-grant.",
+                explanation: "tccutil reset ScreenCapture com.ahcarpenter.mentor removes the TCC record for that service and bundle identifier outright. That does fix a grant bound to an old code requirement, which is what you are after, but it also means the currently running Mentor loses Screen Recording immediately and falls back to accessibility-only mode until you approve it again in System Settings.\n\nIf the goal is only to re-bind the requirement, quit Mentor first, run the reset, then launch the freshly signed build so the new grant is made against the bundle-identifier requirement that scripts/bundle.sh writes.",
+                confidence: 0.78,
+                judgedGoal: "Get the mentor app's capture path fast enough to leave running all day",
+                observationID: 128, model: "claude-opus-5", promptVersion: MentorPrompts.version
+            ),
             Suggestion(
                 id: 4, timestamp: now.addingTimeInterval(-40), bundleID: "com.apple.dt.Xcode", appName: "Xcode",
                 windowTitle: "SensingPipeline.swift - mentor", category: .approach,
@@ -476,10 +550,17 @@ enum SampleSuggestions {
     static func calls(now: Date) -> [ModelCallRecord] {
         var calls: [ModelCallRecord] = [
             ModelCallRecord(
-                id: 62, timestamp: now.addingTimeInterval(-20), tier: .followUp, model: "claude-fable-5-1",
+                id: 63, timestamp: now.addingTimeInterval(-20), tier: .followUp, model: "claude-fable-5-1",
                 promptVersion: MentorPrompts.version, promptCharacters: 3_960, imageBytes: 0,
                 usage: Usage(inputTokens: 1_240, outputTokens: 160, cacheCreationInputTokens: 0, cacheReadInputTokens: 410),
                 cost: 0.0212, latency: 4.1, outcome: .answered, detail: "Yes. Tag the tests you care about with a Tag you declare once, then run swift test --filter with the tag name"
+            ),
+            ModelCallRecord(
+                id: 62, timestamp: now.addingTimeInterval(-389), tier: .understanding, model: "claude-opus-5",
+                promptVersion: MentorPrompts.version, promptCharacters: 11_240, imageBytes: 0,
+                usage: Usage(inputTokens: 2_980, outputTokens: 540, cacheCreationInputTokens: 0, cacheReadInputTokens: 410),
+                cost: 0.0303, latency: 7.8, outcome: .refreshed,
+                detail: "Second goal about the spend cap weakened; they have not looked at the call log since"
             ),
             ModelCallRecord(
                 id: 61, timestamp: now.addingTimeInterval(-40), tier: .mentor, model: "claude-fable-5-1",

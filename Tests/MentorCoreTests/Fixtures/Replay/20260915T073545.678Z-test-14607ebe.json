@@ -2,10 +2,10 @@
   "cost" : 3.4e-05,
   "format" : 1,
   "kind" : "test",
-  "latency" : 0.572185083,
+  "latency" : 1.10584575,
   "model" : "claude-haiku-4-5-20251001",
-  "promptVersion" : 5,
-  "recordedAt" : "2026-09-15T00:08:15Z",
+  "promptVersion" : 10,
+  "recordedAt" : "2026-09-15T07:35:45Z",
   "request" : {
     "max_tokens" : 16,
     "messages" : [
@@ -31,7 +31,7 @@
         "type" : "text"
       }
     ],
-    "id" : "msg_011Cf4FZzUgtHQHAPcV51M9W",
+    "id" : "msg_011Cf4qhHpNNvnrfCEtVd6F8",
     "model" : "claude-haiku-4-5-20251001",
     "stop_reason" : "end_turn",
     "usage" : {

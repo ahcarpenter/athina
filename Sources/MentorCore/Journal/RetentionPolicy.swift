@@ -47,6 +47,7 @@ public struct RetentionResult: Equatable, Sendable {
     public var suggestionsDeleted: Int
     public var followUpsDeleted: Int
     public var modelCallsDeleted: Int
+    public var understandingDeleted: Int
     public var bytesBefore: Int64
     public var bytesAfter: Int64
 
@@ -57,6 +58,7 @@ public struct RetentionResult: Equatable, Sendable {
         suggestionsDeleted: Int = 0,
         followUpsDeleted: Int = 0,
         modelCallsDeleted: Int = 0,
+        understandingDeleted: Int = 0,
         bytesBefore: Int64 = 0,
         bytesAfter: Int64 = 0
     ) {
@@ -66,11 +68,13 @@ public struct RetentionResult: Equatable, Sendable {
         self.suggestionsDeleted = suggestionsDeleted
         self.followUpsDeleted = followUpsDeleted
         self.modelCallsDeleted = modelCallsDeleted
+        self.understandingDeleted = understandingDeleted
         self.bytesBefore = bytesBefore
         self.bytesAfter = bytesAfter
     }
 
     public var deletedAnything: Bool {
-        thumbnailsDeleted + observationsDeleted + eventsDeleted + suggestionsDeleted + followUpsDeleted + modelCallsDeleted > 0
+        thumbnailsDeleted + observationsDeleted + eventsDeleted + suggestionsDeleted + followUpsDeleted
+            + modelCallsDeleted + understandingDeleted > 0
     }
 }

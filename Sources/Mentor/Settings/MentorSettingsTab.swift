@@ -26,7 +26,11 @@ struct MentorSettingsTab: View {
                     tier: "Mentor", choices: ModelCatalog.mentorChoices,
                     model: $state.settings.mentor.mentorModel, effort: $state.settings.mentor.mentorEffort
                 )
-                Text("Triage runs on change moments and decides whether the mentor model should look. Effort sets how much the model thinks before answering and is sent only to models that accept it. Both system prompts are cached, so repeated calls pay the cache-read rate for them.")
+                TierRows(
+                    tier: "Understanding", choices: ModelCatalog.understandingChoices,
+                    model: $state.settings.mentor.understandingModel, effort: $state.settings.mentor.understandingEffort
+                )
+                Text("Triage runs on change moments and decides whether the mentor model should look. The understanding tier only runs when no mentor call has refreshed the record recently. Effort sets how much the model thinks before answering and is sent only to models that accept it. Every system prompt is cached, so repeated calls pay the cache-read rate for them.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -72,6 +76,8 @@ struct MentorSettingsTab: View {
             } footer: {
                 Text("The triage model always receives text only: app and window, the accessibility summary, the latest screen's recognized text, and a short event summary. Excluded apps and secure fields are never captured, so they never reach either model.")
             }
+
+            UnderstandingSection()
 
             Section("Delivery") {
                 NumberRow(
@@ -178,7 +184,7 @@ struct VoiceSection: View {
 
 /// A tier's model picker and effort picker. The effort picker is disabled,
 /// with a note, when the chosen model rejects the effort parameter.
-private struct TierRows: View {
+struct TierRows: View {
     let tier: String
     let choices: [ClaudeModel]
     @Binding var model: String
