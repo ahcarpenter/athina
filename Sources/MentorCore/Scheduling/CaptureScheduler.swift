@@ -19,8 +19,11 @@ public struct CaptureScheduler: Equatable, Sendable {
     public private(set) var lastCaptureAt: Date?
     public private(set) var lastInputAt: Date?
     public private(set) var pendingFocusChangeAt: Date?
+    /// Input noted after the last capture started, which that capture could not see.
     public private(set) var inputSinceLastCapture = false
-    public private(set) var manualRequested = false
+    public private(set) var manualRequestedAt: Date?
+
+    public var manualRequested: Bool { manualRequestedAt != nil }
 
     public init(settings: SensingSettings) {
         self.settings = settings
@@ -38,7 +41,7 @@ public struct CaptureScheduler: Equatable, Sendable {
         } else {
             pendingFocusChangeAt = nil
             inputSinceLastCapture = false
-            manualRequested = false
+            manualRequestedAt = nil
         }
     }
 
@@ -52,15 +55,24 @@ public struct CaptureScheduler: Equatable, Sendable {
         inputSinceLastCapture = true
     }
 
-    public mutating func requestManualCapture() {
-        manualRequested = true
+    public mutating func requestManualCapture(at now: Date) {
+        manualRequestedAt = now
     }
 
-    public mutating func noteCaptureFinished(at now: Date) {
+    /// A capture sees only what happened up to `startedAt`, so it consumes the
+    /// triggers noted by then; one noted while it was in flight stays pending
+    /// and schedules the next capture under the usual delays.
+    public mutating func noteCaptureFinished(startedAt: Date, at now: Date) {
         lastCaptureAt = now
-        pendingFocusChangeAt = nil
-        inputSinceLastCapture = false
-        manualRequested = false
+        if let pendingFocusChangeAt, pendingFocusChangeAt <= startedAt {
+            self.pendingFocusChangeAt = nil
+        }
+        if let lastInputAt, lastInputAt <= startedAt {
+            inputSinceLastCapture = false
+        }
+        if let manualRequestedAt, manualRequestedAt <= startedAt {
+            self.manualRequestedAt = nil
+        }
     }
 
     /// The next capture that would fall due and why, ignoring whether it is already due.

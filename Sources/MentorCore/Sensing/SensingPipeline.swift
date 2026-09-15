@@ -89,7 +89,7 @@ public actor SensingPipeline {
 
     /// Captures as soon as the loop wakes, regardless of cadence.
     public func captureNow() async {
-        scheduler.requestManualCapture()
+        scheduler.requestManualCapture(at: clock.date)
         await signal.signal()
     }
 
@@ -274,7 +274,7 @@ public actor SensingPipeline {
 
     private func performCapture(reason: CaptureReason) async {
         let startedAt = clock.date
-        defer { scheduler.noteCaptureFinished(at: clock.date) }
+        defer { scheduler.noteCaptureFinished(startedAt: startedAt, at: clock.date) }
 
         let focus: FocusContext
         if let fresh = await tracker.readCurrent() {
