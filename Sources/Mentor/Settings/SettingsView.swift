@@ -243,7 +243,11 @@ private struct PrivacySettings: View {
                             .foregroundStyle(state.hotKeyRegistered ? Color.green : Color.orange)
                             .help(state.hotKeyRegistered ? "The hotkey is registered system-wide." : "Another app holds this combination, or it needs a Control, Option, or Command modifier.")
                         }
-                        HotKeyRecorder(hotKey: $state.settings.pauseHotKey)
+                        HotKeyRecorder(
+                            hotKey: $state.settings.pauseHotKey,
+                            conflicts: [state.settings.mentor.pushToTalkHotKey].compactMap { $0 },
+                            conflictNote: "That is the talk-back hotkey."
+                        )
                     }
                 }
             } footer: {

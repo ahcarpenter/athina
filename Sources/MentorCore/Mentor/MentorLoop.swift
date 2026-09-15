@@ -18,6 +18,8 @@ public actor MentorLoop {
     public static let triageMaxTokens = 200
     /// Mentor replies include adaptive thinking, which counts against this.
     public static let mentorMaxTokens = 6000
+    /// A follow-up answer is a few short sentences, plus the same thinking.
+    public static let followUpMaxTokens = 3000
     /// How many journal rows feed the event summaries and the rolling window.
     public static let eventLookback = 40
     public static let windowLookback = 200
@@ -44,6 +46,16 @@ public actor MentorLoop {
     private var apiKey: String?
     /// Tiers with a call in progress; a Test Connection can overlap a tier call.
     private var inFlight: Set<ModelTier> = []
+    /// A toast the user has talked to is up (`setTalkingBack`).
+    private var talkingBack = false
+    /// A suggestion made while that toast was up, waiting for it to close.
+    private var heldSuggestion: Suggestion?
+    /// The one question waiting for the call in flight to return; a newer one takes its place.
+    private struct PendingQuestion {
+        var record: MentorStatus.PendingFollowUp
+        var continuation: CheckedContinuation<Bool, Never>
+    }
+    private var pendingQuestion: PendingQuestion?
     private var consumeTask: Task<Void, Never>?
 
     public init(
@@ -74,7 +86,7 @@ public actor MentorLoop {
 
     public func start() async {
         guard consumeTask == nil else { return }
-        reloadKey()
+        await reloadKey()
         await seedFromJournal()
         await publishStatus()
         consumeTask = Task { [weak self] in
@@ -88,7 +100,43 @@ public actor MentorLoop {
     public func stop() async {
         consumeTask?.cancel()
         consumeTask = nil
+        dropPendingQuestion()
         await broadcaster.finish()
+    }
+
+    /// Call as an exchange with the toast begins and ends: from the key going
+    /// down until the toast that was talked to is closed, so its answer can be
+    /// read. While it is on, a new suggestion is held rather than shown; when
+    /// it goes off, the held one is shown if it is still fresh, otherwise it
+    /// expires unseen.
+    public func setTalkingBack(_ active: Bool, at now: Date = Date()) async {
+        guard talkingBack != active else { return }
+        talkingBack = active
+        guard !active, let held = heldSuggestion else { return }
+        heldSuggestion = nil
+        await publish(held, now: now)
+    }
+
+    /// A held suggestion is not shown while the user is pausing Mentor. The
+    /// pause reaches the loop through the sensing stream too, but the app
+    /// calls this first when it ends a hold while pausing, so the held
+    /// suggestion cannot slip out in between.
+    public func expireHeldSuggestion(now: Date = Date()) async {
+        guard let held = heldSuggestion else { return }
+        heldSuggestion = nil
+        await expireUnseen(held, now: now)
+    }
+
+    private func expireUnseen(_ suggestion: Suggestion, now: Date) async {
+        MentorLoop.log.notice("suggestion \(suggestion.id) expired unseen")
+        await recordFeedback(suggestionID: suggestion.id, feedback: .expiredUnseen, at: now)
+    }
+
+    /// Drops the question waiting for the call in flight, if any: the user
+    /// closed the toast, moved on, or is asking something else.
+    public func withdrawFollowUp() async {
+        guard dropPendingQuestion() else { return }
+        await publishStatus()
     }
 
     public func updateSettings(_ newSettings: MentorSettings) async {
@@ -105,7 +153,7 @@ public actor MentorLoop {
 
     /// Call after the key is saved or removed in Settings.
     public func apiKeyChanged() async {
-        reloadKey()
+        await reloadKey()
         await publishStatus()
     }
 
@@ -132,10 +180,22 @@ public actor MentorLoop {
         return updated
     }
 
+    /// Records that a callout was drawn for a suggestion. Returns the
+    /// suggestion as journaled, or nil when it is unknown.
+    @discardableResult
+    public func noteCalloutShown(suggestionID: Int64) async -> Suggestion? {
+        do {
+            return try await journal.noteCalloutShown(suggestionID: suggestionID)
+        } catch {
+            MentorLoop.log.error("callout not journaled: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
     /// One tiny request on the triage model. Returns the model that answered,
     /// or the API's own error message. Counted as spend like any other call.
     public func testConnection() async -> Result<String, ClaudeClientError> {
-        reloadKey()
+        await reloadKey()
         guard let apiKey else { return .failure(.transport("no API key saved")) }
         let request = MessagesRequest(
             model: settings.triageModel,
@@ -167,6 +227,9 @@ public actor MentorLoop {
         switch event {
         case .modeChanged(let newMode):
             mode = newMode
+            if newMode == .paused {
+                await expireHeldSuggestion(now: Date())
+            }
             await publishStatus()
         case .observation(let observation):
             await consider(observation)
@@ -181,6 +244,7 @@ public actor MentorLoop {
             mode: mode,
             hasAPIKey: apiKey != nil,
             callInFlight: !inFlight.isEmpty,
+            talkingBack: talkingBack,
             spendFraction: spend.fraction(now: now),
             cadenceMultiplier: spend.cadenceMultiplier(now: now),
             nextHourStart: SpendMeter.nextHourStart(after: now)
@@ -335,7 +399,12 @@ public actor MentorLoop {
                 record.detail = verdict.reason.withPlainDashes
                 if let payload = verdict.suggestion {
                     let title = payload.title.withPlainDashes
-                    if payload.confidence < settings.minimumConfidence {
+                    if payload.isBlank {
+                        // Structured output guarantees the fields exist, not
+                        // that they say anything; a toast with no words is noise.
+                        record.outcome = .error
+                        record.detail = "the mentor reply had a \(payload.category.rawValue) suggestion with an empty title or body"
+                    } else if payload.confidence < settings.minimumConfidence {
                         record.outcome = .belowConfidence
                         record.detail = "\(title) (confidence \(Int((payload.confidence * 100).rounded()))%)"
                     } else if let reason = settings.suppression(for: payload.category, bundleID: observation.focus.bundleID, now: now) {
@@ -344,6 +413,10 @@ public actor MentorLoop {
                     } else {
                         record.outcome = .suggested
                         record.detail = title
+                        let region = MentorLoop.region(from: payload.region, frame: observation.frame, sawImage: jpeg != nil)
+                        if payload.region != nil, region == nil {
+                            MentorLoop.log.notice("region dropped: \(jpeg == nil ? "no image was sent" : "outside the frame", privacy: .public)")
+                        }
                         toShow = Suggestion(
                             timestamp: shownAt,
                             bundleID: observation.focus.bundleID,
@@ -356,7 +429,8 @@ public actor MentorLoop {
                             confidence: payload.confidence,
                             observationID: observation.id == 0 ? nil : observation.id,
                             model: response.model,
-                            promptVersion: MentorPrompts.version
+                            promptVersion: MentorPrompts.version,
+                            region: region
                         )
                     }
                 } else {
@@ -380,7 +454,142 @@ public actor MentorLoop {
             timestamp: shownAt, kind: .suggested, bundleID: stored.bundleID, appName: stored.appName,
             detail: "\(stored.category.label): \(stored.title)"
         ))
-        await broadcaster.send(.suggestion(stored))
+        await publish(stored, now: Date())
+    }
+
+    /// Shows a journaled suggestion, holds it while a talked-to toast is up,
+    /// or expires it when it was held too long.
+    private func publish(_ suggestion: Suggestion, now: Date) async {
+        switch scheduler.publishGate(madeAt: suggestion.timestamp, conditions: conditions(now: now), now: now) {
+        case .show:
+            await broadcaster.send(.suggestion(suggestion))
+        case .hold:
+            if let older = heldSuggestion {
+                await expireUnseen(older, now: now)
+            }
+            heldSuggestion = suggestion
+            MentorLoop.log.notice("suggestion \(suggestion.id) held while the user talks back")
+        case .expired:
+            await expireUnseen(suggestion, now: now)
+        }
+    }
+
+    /// The spot the model pointed at, kept only when it saw the image and the
+    /// spot lies inside it. Anything else is a guess and is dropped here, so
+    /// the journal never holds a region that cannot be placed.
+    static func region(from raw: MentorVerdict.Payload.Region?, frame: FrameInfo, sawImage: Bool) -> CalloutRegion? {
+        guard let raw, sawImage, CalloutAnchor.screenRect(for: raw.rect, in: frame) != nil else { return nil }
+        return CalloutRegion(rect: raw.rect, note: raw.note.withPlainDashes.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    // MARK: Follow-up
+
+    /// One thing the user said about a suggestion, answered by the mentor
+    /// model at the mentor tier's effort. The exchange is journaled as a
+    /// follow-up row and the call as a model call, counted against the hour's
+    /// spend like every other call. A held question is journaled with the
+    /// reason and never sent. A question asked while a call is in flight
+    /// waits for it to return and is then asked; only one waits at a time,
+    /// and a newer question, or `withdrawFollowUp`, drops it, in which case
+    /// this returns nil and nothing is journaled.
+    public func askFollowUp(about suggestion: Suggestion, question: String, at now: Date = Date()) async -> FollowUp? {
+        var followUp = FollowUp(
+            suggestionID: suggestion.id, timestamp: now, question: question,
+            model: settings.mentorModel, promptVersion: MentorPrompts.version
+        )
+        var asking = now
+        var gate = scheduler.followUpGate(conditions: conditions(now: asking))
+        while gate == .wait {
+            let record = MentorStatus.PendingFollowUp(suggestionID: suggestion.id, question: question, since: now)
+            let asked = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                dropPendingQuestion()
+                pendingQuestion = PendingQuestion(record: record, continuation: continuation)
+                status.pendingFollowUp = record
+                Task { await self.publishStatus() }
+            }
+            guard asked else { return nil }
+            asking = Date()
+            gate = scheduler.followUpGate(conditions: conditions(now: asking))
+        }
+        if case .hold(let hold) = gate {
+            followUp.error = hold.label
+            return await finish(followUp, about: suggestion)
+        }
+        guard let apiKey else {
+            followUp.error = MentorScheduler.Hold.noAPIKey.label
+            return await finish(followUp, about: suggestion)
+        }
+        let exchange = (try? await journal.followUps(suggestionID: suggestion.id)) ?? []
+        var screenText: String?
+        if let observationID = suggestion.observationID {
+            screenText = try? await journal.observation(id: observationID)?.ocrText
+        }
+        let text = PromptBuilder.followUpMessage(
+            suggestion: suggestion, screenText: screenText, exchange: exchange, question: question, now: asking
+        )
+        let model = settings.mentorModelInfo
+        let request = MessagesRequest(
+            model: model.id,
+            maxTokens: MentorLoop.followUpMaxTokens,
+            system: [SystemBlock(text: MentorPrompts.followUpSystem)],
+            messages: [Message(role: .user, content: [.text(text)])],
+            outputConfig: OutputConfig(
+                format: OutputFormat(schema: MentorPrompts.followUpSchema),
+                effort: settings.effort(for: .followUp)
+            )
+        )
+        let call = await perform(tier: .followUp, request: request, apiKey: apiKey, timeout: MentorLoop.mentorTimeout)
+        var record = call.record
+        switch call.result {
+        case .failure(let error):
+            record.outcome = .error
+            record.detail = error.description
+            followUp.error = error.description
+        case .success(let response):
+            followUp.model = response.model
+            if response.isRefusal {
+                record.outcome = .refused
+                record.detail = "the API declined this request"
+                followUp.error = record.detail
+            } else if let reply = MentorLoop.decode(FollowUpReply.self, from: response) {
+                let answer = reply.answer.withPlainDashes.trimmingCharacters(in: .whitespacesAndNewlines)
+                if answer.isEmpty {
+                    record.outcome = .error
+                    record.detail = "the follow-up reply had an empty answer"
+                    followUp.error = record.detail
+                } else {
+                    record.outcome = .answered
+                    record.detail = String(answer.prefix(160))
+                    followUp.answer = answer
+                }
+            } else {
+                record.outcome = response.isTruncated ? .truncated : .error
+                record.detail = "could not parse the follow-up reply"
+                followUp.error = record.detail
+            }
+        }
+        await store(record)
+        return await finish(followUp, about: suggestion)
+    }
+
+    /// Journals the exchange and its event, publishes it, and returns it with its id.
+    private func finish(_ followUp: FollowUp, about suggestion: Suggestion) async -> FollowUp {
+        var stored = followUp
+        do {
+            stored = try await journal.record(followUp)
+        } catch {
+            MentorLoop.log.error("follow-up not journaled: \(String(describing: error), privacy: .public)")
+        }
+        let detail = followUp.answer == nil
+            ? "\"\(followUp.question)\" (\(followUp.error ?? "no answer"))"
+            : "\"\(followUp.question)\""
+        await journalEvent(JournalEvent(
+            timestamp: followUp.timestamp, kind: .talkBack, bundleID: suggestion.bundleID, appName: suggestion.appName,
+            detail: detail
+        ))
+        await broadcaster.send(.followUp(stored))
+        await publishStatus()
+        return stored
     }
 
     // MARK: Calls
@@ -407,6 +616,11 @@ public actor MentorLoop {
         }
         let latency = Date().timeIntervalSince(started)
         inFlight.remove(tier)
+        if inFlight.isEmpty, let pending = pendingQuestion {
+            pendingQuestion = nil
+            status.pendingFollowUp = nil
+            pending.continuation.resume(returning: true)
+        }
         let usage = (try? result.get().usage) ?? Usage()
         let replayed = client.isReplay
         let record = ModelCallRecord(
@@ -448,6 +662,16 @@ public actor MentorLoop {
         return stored
     }
 
+    /// Resumes the waiting question, if any, as dropped. True when there was one.
+    @discardableResult
+    private func dropPendingQuestion() -> Bool {
+        guard let pending = pendingQuestion else { return false }
+        pendingQuestion = nil
+        status.pendingFollowUp = nil
+        pending.continuation.resume(returning: false)
+        return true
+    }
+
     static func decode<T: Decodable>(_ type: T.Type, from response: MessagesResponse) -> T? {
         let text = response.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return nil }
@@ -480,13 +704,13 @@ public actor MentorLoop {
         await broadcaster.send(.status(status))
     }
 
-    private func reloadKey() {
+    private func reloadKey() async {
         guard !client.isReplay else {
             apiKey = MentorLoop.replayCredential
             return
         }
         do {
-            apiKey = try keyStore.load()
+            apiKey = try await keyStore.loadInBackground()
         } catch {
             apiKey = nil
             MentorLoop.log.error("api key unreadable: \(String(describing: error), privacy: .public)")

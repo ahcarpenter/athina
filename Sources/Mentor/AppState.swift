@@ -4,6 +4,36 @@ import Observation
 import OSLog
 import SwiftUI
 
+/// The last callout decision, for the debug panel.
+struct CalloutRecord: Equatable {
+    enum Status: String {
+        case shown
+        case notShown = "not shown"
+        case takenDown = "taken down"
+    }
+
+    var at: Date
+    var suggestionID: Int64
+    var region: CalloutRegion
+    /// Where it was drawn, or nil when it was not.
+    var placement: CalloutPlacement?
+    var status: Status
+    /// Why it was not shown or was taken down.
+    var reason: String?
+
+    /// "taken down: window moved", for the log.
+    var summary: String {
+        reason.map { "\(status.rawValue): \($0)" } ?? status.rawValue
+    }
+}
+
+/// The last thing heard over push-to-talk, for the debug panel.
+struct TranscriptRecord: Equatable {
+    var at: Date
+    var text: String
+    var handling: String
+}
+
 /// Main-actor view of everything the pipeline and the mentor loop publish,
 /// plus app-level actions.
 @MainActor
@@ -14,6 +44,7 @@ final class AppState {
     static let timelineLimit = 300
     static let callLogLimit = 200
     static let historyLimit = 500
+    static let followUpLimit = 2000
     static let log = Logger(subsystem: "com.ahcarpenter.mentor", category: "app")
 
     var settings: SensingSettings {
@@ -28,20 +59,24 @@ final class AppState {
             let pipeline = pipeline
             let mentor = mentor
             let settings = settings
-            let hotKey = settings.pauseHotKey
             Task {
                 await pipeline?.updateSettings(settings)
                 await mentor?.updateSettings(settings.mentor)
             }
-            if hotKey != oldValue.pauseHotKey {
-                hotKeyRegistered = hotKeys.register(hotKey)
-                AppState.log.notice("pause hotkey \(hotKey.displayString, privacy: .public) registered: \(self.hotKeyRegistered)")
+            if settings.pauseHotKey != oldValue.pauseHotKey {
+                registerPauseHotKey()
             }
+            if settings.mentor.pushToTalkHotKey != oldValue.mentor.pushToTalkHotKey {
+                registerPushToTalkHotKey()
+            }
+            toast.setTalkBackKey(talkBackKey)
         }
     }
 
     /// False when the pause hotkey could not be registered (unusable or taken by another app).
     private(set) var hotKeyRegistered = false
+    /// False when no talk-back hotkey is set or it could not be registered.
+    private(set) var pushToTalkRegistered = false
 
     var mode: SensingMode = .stopped
     var permissions: PermissionStatus
@@ -63,11 +98,21 @@ final class AppState {
     var callLog: [ModelCallRecord] = []
     /// Newest first.
     var suggestionHistory: [Suggestion] = []
+    /// Newest first, across every suggestion.
+    var followUps: [FollowUp] = []
     /// The suggestion currently shown as a toast, if any.
     var activeSuggestion: Suggestion?
     /// Last four characters of the saved key, or nil when there is none.
     private(set) var apiKeyHint: String?
     private(set) var apiKeyError: String?
+
+    // MARK: Callouts and voice state
+
+    private(set) var talkBack: TalkBackState = .idle
+    var lastCallout: CalloutRecord?
+    var lastTranscript: TranscriptRecord?
+    /// Whether the system recognizer can transcribe the current locale on this Mac.
+    let speechAvailability: SpeechListener.Availability
 
     /// Whether the permissions window should open at launch.
     let needsPermissionsOnboarding: Bool
@@ -100,7 +145,27 @@ final class AppState {
     private var toastTask: Task<Void, Never>?
     private var toastDeadline: Date?
     private var toastRemaining: TimeInterval?
+    /// Whether the pointer is over the toast, kept through an exchange so a
+    /// countdown given back afterwards does not run under it.
+    private var toastHovered = false
+    /// The toast the user has talked to: a transcript was matched to an
+    /// answer or a question was asked. A press that heard nothing does not count.
+    private var talkedToSuggestionID: Int64?
     private let toast = ToastController()
+    private let callouts = CalloutController()
+    private var calloutTask: Task<Void, Never>?
+    /// What says the screen under the callout is unchanged, and since when.
+    private var calloutWitness: CalloutWitness?
+    /// The pipeline's dropped-capture count when last seen, to notice new near duplicates.
+    private var lastDroppedCount = 0
+    /// When the pipeline last dropped a capture as a near duplicate of the
+    /// newest kept frame; nil once a newer frame is kept.
+    private var lastNearDuplicateAt: Date?
+    private var screenObserver: (any NSObjectProtocol)?
+    private let listener = SpeechListener()
+    private var listeningLimitTask: Task<Void, Never>?
+    /// Finishes the transcript after the key comes up; cancelled with the exchange.
+    private var transcriptTask: Task<Void, Never>?
 
     private init() {
         clientMode = ModelClientMode(arguments: CommandLine.arguments)
@@ -116,11 +181,15 @@ final class AppState {
         let status = PermissionProbe.current()
         permissions = status
         needsPermissionsOnboarding = !status.allGranted
-        reloadKeyHint()
+        speechAvailability = SpeechListener.availability()
     }
 
     /// A detached state for snapshots and previews: never starts the pipeline.
-    init(sampleWithSettings settings: SensingSettings, clientMode: ModelClientMode = .live) {
+    init(
+        sampleWithSettings settings: SensingSettings,
+        clientMode: ModelClientMode = .live,
+        speechAvailability: SpeechListener.Availability = .available(locale: "English (US)")
+    ) {
         store = SettingsStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("mentor-sample-settings.json"))
         self.clientMode = clientMode
         let dataDirectory = AppPaths.dataDirectory(for: clientMode)
@@ -131,6 +200,7 @@ final class AppState {
         self.settings = settings
         permissions = PermissionStatus(screenRecording: true, accessibility: true)
         needsPermissionsOnboarding = false
+        self.speechAvailability = speechAvailability
         reloadKeyHint()
     }
 
@@ -139,9 +209,20 @@ final class AppState {
     func start() {
         guard !isRunning else { return }
         isRunning = true
-        hotKeys.onPress = { [weak self] in self?.togglePause() }
-        hotKeyRegistered = hotKeys.register(settings.pauseHotKey)
-        AppState.log.notice("pause hotkey \(self.settings.pauseHotKey.displayString, privacy: .public) registered: \(self.hotKeyRegistered)")
+        // The keychain may put up its prompt on the first read after a
+        // rebuild; off the main thread it never freezes the app behind it.
+        reloadKeyHint()
+        hotKeys.onPress = { [weak self] slot in
+            switch slot {
+            case .pause: self?.togglePause()
+            case .pushToTalk: self?.pushToTalkPressed()
+            }
+        }
+        hotKeys.onRelease = { [weak self] slot in
+            if slot == .pushToTalk { self?.pushToTalkReleased() }
+        }
+        registerPauseHotKey()
+        registerPushToTalkHotKey()
 
         let journal: Journal
         do {
@@ -169,6 +250,12 @@ final class AppState {
         toast.onHover = { [weak self] hovering in
             self?.toastHoverChanged(hovering)
         }
+        toast.setTalkBackKey(talkBackKey)
+        screenObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.displayConfigurationChanged() }
+        }
 
         eventTask = Task { [weak self] in
             let stream = await pipeline.events()
@@ -176,9 +263,11 @@ final class AppState {
             let mentor = MentorLoop(
                 settings: mentorSettings, journal: journal, client: clientSetup.client, keyStore: keyStore, events: mentorStream
             )
+            // Sensing starts before the loop attaches: the loop's first key
+            // read can wait on the keychain prompt, and its stream buffers.
+            await pipeline.start()
             await self?.attach(mentor: mentor, journal: journal)
             await self?.loadInitialTimeline(from: journal)
-            await pipeline.start()
             for await event in stream {
                 guard let self else { return }
                 self.handle(event)
@@ -209,21 +298,39 @@ final class AppState {
         }
         callLog = (try? await journal.recentModelCalls(limit: AppState.callLogLimit)) ?? []
         suggestionHistory = (try? await journal.recentSuggestions(limit: AppState.historyLimit)) ?? []
+        followUps = (try? await journal.recentFollowUps(limit: AppState.followUpLimit)) ?? []
     }
 
     func stop() async {
         resourceTask?.cancel()
         saveTask?.cancel()
+        cancelTalkBack()
         if let active = activeSuggestion {
             await respond(to: active.id, with: .expired)?.value
+        }
+        callouts.dismiss()
+        stopCalloutWatch()
+        if let screenObserver {
+            NotificationCenter.default.removeObserver(screenObserver)
         }
         try? store.save(settings)
         await mentor?.stop()
         mentorTask?.cancel()
         await pipeline?.stop()
         eventTask?.cancel()
-        hotKeys.unregister()
+        hotKeys.unregisterAll()
         isRunning = false
+    }
+
+    private func registerPauseHotKey() {
+        hotKeyRegistered = hotKeys.register(settings.pauseHotKey, for: .pause)
+        AppState.log.notice("pause hotkey \(self.settings.pauseHotKey.displayString, privacy: .public) registered: \(self.hotKeyRegistered)")
+    }
+
+    private func registerPushToTalkHotKey() {
+        let key = settings.mentor.pushToTalkHotKey
+        pushToTalkRegistered = hotKeys.register(key, for: .pushToTalk)
+        AppState.log.notice("talk-back hotkey \(key?.displayString ?? "unset", privacy: .public) registered: \(self.pushToTalkRegistered)")
     }
 
     // MARK: Actions
@@ -232,6 +339,7 @@ final class AppState {
         isPaused.toggle()
         let paused = isPaused
         AppState.log.notice("pause toggled: \(paused)")
+        cancelTalkBack()
         Task { await pipeline?.setPaused(paused) }
     }
 
@@ -244,6 +352,7 @@ final class AppState {
         let fresh = PermissionProbe.current()
         guard fresh != permissions else { return }
         permissions = fresh
+        toast.setTalkBackKey(talkBackKey)
         Task { await pipeline?.permissionsMayHaveChanged() }
     }
 
@@ -265,6 +374,7 @@ final class AppState {
             latestImage = nil
             callLog.removeAll()
             suggestionHistory.removeAll()
+            followUps.removeAll()
             if let journal {
                 await loadInitialTimeline(from: journal)
             }
@@ -326,31 +436,43 @@ final class AppState {
         return await mentor.testConnection()
     }
 
+    /// Reads the key's last four characters off the main thread: the keychain
+    /// can block on its own prompt, and the rest of the app must not wait.
     private func reloadKeyHint() {
-        do {
-            apiKeyHint = try keyStore.load().map(APIKey.lastFour)
-        } catch {
-            apiKeyHint = nil
-            apiKeyError = "Could not read the key: \(error)"
+        let keyStore = keyStore
+        Task { [weak self] in
+            let outcome: Result<String?, Error>
+            do {
+                outcome = .success(try await keyStore.loadInBackground().map(APIKey.lastFour))
+            } catch {
+                outcome = .failure(error)
+            }
+            guard let self else { return }
+            switch outcome {
+            case .success(let hint):
+                self.apiKeyHint = hint
+            case .failure(let error):
+                self.apiKeyHint = nil
+                self.apiKeyError = "Could not read the key: \(error)"
+            }
         }
     }
 
     // MARK: Suggestions
 
-    /// Records feedback for a suggestion, whether it came from the toast or the
-    /// history window. A non-answer (expiry or closing the toast) is recorded
-    /// once and never overwrites anything: closing a re-shown toast just closes it.
-    /// Tell me more is recorded once too; re-expanding a folded toast is only a
-    /// view change. Returns the task that journals the feedback, or nil when
-    /// nothing was recorded.
+    /// Records feedback for a suggestion, whether it came from the toast, the
+    /// history window, or a transcript. A non-answer (expiry or closing the
+    /// toast) is recorded once and never overwrites anything: closing a
+    /// re-shown toast just closes it. Tell me more is recorded once too;
+    /// re-expanding a folded toast is only a view change. Returns the task
+    /// that journals the feedback, or nil when nothing was recorded.
     @discardableResult
     func respond(to suggestionID: Int64, with feedback: SuggestionFeedback) -> Task<Void, Never>? {
         let existing = suggestionHistory.first { $0.id == suggestionID }?.feedback
         if activeSuggestion?.id == suggestionID {
             cancelToastExpiry()
             if feedback != .tellMeMore {
-                toast.dismiss()
-                activeSuggestion = nil
+                takeDown()
             }
         }
         if feedback.isNonAnswer, existing != nil { return nil }
@@ -377,17 +499,25 @@ final class AppState {
                 )
                 settings.mentor.neverRules = SuppressionRules.adding(rule, to: settings.mentor.neverRules)
             }
-        case .tellMeMore, .expired, .dismissed:
+        case .tellMeMore, .expired, .expiredUnseen, .dismissed:
             break
         }
         AppState.log.notice("suggestion \(suggestionID) feedback \(feedback.rawValue, privacy: .public)")
         return Task { await mentor?.recordFeedback(suggestionID: suggestionID, feedback: feedback) }
     }
 
+    /// The most recent suggestion that was ever on screen. One that expired
+    /// unseen while another toast was talked to stays in the history but is
+    /// not the last suggestion: the user never saw it and its screen is gone.
+    var lastShownSuggestion: Suggestion? {
+        suggestionHistory.first { $0.feedback != .expiredUnseen }
+    }
+
     /// Brings the most recent suggestion back as a toast, for one that was
-    /// missed. A toast the user asked for stays until answered or closed.
+    /// missed. A toast the user asked for stays until answered or closed; its
+    /// callout comes back only when the spot still checks out.
     func showLastSuggestion() {
-        guard let latest = suggestionHistory.first else { return }
+        guard let latest = lastShownSuggestion else { return }
         show(latest, autoExpires: false)
     }
 
@@ -400,21 +530,78 @@ final class AppState {
     }
 
     private func show(_ suggestion: Suggestion, autoExpires: Bool) {
-        if let active = activeSuggestion, active.id != suggestion.id {
+        if let active = activeSuggestion, active.id == suggestion.id {
+            cancelToastExpiry()
+            toast.bringToFront()
+            if !callouts.isVisible {
+                placeCallout(for: suggestion)
+            }
+            return
+        }
+        if let active = activeSuggestion {
             respond(to: active.id, with: .expired)
         }
         cancelToastExpiry()
+        toastHovered = false
+        cancelTalkBack()
         activeSuggestion = suggestion
-        toast.show(suggestion, expanded: false)
+        toast.show(suggestion, expanded: false, exchange: exchange(for: suggestion.id))
         if autoExpires {
             scheduleToastExpiry(for: suggestion.id, after: settings.mentor.toastTimeout)
+        }
+        placeCallout(for: suggestion)
+    }
+
+    /// Everything that goes with the toast goes with it: the callout and a
+    /// recording in progress. If the toast was talked to, this is where the
+    /// exchange ends and a suggestion held meanwhile may be shown.
+    private func takeDown() {
+        toast.dismiss()
+        callouts.dismiss()
+        stopCalloutWatch()
+        activeSuggestion = nil
+        talkedToSuggestionID = nil
+        cancelTalkBack()
+        endHold()
+    }
+
+    /// Tells the loop no talked-to toast is up, so a suggestion held for it
+    /// is shown if still fresh; while pausing it expires instead.
+    private func endHold() {
+        let pausing = isPaused
+        Task {
+            if pausing { await mentor?.expireHeldSuggestion() }
+            await mentor?.setTalkingBack(false)
+        }
+    }
+
+    /// Settles a press that has ended, by `TalkBackPress`: a talked-to toast
+    /// keeps the hold and no countdown; otherwise the hold ends and the
+    /// countdown the press interrupted resumes.
+    private func settlePress(_ match: TranscriptMatcher.Match?, for suggestion: Suggestion) {
+        let outcome = TalkBackPress.outcome(
+            match: match, toastTalkedTo: talkedToSuggestionID == suggestion.id, countdownRemaining: toastRemaining
+        )
+        toastRemaining = nil
+        switch outcome {
+        case .talkedTo:
+            talkedToSuggestionID = suggestion.id
+        case .notAnExchange(let countdown):
+            endHold()
+            guard let countdown, activeSuggestion?.id == suggestion.id else { return }
+            if toastHovered {
+                toastRemaining = countdown
+            } else {
+                scheduleToastExpiry(for: suggestion.id, after: countdown)
+            }
         }
     }
 
     /// The countdown pauses while the pointer is over the toast and resumes
     /// with the remaining time when it leaves.
     private func toastHoverChanged(_ hovering: Bool) {
-        guard let active = activeSuggestion else { return }
+        toastHovered = hovering
+        guard let active = activeSuggestion, !talkBack.keepsToastUp else { return }
         if hovering {
             // cancelToastExpiry clears toastRemaining, so record the remainder after it.
             guard let deadline = toastDeadline else { return }
@@ -428,6 +615,8 @@ final class AppState {
     }
 
     private func scheduleToastExpiry(for suggestionID: Int64, after timeout: TimeInterval) {
+        // An exchange in progress keeps the toast up; nothing schedules its end.
+        guard !talkBack.keepsToastUp else { return }
         toastTask?.cancel()
         toastDeadline = Date().addingTimeInterval(timeout)
         toastTask = Task { [weak self] in
@@ -442,6 +631,385 @@ final class AppState {
         toastTask = nil
         toastDeadline = nil
         toastRemaining = nil
+    }
+
+    // MARK: Callouts
+
+    /// Draws the callout when the suggestion points at a spot and the spot
+    /// still checks out, then re-checks once a second while it is up so a
+    /// window that moves, loses focus, or changes takes it down. Every
+    /// decision is `CalloutAnchor`'s; this gathers the live readings.
+    private func placeCallout(for suggestion: Suggestion) {
+        callouts.dismiss()
+        stopCalloutWatch()
+        guard let region = suggestion.region else { return }
+        guard settings.mentor.showCallouts else {
+            lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: .notShown, reason: "callouts are off in Settings")
+            return
+        }
+        calloutTask = Task { [weak self] in
+            guard let self else { return }
+            guard let observation = await self.observationForCallout(suggestion) else {
+                self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: .notShown, reason: "the frame is no longer in the journal")
+                return
+            }
+            var witness = CalloutWitness(region: region.rect, original: observation)
+            // A frame kept since the suggestion was made already says whether the text is still there.
+            if let latest = self.latestObservation, latest.id != observation.id {
+                guard witness.observe(latest) else {
+                    self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: .notShown, reason: CalloutRejection.contentChanged.label)
+                    return
+                }
+            }
+            // Near duplicates of that frame since it was kept confirm the screen too,
+            // so a suggestion brought back on an untouched screen gets its callout.
+            if let lastNearDuplicateAt = self.lastNearDuplicateAt {
+                witness.noteDroppedCapture(at: lastNearDuplicateAt)
+            }
+            self.calloutWitness = witness
+            var shown = false
+            while !Task.isCancelled {
+                let result = await self.resolveAnchor(region, observation: observation, confirmedAt: self.calloutWitness?.confirmedAt)
+                guard !Task.isCancelled, self.activeSuggestion?.id == suggestion.id else { return }
+                switch result {
+                case .success(let placement):
+                    if !shown || self.callouts.placement != placement {
+                        self.callouts.show(placement)
+                        self.toast.bringToFront()
+                    }
+                    if self.lastCallout?.status != .shown || self.lastCallout?.suggestionID != suggestion.id || self.lastCallout?.placement != placement {
+                        self.lastCallout = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, placement: placement, status: .shown)
+                    }
+                    if !shown {
+                        shown = true
+                        AppState.log.notice("callout shown for suggestion \(suggestion.id) at \(Formatting.rect(placement.screenRect), privacy: .public)")
+                        if !suggestion.calloutShown {
+                            await self.noteCalloutShown(suggestionID: suggestion.id)
+                        }
+                    }
+                case .failure(let rejection):
+                    self.callouts.dismiss()
+                    let record = CalloutRecord(at: Date(), suggestionID: suggestion.id, region: region, status: shown ? .takenDown : .notShown, reason: rejection.label)
+                    self.lastCallout = record
+                    self.calloutWitness = nil
+                    AppState.log.notice("callout for suggestion \(suggestion.id) \(record.summary, privacy: .public)")
+                    return
+                }
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
+    }
+
+    private func stopCalloutWatch() {
+        calloutTask?.cancel()
+        calloutTask = nil
+        calloutWitness = nil
+    }
+
+    /// Every kept frame goes to the witness: one of the same window that no
+    /// longer shows the framed text in place takes the callout down.
+    private func checkCalloutContent(against latest: ActivityObservation) {
+        guard var witness = calloutWitness, let active = activeSuggestion, let region = active.region else { return }
+        if witness.observe(latest) {
+            calloutWitness = witness
+            return
+        }
+        callouts.dismiss()
+        stopCalloutWatch()
+        let record = CalloutRecord(at: Date(), suggestionID: active.id, region: region, status: .takenDown, reason: CalloutRejection.contentChanged.label)
+        lastCallout = record
+        AppState.log.notice("callout for suggestion \(active.id) \(record.summary, privacy: .public)")
+    }
+
+    /// A capture the pipeline dropped as a near duplicate confirms the screen
+    /// under the callout is unchanged, when the frame it duplicates is a witness.
+    private func noteCadence(_ status: CadenceStatus) {
+        defer { lastDroppedCount = status.droppedCount }
+        guard status.droppedCount > lastDroppedCount else { return }
+        let at = status.lastCaptureAt ?? Date()
+        lastNearDuplicateAt = at
+        guard var witness = calloutWitness else { return }
+        witness.noteDroppedCapture(at: at)
+        calloutWitness = witness
+    }
+
+    /// The observation the suggestion was made from: the latest one when it
+    /// still is, otherwise the journal's copy.
+    private func observationForCallout(_ suggestion: Suggestion) async -> ActivityObservation? {
+        guard let id = suggestion.observationID else { return nil }
+        if let latest = latestObservation, latest.id == id { return latest }
+        return try? await journal?.observation(id: id)
+    }
+
+    private func resolveAnchor(_ region: CalloutRegion, observation: ActivityObservation, confirmedAt: Date?) async -> Result<CalloutPlacement, CalloutRejection> {
+        let live = CalloutAnchor.Live(
+            frontmostPID: NSWorkspace.shared.frontmostApplication?.processIdentifier,
+            focus: await tracker?.peekCurrent(),
+            displays: NSScreen.currentDisplays,
+            now: Date()
+        )
+        return CalloutAnchor.resolve(region, for: observation, live: live, confirmedAt: confirmedAt)
+    }
+
+    private func displayConfigurationChanged() {
+        guard callouts.isVisible, let record = lastCallout else { return }
+        callouts.dismiss()
+        stopCalloutWatch()
+        lastCallout = CalloutRecord(at: Date(), suggestionID: record.suggestionID, region: record.region, status: .takenDown, reason: CalloutRejection.displayChanged.label)
+    }
+
+    /// Persists that the callout was drawn and mirrors it into the history.
+    private func noteCalloutShown(suggestionID: Int64) async {
+        guard let mentor else { return }
+        guard let updated = await mentor.noteCalloutShown(suggestionID: suggestionID) else { return }
+        if let index = suggestionHistory.firstIndex(where: { $0.id == suggestionID }) {
+            suggestionHistory[index].calloutShown = updated.calloutShown
+        }
+        if activeSuggestion?.id == suggestionID {
+            activeSuggestion?.calloutShown = updated.calloutShown
+        }
+    }
+
+    // MARK: Talking back
+
+    /// The exchange about one suggestion, oldest first.
+    func exchange(for suggestionID: Int64) -> [FollowUp] {
+        followUps.filter { $0.suggestionID == suggestionID }.sorted { $0.timestamp != $1.timestamp ? $0.timestamp < $1.timestamp : $0.id < $1.id }
+    }
+
+    /// The talk-back hotkey for the toast's hint, once everything it needs is in place.
+    var talkBackKey: String? {
+        guard let key = settings.mentor.pushToTalkHotKey, speechAvailability.isAvailable, permissions.voiceGranted else { return nil }
+        return key.displayString
+    }
+
+    /// One line for the menu on talking back: how to do it, or what it needs.
+    var talkBackLine: String {
+        if case .unavailable = speechAvailability { return "Talk back: no on-device recognition for this language" }
+        guard let key = settings.mentor.pushToTalkHotKey else { return "Talk back: set a hotkey in Settings > Mentor" }
+        if !permissions.voiceGranted { return "Talk back: needs Microphone and Speech Recognition" }
+        if isRunning, !pushToTalkRegistered { return "Talk back: \(key.displayString) could not be registered" }
+        switch talkBack {
+        case .listening: return "Talk back: listening…"
+        case .waiting: return "Talk back: waiting for the mentor's current call…"
+        case .thinking: return "Talk back: asking the mentor…"
+        case .idle: return "Talk back: hold \(key.displayString)"
+        }
+    }
+
+    /// The loop hears when an exchange begins, so a suggestion that arrives
+    /// before the talked-to toast is closed (`takeDown`) waits instead of
+    /// replacing it.
+    private func setTalkBack(_ state: TalkBackState) {
+        let begins = talkBack == .idle && state != .idle
+        talkBack = state
+        toast.setTalkBack(state)
+        if begins {
+            Task { await mentor?.setTalkingBack(true) }
+        }
+    }
+
+    /// The toast says when the question is waiting for the mentor's current
+    /// call to return, and when it has been asked.
+    private func syncTalkBack(with status: MentorStatus) {
+        switch talkBack {
+        case .thinking(let question) where status.pendingFollowUp?.question == question:
+            setTalkBack(.waiting(question: question))
+        case .waiting(let question) where status.pendingFollowUp == nil:
+            setTalkBack(.thinking(question: question))
+        case .idle, .listening, .waiting, .thinking:
+            break
+        }
+    }
+
+    /// The key went down: bring up the suggestion to talk to, and listen. A
+    /// question still waiting its turn is withdrawn; the new one takes its place.
+    private func pushToTalkPressed() {
+        guard talkBack.acceptsAQuestion else { return }
+        guard activeSuggestion != nil || lastShownSuggestion != nil else {
+            toast.showNote("Nothing to reply to yet: Mentor has not made a suggestion.")
+            return
+        }
+        if case .unavailable(let reason) = speechAvailability {
+            toast.showNote(reason)
+            return
+        }
+        guard permissions.voiceGranted else {
+            for permission in Permission.optional where !permissions.isGranted(permission) {
+                requestPermission(permission)
+            }
+            toast.showNote("Mentor needs Microphone and Speech Recognition to hear you. Grant them in Permissions.")
+            return
+        }
+        guard mode.isActive else {
+            toast.showNote("Mentor is \(mode.label.lowercased()), so it is not listening.")
+            return
+        }
+        guard let suggestion = suggestionToTalkTo() else { return }
+        do {
+            try listener.start { [weak self] partial in
+                guard let self, case .listening = self.talkBack else { return }
+                self.setTalkBack(.listening(partial: partial))
+            }
+        } catch {
+            AppState.log.error("listening failed to start: \(String(describing: error), privacy: .public)")
+            toast.showNote("Could not start listening: \(error).")
+            return
+        }
+        AppState.log.notice("listening for suggestion \(suggestion.id)")
+        if case .waiting = talkBack {
+            Task { await mentor?.withdrawFollowUp() }
+        }
+        setTalkBack(.listening(partial: ""))
+        listeningLimitTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(SpeechListener.maxDuration))
+            guard !Task.isCancelled, let self, case .listening = self.talkBack else { return }
+            self.pushToTalkReleased()
+        }
+    }
+
+    /// The suggestion a reply is about: the toast that is up, or the most
+    /// recent suggestion brought back as a toast that stays until it is
+    /// closed. An exchange keeps the toast up, like expanding it, so its
+    /// countdown stops; what was left of it is kept in case nothing is heard.
+    /// Nil, with a note, when Mentor has not made a suggestion yet.
+    private func suggestionToTalkTo() -> Suggestion? {
+        let suggestion: Suggestion
+        if let active = activeSuggestion {
+            suggestion = active
+        } else if let latest = lastShownSuggestion {
+            suggestion = latest
+            show(latest, autoExpires: false)
+        } else {
+            toast.showNote("Nothing to reply to yet: Mentor has not made a suggestion.")
+            return nil
+        }
+        let remaining = toastDeadline.map { max(2, $0.timeIntervalSinceNow) } ?? toastRemaining
+        cancelToastExpiry()
+        toastRemaining = remaining
+        return suggestion
+    }
+
+    /// Whether the debug panel's Talk back field may send now.
+    var canTalkBackTyped: Bool {
+        talkBack.acceptsAQuestion && (activeSuggestion != nil || lastShownSuggestion != nil)
+    }
+
+    /// The debug panel's Talk back field: typed words take the path a released
+    /// key does, from transcript matching to the follow-up call, the answer in
+    /// the toast. It is how the follow-up path is checked, and a
+    /// follow-up fixture recorded, on a Mac without a microphone grant.
+    func talkBack(typed text: String) {
+        guard canTalkBackTyped, let suggestion = suggestionToTalkTo() else { return }
+        AppState.log.notice("typed talk-back for suggestion \(suggestion.id)")
+        if case .waiting = talkBack {
+            Task { await mentor?.withdrawFollowUp() }
+        }
+        Task { await act(on: text, for: suggestion) }
+    }
+
+    /// The key came up: finish the transcript and act on it.
+    private func pushToTalkReleased() {
+        guard case .listening = talkBack else { return }
+        listeningLimitTask?.cancel()
+        listeningLimitTask = nil
+        let suggestion = activeSuggestion
+        transcriptTask = Task { [weak self] in
+            guard let self else { return }
+            let text = await self.listener.finish()
+            guard !Task.isCancelled else { return }
+            self.transcriptTask = nil
+            await self.handleTranscript(text, for: suggestion)
+        }
+    }
+
+    /// Ends the exchange: the recording is dropped, a transcript still being
+    /// finalized is ignored, and a question waiting its turn is withdrawn. A
+    /// follow-up call already in flight completes and its answer is journaled.
+    /// A recording cut short counts as nothing heard.
+    private func cancelTalkBack() {
+        listeningLimitTask?.cancel()
+        listeningLimitTask = nil
+        transcriptTask?.cancel()
+        transcriptTask = nil
+        listener.cancel()
+        let state = talkBack
+        if state != .idle {
+            setTalkBack(.idle)
+        }
+        switch state {
+        case .listening:
+            if let active = activeSuggestion {
+                settlePress(nil, for: active)
+            } else {
+                endHold()
+            }
+        case .waiting, .thinking:
+            Task { await mentor?.withdrawFollowUp() }
+        case .idle:
+            break
+        }
+    }
+
+    private func handleTranscript(_ text: String?, for suggestion: Suggestion?) async {
+        guard case .listening = talkBack else { return }
+        guard let suggestion, activeSuggestion?.id == suggestion.id else {
+            setTalkBack(.idle)
+            return
+        }
+        await act(on: text, for: suggestion)
+    }
+
+    /// What a transcript, heard or typed, does: one of the toast's answers, or
+    /// one follow-up question whose answer lands in the toast. Either makes
+    /// the toast a talked-to one that stays up, and holds new suggestions,
+    /// until it is closed. A press that heard nothing is not an exchange: the
+    /// toast gets back whatever countdown it had, and nothing is held for it.
+    private func act(on text: String?, for suggestion: Suggestion) async {
+        let match = text.flatMap(TranscriptMatcher.match)
+        setTalkBack(.idle)
+        settlePress(match, for: suggestion)
+        guard let text, let match else {
+            lastTranscript = TranscriptRecord(at: Date(), text: text ?? "", handling: "nothing heard")
+            toast.showNote("Mentor did not catch that.")
+            return
+        }
+        switch match {
+        case .answer(let feedback):
+            lastTranscript = TranscriptRecord(at: Date(), text: text, handling: "answered: \(feedback.label)")
+            AppState.log.notice("transcript answered \(feedback.rawValue, privacy: .public)")
+            if feedback == .tellMeMore { toast.expand() }
+            respond(to: suggestion.id, with: feedback)
+            if activeSuggestion?.id == suggestion.id {
+                Task { await mentor?.setTalkingBack(true) }
+            }
+        case .question(let question):
+            lastTranscript = TranscriptRecord(at: Date(), text: text, handling: "asked the mentor")
+            AppState.log.notice("transcript asked the mentor")
+            setTalkBack(.thinking(question: question))
+            guard let mentor else {
+                setTalkBack(.idle)
+                return
+            }
+            guard let followUp = await mentor.askFollowUp(about: suggestion, question: question) else { return }
+            upsert(followUp)
+            guard activeSuggestion?.id == suggestion.id,
+                  talkBack == .thinking(question: question) || talkBack == .waiting(question: question)
+            else { return }
+            setTalkBack(.idle)
+            toast.setExchange(exchange(for: suggestion.id))
+        }
+    }
+
+    private func upsert(_ followUp: FollowUp) {
+        if let index = followUps.firstIndex(where: { $0.id == followUp.id }) {
+            followUps[index] = followUp
+        } else {
+            followUps.insert(followUp, at: 0)
+            if followUps.count > AppState.followUpLimit {
+                followUps.removeLast(followUps.count - AppState.followUpLimit)
+            }
+        }
     }
 
     // MARK: Presentation helpers
@@ -569,15 +1137,21 @@ final class AppState {
             var slim = observation
             slim.frame.jpeg = nil
             prepend(.observation(slim))
+            lastNearDuplicateAt = nil
+            checkCalloutContent(against: observation)
         case .focusChanged(let context):
             focus = context
         case .modeChanged(let newMode):
             mode = newMode
             AppState.log.notice("mode: \(newMode.rawValue, privacy: .public)")
+            if !newMode.isActive {
+                cancelTalkBack()
+            }
             refreshPermissions()
         case .event(let journalEvent):
             prepend(.event(journalEvent))
         case .cadence(let status):
+            noteCadence(status)
             if status != cadence { cadence = status }
         }
     }
@@ -586,11 +1160,20 @@ final class AppState {
         switch event {
         case .status(let status):
             if status != mentorStatus { mentorStatus = status }
+            syncTalkBack(with: status)
         case .suggestion(let suggestion):
             present(suggestion)
         case .feedback(let suggestion):
             if let index = suggestionHistory.firstIndex(where: { $0.id == suggestion.id }) {
                 suggestionHistory[index] = suggestion
+            } else {
+                let index = suggestionHistory.firstIndex { $0.timestamp < suggestion.timestamp } ?? suggestionHistory.endIndex
+                suggestionHistory.insert(suggestion, at: index)
+            }
+        case .followUp(let followUp):
+            upsert(followUp)
+            if activeSuggestion?.id == followUp.suggestionID {
+                toast.setExchange(exchange(for: followUp.suggestionID))
             }
         case .call(let record):
             callLog.insert(record, at: 0)

@@ -45,6 +45,9 @@ public enum SuggestionFeedback: String, Codable, CaseIterable, Sendable {
     case never
     /// The toast timed out with no action.
     case expired
+    /// Held while the user talked to another toast, and stale by the time
+    /// that ended: never shown at all.
+    case expiredUnseen
     /// The user closed the toast without answering.
     case dismissed
 
@@ -54,13 +57,17 @@ public enum SuggestionFeedback: String, Codable, CaseIterable, Sendable {
         case .notNow: "Not now"
         case .never: "Never for this"
         case .expired: "Expired"
+        case .expiredUnseen: "Expired, never shown"
         case .dismissed: "Dismissed"
         }
     }
 
-    /// True for the two non-answers, which never overwrite an answer.
+    /// True for the non-answers, which never overwrite an answer.
     public var isNonAnswer: Bool {
-        self == .expired || self == .dismissed
+        switch self {
+        case .expired, .expiredUnseen, .dismissed: true
+        case .tellMeMore, .notNow, .never: false
+        }
     }
 }
 
@@ -81,6 +88,11 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
     public var promptVersion: Int
     public var feedback: SuggestionFeedback?
     public var feedbackAt: Date?
+    /// The spot on screen the suggestion is about, in the pixels of the frame
+    /// it was made from, when the mentor tier gave one and it lay inside the frame.
+    public var region: CalloutRegion?
+    /// Whether a callout was drawn on screen for it.
+    public var calloutShown: Bool
 
     public init(
         id: Int64 = 0,
@@ -97,7 +109,9 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
         model: String,
         promptVersion: Int,
         feedback: SuggestionFeedback? = nil,
-        feedbackAt: Date? = nil
+        feedbackAt: Date? = nil,
+        region: CalloutRegion? = nil,
+        calloutShown: Bool = false
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -114,6 +128,8 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
         self.promptVersion = promptVersion
         self.feedback = feedback
         self.feedbackAt = feedbackAt
+        self.region = region
+        self.calloutShown = calloutShown
     }
 }
 
@@ -121,6 +137,8 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
 public enum ModelTier: String, Codable, Sendable, CaseIterable {
     case triage
     case mentor
+    /// The mentor model answering something the user said about a suggestion.
+    case followUp
     /// The Settings "Test connection" button.
     case test
 
@@ -128,6 +146,7 @@ public enum ModelTier: String, Codable, Sendable, CaseIterable {
         switch self {
         case .triage: "Triage"
         case .mentor: "Mentor"
+        case .followUp: "Follow-up"
         case .test: "Test"
         }
     }
@@ -158,6 +177,8 @@ public enum ModelCallOutcome: String, Codable, Sendable, CaseIterable {
     case error
     /// The test call succeeded.
     case ok
+    /// A follow-up question was answered.
+    case answered
 
     public var label: String {
         switch self {
@@ -172,6 +193,7 @@ public enum ModelCallOutcome: String, Codable, Sendable, CaseIterable {
         case .truncated: "Truncated"
         case .error: "Error"
         case .ok: "OK"
+        case .answered: "Answered"
         }
     }
 }
@@ -285,6 +307,19 @@ public struct MentorStatus: Equatable, Sendable {
         }
     }
 
+    /// A follow-up question waiting for the call in flight to return before it is asked.
+    public struct PendingFollowUp: Equatable, Sendable {
+        public var suggestionID: Int64
+        public var question: String
+        public var since: Date
+
+        public init(suggestionID: Int64, question: String, since: Date) {
+            self.suggestionID = suggestionID
+            self.question = question
+            self.since = since
+        }
+    }
+
     public var availability: Availability
     public var lastGate: GateRecord?
     public var lastContext: ContextRecord?
@@ -298,6 +333,7 @@ public struct MentorStatus: Equatable, Sendable {
     public var nextTriageAt: Date?
     public var nextMentorAt: Date?
     public var inFlight: ModelTier?
+    public var pendingFollowUp: PendingFollowUp?
 
     public init(
         availability: Availability = .noAPIKey,
@@ -312,7 +348,8 @@ public struct MentorStatus: Equatable, Sendable {
         cadenceMultiplier: Double = 1,
         nextTriageAt: Date? = nil,
         nextMentorAt: Date? = nil,
-        inFlight: ModelTier? = nil
+        inFlight: ModelTier? = nil,
+        pendingFollowUp: PendingFollowUp? = nil
     ) {
         self.availability = availability
         self.lastGate = lastGate
@@ -327,6 +364,7 @@ public struct MentorStatus: Equatable, Sendable {
         self.nextTriageAt = nextTriageAt
         self.nextMentorAt = nextMentorAt
         self.inFlight = inFlight
+        self.pendingFollowUp = pendingFollowUp
     }
 }
 
@@ -337,6 +375,9 @@ public enum MentorEvent: Sendable {
     case suggestion(Suggestion)
     /// A suggestion's feedback was recorded.
     case feedback(Suggestion)
+    /// The user talked back to a suggestion and the exchange was journaled,
+    /// with the answer or with why there is none.
+    case followUp(FollowUp)
     case call(ModelCallRecord)
     /// The loop journaled an event (a suggestion or feedback), for timelines.
     case event(JournalEvent)

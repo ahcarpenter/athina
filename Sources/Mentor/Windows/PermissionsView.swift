@@ -7,7 +7,7 @@ struct PermissionsView: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 14) {
                 Image(systemName: "eye.circle.fill")
                     .font(.system(size: 40))
@@ -21,8 +21,22 @@ struct PermissionsView: View {
                 }
             }
 
-            VStack(spacing: 12) {
-                ForEach(Permission.allCases) { permission in
+            VStack(spacing: 10) {
+                ForEach(Permission.required) { permission in
+                    PermissionRow(permission: permission, granted: state.permissions.isGranted(permission))
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Optional, for talking back")
+                        .font(.headline)
+                    Text("Hold the talk-back key (Settings > Mentor) to answer or question a suggestion by voice. Both stay off until you grant them; everything else works without them.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                ForEach(Permission.optional) { permission in
                     PermissionRow(permission: permission, granted: state.permissions.isGranted(permission))
                 }
             }
@@ -44,10 +58,12 @@ struct PermissionsView: View {
         .frame(width: 560)
         .task {
             guard !Snapshots.isActive else { return }
-            AppState.log.notice("permissions window opened, granted: screen \(state.permissions.screenRecording) accessibility \(state.permissions.accessibility)")
-            // Trigger the system prompts once so Mentor appears in both
-            // System Settings lists; granting is then a matter of toggles.
-            for permission in Permission.allCases where !state.permissions.isGranted(permission) {
+            AppState.log.notice("permissions window opened, granted: screen \(state.permissions.screenRecording) accessibility \(state.permissions.accessibility) microphone \(state.permissions.microphone) speech \(state.permissions.speechRecognition)")
+            // Trigger the system prompts for the two sensing permissions once
+            // so Mentor appears in both System Settings lists; granting is
+            // then a matter of toggles. The voice pair is asked for only when
+            // the user reaches for it.
+            for permission in Permission.required where !state.permissions.isGranted(permission) {
                 state.requestPermission(permission)
             }
             // Grants made in System Settings do not notify apps; poll while visible.
@@ -96,7 +112,7 @@ private struct PermissionRow: View {
                 .padding(.top, 2)
             }
         }
-        .padding(14)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
     }
@@ -105,6 +121,8 @@ private struct PermissionRow: View {
         switch permission {
         case .screenRecording: "rectangle.dashed.badge.record"
         case .accessibility: "accessibility"
+        case .microphone: "mic.fill"
+        case .speechRecognition: "waveform.and.mic"
         }
     }
 }

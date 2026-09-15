@@ -192,7 +192,7 @@ public actor SensingPipeline {
             if hadAny || fresh.anyGranted {
                 Task { await journalEvent(JournalEvent(
                     kind: .permissionsChanged,
-                    detail: "screen \(fresh.screenRecording ? "granted" : "denied"), accessibility \(fresh.accessibility ? "granted" : "denied")"
+                    detail: "screen \(fresh.screenRecording ? "granted" : "denied"), accessibility \(fresh.accessibility ? "granted" : "denied"), microphone \(fresh.microphone ? "granted" : "denied"), speech \(fresh.speechRecognition ? "granted" : "denied")"
                 )) }
             }
         }
