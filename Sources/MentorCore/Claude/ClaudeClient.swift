@@ -33,7 +33,8 @@ public struct CacheControl: Codable, Equatable, Sendable {
 }
 
 /// One block of the system prompt. Every Mentor system prompt carries a
-/// cache marker so repeated calls read it from the prompt cache.
+/// cache marker so repeated calls read it from the prompt cache; a block that
+/// changes on every call passes nil.
 public struct SystemBlock: Codable, Equatable, Sendable {
     public var type: String
     public var text: String
@@ -387,10 +388,13 @@ public struct AnthropicClient: ClaudeClient {
         self.session = session
     }
 
+    /// The most a whole call may take, whatever its own timeout says.
+    public static let resourceTimeout: TimeInterval = 600
+
     public static func makeSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.waitsForConnectivity = false
-        configuration.timeoutIntervalForResource = 600
+        configuration.timeoutIntervalForResource = resourceTimeout
         configuration.httpAdditionalHeaders = nil
         return URLSession(configuration: configuration)
     }

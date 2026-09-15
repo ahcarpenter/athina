@@ -31,7 +31,8 @@ struct MentorApp: App {
             DebugPanelView()
                 .environment(state)
         }
-        .defaultSize(width: 1180, height: 720)
+        // Tall enough for the Now pane's cards, Understanding included.
+        .defaultSize(width: 1180, height: 860)
         .defaultLaunchBehavior(LaunchArguments.windowToOpen == WindowID.debug ? .presented : .suppressed)
         .restorationBehavior(.disabled)
 
@@ -138,6 +139,9 @@ struct MenuBarContent: View {
             Text(context)
         }
         Text(state.talkBackLine)
+        if let understandingLine = state.understandingLine {
+            Text(understandingLine)
+        }
         if let resources = state.resources {
             Text(String(format: "%.1f%% CPU · %@", resources.cpuPercent, Formatting.bytes(resources.footprintBytes)))
         }

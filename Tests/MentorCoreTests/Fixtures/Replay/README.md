@@ -4,35 +4,36 @@ Recorded model calls that `ReplayClaudeClient` serves in the loop tests and in
 `make run-replay`. See README.md, "Iterating without the network", for the format
 and the rules.
 
-Recorded live once on 2026-09-14 with `Mentor --record`, prompt version 5, from a
-staged scenario and nothing else: the two documents in `scenario/` open in
-TextEdit at 20 point, each window filling the built-in display, on a fresh
-journal, with every other running app and Mentor itself excluded and the idle
-threshold raised so sensing kept running while nothing was typed. The session
-was driven without keystrokes, through TextEdit scripting and accessibility
-actions, so no other app reached any request's event history. Triage and Test
-Connection ran on Claude Haiku 4.5. The mentor tier and the follow-up ran on
-Claude Opus 5 at medium effort, the shipped default: a first attempt on Claude
-Sonnet 5 at medium effort answered this same moment with a risk suggestion whose
-title, body, and explanation were empty, so it was discarded. Every file was
-read, text and screenshot, before it was committed.
+The set is current at prompt version 10. It was recorded live on 2026-09-15 in
+one `Mentor --record` session from a staged scenario and nothing else: the two
+documents in `scenario/` open in TextEdit, each window filling the built-in
+display with its text enlarged through Format > Font > Bigger (so TextEdit marks
+both windows Edited, which the recognized text shows), on an empty journal,
+with every other running app excluded, Mentor itself included. Triage, the
+understanding refresh, and Test Connection ran on Claude Haiku 4.5, the
+cheapest model offered for each. The mentor tier, and with it the follow-up,
+ran on Claude Sonnet 5 at medium effort. For the session the mentor tier's
+minimum interval was at its highest, so no second mentor call restarted the
+refresh count; the refresh interval was at its lowest, five minutes of active
+use; and the idle threshold was an hour. The session was driven without
+keystrokes: windows were raised through the accessibility API, the follow-up was
+typed into the debug panel's Talk back field, and Test Connection was pressed
+in Settings > Mentor. Every file was read, text and screenshot, before it was
+committed.
 
-| File | Kind | Moment | Answer |
-| --- | --- | --- | --- |
-| `20260915T000123.857Z-triage-de93ea15.json` | triage | cleanup-script.txt is in front | not worth a look |
-| `20260915T000428.773Z-triage-5966b261.json` | triage | switch to reading-notes.txt | not worth a look |
-| `20260915T000453.449Z-triage-0c9d3914.json` | triage | back to cleanup-script.txt | worth a look |
-| `20260915T000454.682Z-mentor-fb968013.json` | mentor | the same moment, with the screenshot (1280 by 827 pixels) | risk suggestion, confidence 0.93, region x 4, y 205, 260 by 30 around `rm -rf $BUILD_ROOT/*`, note "empty var means rm -rf /*" |
-| `20260915T000720.703Z-followUp-45fa3e98.json` | followUp | "which line do you mean, and what should I change it to", typed into the debug panel's Talk back field | names the line by its text and gives the quoted, guarded replacement |
-| `20260915T000815.151Z-test-fe31b22a.json` | test | Settings > Mentor > Test Connection | OK |
+While the refresh count ran, TextEdit briefly lost the front to the recording
+machine's terminal app three times. It was excluded, so no screen of it was
+captured, but the refresh request's recent events name those switches, and the
+refresh answer reads them as the user going to the terminal.
 
-Two imperfections are kept as the models gave them, because the fixtures record
-real answers: OCR read the first `echo` line without its opening quote, so the
-mentor reply and the follow-up both suggest adding one, and the follow-up counts
-the `rm` line as line 6, although it quotes the line exactly.
+| File | Kind | Model | Moment | Answer |
+| --- | --- | --- | --- | --- |
+| `20260915T073335.338Z-triage-35be2973.json` | triage | Claude Haiku 4.5 | reading-notes.txt in front at launch | not worth a look |
+| `20260915T073407.244Z-triage-5250ca2f.json` | triage | Claude Haiku 4.5 | switch to cleanup-script.txt | worth a look |
+| `20260915T073409.003Z-mentor-2acd5cb1.json` | mentor | Claude Sonnet 5, medium effort | the same moment, with the screenshot and no understanding yet | risk, confidence 0.92, with a region on `rm -rf $BUILD_ROOT/*`; the first understanding |
+| `20260915T073507.287Z-followUp-bc130c04.json` | followUp | Claude Sonnet 5, medium effort | "which line do you mean, and what should I change it to", typed into Talk back | names the line and gives the guard and the quoted replacement |
+| `20260915T073545.678Z-test-14607ebe.json` | test | Claude Haiku 4.5 | Settings > Mentor > Test Connection | OK |
+| `20260915T074108.202Z-triage-6852515a.json` | triage | Claude Haiku 4.5 | switch back to reading-notes.txt, with the understanding paragraph | not worth a look |
+| `20260915T074110.856Z-understanding-d4773524.json` | understanding | Claude Haiku 4.5 | periodic refresh, after five minutes of active use with no mentor call | a rewritten understanding with two goals |
 
-The live mentor region, drawn on the real screen during the recording, framed
-the `rm -rf $BUILD_ROOT/*` line exactly.
-
-The six kept calls cost an estimated $0.056277; the whole session, the
-discarded Sonnet 5 attempt included, cost $0.067693.
+The recordings cost an estimated $0.0365, and the session made no other call.

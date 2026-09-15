@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Subscribes to the sensing stream, runs the two Claude tiers behind
+/// Subscribes to the sensing stream, runs the three Claude tiers behind
 /// `MentorScheduler`'s gates, accounts spend, and publishes suggestions.
 ///
 /// Everything that reaches the network passes through `perform`, which is the
@@ -12,17 +12,42 @@ import OSLog
 /// toward the hour's spend or its cap.
 public actor MentorLoop {
     public static let triageTimeout: TimeInterval = 30
-    public static let mentorTimeout: TimeInterval = 180
     public static let testTimeout: TimeInterval = 30
+    /// Output tokens a second a reply is assumed to arrive at, under the rate
+    /// measured on Opus 5 (README), so a reply that runs to max_tokens still
+    /// finishes inside its timeout.
+    public static let outputTokensPerSecond = 15.0
+
+    /// The timeout for a call whose reply may run to `maxTokens`, never past
+    /// the client's own cap on a whole call.
+    public static func timeout(forReplyOf maxTokens: Int) -> TimeInterval {
+        min(AnthropicClient.resourceTimeout, 30 + Double(maxTokens) / outputTokensPerSecond)
+    }
     /// Triage answers a short JSON object.
     public static let triageMaxTokens = 200
     /// Mentor replies include adaptive thinking, which counts against this.
-    public static let mentorMaxTokens = 6000
+    /// They now also carry the rewritten understanding.
+    public static let mentorMaxTokens = 8000
     /// A follow-up answer is a few short sentences, plus the same thinking.
     public static let followUpMaxTokens = 3000
+    /// What a reply keeps for adaptive thinking, which every default model but
+    /// Haiku spends and which counts against max_tokens. The budget's range is
+    /// sized so a mentor reply keeps this beside the suggestion and a record
+    /// at the top of the range.
+    public static let thinkingAllowance = 3000
+    /// The JSON around the record and the reason sentence in a refresh reply.
+    public static let understandingReplyOverhead = 1000
+
+    /// A refresh reply is the record at its budget, the JSON and reason
+    /// around it, and the thinking before it.
+    public static func understandingMaxTokens(for budget: Int) -> Int {
+        budget + understandingReplyOverhead + thinkingAllowance
+    }
     /// How many journal rows feed the event summaries and the rolling window.
     public static let eventLookback = 40
     public static let windowLookback = 200
+    /// How many past suggestions a refresh call is told about.
+    public static let suggestionLookback = 20
 
     private static let log = Logger(subsystem: "com.ahcarpenter.mentor", category: "mentor")
 
@@ -57,19 +82,45 @@ public actor MentorLoop {
     }
     private var pendingQuestion: PendingQuestion?
     private var consumeTask: Task<Void, Never>?
+    /// The understanding carried between calls, nil until one forms.
+    private var understanding: UnderstandingRecord?
+    /// When the last observation arrived: the idle gap that expires the
+    /// understanding is measured from it, and the refresh gate holds until it
+    /// exists. Seeded from the journal at launch so the gap is measured from
+    /// real activity rather than from the record's last write.
+    private var lastActivityAt: Date?
+    /// The active use counted toward the next refresh: begun at the record's
+    /// last write, or at the first observation while there is no record, and
+    /// cleared with the record so the next stretch gets a whole interval for a
+    /// mentor call to write the record for free. Counted whenever the mode
+    /// changes and kept in the journal, so a relaunch carries on from it.
+    private var period: RefreshPeriod?
+    /// The system uptime when `period` was last counted or replaced. Uptime
+    /// stops while the Mac sleeps, so the next count measures only time awake.
+    /// Nil until this run first sets the period, so nothing from before the
+    /// launch is counted.
+    private var uptimeAtCount: TimeInterval?
+    /// When Reset Understanding last ran, so a request built before it
+    /// cannot store the record it was shown.
+    private var lastResetAt: Date?
+
+    /// Decides when a day ends for expiry.
+    private let calendar: Calendar
 
     public init(
         settings: MentorSettings,
         journal: Journal,
         client: any ClaudeClient,
         keyStore: any KeyStore,
-        events: AsyncStream<SensingEvent>
+        events: AsyncStream<SensingEvent>,
+        calendar: Calendar = .current
     ) {
         let validated = settings.validated()
         self.settings = validated
         self.journal = journal
         self.client = client
         self.keyStore = keyStore
+        self.calendar = calendar
         source = events
         scheduler = MentorScheduler(settings: validated)
         spend = SpendMeter(cap: validated.hourlySpendCap)
@@ -101,6 +152,7 @@ public actor MentorLoop {
         consumeTask?.cancel()
         consumeTask = nil
         dropPendingQuestion()
+        await countActiveUse(now: Date())
         await broadcaster.finish()
     }
 
@@ -226,13 +278,24 @@ public actor MentorLoop {
     private func handle(_ event: SensingEvent) async {
         switch event {
         case .modeChanged(let newMode):
+            await countActiveUse(now: Date())
             mode = newMode
             if newMode == .paused {
                 await expireHeldSuggestion(now: Date())
             }
+            // The refresh gate's last hold was reached in the old mode; the
+            // next observation gates again in this one.
+            status.lastRefreshHold = nil
             await publishStatus()
         case .observation(let observation):
+            await expireUnderstandingIfNeeded(now: Date())
+            lastActivityAt = observation.timestamp
+            if period == nil { await setPeriod(RefreshPeriod(startedAt: observation.timestamp)) }
             await consider(observation)
+            // After the interactive path, so a mentor call that just refreshed
+            // the record leaves nothing for the refresh gate to do, and the
+            // context verdict triage just reached is the one the gate sees.
+            await refreshUnderstandingIfDue(after: observation)
         case .focusChanged, .event, .cadence:
             break
         }
@@ -293,6 +356,14 @@ public actor MentorLoop {
         )
     }
 
+    /// The latest context verdict while it is still about this observation's
+    /// app, as the menu shows it: the verdict is rewritten only when triage
+    /// runs, and most observations hold before that.
+    private func contextPlacement(for observation: ActivityObservation) -> ContextPlacement? {
+        guard let record = status.lastContext, record.appName == observation.focus.appName else { return nil }
+        return record.placement
+    }
+
     // MARK: Triage tier
 
     /// Text only: app and window, accessibility summary, the latest OCR text,
@@ -305,7 +376,10 @@ public actor MentorLoop {
         let now = Date()
         let events = (try? await journal.recentEvents(limit: MentorLoop.eventLookback)) ?? []
         let contexts = settings.onlyMentorInsideContexts ? settings.contexts : []
-        let text = PromptBuilder.triageMessage(observation: observation, recentEvents: events, now: now)
+        let text = PromptBuilder.triageMessage(
+            observation: observation, recentEvents: events,
+            understanding: understanding?.content, now: now
+        )
         let model = settings.triageModelInfo
         let request = MessagesRequest(
             model: model.id,
@@ -346,21 +420,19 @@ public actor MentorLoop {
     // MARK: Mentor tier
 
     /// The rolling window of recent observations' text plus, when enabled,
-    /// the latest kept thumbnail as an image.
+    /// the latest kept thumbnail as an image. With a record standing, the
+    /// window also takes every screen journaled after the ones its last write
+    /// read, since the reply rewrites it.
     private func runMentor(_ observation: ActivityObservation, context: ContextPlacement) async {
         guard let apiKey else { return }
         let now = Date()
-        let since = now.addingTimeInterval(-settings.mentorWindowDuration)
-        var history = (try? await journal.recentObservations(since: since, limit: MentorLoop.windowLookback)) ?? []
-        if !history.contains(where: { $0.id == observation.id }) {
-            history.append(observation)
-        }
-        let window = RollingWindow.build(
-            observations: history, now: now,
-            duration: settings.mentorWindowDuration, tokenBudget: settings.mentorWindowTokenBudget
+        let window = await screens(
+            since: now.addingTimeInterval(-settings.mentorWindowDuration),
+            after: understanding?.coveredThroughObservationID, now: now, including: observation
         )
         let events = (try? await journal.recentEvents(limit: MentorLoop.eventLookback)) ?? []
         let suppressed = settings.suppressedCategories(bundleID: observation.focus.bundleID, now: now)
+        let requestedAt = Date()
 
         var content: [ContentBlock] = []
         let jpeg = settings.sendThumbnail ? observation.frame.jpeg : nil
@@ -368,22 +440,35 @@ public actor MentorLoop {
             content.append(.image(mediaType: "image/jpeg", base64: jpeg.base64EncodedString()))
         }
         content.append(.text(PromptBuilder.mentorMessage(
-            window: window, latest: observation, recentEvents: events,
+            window: window.entries, latest: observation, recentEvents: events,
             suppressed: suppressed, includesImage: jpeg != nil,
-            context: settings.contexts.first { $0.id == context.contextID }, now: now
+            context: settings.contexts.first { $0.id == context.contextID },
+            hasUnderstanding: understanding != nil,
+            understandingTokenBudget: settings.understandingTokenBudget,
+            screensLeftOut: window.leftOut, now: now
         )))
         let model = settings.mentorModelInfo
+        // The understanding is its own uncached system block after the cached
+        // prompt: it changes on every mentor call, so a marker on it would only
+        // pay the cache write and never be read.
+        var system = [SystemBlock(text: MentorPrompts.mentorSystem)]
+        if let understanding {
+            system.append(MentorPrompts.understandingBlock(understanding))
+        }
+        let strongestGoal = understanding?.content.primaryGoal?.goal
         let request = MessagesRequest(
             model: model.id,
             maxTokens: MentorLoop.mentorMaxTokens,
-            system: [SystemBlock(text: MentorPrompts.mentorSystem)],
+            system: system,
             messages: [Message(role: .user, content: content)],
             outputConfig: OutputConfig(
                 format: OutputFormat(schema: MentorPrompts.mentorSchema),
                 effort: settings.effort(for: .mentor)
             )
         )
-        let call = await perform(tier: .mentor, request: request, apiKey: apiKey, timeout: MentorLoop.mentorTimeout)
+        let call = await perform(
+            tier: .mentor, request: request, apiKey: apiKey, timeout: MentorLoop.timeout(forReplyOf: request.maxTokens)
+        )
         let shownAt = Date()
         var record = call.record
         var toShow: Suggestion?
@@ -397,6 +482,14 @@ public actor MentorLoop {
                 record.detail = "the API declined this request"
             } else if let verdict = MentorLoop.decode(MentorVerdict.self, from: response) {
                 record.detail = verdict.reason.withPlainDashes
+                // Every mentor call rewrites the record, so the refresh rides
+                // along and the periodic call only fires in the gaps.
+                if let updated = verdict.updatedUnderstanding, !resetSince(requestedAt) {
+                    await adopt(
+                        updated, at: shownAt, coveredThrough: window.readThrough,
+                        model: response.model, source: .mentorCall, cost: 0
+                    )
+                }
                 if let payload = verdict.suggestion {
                     let title = payload.title.withPlainDashes
                     if payload.isBlank {
@@ -410,6 +503,9 @@ public actor MentorLoop {
                     } else if let reason = settings.suppression(for: payload.category, bundleID: observation.focus.bundleID, now: now) {
                         record.outcome = .suppressed
                         record.detail = "\(title) (\(reason.label))"
+                    } else if payload.category.judgesAgainstGoal, strongestGoal == nil {
+                        record.outcome = .suppressed
+                        record.detail = "\(title) (no goal to judge against)"
                     } else {
                         record.outcome = .suggested
                         record.detail = title
@@ -427,6 +523,7 @@ public actor MentorLoop {
                             body: payload.body.withPlainDashes,
                             explanation: payload.explanation.withPlainDashes,
                             confidence: payload.confidence,
+                            judgedGoal: judgedGoal(for: payload, strongestGoal: strongestGoal),
                             observationID: observation.id == 0 ? nil : observation.id,
                             model: response.model,
                             promptVersion: MentorPrompts.version,
@@ -538,7 +635,7 @@ public actor MentorLoop {
                 effort: settings.effort(for: .followUp)
             )
         )
-        let call = await perform(tier: .followUp, request: request, apiKey: apiKey, timeout: MentorLoop.mentorTimeout)
+        let call = await perform(tier: .followUp, request: request, apiKey: apiKey, timeout: MentorLoop.timeout(forReplyOf: request.maxTokens))
         var record = call.record
         switch call.result {
         case .failure(let error):
@@ -590,6 +687,251 @@ public actor MentorLoop {
         await broadcaster.send(.followUp(stored))
         await publishStatus()
         return stored
+    }
+
+    // MARK: Understanding
+
+    /// The goal a suggestion was judged against: what the model named, falling
+    /// back to the strongest goal it was shown, and nothing at all for the
+    /// categories that do not judge against one.
+    private func judgedGoal(for payload: MentorVerdict.Payload, strongestGoal: String?) -> String? {
+        guard payload.category.judgesAgainstGoal else { return nil }
+        if let named = payload.judgedGoal?.withPlainDashes.trimmingCharacters(in: .whitespacesAndNewlines),
+           !named.isEmpty {
+            return named
+        }
+        return strongestGoal
+    }
+
+    /// Whether Reset Understanding ran after a request was built at
+    /// `requestedAt`, so its reply describes a record the user has forgotten.
+    private func resetSince(_ requestedAt: Date) -> Bool {
+        guard let lastResetAt else { return false }
+        return lastResetAt >= requestedAt
+    }
+
+    /// Takes a rewritten record as the current one: bounds it to the token
+    /// budget, stores it as the next revision, and publishes it. False when
+    /// the record was empty and nothing changed. `coveredThrough` is the
+    /// highest observation id the writing call read.
+    @discardableResult
+    private func adopt(
+        _ content: Understanding,
+        at time: Date,
+        coveredThrough: Int64?,
+        model: String,
+        source: UnderstandingSource,
+        cost: Double
+    ) async -> Bool {
+        let bounded = content.bounded(toTokens: settings.understandingTokenBudget)
+        guard !bounded.isEmpty else { return false }
+        var record: UnderstandingRecord
+        if let current = understanding {
+            record = current.next(
+                content: bounded, at: time, model: model, source: source,
+                cost: cost, promptVersion: MentorPrompts.version, coveredThroughObservationID: coveredThrough
+            )
+        } else {
+            record = UnderstandingRecord.first(
+                content: bounded, at: time, model: model, source: source,
+                cost: cost, promptVersion: MentorPrompts.version, coveredThroughObservationID: coveredThrough
+            )
+        }
+        do {
+            record = try await journal.record(record)
+        } catch {
+            MentorLoop.log.error("understanding not journaled: \(String(describing: error), privacy: .public)")
+        }
+        understanding = record
+        await setPeriod(RefreshPeriod(startedAt: record.updatedAt))
+        MentorLoop.log.notice(
+            "understanding revision \(record.revision) by \(source.rawValue, privacy: .public), \(record.content.goals.count) goals, \(record.content.estimatedTokens) tokens"
+        )
+        return true
+    }
+
+    /// Drops an understanding that no longer describes the present: a long gap
+    /// with no activity, or a new day. A period still counting toward the first
+    /// record goes by the same rules, quietly, since nothing was formed.
+    private func expireUnderstandingIfNeeded(now: Date) async {
+        guard let writtenAt = understanding?.updatedAt ?? period?.startedAt,
+              let expiry = UnderstandingExpiry.of(
+                  writtenAt: writtenAt, now: now, idleGap: settings.understandingIdleGap,
+                  lastActivityAt: lastActivityAt, calendar: calendar
+              )
+        else { return }
+        let expired = understanding
+        understanding = nil
+        await setPeriod(nil)
+        guard let record = expired else { return }
+        MentorLoop.log.notice("understanding expired: \(expiry.label, privacy: .public)")
+        await journalEvent(JournalEvent(
+            timestamp: now, kind: .understanding, detail: "expired after revision \(record.revision): \(expiry.label)"
+        ))
+        await publishStatus()
+    }
+
+    /// Forgets the understanding entirely, from Settings or the debug panel.
+    public func resetUnderstanding(at now: Date = Date()) async {
+        let previous = understanding
+        understanding = nil
+        lastResetAt = now
+        await setPeriod(nil)
+        status.lastRefreshHold = nil
+        do {
+            try await journal.clearUnderstanding()
+        } catch {
+            MentorLoop.log.error("understanding not cleared: \(String(describing: error), privacy: .public)")
+        }
+        await journalEvent(JournalEvent(
+            timestamp: now, kind: .understanding,
+            detail: previous.map { "reset after revision \($0.revision)" } ?? "reset"
+        ))
+        await publishStatus()
+    }
+
+    public func currentUnderstanding() -> UnderstandingRecord? { understanding }
+
+    /// Replaces the refresh period and keeps it in the journal.
+    private func setPeriod(_ newPeriod: RefreshPeriod?) async {
+        period = newPeriod
+        uptimeAtCount = ProcessInfo.processInfo.systemUptime
+        do {
+            try await journal.storeRefreshPeriod(newPeriod)
+        } catch {
+            MentorLoop.log.error("refresh period not journaled: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Counts the time awake since the period was last counted as active use
+    /// when the current mode captures the screen. Runs before every mode
+    /// change, so all of that time was spent in the current mode.
+    private func countActiveUse(now: Date) async {
+        guard let period else { return }
+        let awake = uptimeAtCount.map { ProcessInfo.processInfo.systemUptime - $0 }
+        await setPeriod(period.counted(through: now, awake: awake, in: mode))
+    }
+
+    /// Runs the periodic refresh when the gate allows it. Every mentor call
+    /// refreshes the record for free, so this only fires in a stretch of active
+    /// use with no mentor call in it.
+    private func refreshUnderstandingIfDue(after observation: ActivityObservation) async {
+        let now = Date()
+        await countActiveUse(now: now)
+        let gate = scheduler.refreshGate(
+            conditions: conditions(now: now),
+            context: contextPlacement(for: observation),
+            period: period,
+            lastActivityAt: lastActivityAt,
+            now: now
+        )
+        let since: Date
+        switch gate {
+        case .hold(let hold):
+            status.lastRefreshHold = MentorStatus.RefreshHoldRecord(at: now, hold: hold)
+            await publishStatus()
+            return
+        case .run(let periodStart):
+            status.lastRefreshHold = nil
+            since = periodStart
+        }
+        await setPeriod(period?.restarted(at: now))
+        await runRefresh(since: since, now: now)
+        await publishStatus()
+    }
+
+    /// Text only: the record as it stands, recent suggestions and events, and
+    /// the screens since it was last written: every one journaled after the
+    /// ones its last write read, or those since `since` before it has read any.
+    private func runRefresh(since: Date, now: Date) async {
+        guard let apiKey else { return }
+        let cursor = understanding?.coveredThroughObservationID
+        let window = await screens(since: cursor == nil ? since : nil, after: cursor, now: now)
+        let events = (try? await journal.recentEvents(limit: MentorLoop.eventLookback)) ?? []
+        let suggestions = (try? await journal.recentSuggestions(limit: MentorLoop.suggestionLookback)) ?? []
+        let requestedAt = Date()
+        let text = PromptBuilder.understandingMessage(
+            current: understanding, window: window.entries, recentEvents: events,
+            recentSuggestions: suggestions, tokenBudget: settings.understandingTokenBudget,
+            screensLeftOut: window.leftOut, now: now
+        )
+        let request = MessagesRequest(
+            model: settings.understandingModelInfo.id,
+            maxTokens: MentorLoop.understandingMaxTokens(for: settings.understandingTokenBudget),
+            system: [SystemBlock(text: MentorPrompts.understandingSystem)],
+            messages: [Message(role: .user, content: [.text(text)])],
+            outputConfig: OutputConfig(
+                format: OutputFormat(schema: MentorPrompts.understandingRefreshSchema),
+                effort: settings.effort(for: .understanding)
+            )
+        )
+        let call = await perform(
+            tier: .understanding, request: request, apiKey: apiKey, timeout: MentorLoop.timeout(forReplyOf: request.maxTokens)
+        )
+        var record = call.record
+        switch call.result {
+        case .failure(let error):
+            record.outcome = .error
+            record.detail = error.description
+        case .success(let response):
+            if response.isRefusal {
+                record.outcome = .refused
+                record.detail = "the API declined this request"
+            } else if let verdict = MentorLoop.decode(UnderstandingVerdict.self, from: response) {
+                if resetSince(requestedAt) {
+                    record.outcome = .error
+                    record.detail = "the understanding was reset during the call"
+                } else if await adopt(
+                    verdict.understanding, at: Date(), coveredThrough: window.readThrough,
+                    model: response.model, source: .periodic, cost: record.cost
+                ) {
+                    record.outcome = .refreshed
+                    record.detail = verdict.reason.withPlainDashes
+                } else {
+                    record.outcome = .error
+                    record.detail = "the refresh reply carried no understanding"
+                }
+            } else {
+                record.outcome = response.isTruncated ? .truncated : .error
+                record.detail = "could not parse the refresh reply"
+            }
+        }
+        status.lastRefresh = await store(record)
+    }
+
+    /// The screens a call reads: those at or after `since`, and every one
+    /// journaled after `cursor`, the highest id the record's last write read.
+    /// Returns the newest that fit the observation token budget; how many
+    /// older ones were left out, counting the rows a capped journal read never
+    /// returned and, with a cursor, only those after it, because the record
+    /// already covers the rest; and the highest id read, for the next
+    /// revision's cursor. `observation` is the one being considered, added
+    /// when the journal has not stored it.
+    private func screens(
+        since: Date?, after cursor: Int64?, now: Date, including observation: ActivityObservation? = nil
+    ) async -> (entries: [RollingWindow.Entry], leftOut: Int, readThrough: Int64?) {
+        // Observation ids are SQLite rowids, assigned at insert as one past the
+        // largest in the table, so they follow the order rows were journaled
+        // whatever their capture timestamps.
+        var history = (try? await journal.recentObservations(
+            since: since, after: cursor, limit: MentorLoop.windowLookback
+        )) ?? []
+        let readThrough = history.map(\.id).max().map { max($0, cursor ?? 0) } ?? cursor
+        func uncovered(_ row: ActivityObservation) -> Bool { cursor.map { row.id > $0 } ?? true }
+        var unread = 0
+        if history.count >= MentorLoop.windowLookback,
+           let total = try? await journal.observationCount(since: cursor == nil ? since : nil, after: cursor) {
+            unread = max(0, total - history.filter(uncovered).count)
+        }
+        if let observation, !history.contains(where: { $0.id == observation.id }) {
+            history.append(observation)
+        }
+        let window = RollingWindow.fill(
+            observations: history, now: now,
+            duration: now.timeIntervalSince(history.map(\.timestamp).min() ?? now),
+            tokenBudget: settings.mentorWindowTokenBudget, countingAfter: cursor
+        )
+        return (window.entries, window.leftOut + unread, readThrough)
     }
 
     // MARK: Calls
@@ -698,6 +1040,8 @@ public actor MentorLoop {
         status.cadenceMultiplier = multiplier
         status.nextTriageAt = scheduler.nextTriageAllowed(multiplier: multiplier)
         status.nextMentorAt = scheduler.nextMentorAllowed(multiplier: multiplier)
+        status.understanding = understanding
+        status.nextRefreshAt = scheduler.nextRefreshAllowed(after: period, mode: mode, multiplier: multiplier)
         status.inFlight = ModelTier.allCases.first { inFlight.contains($0) }
         guard status != lastPublishedStatus else { return }
         lastPublishedStatus = status
@@ -728,7 +1072,22 @@ public actor MentorLoop {
         if let recent = try? await journal.recentModelCalls(limit: 50) {
             status.lastTriage = recent.first { $0.tier == .triage }
             status.lastMentor = recent.first { $0.tier == .mentor }
+            status.lastRefresh = recent.first { $0.tier == .understanding }
         }
+        // The understanding survives a relaunch, so a restart mid-task does not
+        // throw away what Mentor had worked out. Expiry runs here as on every
+        // observation, so one that went stale while the app was closed is
+        // journaled as expired rather than silently skipped. The journal's
+        // newest observation is the activity this run has not seen yet. The
+        // count toward the next refresh survives with it; one kept from before
+        // the record's last write, or none, starts over at that write.
+        understanding = try? await journal.latestUnderstanding()
+        lastActivityAt = (try? await journal.recentObservations(limit: 1))?.first?.timestamp
+        period = try? await journal.refreshPeriod()
+        if let record = understanding, (period?.startedAt ?? .distantPast) < record.updatedAt {
+            await setPeriod(RefreshPeriod(startedAt: record.updatedAt))
+        }
+        await expireUnderstandingIfNeeded(now: now)
     }
 
     private func journalEvent(_ event: JournalEvent) async {

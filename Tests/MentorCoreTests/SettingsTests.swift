@@ -56,6 +56,46 @@ import Testing
         settings.textRetention = 12 * 3600
         #expect(settings.validated().textRetention == 12 * 3600)
     }
+
+    @Test func understandingSettingsHaveTheirDocumentedDefaults() {
+        let d = MentorSettings()
+        #expect(d.understandingModel == ModelCatalog.opus5.id)
+        #expect(d.understandingEffort == .low)
+        #expect(d.understandingRefreshInterval == 900)
+        #expect(d.understandingIdleGap == 4 * 3600)
+        #expect(d.effort(for: .understanding) == .low)
+    }
+
+    @Test func aMentorFileWrittenBeforeTheUnderstandingTakesItsDefaults() throws {
+        // A settings file from the previous build has none of these keys.
+        let data = Data(#"{"mentorModel": "claude-sonnet-5", "hourlySpendCap": 2}"#.utf8)
+        let decoded = try JSONDecoder().decode(MentorSettings.self, from: data)
+        #expect(decoded.mentorModel == "claude-sonnet-5")
+        #expect(decoded.hourlySpendCap == 2)
+        #expect(decoded.understandingModel == MentorSettings().understandingModel)
+        #expect(decoded.understandingRefreshInterval == MentorSettings().understandingRefreshInterval)
+        #expect(decoded.understandingTokenBudget == MentorSettings().understandingTokenBudget)
+        #expect(decoded.understandingIdleGap == MentorSettings().understandingIdleGap)
+    }
+
+    @Test func understandingSettingsRoundTripAndClamp() throws {
+        var settings = MentorSettings()
+        settings.understandingModel = ModelCatalog.haiku45.id
+        settings.understandingEffort = .high
+        settings.understandingRefreshInterval = 1800
+        settings.understandingTokenBudget = 2000
+        settings.understandingIdleGap = 8 * 3600
+        let decoded = try JSONDecoder().decode(MentorSettings.self, from: try JSONEncoder().encode(settings))
+        #expect(decoded == settings)
+        // Haiku rejects the effort parameter, so none is sent for that tier.
+        #expect(decoded.effort(for: .understanding) == nil)
+
+        let outOfRange = Data(#"{"understandingTokenBudget": 99999, "understandingIdleGap": 5, "understandingModel": "not-a-model"}"#.utf8)
+        let clamped = try JSONDecoder().decode(MentorSettings.self, from: outOfRange)
+        #expect(clamped.understandingTokenBudget == MentorSettings.understandingTokenBudgetRange.upperBound)
+        #expect(clamped.understandingIdleGap == 600)
+        #expect(clamped.understandingModel == MentorSettings().understandingModel)
+    }
 }
 
 @Suite struct ExcludedAppsTests {
