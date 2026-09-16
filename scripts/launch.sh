@@ -129,7 +129,7 @@ if [ "$LIVE" = 1 ]; then
 	if [ -n "$running" ]; then
 		{
 			echo "launch: a live Mentor is already running, so this one would share its journal, its settings, and its API spend:"
-			echo "$running" | sed 's/^/  /'
+			echo "  ${running//$'\n'/$'\n'  }"
 			echo "Quit it first (kill <pid>)."
 		} >&2
 		exit 1
