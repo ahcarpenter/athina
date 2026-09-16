@@ -171,10 +171,22 @@ enum Clicker {
         }
         say("row \"\(rowTitle)\" frame \(row)")
         Pointer.glide(to: CGPoint(x: row.midX, y: row.midY), steps: 10, stepMicroseconds: 25_000)
-        usleep(800_000)
 
-        guard let item = menuItemFrame(itemTitle) else {
-            fail("menupick: item \"\(itemTitle)\" did not open under \"\(rowTitle)\"", code: ClickExit.wrongTarget.rawValue)
+        // A submenu opens after a hover delay macOS decides, not after a fixed
+        // wait, so poll for it while keeping the pointer moving inside the row:
+        // a still pointer can leave the hover unrenewed.
+        var opened: CGRect?
+        for attempt in 0..<20 {
+            usleep(200_000)
+            Pointer.move(to: CGPoint(x: row.midX + (attempt.isMultiple(of: 2) ? 1 : -1), y: row.midY))
+            if let frame = menuItemFrame(itemTitle) {
+                opened = frame
+                say("submenu opened after \(Double(attempt + 1) * 0.2)s")
+                break
+            }
+        }
+        guard let item = opened else {
+            fail("menupick: item \"\(itemTitle)\" did not open under \"\(rowTitle)\" within 4s", code: ClickExit.wrongTarget.rawValue)
         }
         say("item \"\(itemTitle)\" frame \(item)")
         // Cross into the submenu along the row before dropping onto the item,

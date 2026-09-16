@@ -371,13 +371,14 @@ screenshots, event taps, announcements, and the journal as TSV and as a copy).
 ### The warm fixture home
 
 A fresh scratch home has no text-recognition model cache, so its first capture
-blocks 30 to 60 seconds inside OCR and the journal fills with events and no
-observations. `mentor-e2e warm` pays that once into
-`~/Library/Caches/mentor-e2e/warm-home`, keeps the caches, and throws the
-session's journal away. Every run then clones it with `cp -c`, an APFS
-copy-on-write copy that costs no measurable time and no disk, and starts from
-an empty journal in a home of its own. Re-warm with `warm --force` after a
-macOS upgrade.
+blocks inside OCR while the model compiles, and the journal fills with events
+and no observations: measured at **93 seconds** on the owner's Mac.
+`mentor-e2e warm` pays that once into `~/Library/Caches/mentor-e2e/warm-home`
+(the `com.apple.e5rt.e5bundlecache` the compile leaves behind), keeps the
+caches, and throws the session's journal away. Every run then clones it with
+`cp -c`, an APFS copy-on-write copy that costs no measurable time and no disk,
+and starts from an empty journal in a home of its own. A run's **first capture
+then lands in 1 second**. Re-warm with `warm --force` after a macOS upgrade.
 
 ### Drive helpers
 
