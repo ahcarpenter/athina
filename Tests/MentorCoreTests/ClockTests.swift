@@ -192,7 +192,10 @@ import Testing
 
     /// A replay given a clock flag it cannot use says why, and still runs on
     /// its own clock at real time: carried on from its journal, and no further.
-    @Test func aRefusedFlagInAReplayStillCarriesOnFromItsJournal() async throws {
+    /// A flag value a replay cannot use is refused, and the replay still gets a
+    /// clock of its own at real time, with nothing added ahead, that the debug
+    /// panel and `ClockRemote` can still move.
+    @Test func aRefusedFlagInAReplayStillLeavesItAClockOfItsOwn() throws {
         let now = Date(timeIntervalSince1970: 1_789_473_600)
         let mode = ClockMode(arguments: ["Mentor", "--replay", "/f", "--time-scale", "500", "--advance-clock", "2h"], clientMode: replay)
         #expect(mode.refusal == "--time-scale needs a number from 1 to 100")
@@ -201,12 +204,11 @@ import Testing
         let adjustable = try #require(control)
         #expect(clock.rate == 1)
 
-        let journal = try Journal.inMemory()
-        try await journal.record(JournalEvent(timestamp: now + 86400, kind: .stopped))
-        mode.startReplay(adjustable, journalNewest: try await journal.newestTimestamp())
-        #expect(clock.date == now + 86400)
+        mode.startReplay(adjustable)
+        #expect(clock.date == now)
+        adjustable.advance(by: .seconds(3600))
         base.advance(by: .seconds(10))
-        #expect(clock.date == now + 86410)
+        #expect(clock.date == now + 3610)
         #expect(ClockMode.refused("x").refusal == "x")
         #expect(ClockMode.system.refusal == nil)
     }
@@ -222,49 +224,21 @@ import Testing
         #expect(clock.date == base.date + 89)
     }
 
-    /// A relaunch carries on from where the replay's own journal left off, and
-    /// `--advance-clock` moves it further; a journal behind the clock changes nothing.
-    @Test func aReplaysClockStartsNeverBehindItsJournalThenMovesAhead() {
+    /// A replay's clock starts at real time and `--advance-clock` moves it that
+    /// far ahead; a mode that is not a replay is not moved at all.
+    @Test func aReplaysClockStartsAtRealTimeAndAdvanceClockMovesItAhead() {
         let now = Date(timeIntervalSince1970: 1_789_473_600)
         let ahead = AdjustableClock(startingAt: now)
-        ClockMode.replay(scale: 1, ahead: 3600).startReplay(ahead, journalNewest: now + 7200)
-        #expect(ahead.date == now + 10_800)
+        ClockMode.replay(scale: 1, ahead: 3600).startReplay(ahead)
+        #expect(ahead.date == now + 3600)
 
-        let behind = AdjustableClock(startingAt: now)
-        ClockMode.replay(scale: 1, ahead: 0).startReplay(behind, journalNewest: now - 86400)
-        #expect(behind.date == now)
-
-        let empty = AdjustableClock(startingAt: now)
-        ClockMode.replay(scale: 1, ahead: 60).startReplay(empty, journalNewest: nil)
-        #expect(empty.date == now + 60)
+        let plain = AdjustableClock(startingAt: now)
+        ClockMode.replay(scale: 1, ahead: 0).startReplay(plain)
+        #expect(plain.date == now)
 
         let untouched = AdjustableClock(startingAt: now)
-        ClockMode.system.startReplay(untouched, journalNewest: now + 7200)
+        ClockMode.system.startReplay(untouched)
         #expect(untouched.date == now)
-    }
-
-    /// The journal is read before the clock is positioned, and a request over
-    /// `ClockRemote` can be served while that read is outstanding. Catching up
-    /// to the journal must add to whatever that request already moved rather
-    /// than swallow it, or the clock ends where it would have been had the
-    /// request never arrived while the script that made it was told it moved.
-    @Test func anAdvanceThatLandsBeforeTheJournalCatchUpIsAddedNotSwallowed() {
-        let now = Date(timeIntervalSince1970: 1_789_473_600)
-        let mode = ClockMode.replay(scale: 1, ahead: 0)
-        let journalNewest = now + 7200
-
-        let inOrder = AdjustableClock(startingAt: now)
-        mode.startReplay(inOrder, journalNewest: journalNewest)
-        inOrder.advance(by: .seconds(7200))
-
-        // The same two moves, the request first, as the race delivers them.
-        let raced = AdjustableClock(startingAt: now)
-        raced.advance(by: .seconds(7200))
-        mode.startReplay(raced, journalNewest: journalNewest)
-
-        #expect(raced.date == now + 14_400)
-        #expect(raced.date == inOrder.date)
-        #expect(raced.movedAhead == inOrder.movedAhead)
     }
 
     @Test func aJournalsNewestTimeIsItsLatestStampAnywhere() async throws {

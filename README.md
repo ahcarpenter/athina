@@ -255,18 +255,16 @@ open -n build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1
   or idle it counts nothing; and past midnight the next observation expires the
   understanding.
 
-A replay's clock never starts behind its own journal. A faster or advanced
-session leaves rows stamped ahead of real time, so a launch that finds such
-rows carries on from the newest of them, then moves `--advance-clock` further,
-rather than going back in time. Every replay makes a new directory, so in
-practice its journal is empty and its clock starts at real time; no replay ever
-reads another's journal, so a faster clock in one never moves another's.
+Every replay makes a new directory, so its journal is empty and its clock
+starts at real time, `--advance-clock` ahead of it when that is given. No
+replay ever reads another's journal, so a faster clock in one never moves
+another's.
 
 The menu bar and the debug panel's Replay badges read **Replay 60x** while the
 clock is scaled, and the menu's Clock line and the Mentor card's Clock field
 say how fast it runs, how far it was moved ahead, and, in the card, the date it
 reads. A launch that asked for a replay it could not start keeps the replay's
-journal, and so its clock. Either flag on a live or recording launch is
+files, and so its clock. Either flag on a live or recording launch is
 refused: the app runs on real time, and the menu, the Mentor card, and the log
 say why, so a live or recording run can never use a controlled clock. A replay
 given a flag value it cannot use says why in the same places, and runs on its
@@ -333,8 +331,8 @@ of them disturbs another or the live app:
   never chose. A file that is not there at all is refused more gently, and the
   replay starts from the live settings, so the apps you excluded stay excluded.
   Put every app a replayed callout must not cover in that file's excluded apps.
-- **Both flags apply only to a replay.** On a live or recording launch they
-  are refused, like the clock flags: the app uses the live files, and the menu,
+- **`--settings` applies only to a replay.** On a live or recording launch it
+  is refused, like the clock flags: the app uses the live files, and the menu,
   the Mentor card, and the log say why. The live app's files never move.
 - **Launching never quits another Mentor.** `make run-replay` replaces only the
   replay its lane (`LANE`, default `replay`) launched from this checkout, and
@@ -346,9 +344,9 @@ of them disturbs another or the live app:
   request, never after an elapsed time that proves nothing on a busy Mac. So a
   `scripts/advance-clock.sh` sent the moment the pid file appears is heard
   rather than posted into a channel nobody is observing yet. A launch that
-  quits as it starts, a replay given a directory another one holds among them,
-  is reported as the failure it is, with what the app said, and leaves no pid
-  file behind. So is a lane whose journal will not open: it can journal no
+  quits as it starts, a replay given a `--settings` file that is not settings
+  among them, is reported as the failure it is, with what the app said, and
+  leaves no pid file behind. So is a lane whose journal will not open: it can journal no
   event and answer no check, so it is reported as a failed launch and stopped,
   even though the app itself stays up when you start it by hand so you can read
   the error in the menu and the debug panel. Two lanes run side by side:

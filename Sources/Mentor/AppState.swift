@@ -330,9 +330,10 @@ final class AppState {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.displayConfigurationChanged() }
         }
+        // Where a replay's clock starts, before anything runs on it and before
+        // the line that says this lane is up.
+        startReplayClock()
         eventTask = Task { [weak self] in
-            // A replay's clock carries on from its journal before anything runs on it.
-            await self?.startReplayClock(journal: journal)
             let stream = await pipeline.events()
             let mentorStream = await pipeline.events()
             let mentor = MentorLoop(
@@ -362,15 +363,9 @@ final class AppState {
         }
     }
 
-    private func startReplayClock(journal: Journal) async {
+    private func startReplayClock() {
         guard let clockControl else { return }
-        var newest: Date?
-        do {
-            newest = try await journal.newestTimestamp()
-        } catch {
-            AppState.log.error("clock starts at real time, the journal's newest time is unreadable: \(String(describing: error), privacy: .public)")
-        }
-        clockMode.startReplay(clockControl, journalNewest: newest)
+        clockMode.startReplay(clockControl)
         clockMovedAhead = clockControl.movedAhead.timeInterval
         AppState.log.notice("clock: \(self.clockLog, privacy: .public)")
     }
