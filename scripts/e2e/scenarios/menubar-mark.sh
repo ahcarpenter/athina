@@ -14,14 +14,6 @@
 # The bar-*.png strips this writes are the evidence of what is really drawn.
 SCENARIO_SUMMARY="Mentor's item keeps one width in the real menu bar across modes"
 
-# The item's width in the real bar, to a tenth of a point.
-mark_width() {
-	"$DRIVE" bar "$MENTOR_PID" 2>/dev/null \
-		| awk -v pid="$MENTOR_PID" '$0 ~ "pid=" pid " " {
-			for (i = 1; i <= NF; i++) if ($i ~ /^w=/) { sub("w=", "", $i); printf "%.1f\n", $i; exit }
-		}'
-}
-
 # Mentor's ordinary windows, ids only and sorted: the menu bar extra and any
 # open menu sit above them at layer 101 and are left out.
 ordinary_windows() {
@@ -34,12 +26,12 @@ scenario_run() {
 	wait_first_observation || return 1
 	wait_idle_input 10 || return 1
 
-	watching="$(mark_width)"
+	watching="$(mentor_item_width)"
 	check "Mentor has an item in the bar while watching" "yes" "$([ -n "$watching" ] && echo yes || echo no)"
 	[ -n "$watching" ] || { log "Mentor has no menu bar extra; see transcript.log"; return 1; }
 	# A strip of the real bar around the item, as evidence of what it looks like.
-	bar_x="$("$DRIVE" bar "$MENTOR_PID" | awk -v pid="$MENTOR_PID" '$0 ~ "pid=" pid " " {
-		for (i = 1; i <= NF; i++) if ($i ~ /^x=/) { sub("x=", "", $i); printf "%d\n", $i - 60; exit } }')"
+	# The item is known to be in the bar by here, so its line carries an x.
+	bar_x=$(($(mentor_extra | sed -n 's/.* x=\([0-9]*\)[0-9.]* .*/\1/p') - 60))
 	bar_y=0
 	"$DRIVE" shot region "$bar_x" "$bar_y" 260 44 "$RUN_DIR/bar-watching.png" >/dev/null 2>&1 || true
 	log "mark width while watching: $watching pt"
@@ -51,7 +43,7 @@ scenario_run() {
 	"$DRIVE" ax "$MENTOR_PID" press AXMenuItem "Pause Watching" >>"$RUN_DIR/transcript.log" 2>&1 || true
 	"$DRIVE" ax "$MENTOR_PID" cancelmenu >/dev/null 2>&1 || true
 	sleep 0.8
-	paused="$(mark_width)"
+	paused="$(mentor_item_width)"
 	"$DRIVE" shot region "$bar_x" "$bar_y" 260 44 "$RUN_DIR/bar-paused.png" >/dev/null 2>&1 || true
 	log "mark width while paused: $paused pt"
 	check "paused is drawn at the same width as watching" "$watching" "$paused"
@@ -64,7 +56,7 @@ scenario_run() {
 	"$DRIVE" ax "$MENTOR_PID" press AXMenuItem "Resume Watching" >>"$RUN_DIR/transcript.log" 2>&1 || true
 	"$DRIVE" ax "$MENTOR_PID" cancelmenu >/dev/null 2>&1 || true
 	sleep 0.8
-	resumed="$(mark_width)"
+	resumed="$(mentor_item_width)"
 	"$DRIVE" shot region "$bar_x" "$bar_y" 260 44 "$RUN_DIR/bar-resumed.png" >/dev/null 2>&1 || true
 	check "resuming is drawn at the same width again" "$watching" "$resumed"
 

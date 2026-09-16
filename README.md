@@ -366,8 +366,8 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 | `other-app-click` | a real click inside a staged TextEdit window dismisses the suggestion |
 | `menubar-keyboard` | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one menu bar scenario that needs no idle input |
 | `menubar-width` | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
-| `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
 | `menubar-mark` | Mentor's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
+| `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
 every check it made, and the directory holding its evidence (transcript,
@@ -1148,13 +1148,13 @@ the understanding's encoding, versioning, bounding and expiry, prompt assembly
 with and without one, request and response coding against fixture JSON,
 recording, redaction, replay matching and stale refusal, launch flags, a
 replay's separate files, the clocks and a replay's clock flags, the toast
-countdown, which variant of the mark the menu bar shows, callout mapping and
-every anchor rejection, a callout aging out,
-transcript matching, the follow-up prompt and gate, the toast rule for voice
-input, the whole loop against a scripted client, follow-ups included, and the
-whole loop against the committed replay fixtures, replayed strictly, a region
-and a follow-up answer included, and every time-based behavior of the loop on
-the test clock) and Vision OCR on a drawn bitmap, so they need no
+countdown, which variant of the mark the menu bar shows and that every variant
+is committed at one size, callout mapping and every anchor rejection, a callout
+aging out, transcript matching, the follow-up prompt and gate, the toast rule
+for voice input, the whole loop against a scripted client, follow-ups included,
+and the whole loop against the committed replay fixtures, replayed strictly, a
+region and a follow-up answer included, and every time-based behavior of the
+loop on the test clock) and Vision OCR on a drawn bitmap, so they need no
 permissions, display, network, microphone, or API key. A committed fixture that
 is stale, or a tier with no committed fixture, fails the run (see The committed
 fixtures). The snapshot run covers every window and Settings pane with sample
@@ -1163,4 +1163,5 @@ the cap), the callout over the sample frame, the toast collapsed, expanded,
 listening, thinking, answered, and as a note, the context editor with a
 duplicate name, the transient status messages (a connection test, a refused
 or recording shortcut, on-device recognition unavailable), and every variant of
-the menu bar mark, at the size the bar draws it and enlarged beside it.
+the menu bar mark, at the size the bar draws it, with the word a replay puts
+beside it, and enlarged.

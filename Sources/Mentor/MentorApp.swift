@@ -77,6 +77,17 @@ struct MenuBarLabel: View {
     }
 }
 
+/// The mark itself, at the size the menu bar draws it.
+struct MenuBarLabelImage: View {
+    let mark: MenuBarMark
+
+    var body: some View {
+        if let image = MenuBarMarkImage.image(for: mark) {
+            Image(nsImage: image).renderingMode(.template)
+        }
+    }
+}
+
 /// Keeps a window's size and position across launches. SwiftUI saves no frame
 /// for a window scene whose state restoration is off, which Mentor's windows
 /// need so they do not reopen at every login.
@@ -170,18 +181,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
-    }
-}
-
-/// The mark itself. Every variant is the same size, so the menu bar's other
-/// extras never shift sideways when Mentor's state changes.
-struct MenuBarLabelImage: View {
-    let mark: MenuBarMark
-
-    var body: some View {
-        if let image = MenuBarMarkImage.image(for: mark) {
-            Image(nsImage: image).renderingMode(.template)
-        }
     }
 }
 
