@@ -268,8 +268,8 @@ files, and so its clock. Either flag on a live or recording launch is
 refused: the app runs on real time, and the menu, the Mentor card, and the log
 say why, so a live or recording run can never use a controlled clock. A replay
 given a flag value it cannot use says why in the same places, and runs on its
-own clock at real time with nothing added ahead: it still carries on from its
-journal, and the Advance field still moves it.
+own clock at real time with nothing added ahead, which the Advance field and
+`scripts/advance-clock.sh` still move.
 
 The tests run on the same kind of clock with no real time at all: an
 `AdjustableClock` made with a start date stands still until a test advances

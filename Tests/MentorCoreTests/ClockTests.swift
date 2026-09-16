@@ -190,8 +190,6 @@ import Testing
             == .replay(scale: 1, ahead: 0, refusal: "--advance-clock needs an interval such as 15m, 2h, or 1d, up to 30d"))
     }
 
-    /// A replay given a clock flag it cannot use says why, and still runs on
-    /// its own clock at real time: carried on from its journal, and no further.
     /// A flag value a replay cannot use is refused, and the replay still gets a
     /// clock of its own at real time, with nothing added ahead, that the debug
     /// panel and `ClockRemote` can still move.

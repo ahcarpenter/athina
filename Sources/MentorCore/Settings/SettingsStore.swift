@@ -50,7 +50,7 @@ public enum AppPaths {
         return base.appendingPathComponent("mentor", isDirectory: true)
     }
 
-    /// Where replays keep their data directories when not given one (see
+    /// Where replays keep the data directory each launch makes (see
     /// `LaunchFiles`): `replay` inside the support directory.
     public static func replayRoot(in supportDirectory: URL = supportDirectory()) -> URL {
         supportDirectory.appendingPathComponent("replay", isDirectory: true)
@@ -59,9 +59,9 @@ public enum AppPaths {
     /// True when `url` names `directory` itself or something inside it, as the
     /// file system sees it rather than as it was spelled: symlinks resolved, a
     /// trailing slash and `..` normalized, and case ignored, since the boot
-    /// volume is case-insensitive by default. Used wherever a path someone
-    /// else chose must be kept out of somewhere (`LaunchFiles.claim`,
-    /// `ClockRemote.answer`), so spelling it differently is never a way in.
+    /// volume is case-insensitive by default. Used where a path someone else
+    /// chose must be kept out of somewhere (`ClockRemote.answer`), so spelling
+    /// it differently is never a way in.
     public static func isAt(_ url: URL, orInside directory: URL) -> Bool {
         let subject = resolvedPath(url)
         let parent = resolvedPath(directory)
@@ -70,9 +70,9 @@ public enum AppPaths {
     }
 
     /// `url` with every symlink in it resolved. `resolvingSymlinksInPath`
-    /// gives up on a path that does not exist yet, which a data directory or a
-    /// reply file usually is, so the deepest part that does exist is resolved
-    /// and the rest put back on.
+    /// gives up on a path that does not exist yet, which a reply file usually
+    /// is, so the deepest part that does exist is resolved and the rest put
+    /// back on.
     static func resolvedPath(_ url: URL) -> String {
         var missing: [String] = []
         var existing = url.standardizedFileURL
