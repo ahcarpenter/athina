@@ -668,9 +668,13 @@ struct DurationRow: View {
                     }
                 }
                 .labelsHidden()
-                // As wide as its longest unit, so the field and stepper of
-                // duration rows in one section line up whichever unit each shows.
-                .frame(width: 84, alignment: .trailing)
+                // A menu-style Picker sizes to the unit it is showing, not to
+                // the widest in its menu, so without a floor two duration rows
+                // in one section put their fields and steppers at different x
+                // positions, 12 px apart in the Journal pane. The floor holds
+                // them on one edge, and it is a minimum rather than a width so
+                // a longer unit word grows the control instead of clipping.
+                .frame(minWidth: 84, alignment: .trailing)
                 .onChange(of: unit) { _, _ in push() }
             }
         } label: {
