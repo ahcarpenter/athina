@@ -1,0 +1,28 @@
+21:27:26 === understanding-surfaces: the understanding a mentor call writes reaches the menu, the card, and Settings, and Reset Understanding asks first
+21:27:26 evidence: /Users/ahcarpenter/Library/Caches/mentor-e2e/runs/understanding-surfaces-20260915-212726
+21:27:26 saved the com.ahcarpenter.mentor preferences
+21:27:29 staged TextEdit pid=92338 with notes.txt and plan.txt
+21:27:29 launched Mentor pid=92367 (replay, sandboxed, home=/Users/ahcarpenter/Library/Caches/mentor-e2e/runs/understanding-surfaces-20260915-212726/home)
+21:27:30 Mentor ready after 1s
+21:27:31 first observation after 1s
+21:27:32 staged the flipping helper window at 120,200 700x380 (pid 92387)
+21:28:48 toast window 30322 up for suggestion 1
+21:28:48 the understanding names "Prepare and safely run a disk-cleanup script on a build machine before the nightly build"
+21:28:48   ok   the mentor call wrote an understanding = 1
+21:28:51   ok   the menu shows the goal it worked out = yes
+21:28:52   ok   the card shows the goal = yes
+21:28:52   ok   the card names the refresh interval = yes
+21:28:52   ok   the card offers Reset Understanding = yes
+21:28:55   ok   Settings shows the current goal = yes
+21:28:58   ok   the confirmation asks before resetting = yes
+21:28:58   ok   the confirmation says it cannot be undone = yes
+21:28:58   ok   the confirmation offers Cancel = yes
+21:28:59   ok   Cancel keeps the understanding = 1
+21:29:00   ok   Cancel journals no reset = 0
+21:29:04   ok   Reset Understanding forgets every revision = 0
+21:29:04   ok   the reset is journaled = 1
+21:29:04   ok   the card says there is no understanding yet = yes
+21:29:08   ok   the menu says the goal is not worked out yet = yes
+21:29:08 === understanding-surfaces: pass
+21:29:08 cleanup
+21:29:08 restored the com.ahcarpenter.mentor preferences
