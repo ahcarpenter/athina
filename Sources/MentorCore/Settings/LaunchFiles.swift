@@ -205,10 +205,16 @@ public struct LaunchFiles: Equatable, Sendable {
     }
 
     /// When a replay's journal was last written, which bounds how new anything
-    /// inside it can be. `.distantPast` when there is none to read, so a
-    /// directory holding no journal at all is swept rather than kept forever.
+    /// inside it can be: the newest of the journal and its `-wal` and `-shm`
+    /// files, since in WAL mode a write lands in `-wal` and the journal file
+    /// itself changes only when it is made and at a checkpoint. `.distantPast`
+    /// when there is none to read, so a directory holding no journal at all is
+    /// swept rather than kept forever.
     private static func lastWritten(_ journal: URL) -> Date {
-        (try? journal.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+        ["", "-wal", "-shm"].compactMap { suffix in
+            try? URL(fileURLWithPath: journal.path + suffix)
+                .resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        }.max() ?? .distantPast
     }
 
 }

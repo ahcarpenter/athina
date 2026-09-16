@@ -313,6 +313,33 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
         #expect(left == ["launch-401-0000000a"])
     }
 
+    /// A journal writes into its `-wal` file and changes the journal file
+    /// itself only when it is made and at a checkpoint, and a replay that quits
+    /// leaves its writes there. A lane whose writes all landed in the `-wal`
+    /// is dated by them: it stays inside the window its journal file alone is
+    /// past, and it is newer than a lane last written an hour ago.
+    @Test func aLaneWhoseWritesAreAllInTheWalSurvivesTheSweep() async throws {
+        let support = scratch()
+        defer { try? FileManager.default.removeItem(at: support) }
+        let root = AppPaths.replayRoot(in: support)
+        let manager = FileManager.default
+        let now = Date()
+
+        let lane = root.appendingPathComponent("launch-501-0000000c", isDirectory: true)
+        let url = Journal.defaultURL(in: lane)
+        let journal = try Journal(url: url)
+        try await journal.record(Fixtures.observation(at: now))
+        try manager.setAttributes([.modificationDate: now - 9 * 3600], ofItemAtPath: url.path)
+        #expect(manager.fileExists(atPath: url.path + "-wal"))
+        try finishedLaunch("launch-502-0000000d", in: support, written: now - 3600)
+
+        withExtendedLifetime(journal) {
+            LaunchFiles.pruneFinishedLaunches(in: root, keeping: 1, window: 6 * 3600, now: now)
+        }
+        let left = Set(try manager.contentsOfDirectory(atPath: root.path))
+        #expect(left == [lane.lastPathComponent])
+    }
+
 }
 
 /// The one line a launch writes for whoever started it, which
