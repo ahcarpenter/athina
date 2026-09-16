@@ -201,9 +201,10 @@ open build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1d -
   paced for a person shrink too: at 60x a held talk-back key is cut off after
   half a second, so talk back to a scaled replay through the Talk back field.
   A capture still takes its real time, so at a high scale one is nearly always
-  in flight, and a change moment that lands during one can be missed; use a
-  low scale around window switches and the advance directives below for long
-  waits.
+  in flight. A change moment that lands during one is captured after it ends,
+  but several that land during the same capture share that one next capture,
+  so use a low scale when each window switch needs its own, and the advance
+  directives below for long waits.
 - `--advance-clock <interval>` starts the clock that far ahead: `90s`, `15m`,
   `2h`, `1d12h`, up to `30d`.
 - The debug panel's Mentor card has an **Advance** field (accessibility label
@@ -519,6 +520,9 @@ Captures are triggered by app or window switches (after `focusSettleDelay`), by
 input bursts settling (`inputSettleDelay`), by a slow floor cadence
 (`floorInterval`) while active, or manually. Nothing runs while paused, idle,
 on an excluded app, or without permissions. `minCaptureInterval` bounds the rate.
+A capture consumes only the triggers noted before it started: a switch, input,
+or manual request that lands while one is in flight stays pending, so the next
+capture follows it under the same delays.
 
 A capture reads the fresh accessibility context, grabs the display containing
 the focused window with `SCScreenshotManager` (Mentor's own windows excluded,
