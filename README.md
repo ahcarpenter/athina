@@ -1078,7 +1078,10 @@ particular to this app:
   (`scripts/mark-assets.swift`) builds the app icon from it and the menu bar
   mark from the second master, the owl below; their outputs are committed, so a
   plain `make build` needs nothing else, and `MarkAssetTests` fails when either
-  master changes without `make mark` being run.
+  master or the script changes without `make mark` being run. The script is in
+  that record because most of the drawing lives there rather than in the
+  masters: the menu bar inset, the eye treatments, the z's and the per-size
+  thickening are all constants in it.
 - **The app icon is the full artwork, full bleed.** macOS 26 masks a legacy
   `.icns` to the standard app icon shape itself and adds the shadow, in Finder,
   in the Dock and in About, scaling the artwork into the 824 of 1024 body, so

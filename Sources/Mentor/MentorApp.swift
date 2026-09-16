@@ -181,11 +181,6 @@ struct MenuBarLabelImage: View {
     var body: some View {
         if let image = MenuBarMarkImage.image(for: mark) {
             Image(nsImage: image).renderingMode(.template)
-        } else {
-            // The bundle is the only place the mark lives, so this is only
-            // reached by a build that did not copy it; say so rather than
-            // showing nothing at all in the menu bar.
-            Image(systemName: "questionmark.square.dashed")
         }
     }
 }

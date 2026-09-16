@@ -71,22 +71,29 @@ import Testing
         #expect(Set(files) == expected, "run `make mark` after changing the set")
     }
 
-    /// The check that catches the one mistake that matters: the master was
-    /// edited and `make mark` was not run, so the icon and the mark in the
-    /// bundle are of an older drawing.
+    /// The check that catches the one mistake that matters: a master or the
+    /// script that draws it was edited and `make mark` was not run, so the icon
+    /// and the mark in the bundle are of an older drawing.
     ///
     /// It compares what the assets were built from rather than rebuilding
     /// them, because Core Graphics stamps the running macOS version into every
     /// PDF it writes, so two machines cannot produce the same bytes.
-    @Test func theAssetsWereBuiltFromTheMastersThatAreHereNow() throws {
+    @Test func theAssetsWereBuiltFromTheSourcesThatAreHereNow() throws {
         let record = try String(contentsOf: markDirectory.appendingPathComponent("built-from.txt"), encoding: .utf8)
-        // Two masters: the Athena drawing behind the app icon, and the owl
-        // behind the menu bar.
-        for name in ["MentorMark.svg", "MentorOwl.svg"] {
-            let svg = try Data(contentsOf: markDirectory.appendingPathComponent(name))
-            let digest = SHA256.hash(data: svg).map { String(format: "%02x", $0) }.joined()
-            #expect(record.contains("\(name) \(digest)"),
-                    "Resources/Mark/\(name) has changed since the assets were built; run `make mark`")
+        // The Athena drawing behind the app icon, the owl behind the menu bar,
+        // and the script that carries the rest of the drawing: the inset, the
+        // eye treatments, the z's and the per-size thickening are constants
+        // there, not in either master.
+        let sources = [
+            markDirectory.appendingPathComponent("MentorMark.svg"),
+            markDirectory.appendingPathComponent("MentorOwl.svg"),
+            root.appendingPathComponent("scripts/mark-assets.swift"),
+        ]
+        for url in sources {
+            let data = try Data(contentsOf: url)
+            let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+            #expect(record.contains("\(url.lastPathComponent) \(digest)"),
+                    "\(url.lastPathComponent) has changed since the assets were built; run `make mark`")
         }
         // And the set it was built for is the set the code can ask for.
         let variants = record.split(separator: "\n")

@@ -615,29 +615,39 @@ func writeMenuBarMarks() throws {
           + "\(menuBarWidth) x \(Int(menuBarHeight)) pt, one width in every mode)")
 }
 
-/// Records which master the committed assets were built from.
+/// Records what the committed assets were built from: both masters, and this
+/// script.
 ///
 /// Core Graphics stamps the running macOS version into every PDF it writes, so
 /// two machines cannot produce the same bytes and "rebuild and diff" is not a
 /// check that can hold. What matters is not the bytes but whether the assets
-/// came from the drawing that is in the tree now, and that is what this
-/// records: `MarkAssetTests` fails when the master has changed and `make mark`
-/// has not been run.
+/// came from the drawing and the drawing code that are in the tree now, and
+/// that is what this records: `MarkAssetTests` fails when any of the three has
+/// changed and `make mark` has not been run.
+///
+/// The script is in the record because most of the drawing lives here rather
+/// than in the masters: the inset, the eye treatments, the z's and the
+/// per-size thickening are all constants in this file, and an edit to any of
+/// them leaves the committed assets stale with nothing else to catch it. The
+/// output is a pure function of these three, so rerunning after an edit
+/// rewrites one line here and leaves the seven binary files untouched.
 func writeProvenance() throws {
-    let digest = try [master, owlMaster].map { url -> String in
+    let generator = URL(fileURLWithPath: #filePath)
+    let digest = try [master, owlMaster, generator].map { url -> String in
         let data = try Data(contentsOf: url)
         return url.lastPathComponent + " " + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }.joined(separator: "\n")
     let text = """
-    # Which masters Resources/AppIcon.icns and the MenuBarMark PDFs beside it
-    # were built from. Written by scripts/mark-assets.swift; run `make mark`
-    # after changing either master or the variant set, never edit this by hand.
+    # What Resources/AppIcon.icns and the MenuBarMark PDFs beside it were built
+    # from: both masters and the script that drew them. Written by
+    # scripts/mark-assets.swift; run `make mark` after changing a master, the
+    # script or the variant set, never edit this by hand.
     \(digest)
     variants \(set.map(\.mark).joined(separator: " "))
 
     """
     try text.write(to: markDirectory.appendingPathComponent("built-from.txt"), atomically: true, encoding: .utf8)
-    print("  Resources/Mark/built-from.txt  (both masters recorded)")
+    print("  Resources/Mark/built-from.txt  (both masters and this script recorded)")
 }
 
 try writeIcon()

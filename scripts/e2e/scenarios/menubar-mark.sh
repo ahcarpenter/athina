@@ -1,13 +1,18 @@
 # shellcheck shell=bash
 # SCENARIO_* below are read by scripts/e2e/mentor-e2e, which sources this file.
 # shellcheck disable=SC2034
-# Mentor's own mark must be what the real menu bar draws, and it must keep one
-# width as Mentor changes state: an item that grows or shrinks pushes every
-# extra to its left sideways, which is the one thing a menu bar extra must
-# never do. The width is read from the real bar through accessibility, not from
-# the asset, so this catches a mark the app failed to load as well as one drawn
-# at the wrong size.
-SCENARIO_SUMMARY="the real menu bar draws Mentor's mark, at one width across modes"
+# Mentor's mark must keep one width as Mentor changes state: an item that grows
+# or shrinks pushes every extra to its left sideways, which is the one thing a
+# menu bar extra must never do. The width is read from the real bar through
+# accessibility rather than from the asset, so it is the width the bar actually
+# gave the item, and a variant drawn at a different size from the others fails
+# the comparison.
+#
+# It does not prove the drawing is Mentor's own. The harness runs the app in
+# replay, where the mode word sits beside the mark, so an item whose mark did
+# not load is still an item with a width and every comparison here still holds.
+# The bar-*.png strips this writes are the evidence of what is really drawn.
+SCENARIO_SUMMARY="Mentor's item keeps one width in the real menu bar across modes"
 
 # The item's width in the real bar, to a tenth of a point.
 mark_width() {
@@ -30,7 +35,7 @@ scenario_run() {
 	wait_idle_input 10 || return 1
 
 	watching="$(mark_width)"
-	check "the mark is in the bar while watching" "yes" "$([ -n "$watching" ] && echo yes || echo no)"
+	check "Mentor has an item in the bar while watching" "yes" "$([ -n "$watching" ] && echo yes || echo no)"
 	[ -n "$watching" ] || { log "Mentor has no menu bar extra; see transcript.log"; return 1; }
 	# A strip of the real bar around the item, as evidence of what it looks like.
 	bar_x="$("$DRIVE" bar "$MENTOR_PID" | awk -v pid="$MENTOR_PID" '$0 ~ "pid=" pid " " {
