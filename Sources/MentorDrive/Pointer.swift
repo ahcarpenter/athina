@@ -187,8 +187,25 @@ enum Clicker {
         guard Pointer.isAt(target) else {
             fail("ABORT: pointer is at \(Pointer.location()), not \(target)", code: ClickExit.pointerMoved.rawValue)
         }
-        guard topmostWindow(at: target)?.pid == pid else {
-            fail("NOT CLICKING: the menu at \(target) is not pid \(pid)'s", code: ClickExit.wrongTarget.rawValue)
+
+        // What is under the point decides, and for a menu that is the
+        // accessibility tree, not the window list: macOS draws menus and the
+        // menu bar into Window Server's own surfaces, so the topmost window
+        // there is often not the app's at all. It is still worth logging.
+        say("topmost window at \(target): \(topmostWindow(at: target)?.description ?? "none")")
+        var hit: AXUIElement?
+        AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(target.x), Float(target.y), &hit)
+        guard let hit else {
+            fail("NOT CLICKING: nothing is under \(target)", code: ClickExit.wrongTarget.rawValue)
+        }
+        var hitPid: pid_t = 0
+        AXUIElementGetPid(hit, &hitPid)
+        say("AX under point: role=\(role(hit)) title=\"\(title(hit))\" pid=\(hitPid)")
+        guard hitPid == pid, role(hit) == "AXMenuItem", title(hit) == itemTitle else {
+            fail(
+                "NOT CLICKING: \(target) is \(role(hit)) \"\(title(hit))\" of pid \(hitPid), not \(pid)'s \"\(itemTitle)\"",
+                code: ClickExit.wrongTarget.rawValue
+            )
         }
         say("clicking \"\(itemTitle)\" at \(target) at \(stamp())")
         Pointer.click(at: target)
