@@ -72,21 +72,43 @@ check() {
 
 # --- Building -----------------------------------------------------------------
 
-ensure_drive() {
-	[ -x "$DRIVE" ] && [ -z "$(find "$ROOT/Sources/MentorDrive" "$ROOT/Sources/MentorE2E" -newer "$DRIVE" -name '*.swift' -print -quit)" ] && return 0
-	log "building mentor-drive"
-	(cd "$ROOT" && swift build --product mentor-drive >/dev/null) || die "could not build mentor-drive"
+# Is anything under the given directories newer than the built product?
+sources_newer_than() {
+	local product="$1"
+	shift
+	[ -x "$product" ] || return 0
+	[ -n "$(find "$@" -name '*.swift' -newer "$product" -print -quit)" ]
 }
 
-ensure_app() {
-	[ -x "$APP_BINARY" ] && return 0
-	# Never rebuild a bundle something is running from: scripts/bundle.sh
-	# deletes it first, and another lane (or the owner) may be using it.
-	if pgrep -f "$APP_BINARY" >/dev/null 2>&1; then
-		die "$APP is running; rebuild it yourself when nothing is using it"
+ensure_drive() {
+	if sources_newer_than "$DRIVE" "$ROOT/Sources/MentorDrive" "$ROOT/Sources/MentorE2E"; then
+		log "building mentor-drive"
+		(cd "$ROOT" && swift build --product mentor-drive >/dev/null) || die "could not build mentor-drive"
 	fi
-	log "building $APP"
-	(cd "$ROOT" && scripts/bundle.sh release >/dev/null 2>&1) || die "could not build the app bundle"
+}
+
+# A check of a stale bundle proves nothing, so the app is rebuilt when a source
+# file is newer than it. Never while something is running from it, though:
+# scripts/bundle.sh deletes the bundle first, and another lane, or the owner,
+# may be using this one.
+ensure_app() {
+	if sources_newer_than "$APP_BINARY" "$ROOT/Sources"; then
+		if pgrep -f "$APP_BINARY" >/dev/null 2>&1; then
+			die "$APP is out of date and something is running from it; rebuild it when nothing is"
+		fi
+		log "building $APP (a source file is newer than it)"
+		(cd "$ROOT" && scripts/bundle.sh release >/dev/null 2>&1) || die "could not build the app bundle"
+	fi
+}
+
+# What was run, for whoever reads the evidence later.
+record_build_provenance() {
+	{
+		printf 'commit %s\n' "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
+		printf 'worktree %s\n' "$(git -C "$ROOT" status --porcelain 2>/dev/null | wc -l | tr -d ' ') file(s) modified"
+		printf 'app %s\n' "$(shasum -a 256 "$APP_BINARY" | cut -c1-16)"
+		printf 'fixtures %s\n' "$FIXTURES"
+	} >"$RUN_DIR/build.txt"
 }
 
 # --- The owner's preferences --------------------------------------------------

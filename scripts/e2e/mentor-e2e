@@ -177,6 +177,7 @@ run_scenario() (
 	log "evidence: $RUN_DIR"
 
 	trap cleanup EXIT
+	record_build_provenance
 	prefs_save
 	HOME_DIR="$RUN_DIR/home"
 	new_home "$HOME_DIR"
