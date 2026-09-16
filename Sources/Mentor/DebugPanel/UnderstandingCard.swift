@@ -48,7 +48,7 @@ struct UnderstandingCard: View {
                     }
                     Divider()
                     VStack(alignment: .leading, spacing: 4) {
-                        Field(label: "Refresh", value: "every \(Formatting.duration(state.settings.mentor.understandingRefreshInterval)) of active use")
+                        Field(label: "Refresh", value: "every \(ClockInterval.description(of: state.settings.mentor.understandingRefreshInterval)) of active use")
                         Field(label: "Next", value: nextRefresh(now: now), lineLimit: 4)
                         if let record {
                             Field(label: "Size", value: "\(Formatting.tokens(record.content.estimatedTokens)) of \(Formatting.tokens(state.settings.mentor.understandingTokenBudget)) tokens")
@@ -84,7 +84,7 @@ struct UnderstandingCard: View {
     }
 
     private var emptyText: String {
-        let interval = Formatting.duration(state.settings.mentor.understandingRefreshInterval)
+        let interval = ClockInterval.description(of: state.settings.mentor.understandingRefreshInterval)
         return "No understanding yet. The next mentor call writes the first one, or a refresh call does after \(interval) of active use without one."
     }
 

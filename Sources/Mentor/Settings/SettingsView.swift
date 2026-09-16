@@ -700,8 +700,9 @@ struct DurationRow: View {
 
     private func push() {
         let seconds = amount * unit.seconds
-        value = range.map { seconds.clamped(to: $0) } ?? max(60, seconds)
-        pull()
+        let bounded = range.map { seconds.clamped(to: $0) } ?? max(60, seconds)
+        value = bounded
+        amount = (bounded / unit.seconds * 10).rounded() / 10
     }
 }
 

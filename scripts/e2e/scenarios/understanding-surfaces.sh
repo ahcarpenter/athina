@@ -44,13 +44,27 @@ menu_items() {
 	sleep 0.4
 }
 
+# The id of the first window whose name starts with $1, empty when none is open.
+window_id() {
+	"$DRIVE" windows "$MENTOR_PID" \
+		| awk -v want="$1" 'index($0, "name=\"" want) {sub("id=", "", $1); print $1; exit}' || echo ""
+}
+
+wait_window() {
+	local want="$1" limit="${2:-10}" i
+	for i in $(seq 1 "$limit"); do
+		[ -n "$(window_id "$want")" ] && return 0
+		sleep 0.5
+	done
+	return 1
+}
+
 # The window's text as VoiceOver reads it, which is also where a label that is
 # only a description rather than a title still shows up.
 window_texts() {
-	local scope="$1" tag="$2"
+	local scope="$1" tag="$2" id
 	"$DRIVE" ax "$MENTOR_PID" texts --scope "$scope" >"$RUN_DIR/$tag-texts.txt" 2>&1 || true
-	local id
-	id="$("$DRIVE" windows "$MENTOR_PID" | awk -v want="$scope" 'index($0, "name=\"" want) {sub("id=", "", $1); print $1; exit}')"
+	id="$(window_id "$scope")"
 	[ -n "$id" ] && "$DRIVE" shot window "$id" "$RUN_DIR/$tag.png" >/dev/null 2>&1
 	return 0
 }
@@ -90,8 +104,14 @@ scenario_run() {
 	# way to change panes, so the pane is chosen before the window opens. The
 	# harness puts the owner's preferences back whatever happens.
 	defaults write "$PREFS_DOMAIN" SettingsPane models >>"$RUN_DIR/transcript.log" 2>&1 || true
-	"$DRIVE" ax "$MENTOR_PID" pressx AXMenuItem "Settings…" --scope extras >>"$RUN_DIR/transcript.log" 2>&1 || true
-	sleep 2
+	# A menu item is only in the tree while the menu is open, so the extra is
+	# pressed right before it, and closed again in case the press left it up.
+	"$DRIVE" ax "$MENTOR_PID" pressextra >>"$RUN_DIR/transcript.log" 2>&1 || { log "the menu bar extra would not open"; return 1; }
+	sleep 0.8
+	"$DRIVE" ax "$MENTOR_PID" pressx AXMenuItem "Settings…" --scope extras >>"$RUN_DIR/transcript.log" 2>&1 \
+		|| { log "the menu offered no Settings… item to press"; return 1; }
+	"$DRIVE" ax "$MENTOR_PID" cancelmenu >>"$RUN_DIR/transcript.log" 2>&1 || true
+	wait_window "Models" || { log "Settings never opened on the Models pane"; return 1; }
 	window_texts "Models" "settings"
 	check "Settings shows the current goal" "yes" "$(has_text settings-texts.txt "$goal")"
 	"$DRIVE" close "$MENTOR_PID" Models >>"$RUN_DIR/transcript.log" 2>&1 || true
