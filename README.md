@@ -304,8 +304,12 @@ of them disturbs another or the live app:
   never opened again, so retention can never age the thumbnails and recognized
   text it captured from the real screen, and the whole directory goes at that
   window instead. Newest, and unwritten, are both measured from when a
-  directory's journal was last written, so a lane that ran all day and quit a
-  moment ago is one of the newest and stays readable. The sweep takes the
+  directory's journal or its `-wal` file was last modified, so a lane that ran
+  all day and quit a moment ago is one of the newest and stays readable. Read a
+  finished lane's journal with `sqlite3 -readonly`, which modifies neither: a
+  plain `sqlite3`, or any reader that opens it read-write, runs a checkpoint as
+  it closes that modifies both, and so can keep the directory up to one window
+  longer. The sweep takes the
   directory's lock before it removes anything, so it never touches one a
   running replay holds, and it never touches a directory whose name is not a
   launch's own.

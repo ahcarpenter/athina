@@ -207,8 +207,12 @@ public struct LaunchFiles: Equatable, Sendable {
     /// When a replay's journal was last written, which bounds how new anything
     /// inside it can be: the newer of the journal and its `-wal` file, since
     /// in WAL mode a write lands in `-wal` and the journal file itself changes
-    /// only when it is made and at a checkpoint. Not `-shm`, which a read
-    /// rewrites, so reading a finished lane never keeps it longer.
+    /// only when it is made and at a checkpoint. Not `-shm`, which a read-only
+    /// read rewrites, so a read-only read never keeps a finished lane longer.
+    /// A read-write reader, the `sqlite3` CLI at its default among them, runs
+    /// a checkpoint as it closes that touches both files, and so can put the
+    /// lane's removal off by up to one window.
+    /// To do instead: date a lane by the newest timestamp inside its journal.
     /// `.distantPast` when there is none to read, so a directory holding no
     /// journal at all is swept rather than kept forever.
     private static func lastWritten(_ journal: URL) -> Date {

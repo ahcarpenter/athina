@@ -317,11 +317,11 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
     /// itself only when it is made and at a checkpoint, and a replay that quits
     /// leaves its writes there. A lane whose writes all landed in the `-wal`
     /// is dated by them: it stays inside the window its journal file alone is
-    /// past, and it is newer than a lane last written an hour ago. Reading a
-    /// finished lane rewrites its `-shm` file and writes nothing, so a lane
-    /// last written nine hours ago and read a moment ago is still past the
-    /// window, and never pushes out a lane written since.
-    @Test func aLaneWhoseWritesAreAllInTheWalSurvivesTheSweepAndAReadExtendsNone() async throws {
+    /// past, and it is newer than a lane last written an hour ago. A read-only
+    /// read of a finished lane rewrites its `-shm` file and nothing else, so a
+    /// lane last written nine hours ago and read that way a moment ago is
+    /// still past the window, and never pushes out a lane written since.
+    @Test func aLaneWhoseWritesAreAllInTheWalSurvivesTheSweepAndAReadOnlyReadExtendsNone() async throws {
         let support = scratch()
         defer { try? FileManager.default.removeItem(at: support) }
         let root = AppPaths.replayRoot(in: support)
@@ -342,7 +342,7 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
         for suffix in ["", "-wal"] {
             try manager.setAttributes([.modificationDate: now - 9 * 3600], ofItemAtPath: readURL.path + suffix)
         }
-        // Where a read of the finished journal leaves its mark.
+        // Where a read-only read of the finished journal leaves its mark.
         try manager.setAttributes([.modificationDate: now], ofItemAtPath: readURL.path + "-shm")
 
         try finishedLaunch("launch-502-0000000d", in: support, written: now - 3600)
