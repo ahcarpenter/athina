@@ -295,7 +295,7 @@ suggestion_feedback() {
 # journals nothing) and Capture Now is pressed through accessibility.
 # Prints the toast's window id.
 wait_toast() {
-	local limit="${1:-300}" i last_flip=0 last_capture=0 now toast
+	local limit="${1:-300}" i last_flip=0 last_capture=0 switches=0 now toast
 	for i in $(seq 1 "$limit"); do
 		kill -0 "$MENTOR_PID" 2>/dev/null || die "Mentor exited while waiting for a toast"
 		toast="$(toast_window)"
@@ -305,8 +305,19 @@ wait_toast() {
 			return 0
 		fi
 		now=$(date +%s)
-		if [ -n "${FLIP_PID:-}" ] && [ $((now - last_flip)) -ge 10 ]; then
-			kill -USR1 "$FLIP_PID" 2>/dev/null || true
+		if [ $((now - last_flip)) -ge 10 ]; then
+			# A screen that never changes journals nothing, and a window
+			# switch is what makes the next capture a focus-change one, so
+			# both nudges go together.
+			[ -n "${FLIP_PID:-}" ] && { kill -USR1 "$FLIP_PID" 2>/dev/null || true; }
+			if [ -n "${TEXTEDIT_PID:-}" ]; then
+				if [ $((switches % 2)) = 0 ]; then
+					raise_window "$TEXTEDIT_PID" plan.txt
+				else
+					raise_window "$TEXTEDIT_PID" notes.txt
+				fi
+				switches=$((switches + 1))
+			fi
 			last_flip=$now
 		fi
 		if [ $((now - last_capture)) -ge 30 ]; then
