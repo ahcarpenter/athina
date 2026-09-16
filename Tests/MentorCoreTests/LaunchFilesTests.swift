@@ -317,27 +317,41 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
     /// itself only when it is made and at a checkpoint, and a replay that quits
     /// leaves its writes there. A lane whose writes all landed in the `-wal`
     /// is dated by them: it stays inside the window its journal file alone is
-    /// past, and it is newer than a lane last written an hour ago.
-    @Test func aLaneWhoseWritesAreAllInTheWalSurvivesTheSweep() async throws {
+    /// past, and it is newer than a lane last written an hour ago. Reading a
+    /// finished lane rewrites its `-shm` file and writes nothing, so a lane
+    /// last written nine hours ago and read a moment ago is still past the
+    /// window, and never pushes out a lane written since.
+    @Test func aLaneWhoseWritesAreAllInTheWalSurvivesTheSweepAndAReadExtendsNone() async throws {
         let support = scratch()
         defer { try? FileManager.default.removeItem(at: support) }
         let root = AppPaths.replayRoot(in: support)
         let manager = FileManager.default
         let now = Date()
 
-        let lane = root.appendingPathComponent("launch-501-0000000c", isDirectory: true)
-        let url = Journal.defaultURL(in: lane)
-        let journal = try Journal(url: url)
-        try await journal.record(Fixtures.observation(at: now))
-        try manager.setAttributes([.modificationDate: now - 9 * 3600], ofItemAtPath: url.path)
-        #expect(manager.fileExists(atPath: url.path + "-wal"))
+        let written = root.appendingPathComponent("launch-501-0000000c", isDirectory: true)
+        let writtenURL = Journal.defaultURL(in: written)
+        let writtenJournal = try Journal(url: writtenURL)
+        try await writtenJournal.record(Fixtures.observation(at: now))
+        try manager.setAttributes([.modificationDate: now - 9 * 3600], ofItemAtPath: writtenURL.path)
+        #expect(manager.fileExists(atPath: writtenURL.path + "-wal"))
+
+        let read = root.appendingPathComponent("launch-503-0000000e", isDirectory: true)
+        let readURL = Journal.defaultURL(in: read)
+        let readJournal = try Journal(url: readURL)
+        try await readJournal.record(Fixtures.observation(at: now - 9 * 3600))
+        for suffix in ["", "-wal"] {
+            try manager.setAttributes([.modificationDate: now - 9 * 3600], ofItemAtPath: readURL.path + suffix)
+        }
+        // Where a read of the finished journal leaves its mark.
+        try manager.setAttributes([.modificationDate: now], ofItemAtPath: readURL.path + "-shm")
+
         try finishedLaunch("launch-502-0000000d", in: support, written: now - 3600)
 
-        withExtendedLifetime(journal) {
-            LaunchFiles.pruneFinishedLaunches(in: root, keeping: 1, window: 6 * 3600, now: now)
+        withExtendedLifetime((writtenJournal, readJournal)) {
+            LaunchFiles.pruneFinishedLaunches(in: root, keeping: 2, window: 6 * 3600, now: now)
         }
         let left = Set(try manager.contentsOfDirectory(atPath: root.path))
-        #expect(left == [lane.lastPathComponent])
+        #expect(left == [written.lastPathComponent, "launch-502-0000000d"])
     }
 
 }
