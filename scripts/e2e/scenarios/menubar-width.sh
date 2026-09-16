@@ -19,8 +19,13 @@ scenario_stage() {
 
 # Brings one app forward, waits for the item's name to catch up with the mode,
 # and prints "<width>|<the extras left of Mentor>".
+#
+# The Mac is shared: bringing an app forward under someone's hands would land
+# their keystrokes in it, so every activation waits for a quiet keyboard and
+# mouse first, the way the click scenarios do.
 measure_bar() {
 	local tag="$1" pid="$2" want="$3"
+	wait_idle_input 15 || return 1
 	"$DRIVE" activate "$pid" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
 	wait_item_title "$want" || {
 		log "the item never said \"$want\" (it says \"$(mentor_item_title)\")"
@@ -41,7 +46,7 @@ measure_bar() {
 scenario_run() {
 	local watching excluded again
 	watching="$(measure_bar watching "$TEXTEDIT_PID" "Watching TextEdit")" || return 1
-	check "the item names the app it watches" "Mentor, Replay, Watching TextEdit" "$(mentor_item_title)"
+	check "the item names the app it watches" "Watching TextEdit" "$(mentor_item_mode)"
 
 	excluded="$(measure_bar excluded "$EXCLUDED_PID" "Not watching Calculator")" || return 1
 	again="$(measure_bar watching-again "$TEXTEDIT_PID" "Watching TextEdit")" || return 1

@@ -466,6 +466,11 @@ mentor_item_width() { mentor_extra | sed -n 's/.* w=\([0-9.]*\) .*/\1/p'; }
 # The item's accessibility name, which is also how a scenario reads the mode.
 mentor_item_title() { mentor_extra | sed -n 's/.*title="\([^"]*\)".*/\1/p'; }
 
+# The mode out of that name, without the app's own name or the replay badge.
+# The badge carries the clock's speed under --time-scale ("Replay 4.0x"), so a
+# check on the mode has to read past it.
+mentor_item_mode() { mentor_item_title | sed -E 's/^Mentor, (Recording, |Replay[^,]*, )?//'; }
+
 # The item's name lags an app switch by a few seconds, so a measurement taken
 # right after one can still be of the mode before it.
 wait_item_title() {

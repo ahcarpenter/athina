@@ -1,6 +1,5 @@
 import AppKit
 import MentorCore
-import OSLog
 import SwiftUI
 
 /// Owns the floating suggestion panel: a non-activating window that never
@@ -18,7 +17,6 @@ final class ToastController {
     static let panelWidth: CGFloat = width + 2
     static let margin: CGFloat = 12
     static let noteDuration: TimeInterval = 4
-    static let log = Logger(subsystem: "com.ahcarpenter.mentor", category: "toast")
 
     var onAction: ((Int64, SuggestionFeedback) -> Void)?
     var onHover: ((Bool) -> Void)?
@@ -155,12 +153,12 @@ final class ToastController {
         guard outsideClickMonitors.isEmpty else { return }
         let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         if let global = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { [weak self] event in
-            MainActor.assumeIsolated { self?.handleClick(event, monitor: "global") }
+            MainActor.assumeIsolated { self?.handleClick(event) }
         }) {
             outsideClickMonitors.append(global)
         }
         if let local = NSEvent.addLocalMonitorForEvents(matching: clicks, handler: { [weak self] event in
-            MainActor.assumeIsolated { self?.handleClick(event, monitor: "local") }
+            MainActor.assumeIsolated { self?.handleClick(event) }
             return event
         }) {
             outsideClickMonitors.append(local)
@@ -172,7 +170,7 @@ final class ToastController {
         outsideClickMonitors.removeAll()
     }
 
-    private func handleClick(_ event: NSEvent, monitor: String) {
+    private func handleClick(_ event: NSEvent) {
         guard let panel, panel.isVisible, let suggestion = model.suggestion else { return }
         let location = event.window.map { $0.convertPoint(toScreen: event.locationInWindow) } ?? event.locationInWindow
         let click = ToastClick(
@@ -180,9 +178,6 @@ final class ToastController {
             location: location,
             menuBarItems: NSApp.windows.filter(\.holdsStatusBarButton).map(\.frame)
         )
-        // Which monitor saw a click, and where, is what a live check of the
-        // classification needs: `log stream --level debug` shows it.
-        ToastController.log.debug("toast click: \(monitor, privacy: .public) monitor, window \(event.window.map { String(describing: type(of: $0)) } ?? "none", privacy: .public), at \(location.debugDescription, privacy: .public), \(String(describing: click), privacy: .public)")
         guard click.dismissesToast(talkBack: model.talkBack) else { return }
         onAction?(suggestion.id, .dismissed)
     }
