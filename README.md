@@ -49,7 +49,8 @@ UI changes get checked without a person at the screen; it needs no permissions
 and never reads the keychain. Each view renders in a borderless window placed
 below the desktop picture, where the window server still composites glass and
 controls and ScreenCaptureKit still captures it, so nothing appears on screen
-and a tall Settings pane renders whole. Replay mode has renders of its own.
+(the run puts no item in the menu bar either) and a tall Settings pane renders
+whole. Replay mode has renders of its own.
 `open build/Mentor.app --args --open debug` (or `settings`, `settings:<pane>`
 for `general`, `contexts`, `models`, `capture`, `journal`, or `privacy`,
 `permissions`, `history`) launches the app with that window already open, which
@@ -362,7 +363,8 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 | `menubar-item-click` | a real pointer click on Mentor's menu bar item opens the menu and leaves the suggestion up, and Answer Suggestion > Tell Me More is recorded |
 | `menubar-empty-click` | a real click on empty menu bar space beside the item dismisses the suggestion, attributed to a real mouse-down by a session tap |
 | `other-app-click` | a real click inside a staged TextEdit window dismisses the suggestion |
-| `menubar-keyboard` | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one scenario that needs no idle input |
+| `menubar-keyboard` | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one menu bar scenario that needs no idle input |
+| `menubar-width` | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
@@ -498,7 +500,8 @@ Sources/MentorCore            library, fully testable
                               ToastCountdown (a toast's countdown, held and resumed), MentorLoop (orchestration)
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory), MentorClock (the one time source: SystemClock,
-                              and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
+                              and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags),
+                              MenuBarIcon (the sensing mode's symbol in a fixed-width template image)
 Sources/Mentor                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
                               (on-device speech recognition), HotKeyCenter (Carbon, press and release),
@@ -1066,7 +1069,9 @@ particular to this app:
   the app menu's About and Quit. Menu items use title case and an ellipsis only
   where more input follows, and no standard keyboard shortcut is repurposed.
   The icon is a template SF Symbol per sensing mode, with a word beside it only
-  in replay or recording.
+  in replay or recording. The item keeps one width in every mode: the symbol is
+  drawn centred in an image as wide as the widest mode symbol (`MenuBarIcon`),
+  so switching to an excluded app never shifts the menu bar extras beside it.
 - **The toast is a non-activating panel, not a notification.** It floats under
   the menu bar on Liquid Glass and never takes keyboard focus, with corners
   concentric with its small capsule buttons. Because it cannot be focused, the
@@ -1107,7 +1112,8 @@ the understanding's encoding, versioning, bounding and expiry, prompt assembly
 with and without one, request and response coding against fixture JSON,
 recording, redaction, replay matching and stale refusal, launch flags, a
 replay's separate files, the clocks and a replay's clock flags, the toast
-countdown, callout mapping and every anchor rejection, a callout aging out,
+countdown, the menu bar icon's one width in every sensing mode, callout
+mapping and every anchor rejection, a callout aging out,
 transcript matching, the follow-up prompt and gate, the toast rule for voice
 input, the whole loop against a scripted client, follow-ups included, and the
 whole loop against the committed replay fixtures, replayed strictly, a region
@@ -1119,5 +1125,6 @@ fixtures). The snapshot run covers every window and Settings pane with sample
 data, their empty states (no suggestions, no frames, no contexts, contexts at
 the cap), the callout over the sample frame, the toast collapsed, expanded,
 listening, thinking, answered, and as a note, the context editor with a
-duplicate name, and the transient status messages (a connection test, a refused
-or recording shortcut, on-device recognition unavailable).
+duplicate name, the transient status messages (a connection test, a refused
+or recording shortcut, on-device recognition unavailable), and the menu bar
+item's label in every sensing mode, live and in replay.

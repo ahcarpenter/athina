@@ -8,22 +8,13 @@ struct MentorApp: App {
     private let state = AppState.shared
 
     var body: some Scene {
-        MenuBarExtra {
+        // A snapshot run renders the label itself, off screen, and puts no
+        // item in the real menu bar.
+        MenuBarExtra(isInserted: .constant(!Snapshots.isActive)) {
             MenuBarContent()
                 .environment(state)
         } label: {
-            // While calls are replayed or recorded, a word beside the icon says
-            // so, so a replay is never mistaken for a live call.
-            if let badge = state.clientModeBadge {
-                HStack(spacing: 3) {
-                    Image(systemName: state.menuBarSymbol)
-                    Text(badge)
-                }
-                .accessibilityLabel("Mentor, \(badge), \(state.statusLine)")
-            } else {
-                Image(systemName: state.menuBarSymbol)
-                    .accessibilityLabel("Mentor, \(state.statusLine)")
-            }
+            MenuBarLabel(mode: state.mode, badge: state.clientModeBadge, statusLine: state.statusLine)
         }
         .menuBarExtraStyle(.menu)
 
@@ -60,6 +51,33 @@ struct MentorApp: App {
         }
         .defaultLaunchBehavior(LaunchArguments.windowToOpen == WindowID.settings ? .presented : .suppressed)
         .restorationBehavior(.disabled)
+    }
+}
+
+/// The menu bar item: the sensing mode's symbol in a fixed-width template
+/// image (`MenuBarIcon`), so the item keeps one width in every mode. While
+/// calls are replayed or recorded, a word beside the icon says so, so a replay
+/// is never mistaken for a live call.
+struct MenuBarLabel: View {
+    let mode: SensingMode
+    let badge: String?
+    let statusLine: String
+
+    var body: some View {
+        if let badge {
+            HStack(spacing: 3) {
+                icon
+                Text(badge)
+            }
+            .accessibilityLabel("Mentor, \(badge), \(statusLine)")
+        } else {
+            icon
+                .accessibilityLabel("Mentor, \(statusLine)")
+        }
+    }
+
+    private var icon: Image {
+        Image(nsImage: MenuBarIcon.image(for: mode))
     }
 }
 

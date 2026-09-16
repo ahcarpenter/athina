@@ -1148,16 +1148,6 @@ final class AppState {
 
     // MARK: Presentation helpers
 
-    var menuBarSymbol: String {
-        switch mode {
-        case .watching, .screenOnly, .accessibilityOnly: "eye.fill"
-        case .idle: "eye"
-        case .paused, .stopped: "eye.slash"
-        case .excluded: "hand.raised.fill"
-        case .waitingForPermissions: "eye.trianglebadge.exclamationmark"
-        }
-    }
-
     var statusLine: String {
         switch mode {
         case .watching, .screenOnly, .accessibilityOnly:

@@ -54,6 +54,7 @@ enum Snapshots {
             ("toast-answered", CGSize(width: ToastController.panelWidth, height: 400), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: Date(), suggestionID: 4), suggestionID: 4)), state),
             ("toast-note", CGSize(width: ToastController.panelWidth, height: 120), AnyView(SampleToastNote()), state),
             ("callout", CGSize(width: 900, height: 620), AnyView(SampleCallout()), state),
+            ("menu-bar-item", CGSize(width: 312, height: 216), AnyView(SampleMenuBarItems()), state),
             ("debug-panel-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), replay),
             ("debug-panel-calls-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
             ("settings-models-replay", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), replay),
@@ -420,6 +421,29 @@ struct StatusMessagesPreview: View {
             VoiceSection()
         }
         .formStyle(.grouped)
+    }
+}
+
+/// The menu bar item's label in every sensing mode, live and in replay, each
+/// in an outline of its image's width, so the renders show it never changes.
+struct SampleMenuBarItems: View {
+    var body: some View {
+        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
+            ForEach(SensingMode.allCases, id: \.self) { mode in
+                GridRow {
+                    Text(mode.label)
+                        .foregroundStyle(.secondary)
+                    ForEach([nil, "Replay"], id: \.self) { badge in
+                        MenuBarLabel(mode: mode, badge: badge, statusLine: mode.label)
+                            .font(Font(NSFont.menuBarFont(ofSize: 0)))
+                            .fixedSize()
+                            .border(.separator)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 

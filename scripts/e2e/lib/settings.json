@@ -22,7 +22,8 @@
     "com.google.Chrome",
     "com.apple.MobileSMS",
     "com.apple.Notes",
-    "com.todesktop.230313mzl4w4u92"
+    "com.todesktop.230313mzl4w4u92",
+    "com.apple.calculator"
   ],
   "mentor": {
     "toastTimeout": 600,
