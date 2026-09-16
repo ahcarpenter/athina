@@ -5,10 +5,6 @@
 # person went back to their work, so the toast gets out of the way.
 SCENARIO_SUMMARY="a real click in another app's window dismisses the suggestion"
 
-scenario_stage() {
-	stage_text_document
-}
-
 scenario_run() {
 	local suggestion frame x y
 	stage_flip_window

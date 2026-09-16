@@ -92,6 +92,21 @@ func run(_ invocation: DriveInvocation) throws {
             fail("click: expected item, at, or window, got \"\(kind)\"", code: 64)
         }
 
+    case "raise":
+        // By pid and window title, never by app name: another lane's app, or
+        // the owner's own, must never be brought forward by a scenario.
+        let pid = try invocation.pid(0)
+        let wanted = invocation.positionals.count > 1 ? invocation.positionals[1] : ""
+        let app = AXUIElementCreateApplication(pid)
+        let windows = (attr(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
+        guard let window = windows.first(where: { wanted.isEmpty || title($0).localizedCaseInsensitiveContains(wanted) }) else {
+            fail("raise: pid \(pid) has no window matching \"\(wanted)\"", code: 2)
+        }
+        AXUIElementSetAttributeValue(app, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
+        let raised = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+        AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue)
+        say("raised \"\(title(window))\" of pid \(pid) -> \(raised.rawValue)")
+
     case "menupick":
         Clicker.menuPick(pid: try invocation.pid(0), row: try invocation.positional(1), item: try invocation.positional(2))
 

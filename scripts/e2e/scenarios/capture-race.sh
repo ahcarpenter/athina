@@ -25,13 +25,19 @@ scenario_run() {
 	stage_flip_window
 	wait_first_observation 90 || return 1
 
-	# Twenty change moments: flip the helper window, then press a key so input
-	# arrives, at a pace that puts each one inside a capture.
+	# Twenty change moments: switch the staged app's focused window, which is
+	# what the sensing loop sees as a change, and flip the helper window so the
+	# screen differs in pixels and in text. On a 60x clock a capture is almost
+	# always in flight when one lands.
 	for i in $(seq 1 20); do
+		if [ $((i % 2)) = 0 ]; then
+			raise_window "$TEXTEDIT_PID" notes.txt
+		else
+			raise_window "$TEXTEDIT_PID" plan.txt
+		fi
 		kill -USR1 "$FLIP_PID" 2>/dev/null || true
-		"$DRIVE" key 56 >/dev/null 2>&1
 		sleep 3
-		[ $((i % 5)) = 0 ] && log "change moment $i of 20, observations so far: $(journal_count observations)"
+		[ $((i % 5)) = 0 ] && log "change moment $i of 20, captures so far: $(journal_count observations)"
 	done
 	sleep 5
 

@@ -344,22 +344,39 @@ stage_flip_window() {
 	log "staged the flipping helper window at ${x},${y} ${w}x${h} (pid $FLIP_PID)"
 }
 
-# A plain text document to click into: the other-app case. Its own scratch file,
-# opened by pid so it is quit by pid.
+# Two plain text documents to click into and to switch between.
+#
+# The staged app is also what sensing watches: the terminal a run is started
+# from is an excluded app, so a run with it in front would journal nothing at
+# all. TextEdit is opened by the harness and stopped by pid.
 stage_text_document() {
-	local file="$RUN_DIR/notes.txt"
-	cat >"$file" <<'TEXT'
+	local first="$RUN_DIR/notes.txt" second="$RUN_DIR/plan.txt"
+	cat >"$first" <<'TEXT'
 Cleanup plan for the build machine
 1. list the stale build roots
 2. check nothing is mounted under them
 3. remove them one at a time
 TEXT
-	open -a TextEdit "$file" || { log "could not open TextEdit"; return 1; }
-	sleep 2
+	cat >"$second" <<'TEXT'
+Release checklist
+- tag the build
+- write the release notes
+- tell the team where the artifacts are
+TEXT
+	open -a TextEdit "$first" "$second" || { log "could not open TextEdit"; return 1; }
+	sleep 3
 	TEXTEDIT_PID="$(pgrep -n -x TextEdit || true)"
 	[ -n "$TEXTEDIT_PID" ] || { log "TextEdit did not start"; return 1; }
 	STAGED_PIDS+=("$TEXTEDIT_PID")
-	log "staged TextEdit pid=$TEXTEDIT_PID with $file"
+	raise_window "$TEXTEDIT_PID" notes.txt
+	log "staged TextEdit pid=$TEXTEDIT_PID with notes.txt and plan.txt"
+}
+
+# Bring one window of a pid forward. Within an app this is a window switch, the
+# change moment the capture scenarios are about.
+raise_window() {
+	"$DRIVE" raise "$1" "${2:-}" >>"$RUN_DIR/transcript.log" 2>&1 || log "could not raise ${2:-a window} of pid $1"
+	return 0
 }
 
 # --- Watchers -----------------------------------------------------------------

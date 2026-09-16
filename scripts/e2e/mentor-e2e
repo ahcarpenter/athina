@@ -167,7 +167,7 @@ run_scenario() (
 	SCENARIO_SUMMARY=""
 	SCENARIO_ARGS=()
 	SCENARIO_SETTINGS='{}'
-	scenario_stage() { :; }
+	scenario_stage() { stage_text_document; }
 	# shellcheck disable=SC1090
 	source "$file"
 

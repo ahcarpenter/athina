@@ -44,6 +44,7 @@ public enum DriveArguments {
         Command(name: "activate", arguments: "<pid>", summary: "bring a pid to the front", minimum: 1, maximum: 1, options: []),
         Command(name: "ax", arguments: "<pid> <dump|texts|menuitems|pressextra|cancelmenu|get|press|pressx|focus|set> [role] [match] [value]", summary: "read or press elements through accessibility", minimum: 2, maximum: 6, options: ["--scope"]),
         Command(name: "click", arguments: "<item <pid> | at <x> <y> | window <pid> <x> <y>>", summary: "post a real HID click, aborting if the pointer is moved", minimum: 2, maximum: 4, options: ["--shot"]),
+        Command(name: "raise", arguments: "<pid> [title]", summary: "bring one of a pid's windows to the front, which journals a window switch", minimum: 1, maximum: 2, options: []),
         Command(name: "menupick", arguments: "<pid> <row> <item>", summary: "hover a submenu row and click one of its items with the pointer", minimum: 3, maximum: 3, options: []),
         Command(name: "tap", arguments: "<session|pid> [pid]", summary: "listen-only event tap logging mouse-downs and what is under them", minimum: 1, maximum: 2, options: []),
         Command(name: "announce", arguments: "<pid>", summary: "log every AXAnnouncementRequested the app posts", minimum: 1, maximum: 1, options: []),
