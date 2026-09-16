@@ -299,28 +299,16 @@ of them disturbs another or the live app:
   for as long as it runs, with a lock on `mentor.pid` inside it that holds its
   pid, which is what keeps a later launch's sweep off a directory still in use.
   Every replay launch sweeps the finished per-launch directories as it starts,
-  and removes those past the newest 10 and those
-  whose own retention window has run out: a finished replay's journal is never
-  opened again, so retention can never age the thumbnails and recognized text
-  it captured from the real screen, and the whole directory goes at its
-  thumbnail window (6 hours by default) instead. Newest, and run out, are both
-  measured from when a directory's journal was last written, so a lane that ran
-  all day and quit a moment ago is one of the newest and stays readable. Each
-  directory is swept by the window the launch that wrote it ran with, recorded
-  in its own `settings.json`, so a check started with `--settings` of its own
-  never decides how long another run's captures are kept. The same sweep clears
-  the journal every replay shared before replays had a directory each,
-  `replay/journal.sqlite` and the settings file beside it, once that journal has
-  gone unwritten for longer than its own window: nothing opens it any more, so
-  retention cannot age it in place either. The builds that wrote that one took
-  no lock to say they were using it, and in WAL mode their writes land in
-  `journal.sqlite-wal` and `journal.sqlite-shm` without touching the journal,
-  so the sweep waits while either of those was itself written inside the
-  window and goes ahead once both are past it as well. It cannot wait on their
-  mere presence: Mentor never closes its connection, so SQLite leaves both
-  behind on every quit and the sweep would never run at all. The sweep never
-  removes one a running replay holds, and never a directory whose name is not
-  a launch's own.
+  and removes those past the newest 10 and those unwritten for longer than your
+  `thumbnailRetention` (6 hours by default): a finished replay's journal is
+  never opened again, so retention can never age the thumbnails and recognized
+  text it captured from the real screen, and the whole directory goes at that
+  window instead. Newest, and unwritten, are both measured from when a
+  directory's journal was last written, so a lane that ran all day and quit a
+  moment ago is one of the newest and stays readable. The sweep takes the
+  directory's lock before it removes anything, so it never touches one a
+  running replay holds, and it never touches a directory whose name is not a
+  launch's own.
 - **`--settings <path>`** (`make run-replay SETTINGS=<path>`) starts the
   replay from that settings file instead of the live one. It is read and never
   written, so a scripted check keeps its settings in a file of its own and
@@ -1152,12 +1140,20 @@ counted (see Iterating without the network).
   at any time. A replay senses the real screen too, and a finished replay's
   journal is never opened again, so nothing can age it in place: the next
   replay launch removes its whole per-launch directory instead, once that
-  directory is past the thumbnail window it recorded for itself (see Replays
-  side by side). The journal every replay shared before replays had a directory
-  each, `replay/journal.sqlite`, is swept the same way: the next replay launch
-  removes it, its `-wal` and `-shm` files and the settings file beside it, once
-  none of them has been written for longer than the window that settings file
-  recorded.
+  directory has gone unwritten for longer than the thumbnail window (see
+  Replays side by side).
+- **Delete `~/Library/Application Support/mentor/replay` yourself if you ran a
+  replay on a build before this one.** Those builds kept one shared
+  `journal.sqlite` there, holding thumbnails and recognized text from your real
+  screen, and nothing ages it now: no launch opens it, so retention never runs
+  against it, and Mentor will not remove it for you. It cannot: an older build
+  from another checkout may have that file open this minute, and a file's
+  timestamps cannot tell that apart from one nobody has touched since the Mac
+  went to sleep, so deleting it on a guess could pull the database out from
+  under a running instance. Quit every Mentor on the Mac and remove the
+  directory. Per-launch directories, the ones this build makes, are swept for
+  you, because a launch holds a lock on its own and the sweep takes that lock
+  before it removes anything.
 - The journal directory is created with mode 0700. Mentor makes every one of
   them itself, the live one and each replay's, so there is no path someone
   else chose for a journal to land in.

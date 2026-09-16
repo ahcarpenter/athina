@@ -246,11 +246,18 @@ public enum ClockRemote {
     /// constant and a replay's pid is in `ps`, so any process in the login
     /// session can ask a running replay to answer somewhere; an unconstrained
     /// path would make that a way to create or replace any file the user can
-    /// write, the live settings among them. Refusing to replace a file is
-    /// what closes it: the exclusive create fails on a symlink too, so a link
-    /// planted in the temporary directory leads nowhere. It costs
+    /// write, the live settings among them. Refusing to replace a file closes
+    /// the rest: the exclusive create fails on a symlink too. It costs
     /// `scripts/advance-clock.sh` nothing, which names a fresh `mktemp` path
     /// under `TMPDIR` that it has already removed.
+    ///
+    /// The path is resolved once and that one path is both checked and written
+    /// to. Checking what was asked for and writing to it are not the same
+    /// thing: `..` after a symlink means one path to `AppPaths.resolvedPath`,
+    /// which folds `..` away before resolving links, and another to the
+    /// kernel, which follows the link first. A request could name
+    /// `<temp>/link-into-the-live-folder/../file` and pass a check that read
+    /// `<temp>/file` while the write landed in the live data folder.
     public static func answer(
         _ reply: Reply,
         at url: URL?,
@@ -258,14 +265,15 @@ public enum ClockRemote {
         supportDirectory: URL = AppPaths.supportDirectory()
     ) throws {
         guard let url else { return }
-        guard AppPaths.isAt(url, orInside: temporaryDirectory),
-              !AppPaths.isAt(url, orInside: supportDirectory) else {
-            throw Refusal(reason: "\(url.path) is not somewhere a clock request may be answered: it must be inside \(temporaryDirectory.path) and outside \(supportDirectory.path)")
+        let target = URL(fileURLWithPath: AppPaths.resolvedPath(url))
+        guard AppPaths.isAt(target, orInside: temporaryDirectory),
+              !AppPaths.isAt(target, orInside: supportDirectory) else {
+            throw Refusal(reason: "\(target.path) is not somewhere a clock request may be answered: it must be inside \(temporaryDirectory.path) and outside \(supportDirectory.path)")
         }
         do {
-            try reply.encoded().write(to: url, options: .withoutOverwriting)
+            try reply.encoded().write(to: target, options: .withoutOverwriting)
         } catch let error as CocoaError where error.code == .fileWriteFileExists {
-            throw Refusal(reason: "\(url.path) already exists, and a clock request never replaces a file")
+            throw Refusal(reason: "\(target.path) already exists, and a clock request never replaces a file")
         }
     }
 

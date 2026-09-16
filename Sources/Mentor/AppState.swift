@@ -212,9 +212,6 @@ final class AppState {
             dataDirectoryLock = nil
             startupRefusal = reason
         }
-        if dataDirectoryLock != nil {
-            files.recordSettings(launchSettings)
-        }
         launchFiles = files
         journalURL = Journal.defaultURL(in: files.dataDirectory)
         store = files.store

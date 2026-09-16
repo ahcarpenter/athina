@@ -9,12 +9,9 @@ private func scratch() -> URL {
 }
 
 /// A per-launch directory left behind by a replay that has quit, holding a
-/// journal last written at `written`, and the retention window that launch ran
-/// with when it recorded one.
+/// journal last written at `written`.
 @discardableResult
-private func finishedLaunch(
-    _ name: String, in support: URL, written: Date, recording window: TimeInterval? = nil
-) throws -> URL {
+private func finishedLaunch(_ name: String, in support: URL, written: Date) throws -> URL {
     let files = LaunchFiles(
         arguments: ["Mentor", "--replay", "/f"],
         clientMode: .replay(directory: URL(fileURLWithPath: "/fixtures"), allowStale: false),
@@ -23,11 +20,6 @@ private func finishedLaunch(
     )
     let manager = FileManager.default
     try manager.createDirectory(at: files.dataDirectory, withIntermediateDirectories: true)
-    if let window {
-        var settings = SensingSettings()
-        settings.thumbnailRetention = window
-        files.recordSettings(settings)
-    }
     let journal = Journal.defaultURL(in: files.dataDirectory)
     try Data("captured screen".utf8).write(to: journal)
     try manager.setAttributes([.modificationDate: written], ofItemAtPath: journal.path)
@@ -47,7 +39,7 @@ private func finishedLaunch(
         for mode in [ModelClientMode.live, .record(directory: URL(fileURLWithPath: "/r"))] {
             let files = LaunchFiles(arguments: ["Mentor"], clientMode: mode, supportDirectory: support)
             #expect(files.dataDirectory == support)
-                #expect(files.settingsSource == support.appendingPathComponent("settings.json"))
+            #expect(files.settingsSource == support.appendingPathComponent("settings.json"))
             #expect(!files.settingsGiven)
             #expect(files.refusals.isEmpty)
         }
@@ -265,7 +257,7 @@ private func finishedLaunch(
         try manager.createDirectory(at: root.appendingPathComponent("my-lane", isDirectory: true), withIntermediateDirectories: true)
         try Data().write(to: root.appendingPathComponent("journal.sqlite"))
 
-        LaunchFiles.pruneFinishedLaunches(in: root, keeping: 2, now: base + 300)
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: 2, window: 6 * 3600, now: base + 300)
         let left = Set(try manager.contentsOfDirectory(atPath: root.path))
         #expect(left == [names[0], names[3], names[4], "my-lane", "journal.sqlite"])
         _ = running
@@ -291,34 +283,10 @@ private func finishedLaunch(
         // The oldest of all is still running, so nothing may touch it.
         let running = try DataDirectoryLock.acquire(in: root.appendingPathComponent(names[2], isDirectory: true), pid: 200)
 
-        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, window: 6 * 3600, now: now)
         let left = Set(try manager.contentsOfDirectory(atPath: root.path))
         #expect(left == [names[1], names[2]])
         _ = running
-    }
-
-    /// Whose retention applies never depends on which lane starts next: each
-    /// finished directory is swept by the window recorded in it by the launch
-    /// that captured its screen content, and one that recorded none by the
-    /// documented default.
-    @Test func eachFinishedLaunchIsPrunedByItsOwnRecordedWindow() throws {
-        let support = scratch()
-        defer { try? FileManager.default.removeItem(at: support) }
-        let root = AppPaths.replayRoot(in: support)
-        let manager = FileManager.default
-        let now = Date(timeIntervalSince1970: 1_789_000_000)
-
-        // A day since it was last written: gone under an hour's window, kept
-        // under a week's.
-        try finishedLaunch("launch-301-0000000a", in: support, written: now - 86400, recording: 3600)
-        try finishedLaunch("launch-302-0000000b", in: support, written: now - 86400, recording: 7 * 86400)
-        // No record of its own, so the documented 6 hour default applies.
-        try finishedLaunch("launch-303-0000000c", in: support, written: now - 86400)
-        try finishedLaunch("launch-304-0000000d", in: support, written: now - 3600)
-
-        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
-        let left = Set(try manager.contentsOfDirectory(atPath: root.path))
-        #expect(left == ["launch-302-0000000b", "launch-304-0000000d"])
     }
 
     /// How long a finished directory has held its captures is how long ago its
@@ -340,104 +308,9 @@ private func finishedLaunch(
             try manager.setAttributes([.creationDate: now - 9 * 3600], ofItemAtPath: url.path)
         }
 
-        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, window: 6 * 3600, now: now)
         let left = Set(try manager.contentsOfDirectory(atPath: root.path))
         #expect(left == ["launch-401-0000000a"])
-    }
-
-    /// The journal every replay shared before replays had a directory each
-    /// holds captures of the real screen and is never opened again, so nothing
-    /// ages it in place: a replay launch sweeps it once it has gone unwritten
-    /// for longer than the window recorded beside it, and leaves it alone
-    /// while it is still inside that window.
-    @Test(arguments: [(TimeInterval(86400), false), (TimeInterval(3600), true)])
-    func theSharedReplayJournalIsSweptOnceItIsPastItsWindow(age: TimeInterval, survives: Bool) throws {
-        let support = scratch()
-        defer { try? FileManager.default.removeItem(at: support) }
-        let root = AppPaths.replayRoot(in: support)
-        let manager = FileManager.default
-        let now = Date(timeIntervalSince1970: 1_789_000_000)
-        try manager.createDirectory(at: root, withIntermediateDirectories: true)
-
-        var settings = SensingSettings()
-        settings.thumbnailRetention = 6 * 3600
-        try SettingsStore(url: SettingsStore.defaultURL(in: root)).save(settings)
-        let journal = Journal.defaultURL(in: root)
-        for name in [journal.lastPathComponent, journal.lastPathComponent + "-wal"] {
-            let url = root.appendingPathComponent(name)
-            try Data("captured screen".utf8).write(to: url)
-            try manager.setAttributes([.modificationDate: now - age], ofItemAtPath: url.path)
-        }
-
-        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
-        let left = Set(try manager.contentsOfDirectory(atPath: root.path))
-        if survives {
-            #expect(left == ["journal.sqlite", "journal.sqlite-wal", "settings.json"])
-        } else {
-            #expect(left.isEmpty)
-        }
-    }
-
-    /// The builds that wrote that shared journal took no hold on it, so one of
-    /// them running from another checkout is invisible to the sweep, and in WAL
-    /// mode its writes land in `-wal` and `-shm` without touching the journal.
-    /// Those two therefore hold the sweep off while either was written inside
-    /// the window, and stop holding it off once both are past it: Mentor never
-    /// closes its connection, so SQLite leaves both behind on every quit, and
-    /// a sweep that skipped merely because `-shm` is there would never run.
-    @Test(arguments: [
-        (TimeInterval(60), true),
-        (TimeInterval(30 * 86400), false),
-    ])
-    func theSharedReplayJournalWaitsOnItsSidecarsOnlyWhileTheyAreFresh(sidecarAge: TimeInterval, survives: Bool) throws {
-        let support = scratch()
-        defer { try? FileManager.default.removeItem(at: support) }
-        let root = AppPaths.replayRoot(in: support)
-        let manager = FileManager.default
-        let now = Date(timeIntervalSince1970: 1_789_000_000)
-        try manager.createDirectory(at: root, withIntermediateDirectories: true)
-
-        // The journal itself is long past the six hour default window, so only
-        // the sidecars decide.
-        let journal = Journal.defaultURL(in: root)
-        try Data("captured screen".utf8).write(to: journal)
-        try manager.setAttributes([.modificationDate: now - 30 * 86400], ofItemAtPath: journal.path)
-        for suffix in ["-wal", "-shm"] {
-            let url = URL(fileURLWithPath: journal.path + suffix)
-            try Data("captured screen".utf8).write(to: url)
-            try manager.setAttributes([.modificationDate: now - sidecarAge], ofItemAtPath: url.path)
-        }
-
-        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
-        let left = Set(try manager.contentsOfDirectory(atPath: root.path))
-        if survives {
-            #expect(left == ["journal.sqlite", "journal.sqlite-wal", "journal.sqlite-shm"])
-        } else {
-            #expect(left.isEmpty)
-        }
-    }
-
-    /// A write in WAL mode lands in `-wal` without touching the journal, so a
-    /// journal that looks long unwritten beside a `-wal` written moments ago is
-    /// one a build is still using, and nothing is removed.
-    @Test func theSharedReplayJournalIsLeftAloneWhileItsWalWasJustWritten() throws {
-        let support = scratch()
-        defer { try? FileManager.default.removeItem(at: support) }
-        let root = AppPaths.replayRoot(in: support)
-        let manager = FileManager.default
-        let now = Date(timeIntervalSince1970: 1_789_000_000)
-        try manager.createDirectory(at: root, withIntermediateDirectories: true)
-
-        let journal = Journal.defaultURL(in: root)
-        try Data("captured screen".utf8).write(to: journal)
-        try manager.setAttributes([.modificationDate: now - 30 * 86400], ofItemAtPath: journal.path)
-        let wal = URL(fileURLWithPath: journal.path + "-wal")
-        try Data("captured screen".utf8).write(to: wal)
-        try manager.setAttributes([.modificationDate: now - 60], ofItemAtPath: wal.path)
-
-        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
-        #expect(Set(try manager.contentsOfDirectory(atPath: root.path))
-            == ["journal.sqlite", "journal.sqlite-wal"])
     }
 
 }
@@ -567,6 +440,17 @@ private func finishedLaunch(
         try FileManager.default.createSymbolicLink(at: temporary.appendingPathComponent("aimed"), withDestinationURL: settings)
         #expect(throws: ClockRemote.Refusal.self) { try answer(at: temporary.appendingPathComponent("aimed")) }
         #expect(try String(contentsOf: settings, encoding: .utf8) == "{\"idleThreshold\":900}")
+
+        // A link out of the temporary directory, stepped back through with `..`:
+        // folding `..` away first reads a path inside the temporary directory,
+        // while the kernel follows the link before the `..` and lands in the
+        // live data folder. The check and the write have to be one path.
+        let inner = support.appendingPathComponent("replay", isDirectory: true)
+        try FileManager.default.createDirectory(at: inner, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: temporary.appendingPathComponent("out"), withDestinationURL: inner)
+        try answer(at: URL(fileURLWithPath: temporary.path + "/out/../walked.json"))
+        #expect(!FileManager.default.fileExists(atPath: support.appendingPathComponent("walked.json").path))
+        #expect(FileManager.default.fileExists(atPath: temporary.appendingPathComponent("walked.json").path))
 
         // Anywhere else outside the temporary directory, and a file that is already there.
         #expect(throws: ClockRemote.Refusal.self) { try answer(at: root.appendingPathComponent("elsewhere.json")) }

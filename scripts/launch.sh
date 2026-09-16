@@ -46,15 +46,22 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 APP="$ROOT/build/Mentor.app"
 EXECUTABLE="$APP/Contents/MacOS/Mentor"
 PID_FILE="$ROOT/build/$LANE.pid"
+# The token is kept beside the pid rather than in it: README shows a person
+# `cat build/<lane>.pid` and handing the result to scripts/advance-clock.sh, so
+# the pid stays the whole of that file.
+TOKEN_FILE="$ROOT/build/$LANE.token"
 TOKEN="lane-$LANE-$$-$(date +%s)"
 
-# The pids of processes running this checkout's bundle, one per line.
-ours() {
-	ps -axo pid=,command= | awk -v exe="$EXECUTABLE" '{
+# The pid of this checkout's Mentor whose arguments carry `$1`, or nothing.
+# Both halves matter: the token alone would match the searching awk, whose own
+# command line holds it, and the bundle alone would match a sibling lane.
+lane_pid() {
+	ps -axo pid=,command= | awk -v exe="$EXECUTABLE" -v token="$1" '{
 		pid = $1
 		sub(/^ *[0-9]+ +/, "")
-		if ($0 == exe || index($0, exe " ") == 1) print pid
-	}'
+		if (index($0, exe " ") != 1) next
+		if (index($0, token)) print pid
+	}' | head -n 1
 }
 
 # Every Mentor on this Mac that is not a replay or a snapshot render, whatever
@@ -100,14 +107,19 @@ stop_pid() {
 	done
 }
 
+# Stops what this lane launched, and only that. A pid on its own is not enough
+# to say so: a lane stopped outside make leaves its pid file behind, and the
+# Mac cycles through the pid space, so that number can come back as a sibling
+# lane. The process has to still carry the token this lane launched it with.
 stop_previous() {
 	[ -f "$PID_FILE" ] || return 0
-	local previous
-	previous="$(cat "$PID_FILE")"
-	if [ -n "$previous" ] && ours | grep -qxF "$previous"; then
+	local previous token
+	previous="$(cat "$PID_FILE" 2>/dev/null || true)"
+	token="$(cat "$TOKEN_FILE" 2>/dev/null || true)"
+	if [ -n "$previous" ] && [ -n "$token" ] && [ "$(lane_pid "$token")" = "$previous" ]; then
 		stop_pid "$previous"
 	fi
-	rm -f "$PID_FILE"
+	rm -f "$PID_FILE" "$TOKEN_FILE"
 }
 
 stop_previous
@@ -123,18 +135,6 @@ if [ "$LIVE" = 1 ]; then
 		exit 1
 	fi
 fi
-
-# The pid of this checkout's Mentor carrying this launch's token. The bundle
-# has to match as well as the token: `ps` lists the searching awk too, and its
-# own command line holds the token, so a token-only search finds awk first.
-started() {
-	ps -axo pid=,command= | awk -v exe="$EXECUTABLE" -v token="$TOKEN" '{
-		pid = $1
-		sub(/^ *[0-9]+ +/, "")
-		if (index($0, exe " ") != 1) next
-		if (index($0, token)) print pid
-	}' | head -n 1
-}
 
 # `open` hands the app its own stdout and stderr, so the line it writes once it
 # has started, and any refusal it prints, would otherwise reach nothing but the
@@ -152,7 +152,7 @@ fi
 
 pid=""
 for _ in $(seq 100); do
-	pid="$(started || true)"
+	pid="$(lane_pid "$TOKEN" || true)"
 	if [ -n "$pid" ]; then break; fi
 	sleep 0.1
 done
@@ -194,7 +194,7 @@ if [ "$ready" = 0 ]; then
 	# a replay left behind goes on sensing the real screen into a directory the
 	# sweep skips while it holds it, and a live one goes on billing.
 	started_ours=0
-	if ours | grep -qxF "$pid"; then started_ours=1; fi
+	if [ "$(lane_pid "$TOKEN")" = "$pid" ]; then started_ours=1; fi
 	said_no=0
 	if grep -q "$DID_NOT_START" "$STARTUP_ERRORS" 2>/dev/null; then said_no=1; fi
 	{
@@ -221,6 +221,7 @@ if [ "$ready" = 0 ]; then
 fi
 
 echo "$pid" >"$PID_FILE"
+printf '%s\n' "$TOKEN" >"$TOKEN_FILE"
 # Where it put its journal and settings, which it chose for itself: nothing
 # names that directory any more, so the app is what says where it is.
 echo "Mentor running as pid $pid (lane $LANE) in $(sed -n '1s/^Mentor started: pid [0-9]* in //p' "$STARTED_LINE")"
