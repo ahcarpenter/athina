@@ -17,6 +17,13 @@ mark_width() {
 		}'
 }
 
+# Mentor's ordinary windows, ids only and sorted: the menu bar extra and any
+# open menu sit above them at layer 101 and are left out.
+ordinary_windows() {
+	"$DRIVE" windows "$MENTOR_PID" 2>/dev/null \
+		| awk '/layer=0 / {sub("id=", "", $1); print $1}' | sort -u
+}
+
 scenario_run() {
 	local watching paused resumed bar_x bar_y
 	wait_first_observation || return 1
@@ -56,13 +63,22 @@ scenario_run() {
 	"$DRIVE" shot region "$bar_x" "$bar_y" 260 44 "$RUN_DIR/bar-resumed.png" >/dev/null 2>&1 || true
 	check "resuming is drawn at the same width again" "$watching" "$resumed"
 
-	# About Mentor, which showed the macOS placeholder while the app had no icon.
+	# About Mentor, which showed the macOS placeholder while the app had no
+	# icon at all. The standard About panel reports no window name, so it is
+	# found as the ordinary window that was not there before rather than by
+	# its title.
+	local before about i
+	before="$(ordinary_windows)"
 	"$DRIVE" ax "$MENTOR_PID" pressextra >>"$RUN_DIR/transcript.log" 2>&1 || true
 	sleep 0.3
 	"$DRIVE" ax "$MENTOR_PID" press AXMenuItem "About Mentor" >>"$RUN_DIR/transcript.log" 2>&1 || true
-	sleep 1.2
-	local about
-	about="$("$DRIVE" windows "$MENTOR_PID" | awk '/About/ {sub("id=", "", $1); print $1; exit}')"
+	# The panel is built the first time it is asked for, so wait for it rather
+	# than guessing how long that takes.
+	for i in $(seq 1 20); do
+		about="$(comm -13 <(printf '%s\n' "$before") <(ordinary_windows) | head -1)"
+		[ -n "$about" ] && break
+		sleep 0.4
+	done
 	if [ -n "$about" ]; then
 		"$DRIVE" shot window "$about" "$RUN_DIR/about-mentor.png" >/dev/null 2>&1 || true
 		"$DRIVE" close "$MENTOR_PID" About >/dev/null 2>&1 || true

@@ -1,6 +1,7 @@
 #!/usr/bin/env swift
 import AppKit
 import CoreGraphics
+import CryptoKit
 import Foundation
 
 // Builds every asset the app draws the mark from, out of the one master
@@ -397,7 +398,7 @@ func writeIcon() throws {
     print("  Resources/AppIcon.icns  (\(sizes.count) sizes, drawing at \(iconHeightFraction) of the canvas)")
 }
 
-enum Failure: Error { case iconutil }
+enum Failure: Error { case iconutil, pdfLengthChanged }
 
 // MARK: The menu bar mark
 
@@ -549,6 +550,55 @@ func drawMenuBarMark(_ badge: Badge, into context: CGContext) {
     }
 }
 
+/// Core Graphics stamps every PDF it writes with the time it was written and
+/// an id derived from it, so two runs over the same drawing produce two
+/// different files. These are committed, so that would dirty all six on every
+/// `make mark` and make "regenerate and check nothing moved" impossible.
+/// Rewriting both fields, the id from the file's own content, leaves the
+/// output a pure function of the master SVG and this script.
+func makeReproducible(_ url: URL) throws {
+    var bytes = try Data(contentsOf: url)
+    let before = bytes.count
+
+    /// Replaces what lies between `opening` and the next `closing` after it.
+    /// The replacement must be the same length as what it replaces: a PDF
+    /// carries byte offsets into itself, so moving anything breaks the file.
+    func rewrite(after opening: String, until closing: String, with replacement: String, from: Data.Index? = nil) {
+        let open = Data(opening.utf8), close = Data(closing.utf8), new = Data(replacement.utf8)
+        var cursor = from ?? bytes.startIndex
+        while let start = bytes[cursor...].range(of: open),
+              let end = bytes[start.upperBound...].range(of: close) {
+            let span = bytes.distance(from: start.upperBound, to: end.lowerBound)
+            if span == new.count {
+                bytes.replaceSubrange(start.upperBound..<end.lowerBound, with: new)
+            }
+            cursor = bytes.index(start.lowerBound, offsetBy: open.count + span)
+        }
+    }
+
+    // A fixed instant rather than now. It is not a claim about when the file
+    // was made; it is what makes the output reproducible. Both fields are the
+    // same length as what Core Graphics writes.
+    rewrite(after: "/CreationDate\n(", until: ")", with: "D:20260101000000Z00'00'")
+    rewrite(after: "/ModDate (", until: ")", with: "D:20260101000000Z00'00'")
+
+    // The trailer's two id hashes, rewritten only inside the trailer: a bare
+    // "<" would match the first one anywhere in the file.
+    let blank = String(repeating: "0", count: 32)
+    func rewriteIDs(with value: String) {
+        guard let trailer = bytes.range(of: Data("/ID [ ".utf8)) else { return }
+        rewrite(after: "<", until: ">", with: value, from: trailer.lowerBound)
+    }
+    rewriteIDs(with: blank)
+    // Hashed from the file with the ids blanked, so it still changes when the
+    // drawing does and never when only the clock has.
+    let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined().prefix(32)
+    rewriteIDs(with: String(digest))
+
+    guard bytes.count == before else { throw Failure.pdfLengthChanged }
+    try bytes.write(to: url)
+}
+
 /// PDF, so one file serves every display scale the menu bar is drawn at, and
 /// so it stays a template: shape and alpha only, no colour of its own.
 func writeMenuBarMarks() throws {
@@ -561,6 +611,7 @@ func writeMenuBarMarks() throws {
         drawMenuBarMark(badge, into: context)
         context.endPDFPage()
         context.closePDF()
+        try makeReproducible(url)
     }
     print("  Resources/Mark/MenuBarMark-*.pdf  (\(set.count) variants, \(Int(menuBarWidth)) x \(Int(menuBarHeight)) pt, one width in every mode)")
 }
