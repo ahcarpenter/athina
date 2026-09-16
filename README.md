@@ -500,8 +500,7 @@ Sources/MentorCore            library, fully testable
                               ToastCountdown (a toast's countdown, held and resumed), MentorLoop (orchestration)
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory), MentorClock (the one time source: SystemClock,
-                              and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags),
-                              MenuBarIcon (the sensing mode's symbol in a fixed-width template image)
+                              and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
 Sources/Mentor                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
                               (on-device speech recognition), HotKeyCenter (Carbon, press and release),
@@ -1068,10 +1067,10 @@ particular to this app:
   as a missing key, is the command that fixes it), then commands, windows, and
   the app menu's About and Quit. Menu items use title case and an ellipsis only
   where more input follows, and no standard keyboard shortcut is repurposed.
-  The icon is a template SF Symbol per sensing mode, with a word beside it only
-  in replay or recording. The item keeps one width in every mode: the symbol is
-  drawn centred in an image as wide as the widest mode symbol (`MenuBarIcon`),
-  so switching to an excluded app never shifts the menu bar extras beside it.
+  The icon is the mark as a template image, one variant per mode, with a word
+  beside it only in replay or recording. Every variant is drawn at the same
+  size, so switching to an excluded app never shifts the menu bar extras
+  beside it.
 - **The toast is a non-activating panel, not a notification.** It floats under
   the menu bar on Liquid Glass and never takes keyboard focus, with corners
   concentric with its small capsule buttons. Because it cannot be focused, the
@@ -1112,8 +1111,8 @@ the understanding's encoding, versioning, bounding and expiry, prompt assembly
 with and without one, request and response coding against fixture JSON,
 recording, redaction, replay matching and stale refusal, launch flags, a
 replay's separate files, the clocks and a replay's clock flags, the toast
-countdown, the menu bar icon's one width in every sensing mode, callout
-mapping and every anchor rejection, a callout aging out,
+countdown, which variant of the mark the menu bar shows, callout mapping and
+every anchor rejection, a callout aging out,
 transcript matching, the follow-up prompt and gate, the toast rule for voice
 input, the whole loop against a scripted client, follow-ups included, and the
 whole loop against the committed replay fixtures, replayed strictly, a region
@@ -1125,6 +1124,5 @@ fixtures). The snapshot run covers every window and Settings pane with sample
 data, their empty states (no suggestions, no frames, no contexts, contexts at
 the cap), the callout over the sample frame, the toast collapsed, expanded,
 listening, thinking, answered, and as a note, the context editor with a
-duplicate name, the transient status messages (a connection test, a refused
-or recording shortcut, on-device recognition unavailable), and the menu bar
-item's label in every sensing mode, live and in replay.
+duplicate name, and the transient status messages (a connection test, a refused
+or recording shortcut, on-device recognition unavailable).

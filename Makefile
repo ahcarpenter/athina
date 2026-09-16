@@ -10,11 +10,17 @@ TIME_SCALE ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/mentor/recordings
 
-.PHONY: build run run-replay record clear-recordings fixture-status test clean measure
+.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure
 
 ## Build the .app bundle into build/Mentor.app
 build:
 	scripts/bundle.sh $(CONFIG)
+
+## Rebuild the app icon and the menu bar mark from Resources/Mark/MentorMark.svg.
+## Its outputs are committed, so a plain `make build` never needs this; run it
+## after changing the master SVG or the variant set (see scripts/mark-assets.swift).
+mark:
+	swift scripts/mark-assets.swift .
 
 ## Build and launch the app (quits a running copy first)
 run: build
