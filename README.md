@@ -62,13 +62,17 @@ below the desktop picture, where the window server still composites glass and
 controls and ScreenCaptureKit still captures it, so nothing appears on screen
 (the run puts no item in the menu bar either) and a tall Settings pane renders
 whole. Replay mode has renders of its own.
-`open -n build/Mentor.app --args --open debug` (or `settings`, `settings:<pane>`
-for `general`, `contexts`, `models`, `capture`, `journal`, or `privacy`,
-`permissions`, `history`) launches the app with that window already open, which
-is how the live panel gets screenshotted from a shell. `--replay <dir>` and
-`--record [<dir>]` choose where model calls go, `--time-scale <n>` and
-`--advance-clock <interval>` set a replay's clock, and `--data-dir <path>` and
-`--settings <path>` choose a replay's files; see Iterating without the network.
+`open -n build/Mentor.app --args --replay <dir> --open debug` (or `settings`,
+`settings:<pane>` for `general`, `contexts`, `models`, `capture`, `journal`, or
+`privacy`, `permissions`, `history`) starts a replay with that window already
+open, which is how a panel gets screenshotted from a shell. Keep the `--replay`:
+a bare `open -n` goes round `scripts/launch.sh`, so nothing stops it starting a
+second live Mentor on the live journal, the live settings and the same API bill.
+The live app's own windows open from its menu bar item, on the copy `make run`
+already started. `--record [<dir>]` chooses where model calls go, `--time-scale
+<n>` and `--advance-clock <interval>` set a replay's clock, and `--data-dir
+<path>` and `--settings <path>` choose a replay's files; see Iterating without
+the network.
 
 ### Setup: the Anthropic API key
 
@@ -308,10 +312,15 @@ of them disturbs another or the live app:
   thumbnail window (6 hours by default) instead. Each directory is swept by the
   window the launch that wrote it ran with, recorded in its own `settings.json`,
   so a check started with `--settings` of its own never decides how long
-  another run's captures are kept. The sweep never removes one a running replay
-  holds, and never a directory with any other name, so a `--data-dir` you named
-  is yours to keep. The debug panel's Mentor card and the log at launch show
-  which directory a replay uses.
+  another run's captures are kept. The same sweep clears the journal every
+  replay shared before replays had a directory each, `replay/journal.sqlite`
+  and the settings file beside it, once that journal has gone unwritten for
+  longer than its own window: nothing opens it any more, so retention cannot
+  age it in place either. The sweep never removes one a running replay holds,
+  including the replay root itself when a `--data-dir` names it, and never a
+  directory with any other name, so a `--data-dir` you named is yours to keep.
+  The debug panel's Mentor card and the log at launch show which directory a
+  replay uses.
 - **`--settings <path>`** (`make run-replay SETTINGS=<path>`) starts the
   replay from that settings file instead of the live one. It is read and never
   written, so a scripted check keeps its settings in a file of its own and
@@ -1137,7 +1146,10 @@ counted (see Iterating without the network).
   journal is never opened again, so nothing can age it in place: the next
   replay launch removes its whole per-launch directory instead, once that
   directory is past the thumbnail window it recorded for itself (see Replays
-  side by side).
+  side by side). The journal every replay shared before replays had a directory
+  each, `replay/journal.sqlite`, is swept the same way: the next replay launch
+  removes it, and the settings file beside it, once it has gone unwritten for
+  longer than the window that settings file recorded.
 - The journal directory is created with mode 0700.
 
 ## Debug panel

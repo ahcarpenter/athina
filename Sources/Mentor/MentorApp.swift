@@ -129,8 +129,11 @@ enum WindowID {
 }
 
 /// Developer aids on the command line: `Mentor --open debug|settings|permissions|history`
-/// presents that window at launch (for example `open -n build/Mentor.app --args --open debug`;
-/// a plain `open` brings an already running Mentor forward and drops the arguments),
+/// presents that window at launch (for example
+/// `open -n build/Mentor.app --args --replay <dir> --open debug`; a plain `open`
+/// brings an already running Mentor forward and drops the arguments, and without
+/// `--replay` the new instance is a second live Mentor on the live journal, the
+/// live settings and the same bill, which only `scripts/launch.sh` refuses),
 /// `--open settings:models` opens Settings on that pane (`SettingsPane`), `--snapshot <dir>`
 /// is handled by `Snapshots`, `--replay <dir>`, `--allow-stale-fixtures`, and
 /// `--record [<dir>]` choose where model calls go (`ModelClientMode`), and

@@ -206,8 +206,9 @@ public struct LaunchFiles: Equatable, Sendable {
     /// window is each directory's own (`recordSettings`), never the sweeping
     /// launch's, so a check with settings of its own never governs how long
     /// another run's captured screen content is kept; a directory that records
-    /// none is swept at the default window. Anything else in `root` is left
-    /// alone.
+    /// none is swept at the default window. The journal replays shared before
+    /// they had a directory each goes the same way (`sweepSharedReplay`);
+    /// anything else in `root` is left alone.
     public static func pruneFinishedLaunches(in root: URL, keeping: Int, now: Date) {
         let manager = FileManager.default
         guard let names = try? manager.contentsOfDirectory(atPath: root.path) else { return }
@@ -223,6 +224,35 @@ public struct LaunchFiles: Equatable, Sendable {
         where index >= keeping || entry.expired {
             try? manager.removeItem(at: entry.url)
         }
+        sweepSharedReplay(in: root, now: now)
+    }
+
+    /// Removes the journal every replay shared before replays had a directory
+    /// each, which sat directly in `root`, once everything in it is past the
+    /// window the `settings.json` beside it recorded. Nothing opens that
+    /// journal any more, so retention can no longer age its thumbnails and
+    /// recognized text in place either, and an upgrade would otherwise leave
+    /// captures of the real screen on disk with nothing to expire them.
+    ///
+    /// The age is when the journal was last written, not when it was made: it
+    /// bounds how new anything inside can be, where the creation date would
+    /// delete content still inside its window. A replay given `root` itself as
+    /// its `--data-dir` holds it, and then these are its own files rather than
+    /// a leftover, so the hold is taken before anything is removed.
+    private static func sweepSharedReplay(in root: URL, now: Date) {
+        let manager = FileManager.default
+        let journal = Journal.defaultURL(in: root)
+        let settings = SettingsStore.defaultURL(in: root)
+        guard manager.fileExists(atPath: journal.path) else { return }
+        let window = SettingsStore(url: settings).load().thumbnailRetention
+        let written = (try? journal.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+        guard written < now.addingTimeInterval(-window) else { return }
+        guard let lock = try? DataDirectoryLock.acquire(in: root, pid: nil, create: false) else { return }
+        let sidecars = ["-shm", "-wal"].map { journal.lastPathComponent + $0 }
+        for name in [journal.lastPathComponent] + sidecars + [settings.lastPathComponent, DataDirectoryLock.fileName] {
+            try? manager.removeItem(at: root.appendingPathComponent(name))
+        }
+        _ = lock
     }
 }
 

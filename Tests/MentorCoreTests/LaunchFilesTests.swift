@@ -368,6 +368,63 @@ private func scratch() -> URL {
         let left = Set(try manager.contentsOfDirectory(atPath: root.path))
         #expect(left == ["launch-302-0000000b", "launch-304-0000000d"])
     }
+
+    /// The journal every replay shared before replays had a directory each
+    /// holds captures of the real screen and is never opened again, so nothing
+    /// ages it in place: a replay launch sweeps it once it has gone unwritten
+    /// for longer than the window recorded beside it, and leaves it alone
+    /// while it is still inside that window.
+    @Test(arguments: [(TimeInterval(86400), false), (TimeInterval(3600), true)])
+    func theSharedReplayJournalIsSweptOnceItIsPastItsWindow(age: TimeInterval, survives: Bool) throws {
+        let support = scratch()
+        defer { try? FileManager.default.removeItem(at: support) }
+        let root = AppPaths.replayRoot(in: support)
+        let manager = FileManager.default
+        let now = Date(timeIntervalSince1970: 1_789_000_000)
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+
+        var settings = SensingSettings()
+        settings.thumbnailRetention = 6 * 3600
+        try SettingsStore(url: SettingsStore.defaultURL(in: root)).save(settings)
+        let journal = Journal.defaultURL(in: root)
+        for name in [journal.lastPathComponent, journal.lastPathComponent + "-shm", journal.lastPathComponent + "-wal"] {
+            let url = root.appendingPathComponent(name)
+            try Data("captured screen".utf8).write(to: url)
+            try manager.setAttributes([.modificationDate: now - age], ofItemAtPath: url.path)
+        }
+
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
+        let left = Set(try manager.contentsOfDirectory(atPath: root.path))
+        if survives {
+            #expect(left == ["journal.sqlite", "journal.sqlite-shm", "journal.sqlite-wal", "settings.json"])
+        } else {
+            #expect(left.isEmpty)
+        }
+    }
+
+    /// The end-to-end harness hands a replay the replay root itself as its
+    /// `--data-dir`, so while a replay holds it those files are its own and the
+    /// sweep must not touch them, however old they look.
+    @Test func theSharedReplayJournalIsLeftAloneWhileAReplayHoldsTheRoot() throws {
+        let support = scratch()
+        defer { try? FileManager.default.removeItem(at: support) }
+        let root = AppPaths.replayRoot(in: support)
+        let manager = FileManager.default
+        let now = Date(timeIntervalSince1970: 1_789_000_000)
+
+        var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--data-dir", root.path], clientMode: replay, supportDirectory: support)
+        guard case .held(let lock) = files.claim(clientMode: replay, supportDirectory: support) else {
+            Issue.record("a replay was refused the replay root")
+            return
+        }
+        let journal = Journal.defaultURL(in: root)
+        try Data("captured screen".utf8).write(to: journal)
+        try manager.setAttributes([.modificationDate: now - 365 * 86400], ofItemAtPath: journal.path)
+
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
+        #expect(manager.fileExists(atPath: journal.path))
+        _ = lock
+    }
 }
 
 /// Moving a replay's clock from another process.

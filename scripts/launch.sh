@@ -82,27 +82,30 @@ live_mentors() {
 		}'
 }
 
+# Stops a Mentor this script is answerable for, and waits for it to go: a
+# killed app is still listed while the kernel tears it down, and the live guard
+# would read that as a live Mentor already running.
+stop_pid() {
+	local victim="$1" i
+	kill -TERM "$victim" 2>/dev/null || true
+	for i in $(seq 50); do
+		kill -0 "$victim" 2>/dev/null || return 0
+		sleep 0.1
+	done
+	echo "launch: pid $victim did not quit, stopping it" >&2
+	kill -KILL "$victim" 2>/dev/null || true
+	for i in $(seq 50); do
+		kill -0 "$victim" 2>/dev/null || return 0
+		sleep 0.1
+	done
+}
+
 stop_previous() {
 	[ -f "$PID_FILE" ] || return 0
 	local previous
 	previous="$(cat "$PID_FILE")"
 	if [ -n "$previous" ] && ours | grep -qxF "$previous"; then
-		kill -TERM "$previous" 2>/dev/null || true
-		local i
-		for i in $(seq 50); do
-			kill -0 "$previous" 2>/dev/null || break
-			sleep 0.1
-		done
-		if kill -0 "$previous" 2>/dev/null; then
-			echo "launch: pid $previous did not quit, stopping it" >&2
-			kill -KILL "$previous" 2>/dev/null || true
-			# A killed app is still listed while the kernel tears it down, and the
-			# live guard below would read that as a live Mentor already running.
-			for i in $(seq 50); do
-				kill -0 "$previous" 2>/dev/null || break
-				sleep 0.1
-			done
-		fi
+		stop_pid "$previous"
 	fi
 	rm -f "$PID_FILE"
 }
@@ -179,9 +182,14 @@ for _ in $(seq "$STARTED_TIMEOUT"); do
 done
 
 if [ "$ready" = 0 ]; then
+	# This lane writes no pid file, so nothing would ever stop what it started:
+	# a replay left behind goes on sensing the real screen into a directory the
+	# sweep skips while it holds it, and a live one goes on billing.
+	started_ours=0
+	if ours | grep -qxF "$pid"; then started_ours=1; fi
 	{
-		if kill -0 "$pid" 2>/dev/null; then
-			echo "launch: Mentor (lane $LANE, pid $pid) never wrote the line it writes once it has started, after $((STARTED_TIMEOUT / 10))s; it is running but not started, so this lane claims nothing:"
+		if [ "$started_ours" = 1 ]; then
+			echo "launch: Mentor (lane $LANE, pid $pid) never wrote the line it writes once it has started, after $((STARTED_TIMEOUT / 10))s; stopping it, so this lane leaves nothing running:"
 		else
 			echo "launch: Mentor (lane $LANE) quit as it started, so nothing is running:"
 		fi
@@ -191,6 +199,7 @@ if [ "$ready" = 0 ]; then
 			echo "  it said nothing; try: log show --last 2m --predicate 'subsystem == \"com.ahcarpenter.mentor\"'"
 		fi
 	} >&2
+	if [ "$started_ours" = 1 ]; then stop_pid "$pid"; fi
 	exit 1
 fi
 
