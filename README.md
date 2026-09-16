@@ -29,6 +29,7 @@ Halt-and-redirect and learned suppression are later phases.
 
 ```sh
 make build            # builds build/Mentor.app from the SwiftPM binary
+make mark             # rebuilds the app icon and the menu bar mark from the two SVG masters (their outputs are committed, so a plain build never needs it)
 make run              # builds, quits a running copy, and launches the app
 make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
 make record           # the same, live, writing every model call to a fixture file (spends API credits)
@@ -150,7 +151,7 @@ real session and uses the live files.
 
 Nothing about a replay can be mistaken for a live call:
 
-- the menu bar shows **Replay** beside the eye, and the menu says where the
+- the menu bar shows **Replay** beside the mark, and the menu says where the
   answers come from and that nothing is billed;
 - the debug panel's status bar and Mentor card carry a Replay badge, the card
   lists the fixtures by kind with their directory, and every replayed row in
@@ -266,7 +267,7 @@ the app creates the directory and writes and removes a probe file there; if
 that fails, every call is refused with the reason, which shows in the menu,
 the Mentor card, and the call log, so a recording that could write nothing
 never spends anything. Those refused calls are journaled as live errors that
-cost nothing, not as replays. The menu bar shows **Recording** beside the eye
+cost nothing, not as replays. The menu bar shows **Recording** beside the mark
 while it runs. `make clear-recordings` deletes the app's own recordings
 directory, `~/Library/Application Support/mentor/recordings`.
 
@@ -366,6 +367,7 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 | `menubar-keyboard` | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one menu bar scenario that needs no idle input |
 | `menubar-width` | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
+| `menubar-mark` | Mentor's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
 every check it made, and the directory holding its evidence (transcript,
@@ -497,7 +499,8 @@ Sources/MentorCore            library, fully testable
                               rendering, and expiry), Suggestion, FollowUp and ModelCallRecord, Callout
                               (CalloutRegion, CalloutAnchor: frame-to-screen mapping and every rule that
                               refuses a callout), TalkBack (TranscriptMatcher, FollowUp, TalkBackState),
-                              ToastCountdown (a toast's countdown, held and resumed), MentorLoop (orchestration)
+                              ToastCountdown (a toast's countdown, held and resumed), MenuBarMark (which variant
+                              of the mark the menu bar shows), MentorLoop (orchestration)
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory), MentorClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
@@ -1015,9 +1018,9 @@ counted (see Iterating without the network).
   for the purpose, never the captain's or any user's real work. Every recording
   is read, text and screenshot, before it is committed.
 - **Pause** from the menu or with the global hotkey (default ⌃⌥⌘P) stops all
-  sensing; the menu bar icon switches from a filled eye to a crossed eye. Idle
-  shows an outlined eye, an excluded app a raised hand, and missing permissions
-  an eye with a warning badge.
+  sensing; the menu bar owl closes its eyes and two z's drift off it. Idle
+  drops a lid over them, an excluded app looks away, missing permissions is a
+  wide stare, and a held mentor tier winks (see Design conventions).
 - Thumbnails expire after 6 hours and text after 7 days by default; the journal
   is capped at 500 MB; all three are adjustable, and the journal can be cleared
   at any time.
@@ -1105,7 +1108,6 @@ particular to this app:
   width throughout, so the other extras never shift sideways when Mentor's state
   changes. Which variant a mode gets is `MenuBarMark.resolve`, a pure function
   with the whole table under test.
-
 - **The toast is a non-activating panel, not a notification.** It floats under
   the menu bar on Liquid Glass and never takes keyboard focus, with corners
   concentric with its small capsule buttons. Because it cannot be focused, the
@@ -1159,5 +1161,6 @@ fixtures). The snapshot run covers every window and Settings pane with sample
 data, their empty states (no suggestions, no frames, no contexts, contexts at
 the cap), the callout over the sample frame, the toast collapsed, expanded,
 listening, thinking, answered, and as a note, the context editor with a
-duplicate name, and the transient status messages (a connection test, a refused
-or recording shortcut, on-device recognition unavailable).
+duplicate name, the transient status messages (a connection test, a refused
+or recording shortcut, on-device recognition unavailable), and every variant of
+the menu bar mark, at the size the bar draws it and enlarged beside it.
