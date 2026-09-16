@@ -8,6 +8,32 @@ private func scratch() -> URL {
     FileManager.default.temporaryDirectory.appendingPathComponent("mentor-files-\(UUID().uuidString)", isDirectory: true)
 }
 
+/// A per-launch directory left behind by a replay that has quit, holding a
+/// journal last written at `written`, and the retention window that launch ran
+/// with when it recorded one.
+@discardableResult
+private func finishedLaunch(
+    _ name: String, in support: URL, written: Date, recording window: TimeInterval? = nil
+) throws -> URL {
+    let files = LaunchFiles(
+        arguments: ["Mentor", "--replay", "/f"],
+        clientMode: .replay(directory: URL(fileURLWithPath: "/fixtures"), allowStale: false),
+        supportDirectory: support,
+        launchName: name
+    )
+    let manager = FileManager.default
+    try manager.createDirectory(at: files.dataDirectory, withIntermediateDirectories: true)
+    if let window {
+        var settings = SensingSettings()
+        settings.thumbnailRetention = window
+        files.recordSettings(settings)
+    }
+    let journal = Journal.defaultURL(in: files.dataDirectory)
+    try Data("captured screen".utf8).write(to: journal)
+    try manager.setAttributes([.modificationDate: written], ofItemAtPath: journal.path)
+    return files.dataDirectory
+}
+
 /// Where a launch keeps its journal and settings: the live files for a live
 /// or recording launch, whatever flags it was given, and files of its own for
 /// every replay, so replays running at once never share a journal or settings.
@@ -120,6 +146,39 @@ private func scratch() -> URL {
         #expect(files.store.url != checkURL)
         #expect(try Data(contentsOf: checkURL) == checkBytes)
         #expect(try Data(contentsOf: SettingsStore.defaultURL(in: support)) == liveBytes)
+    }
+
+    /// `--settings` is read and never written, so the one file it may not name
+    /// is the one this launch saves its own settings to: the launch records
+    /// them there as it starts and again when it quits, so the next run of the
+    /// same check would start from whatever the last one changed.
+    @Test func aSettingsFileInsideTheDataDirectoryRefusesToStart() throws {
+        let support = scratch()
+        let lane = scratch()
+        defer {
+            try? FileManager.default.removeItem(at: support)
+            try? FileManager.default.removeItem(at: lane)
+        }
+        var check = SensingSettings()
+        check.idleThreshold = 900
+        let given = SettingsStore.defaultURL(in: lane)
+        try SettingsStore(url: given).save(check)
+        let bytes = try Data(contentsOf: given)
+
+        var files = LaunchFiles(
+            arguments: ["Mentor", "--replay", "/f", "--data-dir", lane.path, "--settings", given.path],
+            clientMode: replay, supportDirectory: support
+        )
+        guard case .refusedToStart(let reason) = files.claim(clientMode: replay, supportDirectory: support) else {
+            Issue.record("a replay was allowed to start from the file it writes")
+            return
+        }
+        #expect(reason.contains(LaunchFiles.settingsFlag))
+        #expect(reason.contains(given.path))
+        #expect(files.refusals == [reason])
+        // The launch never ran, so the file it was given is exactly as it was.
+        #expect(try Data(contentsOf: given) == bytes)
+        #expect(!FileManager.default.fileExists(atPath: lane.appendingPathComponent(DataDirectoryLock.fileName).path))
     }
 
     /// A settings file that is missing or is not settings is refused, and the
@@ -290,9 +349,7 @@ private func scratch() -> URL {
         var names: [String] = []
         for index in 0..<5 {
             let name = String(format: "launch-%d-%08x", 100 + index, index)
-            let url = root.appendingPathComponent(name, isDirectory: true)
-            try manager.createDirectory(at: url, withIntermediateDirectories: true)
-            try manager.setAttributes([.creationDate: base + Double(index) * 60], ofItemAtPath: url.path)
+            try finishedLaunch(name, in: support, written: base + Double(index) * 60)
             names.append(name)
         }
         // The oldest is still running, and a directory someone named is left alone.
@@ -320,9 +377,7 @@ private func scratch() -> URL {
         var names: [String] = []
         for (index, age) in ages.enumerated() {
             let name = String(format: "launch-%d-%08x", 200 + index, index)
-            let url = root.appendingPathComponent(name, isDirectory: true)
-            try manager.createDirectory(at: url, withIntermediateDirectories: true)
-            try manager.setAttributes([.creationDate: now - age], ofItemAtPath: url.path)
+            try finishedLaunch(name, in: support, written: now - age)
             names.append(name)
         }
         // The oldest of all is still running, so nothing may touch it.
@@ -344,29 +399,42 @@ private func scratch() -> URL {
         let root = AppPaths.replayRoot(in: support)
         let manager = FileManager.default
         let now = Date(timeIntervalSince1970: 1_789_000_000)
-        let replay = self.replay
 
-        func finishedLaunch(_ name: String, aged age: TimeInterval, recording window: TimeInterval?) throws {
-            let files = LaunchFiles(arguments: ["Mentor", "--replay", "/f"], clientMode: replay, supportDirectory: support, launchName: name)
-            try manager.createDirectory(at: files.dataDirectory, withIntermediateDirectories: true)
-            if let window {
-                var settings = SensingSettings()
-                settings.thumbnailRetention = window
-                files.recordSettings(settings)
-            }
-            try manager.setAttributes([.creationDate: now - age], ofItemAtPath: files.dataDirectory.path)
-        }
-
-        // A day old: gone under an hour's window, kept under a week's.
-        try finishedLaunch("launch-301-0000000a", aged: 86400, recording: 3600)
-        try finishedLaunch("launch-302-0000000b", aged: 86400, recording: 7 * 86400)
+        // A day since it was last written: gone under an hour's window, kept
+        // under a week's.
+        try finishedLaunch("launch-301-0000000a", in: support, written: now - 86400, recording: 3600)
+        try finishedLaunch("launch-302-0000000b", in: support, written: now - 86400, recording: 7 * 86400)
         // No record of its own, so the documented 6 hour default applies.
-        try finishedLaunch("launch-303-0000000c", aged: 86400, recording: nil)
-        try finishedLaunch("launch-304-0000000d", aged: 3600, recording: nil)
+        try finishedLaunch("launch-303-0000000c", in: support, written: now - 86400)
+        try finishedLaunch("launch-304-0000000d", in: support, written: now - 3600)
 
         LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
         let left = Set(try manager.contentsOfDirectory(atPath: root.path))
         #expect(left == ["launch-302-0000000b", "launch-304-0000000d"])
+    }
+
+    /// How long a finished directory has held its captures is how long ago its
+    /// journal was last written, not how long ago the directory was made: a
+    /// lane that ran all day and quit a moment ago is one of the newest
+    /// finished launches and stays readable, which is what keeping them is for.
+    @Test func aLaneThatRanAllDayAndJustQuitIsStillReadable() throws {
+        let support = scratch()
+        defer { try? FileManager.default.removeItem(at: support) }
+        let root = AppPaths.replayRoot(in: support)
+        let manager = FileManager.default
+        let now = Date(timeIntervalSince1970: 1_789_000_000)
+
+        // Both ran nine hours, past the six hour default window. One was quit
+        // five minutes ago, the other nine hours ago.
+        let justQuit = try finishedLaunch("launch-401-0000000a", in: support, written: now - 300)
+        let longGone = try finishedLaunch("launch-402-0000000b", in: support, written: now - 9 * 3600)
+        for url in [justQuit, longGone] {
+            try manager.setAttributes([.creationDate: now - 9 * 3600], ofItemAtPath: url.path)
+        }
+
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
+        let left = Set(try manager.contentsOfDirectory(atPath: root.path))
+        #expect(left == ["launch-401-0000000a"])
     }
 
     /// The journal every replay shared before replays had a directory each
@@ -387,7 +455,7 @@ private func scratch() -> URL {
         settings.thumbnailRetention = 6 * 3600
         try SettingsStore(url: SettingsStore.defaultURL(in: root)).save(settings)
         let journal = Journal.defaultURL(in: root)
-        for name in [journal.lastPathComponent, journal.lastPathComponent + "-shm", journal.lastPathComponent + "-wal"] {
+        for name in [journal.lastPathComponent, journal.lastPathComponent + "-wal"] {
             let url = root.appendingPathComponent(name)
             try Data("captured screen".utf8).write(to: url)
             try manager.setAttributes([.modificationDate: now - age], ofItemAtPath: url.path)
@@ -396,10 +464,35 @@ private func scratch() -> URL {
         LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
         let left = Set(try manager.contentsOfDirectory(atPath: root.path))
         if survives {
-            #expect(left == ["journal.sqlite", "journal.sqlite-shm", "journal.sqlite-wal", "settings.json"])
+            #expect(left == ["journal.sqlite", "journal.sqlite-wal", "settings.json"])
         } else {
             #expect(left.isEmpty)
         }
+    }
+
+    /// The builds that wrote that shared journal took no hold on it, so one of
+    /// them running from another checkout is invisible to the sweep. SQLite
+    /// removes `-shm` when the last connection closes cleanly, so while one is
+    /// there the journal may be open and nothing is removed, however long it
+    /// has gone unwritten on a Mac that slept.
+    @Test func theSharedReplayJournalIsLeftAloneWhileAShmFileSaysItMayBeOpen() throws {
+        let support = scratch()
+        defer { try? FileManager.default.removeItem(at: support) }
+        let root = AppPaths.replayRoot(in: support)
+        let manager = FileManager.default
+        let now = Date(timeIntervalSince1970: 1_789_000_000)
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let journal = Journal.defaultURL(in: root)
+        for name in [journal.lastPathComponent, journal.lastPathComponent + "-wal", journal.lastPathComponent + "-shm"] {
+            let url = root.appendingPathComponent(name)
+            try Data("captured screen".utf8).write(to: url)
+            try manager.setAttributes([.modificationDate: now - 30 * 86400], ofItemAtPath: url.path)
+        }
+
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
+        #expect(Set(try manager.contentsOfDirectory(atPath: root.path))
+            == ["journal.sqlite", "journal.sqlite-wal", "journal.sqlite-shm"])
     }
 
     /// The end-to-end harness hands a replay the replay root itself as its
@@ -470,7 +563,7 @@ private func scratch() -> URL {
         let url = directory.appendingPathComponent("reply.json")
         let now = Date(timeIntervalSince1970: 1_789_473_600)
 
-        let moved = ClockRemote.Reply(moved: true, by: 7200, movedAhead: 9000, now: now, pid: 4242)
+        let moved = ClockRemote.Reply(moved: true, movedAhead: 9000, now: now, pid: 4242)
         try ClockRemote.answer(moved, at: url, temporaryDirectory: directory, supportDirectory: support)
         #expect(try ClockRemote.Reply.decode(Data(contentsOf: url)) == moved)
 
@@ -493,7 +586,7 @@ private func scratch() -> URL {
         let support = root.appendingPathComponent("mentor", isDirectory: true)
         try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
-        let reply = ClockRemote.Reply(moved: true, by: 900, movedAhead: 900, now: Date(timeIntervalSince1970: 1_789_473_600), pid: 11)
+        let reply = ClockRemote.Reply(moved: true, movedAhead: 900, now: Date(timeIntervalSince1970: 1_789_473_600), pid: 11)
 
         func answer(at url: URL) throws {
             try ClockRemote.answer(reply, at: url, temporaryDirectory: temporary, supportDirectory: support)

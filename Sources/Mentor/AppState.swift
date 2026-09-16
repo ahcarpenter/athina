@@ -1283,7 +1283,7 @@ final class AppState {
         switch request {
         case .success(let seconds):
             if advanceClock(by: seconds) {
-                reply = ClockRemote.Reply(moved: true, by: seconds, movedAhead: clockMovedAhead, now: clock.date)
+                reply = ClockRemote.Reply(moved: true, movedAhead: clockMovedAhead, now: clock.date)
             } else {
                 let reason = "this launch has no replay clock"
                 AppState.log.error("clock advance request refused: \(reason, privacy: .public)")

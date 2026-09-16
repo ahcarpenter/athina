@@ -214,8 +214,6 @@ public enum ClockRemote {
         public var moved: Bool
         /// Why it did not, when it did not.
         public var reason: String?
-        /// How far this request moved the clock, in seconds.
-        public var by: TimeInterval
         /// How far the clock has been moved ahead in all, in seconds.
         public var movedAhead: TimeInterval
         /// What the clock reads now.
@@ -223,10 +221,9 @@ public enum ClockRemote {
         /// The replay that answered.
         public var pid: Int32
 
-        public init(moved: Bool, reason: String? = nil, by: TimeInterval = 0, movedAhead: TimeInterval, now: Date, pid: Int32 = getpid()) {
+        public init(moved: Bool, reason: String? = nil, movedAhead: TimeInterval, now: Date, pid: Int32 = getpid()) {
             self.moved = moved
             self.reason = reason
-            self.by = by
             self.movedAhead = movedAhead
             self.now = now
             self.pid = pid

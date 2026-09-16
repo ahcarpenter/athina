@@ -309,14 +309,19 @@ of them disturbs another or the live app:
   whose own retention window has run out: a finished replay's journal is never
   opened again, so retention can never age the thumbnails and recognized text
   it captured from the real screen, and the whole directory goes at its
-  thumbnail window (6 hours by default) instead. Each directory is swept by the
-  window the launch that wrote it ran with, recorded in its own `settings.json`,
-  so a check started with `--settings` of its own never decides how long
-  another run's captures are kept. The same sweep clears the journal every
-  replay shared before replays had a directory each, `replay/journal.sqlite`
-  and the settings file beside it, once that journal has gone unwritten for
-  longer than its own window: nothing opens it any more, so retention cannot
-  age it in place either. The sweep never removes one a running replay holds,
+  thumbnail window (6 hours by default) instead. Newest, and run out, are both
+  measured from when a directory's journal was last written, so a lane that ran
+  all day and quit a moment ago is one of the newest and stays readable. Each
+  directory is swept by the window the launch that wrote it ran with, recorded
+  in its own `settings.json`, so a check started with `--settings` of its own
+  never decides how long another run's captures are kept. The same sweep clears
+  the journal every replay shared before replays had a directory each,
+  `replay/journal.sqlite` and the settings file beside it, once that journal has
+  gone unwritten for longer than its own window: nothing opens it any more, so
+  retention cannot age it in place either. That one is left alone while a
+  `journal.sqlite-shm` sits beside it, since SQLite leaves that file behind
+  only while a connection may still be open, and the builds that wrote this
+  journal took no lock to say so. The sweep never removes one a running replay holds,
   including the replay root itself when a `--data-dir` names it, and never a
   directory with any other name, so a `--data-dir` you named is yours to keep.
   The debug panel's Mentor card and the log at launch show which directory a
@@ -324,9 +329,13 @@ of them disturbs another or the live app:
 - **`--settings <path>`** (`make run-replay SETTINGS=<path>`) starts the
   replay from that settings file instead of the live one. It is read and never
   written, so a scripted check keeps its settings in a file of its own and
-  never has to swap the live settings. A file that is missing or is not
-  settings is refused, and the replay starts from the live settings, so the
-  apps you excluded stay excluded. Put every app a replayed callout must not
+  never has to swap the live settings. Naming the `settings.json` inside the
+  replay's own data directory is refused rather than quietly written: that is
+  the file the replay records its own settings in as it starts and saves again
+  when it quits, so the next run of the same check would start from whatever
+  the last one changed. A file that is missing or is not settings is refused,
+  and the replay starts from the live settings, so the apps you excluded stay
+  excluded. Put every app a replayed callout must not
   cover in that file's excluded apps.
 - **Both flags apply only to a replay.** On a live or recording launch they
   are refused, like the clock flags: the app uses the live files, and the menu,
@@ -1149,7 +1158,8 @@ counted (see Iterating without the network).
   side by side). The journal every replay shared before replays had a directory
   each, `replay/journal.sqlite`, is swept the same way: the next replay launch
   removes it, and the settings file beside it, once it has gone unwritten for
-  longer than the window that settings file recorded.
+  longer than the window that settings file recorded and nothing on this Mac
+  looks like it still has it open.
 - The journal directory is created with mode 0700.
 
 ## Debug panel

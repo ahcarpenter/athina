@@ -137,6 +137,12 @@ public struct LaunchFiles: Equatable, Sendable {
     /// was given one, sweeps the finished per-launch directories as it starts
     /// (`pruneFinishedLaunches`).
     ///
+    /// A `--settings` file that is the very file this launch would save its
+    /// own settings to is refused too: the launch records its settings there
+    /// as it starts and saves them again when it quits, so a check that asked
+    /// to start from that file would find it rewritten, and the next run of
+    /// the same check would start from settings the last one changed.
+    ///
     /// A `--data-dir` in the live data folder is refused for the same reason:
     /// the folder holds the live journal and the live settings, and a replay
     /// given it would write its replayed suggestions, feedback and clock-ahead
@@ -152,6 +158,11 @@ public struct LaunchFiles: Equatable, Sendable {
            AppPaths.isAt(dataDirectory, orInside: supportDirectory),
            !AppPaths.isAt(dataDirectory, orInside: AppPaths.replayRoot(in: supportDirectory)) {
             let reason = "\(LaunchFiles.dataDirectoryFlag) \(dataDirectory.path) is the live data folder \(supportDirectory.path), or inside it, which a replay may not use: nothing a replay does may reach the live journal or the live settings"
+            refusals.append(reason)
+            return .refusedToStart(reason)
+        }
+        if settingsGiven, AppPaths.isAt(settingsSource, orInside: store.url) {
+            let reason = "\(LaunchFiles.settingsFlag) \(settingsSource.path) is the file this replay saves its own settings to (\(store.url.path)), and \(LaunchFiles.settingsFlag) is read and never written: keep it outside the data directory \(dataDirectory.path)"
             refusals.append(reason)
             return .refusedToStart(reason)
         }
@@ -198,33 +209,46 @@ public struct LaunchFiles: Equatable, Sendable {
     }
 
     /// Removes the per-launch directories in `root` that no running replay
-    /// holds: those past the newest `keeping` by creation date, and those whose
-    /// own recorded thumbnail retention window has run out by `now`. A replay
-    /// senses the real screen, and its journal is never opened again once it
-    /// quits, so retention can never age the thumbnails and recognized text
-    /// inside it and the whole directory goes at that window instead. The
-    /// window is each directory's own (`recordSettings`), never the sweeping
-    /// launch's, so a check with settings of its own never governs how long
-    /// another run's captured screen content is kept; a directory that records
-    /// none is swept at the default window. The journal replays shared before
-    /// they had a directory each goes the same way (`sweepSharedReplay`);
-    /// anything else in `root` is left alone.
+    /// holds: those past the newest `keeping`, and those whose own recorded
+    /// thumbnail retention window has run out by `now`. A replay senses the
+    /// real screen, and its journal is never opened again once it quits, so
+    /// retention can never age the thumbnails and recognized text inside it
+    /// and the whole directory goes at that window instead. The window is each
+    /// directory's own (`recordSettings`), never the sweeping launch's, so a
+    /// check with settings of its own never governs how long another run's
+    /// captured screen content is kept; a directory that records none is swept
+    /// at the default window. The journal replays shared before they had a
+    /// directory each goes the same way (`sweepSharedReplay`); anything else in
+    /// `root` is left alone.
+    ///
+    /// Newest, and expired, are both measured by `lastWritten`, so a lane that
+    /// ran all day and quit a moment ago is still one of the newest and is
+    /// still readable. Its creation date would say it was older than its own
+    /// window and take it away the instant it quit, which is the opposite of
+    /// what `keptFinishedLaunches` is for.
     public static func pruneFinishedLaunches(in root: URL, keeping: Int, now: Date) {
         let manager = FileManager.default
         guard let names = try? manager.contentsOfDirectory(atPath: root.path) else { return }
-        var finished: [(url: URL, created: Date, expired: Bool, lock: DataDirectoryLock)] = []
+        var finished: [(url: URL, written: Date, expired: Bool, lock: DataDirectoryLock)] = []
         for name in names where isLaunchName(name) {
             let url = root.appendingPathComponent(name, isDirectory: true)
             guard let lock = try? DataDirectoryLock.acquire(in: url, pid: nil, create: false) else { continue }
-            let created = (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
+            let written = lastWritten(Journal.defaultURL(in: url))
             let window = SettingsStore(url: SettingsStore.defaultURL(in: url)).load().thumbnailRetention
-            finished.append((url, created, created < now.addingTimeInterval(-window), lock))
+            finished.append((url, written, written < now.addingTimeInterval(-window), lock))
         }
-        for (index, entry) in finished.sorted(by: { $0.created > $1.created }).enumerated()
+        for (index, entry) in finished.sorted(by: { $0.written > $1.written }).enumerated()
         where index >= keeping || entry.expired {
             try? manager.removeItem(at: entry.url)
         }
         sweepSharedReplay(in: root, now: now)
+    }
+
+    /// When a replay's journal was last written, which bounds how new anything
+    /// inside it can be. `.distantPast` when there is none to read, so a
+    /// directory holding no journal at all is swept rather than kept forever.
+    private static func lastWritten(_ journal: URL) -> Date {
+        (try? journal.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
     }
 
     /// Removes the journal every replay shared before replays had a directory
@@ -234,22 +258,28 @@ public struct LaunchFiles: Equatable, Sendable {
     /// recognized text in place either, and an upgrade would otherwise leave
     /// captures of the real screen on disk with nothing to expire them.
     ///
-    /// The age is when the journal was last written, not when it was made: it
-    /// bounds how new anything inside can be, where the creation date would
-    /// delete content still inside its window. A replay given `root` itself as
-    /// its `--data-dir` holds it, and then these are its own files rather than
-    /// a leftover, so the hold is taken before anything is removed.
+    /// The age is `lastWritten`, not when the journal was made: it bounds how
+    /// new anything inside can be, where the creation date would delete
+    /// content still inside its window. A replay given `root` itself as its
+    /// `--data-dir` holds it, and then these are its own files rather than a
+    /// leftover, so the hold is taken before anything is removed.
+    ///
+    /// A hold is not enough on its own here, because the builds that wrote
+    /// this journal took none: one of them may be running from another
+    /// checkout on this Mac right now with the journal open, and a Mac that
+    /// slept would leave it looking untouched for longer than the window.
+    /// SQLite deletes `-shm` when the last connection closes cleanly, so while
+    /// that file is there the journal may be open and nothing is removed.
     private static func sweepSharedReplay(in root: URL, now: Date) {
         let manager = FileManager.default
         let journal = Journal.defaultURL(in: root)
         let settings = SettingsStore.defaultURL(in: root)
         guard manager.fileExists(atPath: journal.path) else { return }
+        guard !manager.fileExists(atPath: journal.path + "-shm") else { return }
         let window = SettingsStore(url: settings).load().thumbnailRetention
-        let written = (try? journal.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-        guard written < now.addingTimeInterval(-window) else { return }
+        guard lastWritten(journal) < now.addingTimeInterval(-window) else { return }
         guard let lock = try? DataDirectoryLock.acquire(in: root, pid: nil, create: false) else { return }
-        let sidecars = ["-shm", "-wal"].map { journal.lastPathComponent + $0 }
-        for name in [journal.lastPathComponent] + sidecars + [settings.lastPathComponent, DataDirectoryLock.fileName] {
+        for name in [journal.lastPathComponent, journal.lastPathComponent + "-wal", settings.lastPathComponent, DataDirectoryLock.fileName] {
             try? manager.removeItem(at: root.appendingPathComponent(name))
         }
         _ = lock
