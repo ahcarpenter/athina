@@ -24,9 +24,16 @@ import Foundation
 // tinted by the system when it is a template, so the menu bar files carry
 // shape and alpha only, never colour.
 
+enum Failure: Error { case iconutil, pdfLengthChanged, owlShape(String), svg(String) }
+
 /// A small reader for the subset of SVG this project's mark uses: groups with
 /// transforms, paths, and the three primitives the cream layer is made of.
 /// Enough to rasterise the committed master source, and no more.
+///
+/// Anything outside that subset stops the build. Both assets are generated and
+/// committed, so a master carrying something this reader does not understand
+/// would otherwise be drawn wrong and committed wrong with nothing to show for
+/// it.
 enum SVG {
     struct Element {
         var path: CGPath
@@ -42,8 +49,8 @@ enum SVG {
     static func parse(contentsOf url: URL) throws -> Document {
         guard let root = try XMLDocument(contentsOf: url).rootElement() else { return Document(elements: []) }
         var elements: [Element] = []
-        read(root, into: &elements, transform: .identity,
-             fill: CGColor(red: 0, green: 0, blue: 0, alpha: 1), group: nil)
+        try read(root, into: &elements, transform: .identity,
+                 fill: CGColor(red: 0, green: 0, blue: 0, alpha: 1), group: nil)
         return Document(elements: elements)
     }
 
@@ -51,36 +58,47 @@ enum SVG {
 
     /// Walks the tree, carrying down what an element inherits from the groups
     /// it sits in: the transform, the fill, and the name of the group itself.
+    ///
+    /// Only `svg` and `g` hold other elements. Anything else is drawn or
+    /// refused, never descended into: `defs`, `clipPath` and `mask` carry
+    /// geometry that is referred to rather than painted, and painting it fills
+    /// the icon with a shape that was never meant to be seen.
     private static func read(
         _ element: XMLElement, into elements: inout [Element],
         transform inherited: CGAffineTransform, fill inheritedFill: CGColor?, group: String?
-    ) {
+    ) throws {
         var local = inherited
         if let own = attribute("transform", of: element) { local = transform(own).concatenating(local) }
         let fill = attribute("fill", of: element).map(colour) ?? inheritedFill
-        if let built = shape(of: element) {
+        let name = element.name ?? ""
+        guard name == "svg" || name == "g" else {
             let transformed = CGMutablePath()
-            transformed.addPath(built, transform: local)
+            transformed.addPath(try shape(of: element), transform: local)
             elements.append(Element(path: transformed, fill: fill,
                                     evenOdd: attribute("fill-rule", of: element) == "evenodd", group: group))
             return
         }
-        let group = element.name == "g" ? attribute("id", of: element) ?? group : group
+        let group = name == "g" ? attribute("id", of: element) ?? group : group
         for child in element.children ?? [] {
             guard let child = child as? XMLElement else { continue }
-            read(child, into: &elements, transform: local, fill: fill, group: group)
+            try read(child, into: &elements, transform: local, fill: fill, group: group)
         }
     }
 
     /// One drawable element's geometry in its own coordinates: a path, or one
-    /// of the three primitives the cream layer is made of. Nil for anything
-    /// else, which is a container to descend into.
-    private static func shape(of element: XMLElement) -> CGPath? {
+    /// of the three primitives the cream layer is made of.
+    private static func shape(of element: XMLElement) throws -> CGPath {
+        let kind = element.name ?? "?"
         func number(_ name: String) -> Double { attribute(name, of: element).flatMap(Double.init) ?? 0 }
-        switch element.name {
+        func required(_ name: String) throws -> String {
+            guard let value = attribute(name, of: element) else {
+                throw Failure.svg("<\(kind)> carries no \(name) for this reader to draw")
+            }
+            return value
+        }
+        switch kind {
         case "path":
-            guard let d = attribute("d", of: element) else { return nil }
-            return pathData(d)
+            return try pathData(required("d"))
         case "circle":
             let cx = number("cx"), cy = number("cy"), r = number("r")
             let p = CGMutablePath()
@@ -92,8 +110,7 @@ enum SVG {
                              width: number("width"), height: number("height")))
             return p
         case "polygon":
-            guard let points = attribute("points", of: element) else { return nil }
-            let n = numbers(points)
+            let n = numbers(try required("points"))
             let p = CGMutablePath()
             for i in stride(from: 0, to: n.count - 1, by: 2) {
                 let pt = CGPoint(x: n[i], y: n[i + 1])
@@ -101,7 +118,9 @@ enum SVG {
             }
             p.closeSubpath()
             return p
-        default: return nil
+        default:
+            throw Failure.svg("<\(kind)> is not an element this reader draws; the masters carry "
+                              + "groups, paths, circles, rects and polygons and nothing else")
         }
     }
 
@@ -158,7 +177,7 @@ enum SVG {
         return result
     }
 
-    private static func pathData(_ d: String) -> CGMutablePath {
+    private static func pathData(_ d: String) throws -> CGMutablePath {
         let path = CGMutablePath()
         var tokens: [String] = []
         var current = ""
@@ -215,7 +234,8 @@ enum SVG {
                 // Nothing follows a close but the next command.
                 if i < tokens.count, let c = tokens[i].first, !c.isLetter { i += 1 }
             default:
-                i += 1
+                throw Failure.svg("path command '\(command)' is not one this reader draws; the "
+                                  + "masters are written with M, L, H, V, C and Z alone")
             }
         }
         return path
@@ -319,8 +339,6 @@ func writeIcon() throws {
     try FileManager.default.removeItem(at: iconset)
     print("  Resources/AppIcon.icns  (\(sizes.count) sizes, drawing at \(iconHeightFraction) of the canvas)")
 }
-
-enum Failure: Error { case iconutil, pdfLengthChanged, owlShape(String) }
 
 // MARK: The menu bar mark
 
@@ -503,9 +521,16 @@ func drawEyes(_ eyes: Eyes) -> CGPath {
     return path
 }
 
-/// The item's height in points, the size the menu bar gives a symbol, and the
+/// The item's box in points, the size the menu bar gives a symbol, and the
 /// owl's width at that height from its own proportions.
+///
+/// The drawing is held off the top and bottom of that box by `menuBarInset`,
+/// so the item sits inside its box the way the system's own extras do rather
+/// than reading as the tallest thing in the bar. The box keeps its size
+/// whatever the inset is, and every state is drawn at the same scale, so the
+/// item is still one width in every mode.
 let menuBarHeight = 16.0
+let menuBarInset = 1.0
 let menuBarWidth = (menuBarHeight * parts.bounds.width / parts.bounds.height * 2).rounded() / 2
 
 /// Which treatment each state gets.
@@ -527,12 +552,14 @@ func drawMenuBarMark(_ eyes: Eyes, asleep: Bool, into context: CGContext) {
     context.setAllowsAntialiasing(true)
     context.setFillColor(ink)
     context.saveGState()
-    let scale = menuBarHeight / parts.bounds.height
+    let scale = (menuBarHeight - menuBarInset * 2) / parts.bounds.height
     // The owl's own extent, centred in the item's box. SVG counts y down the
     // page and a PDF counts it up, so the drawing is flipped as well as
     // scaled, or the owl stands on its head.
     let drawnWidth = parts.bounds.width * scale
-    context.translateBy(x: CGFloat((menuBarWidth - drawnWidth) / 2), y: CGFloat(menuBarHeight))
+    let drawnHeight = parts.bounds.height * scale
+    context.translateBy(x: CGFloat((menuBarWidth - drawnWidth) / 2),
+                        y: CGFloat(menuBarHeight - (menuBarHeight - drawnHeight) / 2))
     context.scaleBy(x: CGFloat(scale), y: CGFloat(-scale))
     context.translateBy(x: -parts.bounds.minX, y: -parts.bounds.minY)
     context.addPath(asleep ? drawEyes(eyes).union(sleepMarks) : drawEyes(eyes))

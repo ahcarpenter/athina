@@ -429,11 +429,11 @@ struct StatusMessagesPreview: View {
 ///
 /// The menu bar itself cannot be rendered into a window, so this is how a
 /// change to the mark gets looked at without a person at the screen, and how
-/// CI keeps a picture of all six. The bar behind them is the menu bar's own
-/// material, and the mark is a template image, so each one takes the
-/// foreground colour exactly as it does in the bar. The two labels are drawn
-/// in an outline of the width the bar gives them, so the renders show the
-/// mark itself never changes width.
+/// CI keeps a picture of all six. Each mark is a template image drawn on the
+/// window's own background, so it takes the foreground colour the way it does
+/// in the bar, in both appearances; the bar's material is not reproduced here.
+/// The two labels are drawn in an outline of the width the bar gives them, so
+/// the renders show the mark itself never changes width.
 struct SampleMenuBarMarks: View {
     private static let enlargement = 4.0
     private static let spacing = 22.0
