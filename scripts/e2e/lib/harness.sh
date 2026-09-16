@@ -36,6 +36,7 @@ JOURNAL=""
 MENTOR_PID=""
 HELPER_PIDS=()
 STAGED_PIDS=()
+STAGED_WINDOWS=()
 PREFS_BACKUP=""
 PREFS_EXISTED=0
 CHECKS_FAILED=0
@@ -246,7 +247,10 @@ cleanup() {
 	local status=$?
 	set +e
 	log "cleanup"
-	local pid
+	local pid window
+	for window in ${STAGED_WINDOWS[@]+"${STAGED_WINDOWS[@]}"}; do
+		"$DRIVE" close "${window%%:*}" "${window##*:}" >>"$RUN_DIR/transcript.log" 2>&1
+	done
 	for pid in ${HELPER_PIDS[@]+"${HELPER_PIDS[@]}"}; do stop_pid "$pid"; done
 	for pid in ${STAGED_PIDS[@]+"${STAGED_PIDS[@]}"}; do stop_pid "$pid"; done
 	stop_pid "$MENTOR_PID"
@@ -396,11 +400,20 @@ Release checklist
 - write the release notes
 - tell the team where the artifacts are
 TEXT
+	local already
+	already="$(pgrep -x TextEdit || true)"
 	open -a TextEdit "$first" "$second" || { log "could not open TextEdit"; return 1; }
 	sleep 3
 	TEXTEDIT_PID="$(pgrep -n -x TextEdit || true)"
 	[ -n "$TEXTEDIT_PID" ] || { log "TextEdit did not start"; return 1; }
-	STAGED_PIDS+=("$TEXTEDIT_PID")
+	if [ -n "$already" ]; then
+		# The owner had TextEdit open and `open -a` reused it. Quitting it
+		# would take his work with it, so only these two documents come down.
+		STAGED_WINDOWS+=("$TEXTEDIT_PID:notes.txt" "$TEXTEDIT_PID:plan.txt")
+		log "TextEdit was already running (pid $TEXTEDIT_PID); only this run's documents will be closed"
+	else
+		STAGED_PIDS+=("$TEXTEDIT_PID")
+	fi
 	raise_window "$TEXTEDIT_PID" notes.txt
 	log "staged TextEdit pid=$TEXTEDIT_PID with notes.txt and plan.txt"
 }

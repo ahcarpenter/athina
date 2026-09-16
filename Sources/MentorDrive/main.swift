@@ -107,6 +107,21 @@ func run(_ invocation: DriveInvocation) throws {
         AXUIElementSetAttributeValue(window, kAXMainAttribute as CFString, kCFBooleanTrue)
         say("raised \"\(title(window))\" of pid \(pid) -> \(raised.rawValue)")
 
+    case "close":
+        let pid = try invocation.pid(0)
+        let wanted = try invocation.positional(1)
+        let app = AXUIElementCreateApplication(pid)
+        let windows = (attr(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
+        guard let window = windows.first(where: { title($0).localizedCaseInsensitiveContains(wanted) }) else {
+            say("close: pid \(pid) has no window matching \"\(wanted)\"")
+            exit(2)
+        }
+        guard let button = attr(window, kAXCloseButtonAttribute) else {
+            fail("close: \"\(title(window))\" has no close button", code: 2)
+        }
+        let closed = AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString)
+        say("closed \"\(title(window))\" of pid \(pid) -> \(closed.rawValue)")
+
     case "menupick":
         Clicker.menuPick(pid: try invocation.pid(0), row: try invocation.positional(1), item: try invocation.positional(2))
 
