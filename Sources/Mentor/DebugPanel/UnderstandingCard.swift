@@ -48,7 +48,7 @@ struct UnderstandingCard: View {
                     }
                     Divider()
                     VStack(alignment: .leading, spacing: 4) {
-                        Field(label: "Refresh", value: "every \(ClockInterval.description(of: state.settings.mentor.understandingRefreshInterval)) of active use")
+                        Field(label: "Refresh", value: refreshInterval)
                         Field(label: "Next", value: nextRefresh(now: now), lineLimit: 4)
                         if let record {
                             Field(label: "Size", value: "\(Formatting.tokens(record.content.estimatedTokens)) of \(Formatting.tokens(state.settings.mentor.understandingTokenBudget)) tokens")
@@ -84,14 +84,13 @@ struct UnderstandingCard: View {
     }
 
     private var emptyText: String {
-        let interval = ClockInterval.description(of: state.settings.mentor.understandingRefreshInterval)
-        return "No understanding yet. The next mentor call writes the first one, or a refresh call does after \(interval) of active use without one."
+        "No understanding yet. The next mentor call writes the first one, or a refresh call does."
     }
 
     @ViewBuilder
     private func goals(_ content: Understanding) -> some View {
         if content.goals.isEmpty {
-            Text("No goal inferred yet.")
+            Text("No goal worked out yet.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         } else {
@@ -164,6 +163,17 @@ struct UnderstandingCard: View {
     }
 
     // MARK: Text
+
+    /// The interval a refresh will actually be held to: the set one stretched
+    /// by the cadence multiplier, as `nextRefreshAllowed` stretches it, so this
+    /// can never disagree with the countdown beside it.
+    private var refreshInterval: String {
+        let set = state.settings.mentor.understandingRefreshInterval
+        let multiplier = max(1, state.mentorStatus.cadenceMultiplier)
+        let text = "every \(ClockInterval.description(of: set * multiplier)) of active use"
+        guard multiplier > 1 else { return text }
+        return text + ", slowed \(Formatting.multiplier(multiplier)) from \(ClockInterval.description(of: set))"
+    }
 
     private func nextRefresh(now: Date) -> String {
         switch state.mentorStatus.refreshStanding(mode: state.mode) {
