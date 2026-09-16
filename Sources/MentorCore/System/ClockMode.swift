@@ -12,13 +12,13 @@ import Foundation
 ///   for example `90s`, `15m`, `2h`, or `1d12h`
 ///
 /// and the debug panel moves it ahead on demand. A command line that asked for
-/// a replay it could not start keeps the replay's journal, so it gets the
+/// a replay it could not start keeps the replay's files, so it gets the
 /// replay's clock too. Either flag on a live or recording launch is refused:
 /// the app runs on real time and says why, so a live or recording run can
 /// never use a controlled clock. A replay's flag with a value that cannot be
 /// used is refused and said the same way, but the replay keeps its own clock
-/// at real time with nothing added ahead, so it still carries on from its
-/// journal and the debug panel still moves it.
+/// at real time with nothing added ahead, so the debug panel and
+/// `ClockRemote` still move it.
 public enum ClockMode: Equatable, Sendable {
     /// Real time.
     case system
@@ -93,7 +93,7 @@ public enum ClockMode: Equatable, Sendable {
 
     /// The clock for this mode, and the handle that moves it, which only a
     /// replay has. A replay's clock starts at real time; `startReplay` moves
-    /// it to where the replay carries on from.
+    /// it to where the replay starts.
     public func makeClock(base: some MentorClock = SystemClock()) -> (clock: any MentorClock, control: AdjustableClock?) {
         switch self {
         case .system, .refused:
@@ -104,19 +104,12 @@ public enum ClockMode: Equatable, Sendable {
         }
     }
 
-    /// Moves a replay's clock to where the replay starts, before anything
-    /// runs on it: never behind the newest time in the replay's own journal,
-    /// which a faster or advanced session leaves stamped ahead of real time,
-    /// so a relaunch carries on where the last one stopped instead of going
-    /// back in time; then `--advance-clock` further.
-    public func startReplay(_ clock: AdjustableClock, journalNewest: Date?) {
-        guard case .replay(_, let ahead, _) = self else { return }
-        if let journalNewest {
-            clock.advance(toDate: journalNewest)
-        }
-        if ahead > 0 {
-            clock.advance(by: .seconds(ahead))
-        }
+    /// Moves a replay's clock to where the replay starts, which is `--advance-clock`
+    /// ahead of real time. Every replay makes a directory of its own and so
+    /// opens an empty journal, so there is never anything to carry on from.
+    public func startReplay(_ clock: AdjustableClock) {
+        guard case .replay(_, let ahead, _) = self, ahead > 0 else { return }
+        clock.advance(by: .seconds(ahead))
     }
 }
 
@@ -156,5 +149,136 @@ public enum ClockInterval {
             remaining %= size
         }
         return parts.joined(separator: " ")
+    }
+}
+
+/// Moves a replay's clock from another process, with no accessibility: a
+/// distributed notification named `name`, whose object is the replay's
+/// process id as text and whose user info holds `intervalKey` with an interval
+/// as the debug panel's Advance field takes it (`15m`, `2h`, `1d`), and
+/// `replyKey` with a file path to answer at.
+///
+/// A distributed notification reaches only the observers registered when it is
+/// posted, and posting says nothing about whether anyone heard it, so a
+/// replay that is still starting, a pid that is not Mentor, or a live launch
+/// that never listens would all look like success. The reply file is what
+/// makes a request provable: the replay writes `Reply` there, and
+/// `scripts/advance-clock.sh` waits for that file and fails naming the pid
+/// when it never appears. Only a replay listens, and only for its own pid, so
+/// a request can never reach a live or recording launch or another replay.
+public enum ClockRemote {
+    public static let name = "com.ahcarpenter.mentor.advance-clock"
+    public static let intervalKey = "interval"
+    public static let replyKey = "replyTo"
+
+    /// Whether a launch in `mode` listens at all.
+    public static func listens(in mode: ClockMode) -> Bool {
+        if case .replay = mode { return true }
+        return false
+    }
+
+    /// The object a replay with process id `pid` listens for.
+    public static func object(for pid: Int32) -> String {
+        String(pid)
+    }
+
+    /// The seconds a request asks for, or why it is refused.
+    public static func seconds(from userInfo: [AnyHashable: Any]?) -> Result<TimeInterval, Refusal> {
+        guard let text = userInfo?[intervalKey] as? String else {
+            return .failure(Refusal(reason: "no \(intervalKey) in the request"))
+        }
+        guard let seconds = ClockInterval.seconds(from: text), ClockMode.accepts(advance: seconds) else {
+            return .failure(Refusal(reason: "\"\(text)\" is not an interval such as 15m, 2h, or 1d, up to \(ClockInterval.description(of: ClockMode.maxAdvance))"))
+        }
+        return .success(seconds)
+    }
+
+    /// Where the request asks for its answer, or nil when it asked for none.
+    /// A relative path is refused rather than resolved, because the app's
+    /// working directory is `/` when it was started with `open`.
+    public static func replyURL(from userInfo: [AnyHashable: Any]?) -> URL? {
+        guard let path = userInfo?[replyKey] as? String, path.hasPrefix("/") else { return nil }
+        return URL(fileURLWithPath: path)
+    }
+
+    /// What a replay answers a request with.
+    public struct Reply: Codable, Equatable, Sendable {
+        /// Whether the clock moved.
+        public var moved: Bool
+        /// Why it did not, when it did not.
+        public var reason: String?
+        /// How far the clock has been moved ahead in all, in seconds.
+        public var movedAhead: TimeInterval
+        /// What the clock reads now.
+        public var now: Date
+        /// The replay that answered.
+        public var pid: Int32
+
+        public init(moved: Bool, reason: String? = nil, movedAhead: TimeInterval, now: Date, pid: Int32 = getpid()) {
+            self.moved = moved
+            self.reason = reason
+            self.movedAhead = movedAhead
+            self.now = now
+            self.pid = pid
+        }
+
+        public func encoded() throws -> Data {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            return try encoder.encode(self)
+        }
+
+        public static func decode(_ data: Data) throws -> Reply {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(Reply.self, from: data)
+        }
+    }
+
+    /// Answers the request at the path it named, and only where a request may
+    /// make a replay write: a file that does not exist yet, inside the system
+    /// temporary directory, never inside the live data folder. Does nothing
+    /// when the request named none, and throws rather than writing otherwise,
+    /// which the caller logs.
+    ///
+    /// Nothing authenticates this channel. The notification name is a
+    /// constant and a replay's pid is in `ps`, so any process in the login
+    /// session can ask a running replay to answer somewhere; an unconstrained
+    /// path would make that a way to create or replace any file the user can
+    /// write, the live settings among them. Refusing to replace a file closes
+    /// the rest: the exclusive create fails on a symlink too. It costs
+    /// `scripts/advance-clock.sh` nothing, which names a fresh `mktemp` path
+    /// that it has already removed, in the per-user temporary directory
+    /// (`getconf DARWIN_USER_TEMP_DIR`) that `NSTemporaryDirectory` names.
+    ///
+    /// The path is resolved once and that one path is both checked and written
+    /// to. Checking what was asked for and writing to it are not the same
+    /// thing: `..` after a symlink means one path to `AppPaths.resolvedPath`,
+    /// which folds `..` away before resolving links, and another to the
+    /// kernel, which follows the link first. A request could name
+    /// `<temp>/link-into-the-live-folder/../file` and pass a check that read
+    /// `<temp>/file` while the write landed in the live data folder.
+    public static func answer(
+        _ reply: Reply,
+        at url: URL?,
+        temporaryDirectory: URL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true),
+        supportDirectory: URL = AppPaths.supportDirectory()
+    ) throws {
+        guard let url else { return }
+        let target = URL(fileURLWithPath: AppPaths.resolvedPath(url))
+        guard AppPaths.isAt(target, orInside: temporaryDirectory),
+              !AppPaths.isAt(target, orInside: supportDirectory) else {
+            throw Refusal(reason: "\(target.path) is not somewhere a clock request may be answered: it must be inside \(temporaryDirectory.path) and outside \(supportDirectory.path)")
+        }
+        do {
+            try reply.encoded().write(to: target, options: .withoutOverwriting)
+        } catch let error as CocoaError where error.code == .fileWriteFileExists {
+            throw Refusal(reason: "\(target.path) already exists, and a clock request never replaces a file")
+        }
+    }
+
+    public struct Refusal: Error, Equatable {
+        public var reason: String
     }
 }
