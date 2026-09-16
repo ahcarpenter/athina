@@ -3,10 +3,10 @@ import Foundation
 /// Which variant of Mentor's mark the menu bar shows, and the pure function
 /// that decides it.
 ///
-/// The mark is one drawing: a profile in a crested Corinthian helmet. Every
-/// variant keeps that silhouette and the same width, so the modes read as one
-/// family rather than as six different icons, and so the item never shifts the
-/// menu bar's other extras sideways when Mentor's state changes.
+/// The menu bar's mark is one drawing, the owl of `Resources/Mark/MentorOwl.svg`.
+/// Every variant keeps that silhouette and the same width, so the modes read as
+/// one family rather than as six different icons, and so the item never shifts
+/// the menu bar's other extras sideways when Mentor's state changes.
 ///
 /// Two signals already carried elsewhere decide the variant, and this function
 /// is the only place they are combined: `SensingMode` says what the pipeline is
@@ -33,8 +33,9 @@ public enum MenuBarMark: String, CaseIterable, Sendable {
     /// The sensing mode decides first, because a mode that is not watching is
     /// the more important thing to say: nothing is being captured at all.
     /// Availability only distinguishes the three watching modes from each
-    /// other. While calls are replayed or recorded there is no live
-    /// availability to report, so those modes read as plain watching.
+    /// other. While calls are replayed there is no live availability to
+    /// report, so a replay reads as plain watching; a recording makes real
+    /// calls, so its availability is the live one and is shown as such.
     public static func resolve(
         mode: SensingMode,
         availability: MentorStatus.Availability,

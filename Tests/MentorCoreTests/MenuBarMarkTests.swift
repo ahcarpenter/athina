@@ -57,9 +57,9 @@ import Testing
         #expect(mark(.watching, .capReached(until: t0 + 3600)) == .held)
     }
 
-    /// A replay or a recording has no live availability to report, so the
-    /// sensing modes read as plain watching and the word beside the icon does
-    /// the rest.
+    /// A replay has no live availability to report, so the sensing modes read
+    /// as plain watching and the word beside the icon does the rest. A
+    /// recording is not offline, so it keeps the live reading.
     @Test func offlineCallsNeverReadAsNeedsSomethingOrHeld() {
         for availability in availabilities {
             for mode in [SensingMode.watching, .screenOnly, .accessibilityOnly] {

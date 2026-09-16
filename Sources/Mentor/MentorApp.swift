@@ -173,9 +173,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// The menu bar extra's menu: what Mentor is doing, then its commands, then
-/// its windows, then Quit. Status rows are dimmed text; a status that needs
-/// something from the person is a command that goes there.
 /// The mark itself. Every variant is the same size, so the menu bar's other
 /// extras never shift sideways when Mentor's state changes.
 struct MenuBarLabelImage: View {
@@ -193,6 +190,9 @@ struct MenuBarLabelImage: View {
     }
 }
 
+/// The menu bar extra's menu: what Mentor is doing, then its commands, then
+/// its windows, then Quit. Status rows are dimmed text; a status that needs
+/// something from the person is a command that goes there.
 struct MenuBarContent: View {
     @Environment(AppState.self) private var state
     @Environment(\.openWindow) private var openWindow

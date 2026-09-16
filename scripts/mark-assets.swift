@@ -4,16 +4,17 @@ import CoreGraphics
 import CryptoKit
 import Foundation
 
-// Builds every asset the app draws the mark from, out of the one master
-// source, Resources/Mark/MentorMark.svg. Run it with `make mark` whenever that
-// file changes; its outputs are committed so a plain `make build` needs
-// nothing but the repository.
+// Builds every asset the app draws its mark from, out of the two committed
+// masters: Resources/Mark/MentorMark.svg, the Athena drawing, for the app
+// icon, and Resources/Mark/MentorOwl.svg, the owl, for the menu bar. Run it
+// with `make mark` whenever either changes; its outputs are committed so a
+// plain `make build` needs nothing but the repository.
 //
 // It produces:
 //
-//   Resources/AppIcon.icns           the app icon, full artwork, every size
-//   Resources/Mark/MenuBarMark-*.pdf the menu bar mark, line art alone, one
-//                                    file per variant of MenuBarMark
+//   Resources/AppIcon.icns           the app icon, full Athena artwork, every size
+//   Resources/Mark/MenuBarMark-*.pdf the menu bar mark, the owl's silhouette,
+//                                    one file per variant of MenuBarMark
 //
 // Two things about macOS 26 shape what it does. First, the system masks a
 // legacy .icns to the standard app icon shape itself and adds the shadow: a
@@ -35,17 +36,11 @@ enum SVG {
     }
 
     struct Document {
-        var viewBox: CGRect
         var elements: [Element]
     }
 
     static func parse(contentsOf url: URL) throws -> Document {
         let text = try String(contentsOf: url, encoding: .utf8)
-        let viewBox = attribute("viewBox", in: firstTag("svg", in: text) ?? "").map { value -> CGRect in
-            let n = numbers(value)
-            return CGRect(x: n[0], y: n[1], width: n[2], height: n[3])
-        } ?? CGRect(x: 0, y: 0, width: 1, height: 1)
-
         var elements: [Element] = []
         var transforms: [CGAffineTransform] = [.identity]
         var fills: [CGColor?] = [CGColor(red: 0, green: 0, blue: 0, alpha: 1)]
@@ -104,46 +99,7 @@ enum SVG {
             transformed.addPath(built, transform: local)
             elements.append(Element(path: transformed, fill: fill, evenOdd: evenOdd, group: groups.last!))
         }
-        return Document(viewBox: viewBox, elements: elements)
-    }
-
-    /// Renders at a pixel width, keeping the viewBox's aspect. `group` limits
-    /// the drawing to one named group; `tint` overrides every fill, which is
-    /// how a template image is produced.
-    static func render(
-        _ document: Document, pixelWidth: Int, group: String? = nil,
-        background: CGColor? = nil, tint: CGColor? = nil
-    ) -> CGImage {
-        let scale = Double(pixelWidth) / document.viewBox.width
-        let pixelHeight = Int((document.viewBox.height * scale).rounded())
-        let context = CGContext(
-            data: nil, width: pixelWidth, height: pixelHeight, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB)!,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        )!
-        if let background {
-            context.setFillColor(background)
-            context.fill(CGRect(x: 0, y: 0, width: pixelWidth, height: pixelHeight))
-        }
-        context.setAllowsAntialiasing(true)
-        context.interpolationQuality = .high
-        // SVG's y runs down the page; Core Graphics' runs up.
-        context.translateBy(x: 0, y: CGFloat(pixelHeight))
-        context.scaleBy(x: CGFloat(scale), y: CGFloat(-scale))
-        context.translateBy(x: -document.viewBox.minX, y: -document.viewBox.minY)
-        for element in document.elements {
-            if let group, element.group != group { continue }
-            guard let fill = tint ?? element.fill else { continue }
-            context.addPath(element.path)
-            context.setFillColor(fill)
-            context.fillPath(using: element.evenOdd ? .evenOdd : .winding)
-        }
-        return context.makeImage()!
-    }
-
-    static func writePNG(_ image: CGImage, to url: URL) throws {
-        let rep = NSBitmapImageRep(cgImage: image)
-        try rep.representation(using: .png, properties: [:])!.write(to: url)
+        return Document(elements: elements)
     }
 
     // MARK: Reading
@@ -168,10 +124,6 @@ enum SVG {
             name.append(character)
         }
         return name
-    }
-
-    private static func firstTag(_ name: String, in text: String) -> String? {
-        tags(in: text).first { tagName($0) == name }
     }
 
     private static func attribute(_ name: String, in token: String) -> String? {
@@ -498,13 +450,6 @@ enum Eyes: String {
     case wide
     /// One eye open and one closed.
     case winking
-    /// Both eyes filled in. Not in the shipped set: it is here so the captain
-    /// can compare it against `closed`, because removing the pupils leaves the
-    /// whitest eyes in the set, which reads wide awake rather than shut.
-    case closedFilled
-    /// Both eyes filled in but for a slit, the way a closed eye is usually
-    /// drawn. Also a comparison, not in the shipped set.
-    case closedSlit
 }
 
 /// Two z's drifting off the owl, in the style of the reference the captain
@@ -583,15 +528,6 @@ func drawEyes(_ eyes: Eyes) -> CGPath {
         addPupil(0)
         // The closed eye is filled in, so only one eye is still looking.
         path = path.union(parts.eyes[1])
-    case .closedFilled:
-        for eye in parts.eyes { path = path.union(eye) }
-    case .closedSlit:
-        for eye in parts.eyes {
-            let box = eye.boundingBoxOfPath
-            let slit = CGPath(rect: CGRect(x: box.minX - 1, y: box.midY - box.height * 0.09,
-                                           width: box.width + 2, height: box.height * 0.18), transform: nil)
-            path = path.union(eye.subtracting(slit))
-        }
     }
     return path
 }

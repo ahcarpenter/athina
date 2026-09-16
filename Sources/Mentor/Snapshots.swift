@@ -54,7 +54,7 @@ enum Snapshots {
             ("toast-answered", CGSize(width: ToastController.panelWidth, height: 400), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: Date(), suggestionID: 4), suggestionID: 4)), state),
             ("toast-note", CGSize(width: ToastController.panelWidth, height: 120), AnyView(SampleToastNote()), state),
             ("callout", CGSize(width: 900, height: 620), AnyView(SampleCallout()), state),
-            ("menu-bar-marks", CGSize(width: 620, height: 420), AnyView(SampleMenuBarMarks()), state),
+            ("menu-bar-marks", SampleMenuBarMarks.wholeSize, AnyView(SampleMenuBarMarks()), state),
             ("debug-panel-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), replay),
             ("debug-panel-calls-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
             ("settings-models-replay", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), replay),
@@ -435,8 +435,28 @@ struct StatusMessagesPreview: View {
 /// in an outline of the width the bar gives them, so the renders show the
 /// mark itself never changes width.
 struct SampleMenuBarMarks: View {
+    private static let enlargement = 4.0
+    private static let spacing = 22.0
+    private static let padding = 28.0
+
+    /// The mark's own size, read from the asset the menu bar draws, so the
+    /// enlargement reserves exactly the room it takes.
+    @MainActor private static var markSize: CGSize {
+        MenuBarMarkImage.image(for: .watching)?.size ?? CGSize(width: 14, height: 16)
+    }
+
+    /// A window tall enough for every variant, so the picture is of all six
+    /// rather than of however many a fixed height happened to leave room for.
+    @MainActor static var wholeSize: CGSize {
+        let rows = Double(MenuBarMark.allCases.count)
+        return CGSize(
+            width: 480,
+            height: padding * 2 + markSize.height * enlargement * rows + spacing * (rows - 1)
+        )
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: Self.spacing) {
             ForEach(MenuBarMark.allCases, id: \.self) { mark in
                 HStack(spacing: 18) {
                     Text(mark.rawValue)
@@ -452,13 +472,15 @@ struct SampleMenuBarMarks: View {
                     Divider().frame(height: 26)
                     // And enlarged, so the drawing can be looked at closely.
                     MenuBarLabelImage(mark: mark)
-                        .scaleEffect(4, anchor: .leading)
-                        .frame(width: 19 * 4, height: 16 * 4, alignment: .leading)
+                        .scaleEffect(Self.enlargement, anchor: .leading)
+                        .frame(width: Self.markSize.width * Self.enlargement,
+                               height: Self.markSize.height * Self.enlargement,
+                               alignment: .leading)
                 }
                 .foregroundStyle(.primary)
             }
         }
-        .padding(28)
+        .padding(Self.padding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(.background)
     }

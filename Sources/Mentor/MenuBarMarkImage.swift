@@ -6,7 +6,7 @@ import MentorCore
 /// Each variant is a PDF, so one file serves every display scale, and each is
 /// a template image, so macOS tints it with the menu bar's own foreground
 /// colour like every other extra rather than drawing it in a colour of its
-/// own. They are built from `Resources/Mark/MentorMark.svg` by
+/// own. They are built from `Resources/Mark/MentorOwl.svg` by
 /// `scripts/mark-assets.swift` (`make mark`).
 @MainActor
 enum MenuBarMarkImage {

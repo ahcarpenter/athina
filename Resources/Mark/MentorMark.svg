@@ -7,8 +7,8 @@
   This file is the master source. Its coordinates are the pixel space of the
   artist's own 894 x 1247 reference bitmap, so any number here can be checked
   against it directly. The two groups are independent: "shapes" is the flat
-  cream layer, "lineart" is the drawing, and either stands alone. The menu bar
-  uses "lineart" by itself.
+  cream layer, "lineart" is the drawing, and either stands alone. This file is
+  the app icon's master; the menu bar has its own, MentorOwl.svg.
 
   The cream shapes are exact primitives, not traced: they were measured from
   the reference and are a circle, a square and a regular hexagon. The line art
