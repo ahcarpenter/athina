@@ -9,6 +9,9 @@ No prompt, schema, fixture, gating, or sensing change; no live model call.
 
 ## Evidence
 
+`scripts/e2e/mentor-e2e run understanding-surfaces` passes on this branch in 102 seconds: the mentor call that raises the first suggestion writes the first understanding, that goal reaches the menu clipped, the debug panel's card, and Settings > Models, and Reset Understanding… asks first, keeps every revision on Cancel with nothing journaled, and on Reset forgets them all and journals "reset after revision 1", after which the card reads "No understanding yet." and the menu "Goal: not worked out yet". Fifteen checks, all pass; the run's own screenshots and log are in `e2e/`.
+
+
 On-screen captures on the captain's Mac in replay (`--replay Tests/MentorCoreTests/Fixtures/Replay`), one instance tracked by pid, under a scratch `CFFIXED_USER_HOME` with `sandbox-exec` denying the network and the real support directory, and every running app excluded. The captain was at the Mac, so nothing took focus: the scratch replay journal was seeded with the understanding the committed refresh fixture recorded, the status menu was opened and closed through accessibility, buttons were pressed by their accessibility description, and windows were captured by id. Light only: dark on screen would have meant switching the whole Mac's appearance; every state is rendered in light and dark below.
 
 - Menu goal line with an understanding, then after Reset Understanding: "Goal: not worked out yet".
