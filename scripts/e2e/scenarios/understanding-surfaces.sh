@@ -7,8 +7,8 @@
 # Models, and then through Reset Understanding, which asks before it forgets
 # every revision.
 #
-# It needs no pointer: the menu is opened through accessibility and every
-# button is pressed by name.
+# Every button is pressed by name through accessibility; only the footer's
+# link, which accessibility offers no press for, needs the real pointer.
 SCENARIO_SUMMARY="the understanding a mentor call writes reaches the menu, the card, and Settings, and Reset Understanding asks first"
 SCENARIO_ARGS=(--open debug)
 
@@ -83,12 +83,46 @@ row_field_x() {
 	' "$RUN_DIR/$1"
 }
 
+# The screen point at the centre of an element, from a dump: "<x> <y>", empty
+# when the dump holds no such element. This is what a pointer step aims at.
+element_centre() {
+	awk -v role="$2" -v want="desc=\"$3\"" '
+		$1 == role && index($0, want) && match($0, /pos=\(-?[0-9]+,-?[0-9]+\) size=[0-9]+x[0-9]+/) {
+			split(substr($0, RSTART, RLENGTH), a, /[(,)x= ]+/)
+			printf "%d %d\n", a[2] + a[5] / 2, a[3] + a[6] / 2
+			exit
+		}
+	' "$RUN_DIR/$1"
+}
+
+# The amount a duration row's field is showing, read the same way.
+row_field_value() {
+	awk -v want="desc=\"$2, in " '
+		$1 == "AXTextField" && index($0, want) && match($0, /value="[^"]*"/) {
+			print substr($0, RSTART + 7, RLENGTH - 8)
+			exit
+		}
+	' "$RUN_DIR/$1"
+}
+
+# Type an amount into a duration row and end the edit by moving focus, the way
+# a person does who types and then clicks elsewhere rather than pressing
+# Return. The amount the row is left showing is what the row committed.
+type_duration() {
+	local row="$1" unit="$2" typed="$3" tag="$4"
+	"$DRIVE" ax "$MENTOR_PID" set AXTextField "$row, in $unit" "$typed" --scope Models >>"$RUN_DIR/transcript.log" 2>&1 || return 1
+	"$DRIVE" ax "$MENTOR_PID" focus AXTextField "Size limit, in tokens" --scope Models >>"$RUN_DIR/transcript.log" 2>&1 || return 1
+	sleep 0.6
+	"$DRIVE" ax "$MENTOR_PID" dump --scope Models >"$RUN_DIR/$tag.txt" 2>&1 || true
+	row_field_value "$tag.txt" "$row"
+}
+
 has_text() {
 	grep -qF "$2" "$RUN_DIR/$1" && echo yes || echo no
 }
 
 scenario_run() {
-	local goal head revisions refresh_x idle_x
+	local goal head revisions refresh_x idle_x link
 	stage_flip_window
 	wait_toast >/dev/null || return 1
 	wait_understanding || { log "no understanding was written"; return 1; }
@@ -144,6 +178,46 @@ scenario_run() {
 	[ -n "$refresh_x" ] && [ -n "$idle_x" ] || { log "the Models pane showed no duration fields to measure"; return 1; }
 	check "the duration rows start their fields on one x" "$refresh_x" "$idle_x"
 
+	# The row is held to the seconds the setting itself accepts, 5 minutes to
+	# 12 hours, and it commits when the edit ends however it ends, so typing an
+	# amount outside that and clicking away leaves the nearest one it allows
+	# rather than a figure validated() would quietly clamp behind the person.
+	check "a refresh below the range settles at the shortest allowed" "5" \
+		"$(type_duration "Refresh at most every" minutes 1 refresh-too-short)"
+	check "a refresh above the range settles at the longest allowed" "720" \
+		"$(type_duration "Refresh at most every" minutes 1000 refresh-too-long)"
+	check "an allowed refresh is left as typed" "20" \
+		"$(type_duration "Refresh at most every" minutes 20 refresh-in-range)"
+
+	# The footer names the Journal pane by linking to it, and the link opens it
+	# here rather than in a browser, so the Settings window itself changes pane.
+	# A link inside a Text offers accessibility nothing to press, so this is the
+	# one step that needs the real pointer; the footer is below the fold, so the
+	# pane is scrolled to the end and the link found again before it is aimed at.
+	"$DRIVE" ax "$MENTOR_PID" set AXScrollBar "" 1 --scope Models >>"$RUN_DIR/transcript.log" 2>&1 || true
+	sleep 0.6
+	"$DRIVE" ax "$MENTOR_PID" dump --scope Models >"$RUN_DIR/footer-dump.txt" 2>&1 || true
+	link="$(element_centre footer-dump.txt AXLink "Journal settings")"
+	[ -n "$link" ] || { log "the footer showed no Journal settings link to aim at"; return 1; }
+	# The flipping helper floats above the Settings window and has already
+	# earned the mentor call this scenario follows, so it is stopped rather
+	# than left over the point the pointer is about to aim at.
+	stop_pid "$FLIP_PID"
+	sleep 0.5
+	wait_idle_input || return 1
+	# A click into a window that is not key only makes it key, so the Settings
+	# window is brought forward before the pointer aims at anything inside it.
+	"$DRIVE" raise "$MENTOR_PID" Models >>"$RUN_DIR/transcript.log" 2>&1 || true
+	sleep 0.5
+	# shellcheck disable=SC2086
+	"$DRIVE" click window "$MENTOR_PID" $link --shot "$RUN_DIR/footer-link.png" >>"$RUN_DIR/transcript.log" 2>&1 \
+		|| { log "the click on the Journal settings link would not land"; return 1; }
+	sleep 1
+	check "the footer link opens the Journal pane in place" "yes" \
+		"$([ -n "$(window_id "Journal")" ] && echo yes || echo no)"
+	window_texts "Journal" "journal-pane"
+
+	"$DRIVE" close "$MENTOR_PID" Journal >>"$RUN_DIR/transcript.log" 2>&1 || true
 	"$DRIVE" close "$MENTOR_PID" Models >>"$RUN_DIR/transcript.log" 2>&1 || true
 	sleep 0.5
 

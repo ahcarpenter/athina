@@ -368,7 +368,7 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 | `menubar-width` | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
 | `menubar-mark` | Mentor's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
-| `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models, and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
+| `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
 every check it made, and the directory holding its evidence (transcript,
