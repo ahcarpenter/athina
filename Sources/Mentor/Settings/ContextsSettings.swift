@@ -61,13 +61,7 @@ struct MentorshipContextsSection: View {
         } footer: {
             // The link opens the Privacy pane in place rather than describing where it is.
             Text("Triage places each moment in one of your contexts as part of the judgment it already makes, so contexts cost no extra call. To keep an app from being looked at at all, exclude it in [Privacy settings](mentor-settings:privacy).")
-                .environment(\.openURL, OpenURLAction { url in
-                    guard url.scheme == "mentor-settings", let pane = SettingsPane(rawValue: url.absoluteString.replacingOccurrences(of: "mentor-settings:", with: "")) else {
-                        return .systemAction
-                    }
-                    pane.select()
-                    return .handled
-                })
+                .settingsPaneLinks()
         }
         .sheet(item: $editing) { context in
             ContextEditor(context: context, existing: contexts) { edited in

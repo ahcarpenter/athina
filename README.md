@@ -368,6 +368,7 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 | `menubar-width` | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
 | `menubar-mark` | Mentor's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
+| `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
 every check it made, and the directory holding its evidence (transcript,
@@ -906,10 +907,10 @@ oldest timeline entries first, then the oldest mentor history, then concerns,
 then the weakest goals, always keeping the strongest goal. It expires after
 `understandingIdleGap` with no activity (4 hours) and always at a new day;
 expiry and reset are journaled.
-**Reset Understanding**, in Settings > Models and in the debug panel, forgets
-every revision at once. Revisions are inserted rather than updated, so the
-journal keeps the trail of how the reading developed, and the current one
-survives a relaunch.
+**Reset Understanding…**, in Settings > Models and in the debug panel, asks
+first and then forgets every revision at once. Revisions are inserted rather
+than updated, so the journal keeps the trail of how the reading developed, and
+the current one survives a relaunch.
 
 **What it costs.** The common case is free: a mentor call was going to happen
 anyway and the record rides along in its reply, paying only for the extra
@@ -1035,9 +1036,10 @@ cached tokens, estimated cost and latency, spend this hour, the cadence state
 with the current slowdown, the last callout decision with its region in frame
 pixels and screen points, and the last transcript with what was done with it),
 the Understanding card (revision, when and how it was last written, the
-inferred goals with their evidence and confidence, the timeline, what has been
-said and answered, open concerns, when the next refresh is due or why it is
-held, size against the budget, cost since it began, and Reset Understanding),
+inferred goals with their evidence and confidence, what has been done and
+said so far, open concerns, the refresh interval, when the next refresh is
+due, running, or why it is held, size against the budget, what refresh calls
+have cost since it began, the last refresh call, and Reset Understanding…),
 focused element (role, title, description, text), cadence settings and
 counters, journal size and path. Centre: the latest kept frame with OCR boxes
 overlaid and the recognized text below; selecting an observation in the
@@ -1121,12 +1123,20 @@ particular to this app:
 - **Settings is the SwiftUI `Settings` scene**: a toolbar of panes, the window
   titled by its pane, the last pane remembered, each pane a fixed-size grouped
   form that scrolls. Rows use the form's own label and subtitle styling, and a
-  place elsewhere in Settings is a link, not a description.
+  place elsewhere in Settings is a link, not a description. A duration row given
+  its setting's range offers only what that setting accepts: its unit pop-up
+  lists the units the range holds a whole amount of, and an amount typed outside
+  the range settles at the nearest allowed one as the edit ends, rather than
+  being clamped out of sight afterwards.
 - **Status is never color alone.** Inline messages are `StatusLabel` and badges
   are `StatusBadge` (`Sources/Mentor/Components.swift`): the symbol or capsule
   carries the color, the words stay in a label color. Text uses system text
   styles and label colors, never fixed point sizes or tertiary text for
   anything that must be read.
+- **What cannot be undone asks first.** Clear Journal… and Reset
+  Understanding… open a confirmation that names what is lost; the confirming
+  button is plain, since it is what the person chose, and Cancel is always
+  there.
 - **Permissions explain before they ask.** The window never prompts on its own,
   each permission has one button, and the purpose strings in
   `Resources/Info.plist` say the same as the window in one sentence.
@@ -1160,9 +1170,11 @@ permissions, display, network, microphone, or API key. A committed fixture that
 is stale, or a tier with no committed fixture, fails the run (see The committed
 fixtures). The snapshot run covers every window and Settings pane with sample
 data, their empty states (no suggestions, no frames, no contexts, contexts at
-the cap), the callout over the sample frame, the toast collapsed, expanded,
-listening, thinking, answered, and as a note, the context editor with a
-duplicate name, the transient status messages (a connection test, a refused
-or recording shortcut, on-device recognition unavailable), and every variant of
-the menu bar mark, at the size the bar draws it, with the word a replay puts
-beside it, and enlarged.
+the cap), the Understanding card with a record, with none, paused, with a
+refresh call in flight, and after a failed refresh, the Understanding settings
+section with and without a record, the callout over the sample frame, the toast
+collapsed, expanded, listening, thinking, answered, and as a note, the context
+editor with a duplicate name, the transient status messages (a connection test,
+a refused or recording shortcut, on-device recognition unavailable), and every
+variant of the menu bar mark, at the size the bar draws it, with the word a
+replay puts beside it, and enlarged.

@@ -23,7 +23,10 @@ enum Snapshots {
         let empty = AppState.sampleEmpty()
         let atCap = AppState.sampleAtContextCap()
         let noSpeech = AppState.sample(speechAvailability: .unavailable(reason: "On-device speech recognition is not available for Welsh, so talking back is off."))
+        let noUnderstanding = AppState.sampleUnderstanding(.none)
         let pane = CGSize(width: SettingsView.paneWidth, height: 640)
+        // The debug panel's Now pane is this wide, so the card wraps as it does there.
+        func card(_ height: CGFloat) -> CGSize { CGSize(width: 340, height: height) }
         // Render windows are not held to a display's height, so a pane that
         // scrolls in the Settings window renders whole.
         func whole(_ height: CGFloat) -> CGSize { CGSize(width: SettingsView.paneWidth, height: height) }
@@ -32,6 +35,12 @@ enum Snapshots {
             ("debug-panel", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), state),
             ("debug-panel-calls", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), state),
             ("debug-panel-empty", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), empty),
+            // The Understanding card whole, in each state it can be in.
+            ("understanding-card", card(900), AnyView(SampleUnderstandingCard()), state),
+            ("understanding-card-empty", card(360), AnyView(SampleUnderstandingCard()), noUnderstanding),
+            ("understanding-card-paused", card(900), AnyView(SampleUnderstandingCard()), AppState.sampleUnderstanding(.paused)),
+            ("understanding-card-refreshing", card(900), AnyView(SampleUnderstandingCard()), AppState.sampleUnderstanding(.refreshing)),
+            ("understanding-card-failed", card(900), AnyView(SampleUnderstandingCard()), AppState.sampleUnderstanding(.failed)),
             ("settings-general", whole(860), AnyView(GeneralSettings().formStyle(.grouped)), state),
             ("settings-contexts", pane, AnyView(ContextsSettings().formStyle(.grouped)), state),
             ("settings-contexts-empty", CGSize(width: SettingsView.paneWidth, height: 420), AnyView(ContextsSettings().formStyle(.grouped)), empty),
@@ -41,6 +50,10 @@ enum Snapshots {
             ("settings-status-messages", CGSize(width: SettingsView.paneWidth, height: 760), AnyView(StatusMessagesPreview()), noSpeech),
             ("settings-models", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), state),
             ("settings-models-empty", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), empty),
+            // The Understanding section sits below the fold of the Models pane,
+            // so it also renders on its own, with a record and without one.
+            ("settings-understanding", whole(560), AnyView(SampleUnderstandingSettings()), state),
+            ("settings-understanding-empty", whole(480), AnyView(SampleUnderstandingSettings()), noUnderstanding),
             ("settings-capture", whole(920), AnyView(CaptureSettings().formStyle(.grouped)), state),
             ("settings-journal", CGSize(width: SettingsView.paneWidth, height: 500), AnyView(JournalSettings().formStyle(.grouped)), state),
             ("settings-privacy", pane, AnyView(PrivacySettings().formStyle(.grouped)), state),
@@ -264,6 +277,12 @@ extension AppState {
                 frame: frame, textBlocks: [], reason: i % 3 == 0 ? .focusChange : .floor
             )))
         }
+        // Yesterday's understanding, forgotten as the day's first session began,
+        // so it is the oldest entry and the current record starts after it.
+        timeline.append(.event(JournalEvent(
+            id: 2, timestamp: now.addingTimeInterval(-7860), kind: .understanding,
+            detail: "expired after revision 12: a new day started"
+        )))
         state.timeline = timeline
 
         var suggestions = SampleSuggestions.make(now: now)
@@ -378,6 +397,78 @@ extension AppState {
         status.cadenceMultiplier = 1
         state.mentorStatus = status
         return state
+    }
+
+    enum UnderstandingSample {
+        /// Mentor is ready but has not written an understanding yet.
+        case none
+        /// Paused, so no active use counts toward a refresh.
+        case paused
+        /// A periodic refresh call is in flight.
+        case refreshing
+        /// The last periodic refresh call failed.
+        case failed
+    }
+
+    /// The sample with the understanding in another state, for the
+    /// Understanding card and settings section.
+    static func sampleUnderstanding(_ variant: UnderstandingSample) -> AppState {
+        let state = sample()
+        let now = state.clock.date
+        var status = state.mentorStatus
+        switch variant {
+        case .none:
+            state.callLog.removeAll { $0.tier == .understanding }
+            status.understanding = nil
+            status.lastRefresh = nil
+            status.lastRefreshHold = nil
+            status.nextRefreshAt = nil
+        case .paused:
+            state.mode = .paused
+            status.lastRefreshHold = MentorStatus.RefreshHoldRecord(at: now.addingTimeInterval(-300), hold: .unavailable(.paused))
+        case .refreshing:
+            status.inFlight = .understanding
+            status.lastRefreshHold = MentorStatus.RefreshHoldRecord(at: now.addingTimeInterval(-1), hold: .callInFlight)
+            status.nextRefreshAt = now.addingTimeInterval(-1)
+        case .failed:
+            let failed = ModelCallRecord(
+                id: 64, timestamp: now.addingTimeInterval(-10), tier: .understanding, model: "claude-opus-5",
+                promptVersion: MentorPrompts.version, promptCharacters: 12_010, imageBytes: 0,
+                usage: Usage(inputTokens: 0, outputTokens: 0, cacheCreationInputTokens: 0, cacheReadInputTokens: 0),
+                cost: 0, latency: 30.2, outcome: .error,
+                detail: ClaudeClientError.api(status: 529, type: "overloaded_error", message: "Overloaded").description
+            )
+            state.callLog.insert(failed, at: 0)
+            status.lastRefresh = failed
+            status.lastRefreshHold = MentorStatus.RefreshHoldRecord(at: now.addingTimeInterval(-2.4), hold: .notDue(until: now.addingTimeInterval(890)))
+            status.nextRefreshAt = now.addingTimeInterval(890)
+        }
+        state.mentorStatus = status
+        return state
+    }
+}
+
+/// The Understanding card as the debug panel's Now pane lays it out.
+struct SampleUnderstandingCard: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            UnderstandingCard()
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+/// The Models pane's Understanding section on its own.
+struct SampleUnderstandingSettings: View {
+    var body: some View {
+        Form {
+            UnderstandingSection()
+        }
+        .formStyle(.grouped)
     }
 }
 
@@ -738,7 +829,8 @@ enum SampleSuggestions {
                 detail: outside ? "Booking a flight" : (quiet ? "Reading documentation, nothing to act on" : "Repeated manual test runs")
             ))
         }
-        return calls
+        // Newest first, as the journal lists them.
+        return calls.sorted { $0.timestamp > $1.timestamp }
     }
 }
 

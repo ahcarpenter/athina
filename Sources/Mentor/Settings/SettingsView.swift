@@ -77,6 +77,18 @@ extension View {
         formStyle(.grouped)
             .frame(width: SettingsView.paneWidth, height: height)
     }
+
+    /// Opens a `mentor-settings:<pane>` link in this text as that Settings
+    /// pane, so text names a place elsewhere in Settings by linking to it.
+    func settingsPaneLinks() -> some View {
+        environment(\.openURL, OpenURLAction { url in
+            guard url.scheme == "mentor-settings", let pane = SettingsPane(rawValue: url.absoluteString.replacingOccurrences(of: "mentor-settings:", with: "")) else {
+                return .systemAction
+            }
+            pane.select()
+            return .handled
+        })
+    }
 }
 
 // MARK: - Capture
@@ -245,7 +257,7 @@ struct JournalSettings: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Every observation, thumbnail, event, suggestion, follow-up question, and model call record is deleted, along with what Mentor understands of your goals. You can't undo this action.")
+            Text("Every observation, thumbnail, event, suggestion, follow-up question, and model call record is deleted, along with Mentor's understanding of what you are working toward. You can't undo this action.")
         }
         .task {
             await state.refreshJournalStats()
@@ -592,6 +604,11 @@ private struct NumberControls<Field: View, StepperView: View>: View {
 struct DurationRow: View {
     let title: String
     @Binding var value: TimeInterval
+    /// The seconds the setting itself accepts, where it bounds them. A unit is
+    /// offered only where the range holds a whole amount of it, and the stepper
+    /// and a typed amount are held inside it, so the row cannot offer a
+    /// duration `MentorSettings.validated()` would clamp away.
+    let range: ClosedRange<TimeInterval>?
     var help: String?
 
     private enum Unit: String, CaseIterable, Identifiable {
@@ -606,14 +623,41 @@ struct DurationRow: View {
         }
     }
 
+    /// The width the unit pop-up reserves. A menu-style Picker sizes to the
+    /// unit it is showing, not to the widest in its menu, and a form's rows are
+    /// trailing aligned, so a row showing "minutes" puts its field and stepper
+    /// 12 pt left of a row showing "hours". Reserving what a pop-up needs for
+    /// the widest unit word holds every duration row on one x whatever unit
+    /// each is showing, and measuring it rather than naming a number keeps that
+    /// true whatever font the control draws in.
+    @MainActor private static let unitWidth: CGFloat = {
+        let sizing = NSPopUpButton(frame: .zero, pullsDown: false)
+        sizing.addItems(withTitles: Unit.allCases.map(\.rawValue))
+        return sizing.intrinsicContentSize.width
+    }()
+
     @State private var amount: Double = 1
     @State private var unit: Unit = .hours
+    @FocusState private var editing: Bool
 
-    init(_ title: String, value: Binding<TimeInterval>, help: String? = nil) {
+    init(_ title: String, value: Binding<TimeInterval>, range: ClosedRange<TimeInterval>? = nil, help: String? = nil) {
         self.title = title
         _value = value
+        self.range = range
         self.help = help
     }
+
+    /// The whole amounts of `unit` the range allows, or the unbounded row's
+    /// own 1...10_000 where the setting has no range. Nil where the range holds
+    /// no whole amount of the unit, which is how that unit is left out.
+    private func amounts(in unit: Unit) -> ClosedRange<Double>? {
+        guard let range else { return 1...10_000 }
+        let low = max(1, (range.lowerBound / unit.seconds).rounded(.up))
+        let high = (range.upperBound / unit.seconds).rounded(.down)
+        return low <= high ? low...high : nil
+    }
+
+    private var units: [Unit] { Unit.allCases.filter { amounts(in: $0) != nil } }
 
     var body: some View {
         LabeledContent {
@@ -622,16 +666,26 @@ struct DurationRow: View {
                     .labelsHidden()
                     .multilineTextAlignment(.trailing)
                     .frame(width: 72)
+                    .focused($editing)
                     .onSubmit(push)
-                Stepper(title, value: $amount, in: 1...10_000, step: 1, onEditingChanged: { _ in push() })
+                    // A field writes the setting when its editing ends, however
+                    // it ends, not only when Return commits it.
+                    .onChange(of: editing) { _, focused in
+                        if !focused { push() }
+                    }
+                Stepper(title, value: $amount, in: amounts(in: unit) ?? 1...10_000, step: 1, onEditingChanged: { _ in push() })
                     .labelsHidden()
                 Picker("Unit", selection: $unit) {
-                    ForEach(Unit.allCases) { unit in
+                    ForEach(units) { unit in
                         Text(unit.rawValue).tag(unit)
                     }
                 }
                 .labelsHidden()
-                .fixedSize()
+                // A minimum rather than a width, so a unit word wider than the
+                // measurement grows the control instead of clipping, and
+                // trailing so the pop-up keeps the form's edge and the slack a
+                // shorter word leaves falls between it and the stepper.
+                .frame(minWidth: Self.unitWidth, alignment: .trailing)
                 .onChange(of: unit) { _, _ in push() }
             }
         } label: {
@@ -646,20 +700,24 @@ struct DurationRow: View {
 
     private func pull() {
         let seconds = value
+        let offered = units
         let chosen: Unit
-        if seconds >= 86400, seconds.truncatingRemainder(dividingBy: 86400) == 0 {
+        if offered.contains(.days), seconds >= 86400, seconds.truncatingRemainder(dividingBy: 86400) == 0 {
             chosen = .days
-        } else if seconds >= 3600 {
+        } else if offered.contains(.hours), seconds >= 3600 {
             chosen = .hours
         } else {
-            chosen = .minutes
+            chosen = offered.first ?? .minutes
         }
         unit = chosen
         amount = (seconds / chosen.seconds * 10).rounded() / 10
     }
 
     private func push() {
-        value = max(60, amount * unit.seconds)
+        let seconds = amount * unit.seconds
+        let bounded = range.map { seconds.clamped(to: $0) } ?? max(60, seconds)
+        value = bounded
+        amount = (bounded / unit.seconds * 10).rounded() / 10
     }
 }
 

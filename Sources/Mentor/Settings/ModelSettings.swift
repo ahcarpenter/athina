@@ -273,7 +273,7 @@ private struct SpendSection: View {
                 } else {
                     let status = state.mentorStatus
                     let spend = "\(Formatting.dollars(status.spendThisHour)) over \(Plural.count(status.callsThisHour, "call", "calls"))"
-                    Text(status.cadenceMultiplier > 1.05 ? "\(spend), calls slowed \(Formatting.multiplier(status.cadenceMultiplier))" : spend)
+                    Text(status.isCadenceSlowed ? "\(spend), calls slowed \(Formatting.multiplier(status.cadenceMultiplier))" : spend)
                         .monospacedDigit()
                 }
             }
