@@ -363,6 +363,7 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 | `menubar-empty-click` | a real click on empty menu bar space beside the item dismisses the suggestion, attributed to a real mouse-down by a session tap |
 | `other-app-click` | a real click inside a staged TextEdit window dismisses the suggestion |
 | `menubar-keyboard` | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one scenario that needs no idle input |
+| `menubar-width` | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,

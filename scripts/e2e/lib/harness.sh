@@ -34,6 +34,7 @@ RUN_DIR=""
 HOME_DIR=""
 JOURNAL=""
 MENTOR_PID=""
+EXCLUDED_PID=""
 HELPER_PIDS=()
 STAGED_PIDS=()
 STAGED_WINDOWS=()
@@ -430,11 +431,64 @@ TEXT
 	log "staged TextEdit pid=$TEXTEDIT_PID with notes.txt and plan.txt"
 }
 
+# An app Mentor is set to ignore, so a scenario can watch the item switch into
+# and out of the excluded mode. Calculator has no documents of the owner's to
+# reuse or close, and it is in the seeded exclusions beside his own apps.
+stage_excluded_app() {
+	local already
+	already="$(pgrep -x Calculator || true)"
+	open -g -a Calculator || { log "could not open Calculator"; return 1; }
+	sleep 2
+	EXCLUDED_PID="$(pgrep -n -x Calculator || true)"
+	[ -n "$EXCLUDED_PID" ] || { log "Calculator did not start"; return 1; }
+	if [ -n "$already" ]; then
+		log "Calculator was already running (pid $EXCLUDED_PID); it will be left running"
+	else
+		STAGED_PIDS+=("$EXCLUDED_PID")
+	fi
+	log "staged the excluded app Calculator pid=$EXCLUDED_PID"
+}
+
 # Bring one window of a pid forward. Within an app this is a window switch, the
 # change moment the capture scenarios are about.
 raise_window() {
 	"$DRIVE" raise "$1" "${2:-}" >>"$RUN_DIR/transcript.log" 2>&1 || log "could not raise ${2:-a window} of pid $1"
 	return 0
+}
+
+# --- The menu bar -------------------------------------------------------------
+
+# Mentor's own status item, as one `extra` line of the bar report.
+mentor_extra() { "$DRIVE" bar | grep "^extra .*pid=$MENTOR_PID " || true; }
+
+mentor_item_width() { mentor_extra | sed -n 's/.* w=\([0-9.]*\) .*/\1/p'; }
+
+# The item's accessibility name, which is also how a scenario reads the mode.
+mentor_item_title() { mentor_extra | sed -n 's/.*title="\([^"]*\)".*/\1/p'; }
+
+# The item's name lags an app switch by a few seconds, so a measurement taken
+# right after one can still be of the mode before it.
+wait_item_title() {
+	local want="$1" limit="${2:-30}" i
+	for i in $(seq 1 "$limit"); do
+		case "$(mentor_item_title)" in *"$want"*) return 0 ;; esac
+		sleep 1
+	done
+	return 1
+}
+
+# Every extra left of Mentor's, as "app@x" left to right. Status items are
+# anchored at the right of the bar, so these are the ones an item that changes
+# width pushes sideways.
+extras_left_of_mentor() {
+	"$DRIVE" bar | awk -v mine="pid=$MENTOR_PID" '
+		/^extra / {
+			match($0, /app="[^"]*"/); app = substr($0, RSTART + 5, RLENGTH - 6)
+			match($0, /pid=[0-9]+/); pid = substr($0, RSTART, RLENGTH)
+			match($0, /x=[-0-9.]+/); x = substr($0, RSTART + 2, RLENGTH - 2)
+			if (pid == mine) { anchor = x } else { n++; apps[n] = app; xs[n] = x }
+		}
+		END { for (i = 1; i <= n; i++) if (xs[i] + 0 < anchor + 0) printf "%s@%s ", apps[i], xs[i] }'
 }
 
 # --- Watchers -----------------------------------------------------------------
