@@ -268,8 +268,6 @@ extension AppState {
             .event(JournalEvent(id: 7, timestamp: now.addingTimeInterval(-1300), kind: .resumed)),
             .event(JournalEvent(id: 6, timestamp: now.addingTimeInterval(-1500), kind: .paused)),
             .event(JournalEvent(id: 5, timestamp: now.addingTimeInterval(-3600), kind: .retention, detail: "removed 40 thumbnails, 0 observations, 0 events")),
-            // Yesterday's understanding, forgotten as the day's first session began.
-            .event(JournalEvent(id: 2, timestamp: now.addingTimeInterval(-7190), kind: .understanding, detail: "expired after revision 12: a new day started")),
             .event(JournalEvent(id: 1, timestamp: now.addingTimeInterval(-7200), kind: .started)),
         ]
         for i in 0..<12 {
@@ -279,6 +277,12 @@ extension AppState {
                 frame: frame, textBlocks: [], reason: i % 3 == 0 ? .focusChange : .floor
             )))
         }
+        // Yesterday's understanding, forgotten as the day's first session began,
+        // so it is the oldest entry and the current record starts after it.
+        timeline.append(.event(JournalEvent(
+            id: 2, timestamp: now.addingTimeInterval(-7860), kind: .understanding,
+            detail: "expired after revision 12: a new day started"
+        )))
         state.timeline = timeline
 
         var suggestions = SampleSuggestions.make(now: now)

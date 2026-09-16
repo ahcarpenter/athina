@@ -84,7 +84,6 @@ struct UnderstandingCard: View {
     }
 
     private var emptyText: String {
-        guard record == nil else { return "Nothing is written in this revision yet." }
         let interval = Formatting.duration(state.settings.mentor.understandingRefreshInterval)
         return "No understanding yet. The next mentor call writes the first one, or a refresh call does after \(interval) of active use without one."
     }

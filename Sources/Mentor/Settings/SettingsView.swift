@@ -625,6 +625,7 @@ struct DurationRow: View {
 
     @State private var amount: Double = 1
     @State private var unit: Unit = .hours
+    @FocusState private var editing: Bool
 
     init(_ title: String, value: Binding<TimeInterval>, range: ClosedRange<TimeInterval>? = nil, help: String? = nil) {
         self.title = title
@@ -652,7 +653,13 @@ struct DurationRow: View {
                     .labelsHidden()
                     .multilineTextAlignment(.trailing)
                     .frame(width: 72)
+                    .focused($editing)
                     .onSubmit(push)
+                    // A field writes the setting when its editing ends, however
+                    // it ends, not only when Return commits it.
+                    .onChange(of: editing) { _, focused in
+                        if !focused { push() }
+                    }
                 Stepper(title, value: $amount, in: amounts(in: unit) ?? 1...10_000, step: 1, onEditingChanged: { _ in push() })
                     .labelsHidden()
                 Picker("Unit", selection: $unit) {
@@ -694,6 +701,7 @@ struct DurationRow: View {
     private func push() {
         let seconds = amount * unit.seconds
         value = range.map { seconds.clamped(to: $0) } ?? max(60, seconds)
+        pull()
     }
 }
 
