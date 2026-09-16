@@ -273,7 +273,8 @@ public struct LaunchFiles: Equatable, Sendable {
 
     /// When a replay's journal was last written, which bounds how new anything
     /// inside it can be. `.distantPast` when there is none to read, so a
-    /// directory holding no journal at all is swept rather than kept forever.
+    /// directory holding no journal at all is swept rather than kept forever,
+    /// and a sidecar that is not there counts as long past rather than recent.
     private static func lastWritten(_ journal: URL) -> Date {
         (try? journal.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
     }
@@ -294,20 +295,25 @@ public struct LaunchFiles: Equatable, Sendable {
     /// A hold is not enough on its own here, because the builds that wrote
     /// this journal took none: one of them may be running from another
     /// checkout on this Mac right now with the journal open, and a Mac that
-    /// slept would leave it looking untouched for longer than the window.
-    /// SQLite deletes `-shm` when the last connection closes cleanly, so while
-    /// that file is there the journal may be open and nothing is removed.
+    /// slept would leave it looking untouched for longer than the window. So
+    /// the `-wal` and `-shm` files beside it have to be past the window too.
+    /// In WAL mode a write lands in `-wal` without touching the journal, and
+    /// `-shm` is rewritten alongside it, so those two are what say a build is
+    /// still using this journal. Their absence says the same thing: Mentor
+    /// never closes its connection, so SQLite leaves both behind on every
+    /// quit, and asking only whether `-shm` is there would skip for ever.
     private static func sweepSharedReplay(in root: URL, now: Date) {
         let manager = FileManager.default
         let journal = Journal.defaultURL(in: root)
         let settings = SettingsStore.defaultURL(in: root)
         guard manager.fileExists(atPath: journal.path) else { return }
-        guard !manager.fileExists(atPath: journal.path + "-shm") else { return }
         let window = SettingsStore(url: settings).load().thumbnailRetention
-        guard lastWritten(journal) < now.addingTimeInterval(-window) else { return }
+        let expired = now.addingTimeInterval(-window)
+        let sidecars = ["-wal", "-shm"].map { URL(fileURLWithPath: journal.path + $0) }
+        guard ([journal] + sidecars).allSatisfy({ lastWritten($0) < expired }) else { return }
         guard let lock = try? DataDirectoryLock.acquire(in: root, pid: nil, create: false) else { return }
-        for name in [journal.lastPathComponent, journal.lastPathComponent + "-wal", settings.lastPathComponent, DataDirectoryLock.fileName] {
-            try? manager.removeItem(at: root.appendingPathComponent(name))
+        for url in [journal] + sidecars + [settings, root.appendingPathComponent(DataDirectoryLock.fileName)] {
+            try? manager.removeItem(at: url)
         }
         _ = lock
     }

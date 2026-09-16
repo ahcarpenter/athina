@@ -318,10 +318,14 @@ of them disturbs another or the live app:
   the journal every replay shared before replays had a directory each,
   `replay/journal.sqlite` and the settings file beside it, once that journal has
   gone unwritten for longer than its own window: nothing opens it any more, so
-  retention cannot age it in place either. That one is left alone while a
-  `journal.sqlite-shm` sits beside it, since SQLite leaves that file behind
-  only while a connection may still be open, and the builds that wrote this
-  journal took no lock to say so. The sweep never removes one a running replay holds,
+  retention cannot age it in place either. The builds that wrote that one took
+  no lock to say they were using it, and in WAL mode their writes land in
+  `journal.sqlite-wal` and `journal.sqlite-shm` without touching the journal,
+  so the sweep waits while either of those was itself written inside the
+  window and goes ahead once both are past it as well. It cannot wait on their
+  mere presence: Mentor never closes its connection, so SQLite leaves both
+  behind on every quit and the sweep would never run at all. The sweep never
+  removes one a running replay holds,
   including the replay root itself when a `--data-dir` names it, and never a
   directory with any other name, so a `--data-dir` you named is yours to keep.
   The debug panel's Mentor card and the log at launch show which directory a
@@ -1160,9 +1164,9 @@ counted (see Iterating without the network).
   directory is past the thumbnail window it recorded for itself (see Replays
   side by side). The journal every replay shared before replays had a directory
   each, `replay/journal.sqlite`, is swept the same way: the next replay launch
-  removes it, and the settings file beside it, once it has gone unwritten for
-  longer than the window that settings file recorded and nothing on this Mac
-  looks like it still has it open.
+  removes it, its `-wal` and `-shm` files and the settings file beside it, once
+  none of them has been written for longer than the window that settings file
+  recorded.
 - The journal directory is created with mode 0700.
 
 ## Debug panel

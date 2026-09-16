@@ -507,11 +507,48 @@ private func finishedLaunch(
     }
 
     /// The builds that wrote that shared journal took no hold on it, so one of
-    /// them running from another checkout is invisible to the sweep. SQLite
-    /// removes `-shm` when the last connection closes cleanly, so while one is
-    /// there the journal may be open and nothing is removed, however long it
-    /// has gone unwritten on a Mac that slept.
-    @Test func theSharedReplayJournalIsLeftAloneWhileAShmFileSaysItMayBeOpen() throws {
+    /// them running from another checkout is invisible to the sweep, and in WAL
+    /// mode its writes land in `-wal` and `-shm` without touching the journal.
+    /// Those two therefore hold the sweep off while either was written inside
+    /// the window, and stop holding it off once both are past it: Mentor never
+    /// closes its connection, so SQLite leaves both behind on every quit, and
+    /// a sweep that skipped merely because `-shm` is there would never run.
+    @Test(arguments: [
+        (TimeInterval(60), true),
+        (TimeInterval(30 * 86400), false),
+    ])
+    func theSharedReplayJournalWaitsOnItsSidecarsOnlyWhileTheyAreFresh(sidecarAge: TimeInterval, survives: Bool) throws {
+        let support = scratch()
+        defer { try? FileManager.default.removeItem(at: support) }
+        let root = AppPaths.replayRoot(in: support)
+        let manager = FileManager.default
+        let now = Date(timeIntervalSince1970: 1_789_000_000)
+        try manager.createDirectory(at: root, withIntermediateDirectories: true)
+
+        // The journal itself is long past the six hour default window, so only
+        // the sidecars decide.
+        let journal = Journal.defaultURL(in: root)
+        try Data("captured screen".utf8).write(to: journal)
+        try manager.setAttributes([.modificationDate: now - 30 * 86400], ofItemAtPath: journal.path)
+        for suffix in ["-wal", "-shm"] {
+            let url = URL(fileURLWithPath: journal.path + suffix)
+            try Data("captured screen".utf8).write(to: url)
+            try manager.setAttributes([.modificationDate: now - sidecarAge], ofItemAtPath: url.path)
+        }
+
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
+        let left = Set(try manager.contentsOfDirectory(atPath: root.path))
+        if survives {
+            #expect(left == ["journal.sqlite", "journal.sqlite-wal", "journal.sqlite-shm"])
+        } else {
+            #expect(left.isEmpty)
+        }
+    }
+
+    /// A write in WAL mode lands in `-wal` without touching the journal, so a
+    /// journal that looks long unwritten beside a `-wal` written moments ago is
+    /// one a build is still using, and nothing is removed.
+    @Test func theSharedReplayJournalIsLeftAloneWhileItsWalWasJustWritten() throws {
         let support = scratch()
         defer { try? FileManager.default.removeItem(at: support) }
         let root = AppPaths.replayRoot(in: support)
@@ -520,15 +557,15 @@ private func finishedLaunch(
         try manager.createDirectory(at: root, withIntermediateDirectories: true)
 
         let journal = Journal.defaultURL(in: root)
-        for name in [journal.lastPathComponent, journal.lastPathComponent + "-wal", journal.lastPathComponent + "-shm"] {
-            let url = root.appendingPathComponent(name)
-            try Data("captured screen".utf8).write(to: url)
-            try manager.setAttributes([.modificationDate: now - 30 * 86400], ofItemAtPath: url.path)
-        }
+        try Data("captured screen".utf8).write(to: journal)
+        try manager.setAttributes([.modificationDate: now - 30 * 86400], ofItemAtPath: journal.path)
+        let wal = URL(fileURLWithPath: journal.path + "-wal")
+        try Data("captured screen".utf8).write(to: wal)
+        try manager.setAttributes([.modificationDate: now - 60], ofItemAtPath: wal.path)
 
         LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
         #expect(Set(try manager.contentsOfDirectory(atPath: root.path))
-            == ["journal.sqlite", "journal.sqlite-wal", "journal.sqlite-shm"])
+            == ["journal.sqlite", "journal.sqlite-wal"])
     }
 
     /// The end-to-end harness hands a replay the replay root itself as its
