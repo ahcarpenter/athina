@@ -54,6 +54,7 @@ enum Snapshots {
             ("toast-answered", CGSize(width: ToastController.panelWidth, height: 400), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: Date(), suggestionID: 4), suggestionID: 4)), state),
             ("toast-note", CGSize(width: ToastController.panelWidth, height: 120), AnyView(SampleToastNote()), state),
             ("callout", CGSize(width: 900, height: 620), AnyView(SampleCallout()), state),
+            ("menu-bar-marks", CGSize(width: 620, height: 420), AnyView(SampleMenuBarMarks()), state),
             ("debug-panel-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), replay),
             ("debug-panel-calls-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
             ("settings-models-replay", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), replay),
@@ -420,6 +421,46 @@ struct StatusMessagesPreview: View {
             VoiceSection()
         }
         .formStyle(.grouped)
+    }
+}
+
+/// Every variant of the menu bar mark, at the size the menu bar draws it,
+/// with the word a replay puts beside it, and enlarged.
+///
+/// The menu bar itself cannot be rendered into a window, so this is how a
+/// change to the mark gets looked at without a person at the screen, and how
+/// CI keeps a picture of all six. The bar behind them is the menu bar's own
+/// material, and the mark is a template image, so each one takes the
+/// foreground colour exactly as it does in the bar. The two labels are drawn
+/// in an outline of the width the bar gives them, so the renders show the
+/// mark itself never changes width.
+struct SampleMenuBarMarks: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            ForEach(MenuBarMark.allCases, id: \.self) { mark in
+                HStack(spacing: 18) {
+                    Text(mark.rawValue)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(width: 160, alignment: .leading)
+                    // At the size the menu bar draws it, live and in replay.
+                    ForEach([nil, "Replay"], id: \.self) { badge in
+                        MenuBarLabel(mark: mark, badge: badge, statusLine: mark.rawValue)
+                            .font(Font(NSFont.menuBarFont(ofSize: 0)))
+                            .fixedSize()
+                            .border(.separator)
+                    }
+                    Divider().frame(height: 26)
+                    // And enlarged, so the drawing can be looked at closely.
+                    MenuBarLabelImage(mark: mark)
+                        .scaleEffect(4, anchor: .leading)
+                        .frame(width: 19 * 4, height: 16 * 4, alignment: .leading)
+                }
+                .foregroundStyle(.primary)
+            }
+        }
+        .padding(28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(.background)
     }
 }
 
