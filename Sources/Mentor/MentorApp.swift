@@ -138,7 +138,9 @@ enum WindowID {
 /// is handled by `Snapshots`, `--replay <dir>`, `--allow-stale-fixtures`, and
 /// `--record [<dir>]` choose where model calls go (`ModelClientMode`), and
 /// `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock (`ClockMode`), and
-/// `--data-dir <path>` and `--settings <path>` choose a replay's files (`LaunchFiles`).
+/// `--settings <path>` chooses the settings a replay starts from (`LaunchFiles`).
+/// Where a replay keeps its files is never an argument: it makes a directory of
+/// its own and says which on the line it writes when it starts.
 enum LaunchArguments {
     private static var openArgument: String? {
         let arguments = CommandLine.arguments
@@ -164,9 +166,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // A replay given a data directory another replay holds never starts:
-        // the caller named that directory to read its journal, so running
-        // against another one would answer with the wrong files.
+        // A launch that must not run says so and goes, rather than running
+        // on something nobody asked for: a replay given a --settings file
+        // that is not settings is the one that reaches here.
         if let refusal = AppState.shared.startupRefusal {
             FileHandle.standardError.write(Data(LaunchReport.didNotStart(refusal).line.utf8))
             AppState.log.error("did not start: \(refusal, privacy: .public)")
@@ -194,7 +196,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // leaves the lane unable to journal anything, so it is reported as the
         // failed launch it is. The app stays up either way, so the person at
         // the screen can read the error in the menu and the debug panel.
-        let report = LaunchReport(pid: ProcessInfo.processInfo.processIdentifier, journalError: AppState.shared.journalError)
+        let report = LaunchReport(
+            pid: ProcessInfo.processInfo.processIdentifier,
+            dataDirectory: AppState.shared.launchFiles.dataDirectory,
+            journalError: AppState.shared.journalError
+        )
         switch report {
         case .started:
             FileHandle.standardOutput.write(Data(report.line.utf8))

@@ -167,15 +167,17 @@ if [ -z "$pid" ]; then
 fi
 
 # A pid is not yet a running Mentor: the app refuses a launch it must not make,
-# such as a --data-dir another replay holds, from applicationDidFinishLaunching,
-# and how long that takes to reach is a property of the Mac, not of this launch.
+# such as one given a --settings file that is not settings, from
+# applicationDidFinishLaunching, and how long that takes to reach is a property
+# of the Mac, not of this launch.
 # So wait for the app to say it started, and stop early when it says it did not
 # or goes away. The timeout is in tenths of a second, and generous: it is there
 # to end the wait, not to time the app.
 STARTED_TIMEOUT=600
 # The app's own way of saying it is not up (`LaunchReport` in MentorCore), on
-# stderr; a snapshot render says `snapshot failed:` the same way.
-DID_NOT_START='^\(Mentor did not start: \|snapshot failed: \)'
+# stderr. Nothing else counts: this script is only ever given a launch that
+# means to keep running.
+DID_NOT_START='^Mentor did not start: '
 ready=0
 for _ in $(seq "$STARTED_TIMEOUT"); do
 	if [ -s "$STARTED_LINE" ]; then ready=1; break; fi
@@ -219,4 +221,6 @@ if [ "$ready" = 0 ]; then
 fi
 
 echo "$pid" >"$PID_FILE"
-echo "Mentor running as pid $pid (lane $LANE)"
+# Where it put its journal and settings, which it chose for itself: nothing
+# names that directory any more, so the app is what says where it is.
+echo "Mentor running as pid $pid (lane $LANE) in $(sed -n '1s/^Mentor started: pid [0-9]* in //p' "$STARTED_LINE")"

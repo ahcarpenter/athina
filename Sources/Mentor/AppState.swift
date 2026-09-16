@@ -122,13 +122,13 @@ final class AppState {
     let journalURL: URL
     let settingsURL: URL
     /// Where this launch keeps its files, the settings it started from, and
-    /// any file flag that was refused.
+    /// any flag that was refused.
     let launchFiles: LaunchFiles
     /// Keeps a replay's data directory its own while the app runs.
     private let dataDirectoryLock: DataDirectoryLock?
-    /// Why this launch must not start, when a replay was given a data
-    /// directory another one holds. The app says so and exits rather than
-    /// running against a directory nobody asked for.
+    /// Why this launch must not start, when a replay was given a `--settings`
+    /// file that is not settings. The app says so and exits rather than running
+    /// on settings nobody asked for.
     let startupRefusal: String?
 
     // MARK: Model client mode
@@ -1311,7 +1311,7 @@ final class AppState {
 
     /// For the log at launch.
     private var launchFilesLog: String {
-        var line = "data in \(launchFiles.dataDirectory.path)\(launchFiles.isPerLaunch ? " (this launch only)" : ""), settings from \(launchFiles.settingsSource.path)"
+        var line = "data in \(launchFiles.dataDirectory.path)\(clientMode.isOffline ? " (this launch only)" : ""), settings from \(launchFiles.settingsSource.path)"
         if !launchFiles.refusals.isEmpty { line += ", refused: \(launchFiles.refusals.joined(separator: "; "))" }
         return line
     }

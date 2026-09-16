@@ -7,8 +7,6 @@ RECORD_DIR ?=
 ALLOW_STALE ?=
 ## Set to run a replay's clock that many times faster than real time (see README, "A faster clock")
 TIME_SCALE ?=
-## A replay's data directory, for its journal and settings: a new one per launch unless given (see README, "Replays side by side")
-DATA_DIR ?=
 ## A settings file a replay starts from instead of the live settings, read and never written
 SETTINGS ?=
 ## Names the replay's pid file, build/<LANE>.pid: `make run-replay` replaces only the replay its own lane launched
@@ -41,20 +39,18 @@ run: build
 ## Build and launch the app answering every model call from recorded fixtures:
 ## no network, no API key, no spend (see README, "Iterating without the network").
 ## Replaces only the replay this checkout's lane launched before, in a data directory
-## of its own. A leading ~ in REPLAY_DIR, RECORD_DIR, DATA_DIR, or SETTINGS is
+## of its own, which it names on the line it prints as it starts. A leading ~
+## in REPLAY_DIR, RECORD_DIR, or SETTINGS is
 ## expanded here, because zsh leaves it after `=`. Each path is added to the
 ## argument list on its own, so one with a space in it stays one argument
 ## whatever shell runs the recipe.
 run-replay: build
 	@dir="$(REPLAY_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
 	test -d "$$dir" || { echo "run-replay: no fixture directory at $$dir" >&2; exit 1; }; \
-	data="$(DATA_DIR)"; case "$$data" in "~"|"~/"*) data="$$HOME$${data#\~}";; esac; \
-	if [ -n "$$data" ]; then mkdir -p -m 700 "$$data" && data="$$(cd "$$data" && pwd)" || exit 1; fi; \
 	settings="$(SETTINGS)"; case "$$settings" in "~"|"~/"*) settings="$$HOME$${settings#\~}";; esac; \
 	if [ -n "$$settings" ]; then test -f "$$settings" || { echo "run-replay: no settings file at $$settings" >&2; exit 1; }; \
 		settings="$$(cd "$$(dirname "$$settings")" && pwd)/$$(basename "$$settings")"; fi; \
 	set -- --replay "$$(cd "$$dir" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures) $(if $(TIME_SCALE),--time-scale $(TIME_SCALE)); \
-	if [ -n "$$data" ]; then set -- "$$@" --data-dir "$$data"; fi; \
 	if [ -n "$$settings" ]; then set -- "$$@" --settings "$$settings"; fi; \
 	scripts/launch.sh "$(LANE)" -- "$$@"
 

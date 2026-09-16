@@ -234,7 +234,12 @@ cmd_journal() {
 		"$DRIVE" journal "$home" "$query"
 		return
 	fi
-	"$DRIVE" journal "$home/Library/Application Support/mentor/replay/journal.sqlite" "$query"
+	# Each launch keeps its journal in a directory of its own under the home's
+	# replay root, so the newest one there is the run being asked about.
+	local journal
+	journal="$(find "$home/Library/Application Support/mentor/replay" -maxdepth 2 -name 'journal.sqlite' -print0 2>/dev/null | xargs -0 ls -t 2>/dev/null | head -1)"
+	[ -n "$journal" ] || die "no journal under $home; that home may hold no replay"
+	"$DRIVE" journal "$journal" "$query"
 }
 
 cmd_clean() {

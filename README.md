@@ -70,9 +70,10 @@ a bare `open -n` goes round `scripts/launch.sh`, so nothing stops it starting a
 second live Mentor on the live journal, the live settings and the same API bill.
 The live app's own windows open from its menu bar item, on the copy `make run`
 already started. `--record [<dir>]` chooses where model calls go, `--time-scale
-<n>` and `--advance-clock <interval>` set a replay's clock, and `--data-dir
-<path>` and `--settings <path>` choose a replay's files; see Iterating without
-the network.
+<n>` and `--advance-clock <interval>` set a replay's clock, and `--settings
+<path>` chooses the settings a replay starts from; see Iterating without the
+network. Where a replay keeps its own files is not an argument: it makes a
+directory for itself and says which on the line it writes as it starts.
 
 ### Setup: the Anthropic API key
 
@@ -137,7 +138,7 @@ make run-replay                                   # the committed fixtures
 make run-replay REPLAY_DIR=~/Library/Application\ Support/mentor/recordings
 make run-replay ALLOW_STALE=1                     # also serve stale fixtures, see below
 make run-replay TIME_SCALE=60                     # on a clock 60 times real time, see A faster clock
-make run-replay SETTINGS=check.json DATA_DIR=~/lanes/a LANE=a   # its own settings and files, see Replays side by side
+make run-replay SETTINGS=check.json LANE=a         # its own settings, in a lane of its own, see Replays side by side
 open -n build/Mentor.app --args --replay <dir> --open debug
 ```
 
@@ -154,9 +155,9 @@ live ones. Test Connection replays the recorded test call.
 
 **A replay runs against files of its own, seeded from your live settings.** A
 replay, and a replay that was refused, keeps its journal and settings in a data
-directory of its own rather than beside the live ones: by default a new one for
-each launch, `~/Library/Application Support/mentor/replay/launch-<pid>-<random>`,
-or the one `--data-dir` names (see Replays side by side). Every replay launch
+directory of its own rather than beside the live ones: a new one for each
+launch, `~/Library/Application Support/mentor/replay/launch-<pid>-<random>`,
+which it names as it starts (see Replays side by side). Every replay launch
 starts from your live settings, read and never written (or from the defaults
 when there are none), unless `--settings` names another file, so the apps you
 excluded stay excluded, and your retention and sensing choices hold, exactly as
@@ -255,11 +256,11 @@ open -n build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1
   understanding.
 
 A replay's clock never starts behind its own journal. A faster or advanced
-session leaves rows stamped ahead of real time, so a relaunch with the same
-`--data-dir` carries on from the newest of them, then moves `--advance-clock`
-further, rather than going back in time. A replay in a new directory, the
-default, starts from real time, and no replay ever reads another's journal, so
-a faster clock in one never moves another's.
+session leaves rows stamped ahead of real time, so a launch that finds such
+rows carries on from the newest of them, then moves `--advance-clock` further,
+rather than going back in time. Every replay makes a new directory, so in
+practice its journal is empty and its clock starts at real time; no replay ever
+reads another's journal, so a faster clock in one never moves another's.
 
 The menu bar and the debug panel's Replay badges read **Replay 60x** while the
 clock is scaled, and the menu's Clock line and the Mentor card's Clock field
@@ -286,32 +287,21 @@ day are each proven in milliseconds.
 Any number of replays can run at once, from one checkout or several, and none
 of them disturbs another or the live app:
 
-- **Each replay has its own data directory.** With no flag a launch makes a new
-  one, `replay/launch-<pid>-<random>` inside the support directory, so its
-  journal starts empty and its clock at real time. `--data-dir <path>` (`make
-  run-replay DATA_DIR=<path>`) uses that directory instead, and a relaunch with
-  the same one carries on from its journal. A replay holds its directory for
-  as long as it runs, with a lock on `mentor.pid` inside it that holds its
-  pid; a second replay given a directory another one holds does not start at
-  all, and says which pid holds it, because the caller named that directory to
-  read its journal and a replay writing somewhere else would leave a check
-  reading a stale journal. A replay may not be pointed at the live data folder
-  (`~/Library/Application Support/mentor`) or anything else inside it: that
-  folder holds the live journal and the live settings, so a replay given it
-  would write replayed suggestions, feedback and clock-ahead rows into the
-  files a live Mentor may be using at that moment. Such a launch is refused
-  and names the path, however it is spelled, symlinks and case included; the
-  `replay` folder inside it is the one place there that is for a replay's
-  files, so a lane under it is allowed. A `--data-dir` that is already there
-  and that group or other can read, write or search is refused too, naming the
-  path and the mode it found: the journal about to be written in it holds
-  thumbnails and recognized text from the real screen. Its mode is never
-  changed for you, since the path you named can be a home or a folder you
-  share on purpose; `chmod 700` it, or name one that does not exist yet, which
-  Mentor then creates owner-only. A replay with no `--data-dir` always
-  gets a directory of its own, so it never collides. Every replay launch sweeps the
-  finished per-launch directories as it starts, whether it made its own or was
-  given one with `--data-dir`, and removes those past the newest 10 and those
+- **Each replay has its own data directory, and only the app names it.** A
+  launch makes a new one, `replay/launch-<pid>-<random>` inside the support
+  directory, so its journal starts empty and its clock at real time, and it
+  never collides with another replay's. Nothing outside the app chooses that
+  path: there is no flag for it, so there is nothing to point at the live data
+  folder, at a directory someone else can read, or at one another replay is
+  already using. A launch says where it put its files on the line it writes as
+  it starts, `Mentor started: pid <pid> in <directory>`, and everything past
+  the first ` in ` is the path, so a script reads it without quoting however
+  the path is spelled. `make run-replay` prints it, the debug panel's Mentor
+  card shows it, and the log at launch records it. A replay holds its directory
+  for as long as it runs, with a lock on `mentor.pid` inside it that holds its
+  pid, which is what keeps a later launch's sweep off a directory still in use.
+  Every replay launch sweeps the finished per-launch directories as it starts,
+  and removes those past the newest 10 and those
   whose own retention window has run out: a finished replay's journal is never
   opened again, so retention can never age the thumbnails and recognized text
   it captured from the real screen, and the whole directory goes at its
@@ -331,20 +321,12 @@ of them disturbs another or the live app:
   window and goes ahead once both are past it as well. It cannot wait on their
   mere presence: Mentor never closes its connection, so SQLite leaves both
   behind on every quit and the sweep would never run at all. The sweep never
-  removes one a running replay holds, the replay root itself included when a
-  `--data-dir` names it. A `--data-dir` that names the replay root is that
-  shared journal, though, so once it has quit it is swept as one; a
-  `--data-dir` of any other name is never swept, whatever it holds and however
-  old it is. The debug panel's Mentor card and the log at launch show which
-  directory a replay uses.
+  removes one a running replay holds, and never a directory whose name is not
+  a launch's own.
 - **`--settings <path>`** (`make run-replay SETTINGS=<path>`) starts the
   replay from that settings file instead of the live one. It is read and never
   written, so a scripted check keeps its settings in a file of its own and
-  never has to swap the live settings. Naming the `settings.json` inside the
-  replay's own data directory is refused rather than quietly written: that is
-  the file the replay records its own settings in as it starts and saves again
-  when it quits, so the next run of the same check would start from whatever
-  the last one changed. A file that is there but is not settings stops the
+  never has to swap the live settings. A file that is there but is not settings stops the
   launch, naming the file and what was wrong with it: a check that generated
   its settings and got truncated JSON would otherwise run on your live
   thresholds, contexts and retention and could report a pass on settings it
@@ -583,11 +565,11 @@ home.
 Runs land in `~/Library/Caches/mentor-e2e/runs/<scenario>-<stamp>/`, or under
 `--out <dir>`; `--keep-home` keeps the scratch home to look inside it.
 Each run has its own home, and `launch_mentor` in `scripts/e2e/lib/harness.sh`
-is the one place that decides where a run's journal and settings live: it
-passes `--data-dir <home>/Library/Application Support/mentor/replay`, so the
-run reads its own journal at a path it knows. Without that flag a replay makes
-a new directory for each launch (see Replays side by side), which is what keeps
-two replays apart when they share a home.
+learns where that run's journal is rather than dictating it: the replay makes a
+directory for each launch (see Replays side by side), which is what keeps two
+replays apart when they share a home, and names it on the line it writes as it
+starts. The harness waits for that line in `app.log`, matching its own pid so a
+relaunch never reads the last one's, and takes the path from it.
 
 ## Permissions
 
@@ -621,7 +603,7 @@ Sources/MentorCore            library, fully testable
   Settings/                   SensingSettings (every threshold and cadence), MentorSettings (the loop's
                               section of the same file), SettingsStore (JSON), ExcludedApps, HotKey,
                               LaunchFiles (a launch's data directory and starting settings: a replay's own
-                              directory, --data-dir, --settings, and the lock that keeps a directory one replay's)
+                              directory, --settings, the started line that names it, and the lock that keeps it one replay's)
   Model/ActivityObservation   FocusContext, FrameInfo, TextBlock, ActivityObservation, JournalEvent,
                               SensingEvent (the stream the mentor loop consumes), SensingMode, CadenceStatus
   Scheduling/                 CaptureScheduler (pure trigger and cadence state machine),
@@ -1178,10 +1160,9 @@ counted (see Iterating without the network).
   removes it, its `-wal` and `-shm` files and the settings file beside it, once
   none of them has been written for longer than the window that settings file
   recorded.
-- A journal directory Mentor creates is created with mode 0700. One you name
-  with `--data-dir` keeps the mode it already has, so a launch that would put a
-  journal somewhere group or other can reach is refused instead (see Replays
-  side by side).
+- The journal directory is created with mode 0700. Mentor makes every one of
+  them itself, the live one and each replay's, so there is no path someone
+  else chose for a journal to land in.
 
 ## Debug panel
 

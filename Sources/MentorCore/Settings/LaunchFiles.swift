@@ -10,11 +10,11 @@ import Foundation
 /// nothing it does reaches the live journal, the live settings, or another
 /// replay:
 ///
-/// - with no flag, a new directory made for this launch alone inside
-///   `AppPaths.replayRoot`, so two replays never share a journal and a
-///   faster clock in one never moves another's
-/// - `--data-dir <path>`: that directory; a relaunch with the same one
-///   carries on from its journal, clock included
+/// - a new directory made for this launch alone inside `AppPaths.replayRoot`,
+///   never one the caller names, so two replays never share a journal and a
+///   faster clock in one never moves another's. The launch says which one it
+///   made on the line it writes when it starts (`LaunchReport`), so a script
+///   reads the path rather than dictating it.
 /// - `--settings <path>`: starts from that settings file instead of the live
 ///   one; the file is read and never written, and one that is there but is
 ///   not settings stops the launch rather than quietly standing the live
@@ -23,23 +23,20 @@ import Foundation
 /// Every replay starts from settings it reads and never writes, and keeps its
 /// own `settings.json` in its data directory: the settings it started with,
 /// recorded there as it starts (`recordSettings`), and anything it changes
-/// afterwards. Either flag on a live or recording launch is refused, like the
-/// clock flags: the launch uses the live files and says why. A flag with no
-/// value is refused the same way, and the replay keeps its own per-launch
-/// directory or the live settings.
+/// afterwards. `--settings` on a live or recording launch is refused, like the
+/// clock flags: the launch uses the live files and says why. The flag with no
+/// value is refused the same way, and the replay keeps the live settings.
 public struct LaunchFiles: Equatable, Sendable {
-    public static let dataDirectoryFlag = "--data-dir"
     public static let settingsFlag = "--settings"
     /// Finished per-launch directories a replay launch leaves in place, newest
     /// first, so a check can still read the journal of one that just quit and
     /// is still inside its own retention window.
     public static let keptFinishedLaunches = 10
 
-    /// Holds the journal and the settings the launch saves.
+    /// Holds the journal and the settings the launch saves. For a replay it is
+    /// this launch's alone, which a later replay launch may remove once no
+    /// running replay holds it.
     public var dataDirectory: URL
-    /// True for a directory made for this launch alone, which a later replay
-    /// launch may remove once no running replay holds it.
-    public var isPerLaunch: Bool
     /// The settings file the launch starts from.
     public var settingsSource: URL
     /// Whether `settingsSource` was asked for with `--settings`.
@@ -64,7 +61,6 @@ public struct LaunchFiles: Equatable, Sendable {
             let next = arguments[index + 1]
             return next.hasPrefix("--") || next.isEmpty ? .some(nil) : .some(next)
         }
-        let dataValue = value(after: LaunchFiles.dataDirectoryFlag)
         let settingsValue = value(after: LaunchFiles.settingsFlag)
         let liveSettings = SettingsStore.defaultURL(in: supportDirectory)
         refusals = []
@@ -74,24 +70,13 @@ public struct LaunchFiles: Equatable, Sendable {
 
         guard clientMode.isOffline else {
             dataDirectory = supportDirectory
-            isPerLaunch = false
-            let given = [dataValue.map { _ in LaunchFiles.dataDirectoryFlag }, settingsValue.map { _ in LaunchFiles.settingsFlag }].compactMap { $0 }
-            if !given.isEmpty {
-                refusals.append("\(given.joined(separator: " and ")) \(given.count == 1 ? "applies" : "apply") only to \(ModelClientMode.replayFlag)")
+            if settingsValue != nil {
+                refusals.append("\(LaunchFiles.settingsFlag) applies only to \(ModelClientMode.replayFlag)")
             }
             return
         }
 
-        if let dataValue, let path = dataValue {
-            dataDirectory = ModelClientMode.url(forPath: path)
-            isPerLaunch = false
-        } else {
-            dataDirectory = AppPaths.replayRoot(in: supportDirectory).appendingPathComponent(launchName, isDirectory: true)
-            isPerLaunch = true
-            if dataValue != nil {
-                refusals.append("\(LaunchFiles.dataDirectoryFlag) needs a directory")
-            }
-        }
+        dataDirectory = AppPaths.replayRoot(in: supportDirectory).appendingPathComponent(launchName, isDirectory: true)
         if let settingsValue {
             if let path = settingsValue {
                 settingsSource = ModelClientMode.url(forPath: path).standardizedFileURL
@@ -146,39 +131,15 @@ public struct LaunchFiles: Equatable, Sendable {
 
     /// Makes the replay's data directory its own for as long as the lock in
     /// the returned claim lives; a live or recording launch holds nothing.
-    ///
-    /// A `--data-dir` another running replay holds refuses the launch rather
-    /// than quietly using a different directory: the flag exists so that the
-    /// caller knows where the journal is, and the end-to-end harness reads
-    /// exactly the path it passed, so a replay writing somewhere else would
-    /// leave a check reading a stale journal and reporting a pass that never
-    /// happened. Every replay launch, whether it makes its own directory or
-    /// was given one, sweeps the finished per-launch directories as it starts
-    /// (`pruneFinishedLaunches`).
-    ///
-    /// A `--data-dir` that is already there and that group or other can read,
-    /// write or search is refused as well: the journal about to be written in
-    /// it holds thumbnails and recognized text from the real screen, and the
-    /// mode of a directory the operator named is never changed here, since
-    /// that path can be a home or a folder shared on purpose.
+    /// The directory is this launch's own and is made here, owner-only, so
+    /// there is nothing to judge about where it is or who can reach it.
+    /// Every replay launch sweeps the finished per-launch directories as it
+    /// starts (`pruneFinishedLaunches`).
     ///
     /// A `--settings` file that is there but is not settings refuses the
-    /// launch as well, on the reason `loadSettings` left behind, so a check
-    /// whose generated settings came out unreadable stops rather than running
-    /// on settings it never chose.
-    ///
-    /// A `--settings` file that is the very file this launch would save its
-    /// own settings to is refused too: the launch records its settings there
-    /// as it starts and saves them again when it quits, so a check that asked
-    /// to start from that file would find it rewritten, and the next run of
-    /// the same check would start from settings the last one changed.
-    ///
-    /// A `--data-dir` in the live data folder is refused for the same reason:
-    /// the folder holds the live journal and the live settings, and a replay
-    /// given it would write its replayed suggestions, feedback and clock-ahead
-    /// rows into them, while a live Mentor may be running against the same two
-    /// files. The replay root inside it is the one place there that is for a
-    /// replay's files, so a lane under it is allowed.
+    /// launch, on the reason `loadSettings` left behind, so a check whose
+    /// generated settings came out unreadable stops rather than running on
+    /// settings it never chose.
     public mutating func claim(
         clientMode: ModelClientMode,
         supportDirectory: URL = AppPaths.supportDirectory()
@@ -186,22 +147,6 @@ public struct LaunchFiles: Equatable, Sendable {
         guard clientMode.isOffline else { return .notNeeded }
         if let unusableSettings {
             return .refusedToStart(unusableSettings)
-        }
-        if !isPerLaunch,
-           AppPaths.isAt(dataDirectory, orInside: supportDirectory),
-           !AppPaths.isAt(dataDirectory, orInside: AppPaths.replayRoot(in: supportDirectory)) {
-            let reason = "\(LaunchFiles.dataDirectoryFlag) \(dataDirectory.path) is the live data folder \(supportDirectory.path), or inside it, which a replay may not use: nothing a replay does may reach the live journal or the live settings"
-            refusals.append(reason)
-            return .refusedToStart(reason)
-        }
-        if !isPerLaunch, let reason = LaunchFiles.openToOthersRefusal(dataDirectory) {
-            refusals.append(reason)
-            return .refusedToStart(reason)
-        }
-        if settingsGiven, AppPaths.isAt(settingsSource, orInside: store.url) {
-            let reason = "\(LaunchFiles.settingsFlag) \(settingsSource.path) is the file this replay saves its own settings to (\(store.url.path)), and \(LaunchFiles.settingsFlag) is read and never written: keep it outside the data directory \(dataDirectory.path)"
-            refusals.append(reason)
-            return .refusedToStart(reason)
         }
         do {
             let lock = try DataDirectoryLock.acquire(in: dataDirectory)
@@ -213,35 +158,11 @@ public struct LaunchFiles: Equatable, Sendable {
                 now: Date()
             )
             return .held(lock)
-        } catch DataDirectoryLock.Failure.inUse(let pid) {
-            let holder = pid.map { "pid \($0)" } ?? "another process"
-            let reason = "\(LaunchFiles.dataDirectoryFlag) \(dataDirectory.path) is in use by another Mentor (\(holder))"
-            refusals.append(reason)
-            return .refusedToStart(reason)
         } catch {
             let reason = "could not hold \(dataDirectory.path) for this replay: \(error)"
             refusals.append(reason)
             return .refusedToStart(reason)
         }
-    }
-
-    /// Why a data directory that is already there may not be used: anyone but
-    /// its owner can reach into it, and a replay's journal holds what was on
-    /// the real screen. Nil when it is owner-only, and nil when it is not
-    /// there yet, since one made here is made owner-only.
-    ///
-    /// The mode is the one the directory the journal lands in has, read
-    /// through any symlink as `AppPaths.isAt` reads a path beside it. A
-    /// symlink's own mode is always `755` on macOS and `chmod` follows the
-    /// link, so judging the link would refuse every symlinked lane for a
-    /// reason its owner cannot fix, and would pass a link to a directory
-    /// anyone can read.
-    static func openToOthersRefusal(_ directory: URL) -> String? {
-        let resolved = AppPaths.resolvedPath(directory)
-        let attributes = try? FileManager.default.attributesOfItem(atPath: resolved)
-        guard let mode = attributes?[.posixPermissions] as? NSNumber, mode.int16Value & 0o077 != 0 else { return nil }
-        let spelled = String(format: "%03o", mode.int16Value)
-        return "\(dataDirectoryFlag) \(directory.path) is mode \(spelled), which group or other can reach into, and a replay's journal holds what was on the real screen: make it owner-only (chmod 700 \(resolved)) or name a directory that is not there yet"
     }
 
     /// Writes the settings this launch runs with into its own data directory,
@@ -317,9 +238,7 @@ public struct LaunchFiles: Equatable, Sendable {
     ///
     /// The age is `lastWritten`, not when the journal was made: it bounds how
     /// new anything inside can be, where the creation date would delete
-    /// content still inside its window. A replay given `root` itself as its
-    /// `--data-dir` holds it, and then these are its own files rather than a
-    /// leftover, so the hold is taken before anything is removed.
+    /// content still inside its window.
     ///
     /// A hold is not enough on its own here, because the builds that wrote
     /// this journal took none: one of them may be running from another
@@ -340,11 +259,9 @@ public struct LaunchFiles: Equatable, Sendable {
         let expired = now.addingTimeInterval(-window)
         let sidecars = ["-wal", "-shm"].map { URL(fileURLWithPath: journal.path + $0) }
         guard ([journal] + sidecars).allSatisfy({ lastWritten($0) < expired }) else { return }
-        guard let lock = try? DataDirectoryLock.acquire(in: root, pid: nil, create: false) else { return }
-        for url in [journal] + sidecars + [settings, root.appendingPathComponent(DataDirectoryLock.fileName)] {
+        for url in [journal] + sidecars + [settings] {
             try? manager.removeItem(at: url)
         }
-        _ = lock
     }
 }
 
@@ -377,11 +294,9 @@ public final class DataDirectoryLock: @unchecked Sendable {
     /// writes `pid` into the file; a nil `pid` only checks that no one holds
     /// it and leaves the file as it was.
     ///
-    /// A directory made here is made owner-only, like the journal directory it
-    /// holds: this runs before `Journal` opens, so for a directory that was
-    /// not there it is what decides the mode. One that is already there keeps
-    /// the mode it has, which is why `LaunchFiles.claim` refuses a `--data-dir`
-    /// group or other can reach into rather than changing it.
+    /// The directory is made owner-only, like the journal directory it holds:
+    /// this runs before `Journal` opens, and a replay's directory is always
+    /// one this launch is making, so it is what decides the mode.
     public static func acquire(in directory: URL, pid: Int32? = getpid(), create: Bool = true) throws -> DataDirectoryLock {
         if create {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
@@ -417,7 +332,7 @@ public final class DataDirectoryLock: @unchecked Sendable {
 /// `started` goes to stdout and `didNotStart` to stderr, both unbuffered,
 /// since stdout to a file is not line buffered.
 public enum LaunchReport: Equatable, Sendable {
-    case started(pid: Int32)
+    case started(pid: Int32, dataDirectory: URL)
     case didNotStart(String)
 
     /// How the app says a lane is not up. `scripts/launch.sh` waits on this,
@@ -427,14 +342,18 @@ public enum LaunchReport: Equatable, Sendable {
 
     /// What a launch is once `AppState.start` has returned: up, unless the
     /// journal it has to write is unopenable.
-    public init(pid: Int32, journalError: String?) {
-        self = journalError.map { .didNotStart($0) } ?? .started(pid: pid)
+    public init(pid: Int32, dataDirectory: URL, journalError: String?) {
+        self = journalError.map { .didNotStart($0) } ?? .started(pid: pid, dataDirectory: dataDirectory)
     }
 
-    /// The line itself, newline included.
+    /// The line itself, newline included. The started line ends in the data
+    /// directory this launch made, and nothing follows it, so a reader takes
+    /// everything past the first ` in ` and needs no quoting however the path
+    /// is spelled. That is how a script learns where the journal is now that
+    /// nothing can name it beforehand.
     public var line: String {
         switch self {
-        case .started(let pid): "Mentor started: pid \(pid)\n"
+        case .started(let pid, let directory): "Mentor started: pid \(pid) in \(directory.path)\n"
         case .didNotStart(let reason): "\(LaunchReport.didNotStartMarker)\(reason)\n"
         }
     }

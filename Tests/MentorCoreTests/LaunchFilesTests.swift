@@ -47,25 +47,20 @@ private func finishedLaunch(
         for mode in [ModelClientMode.live, .record(directory: URL(fileURLWithPath: "/r"))] {
             let files = LaunchFiles(arguments: ["Mentor"], clientMode: mode, supportDirectory: support)
             #expect(files.dataDirectory == support)
-            #expect(!files.isPerLaunch)
-            #expect(files.settingsSource == support.appendingPathComponent("settings.json"))
+                #expect(files.settingsSource == support.appendingPathComponent("settings.json"))
             #expect(!files.settingsGiven)
             #expect(files.refusals.isEmpty)
         }
     }
 
-    @Test func theFlagsAreRefusedOutsideAReplayAndTheLiveFilesStay() {
+    @Test(arguments: [ModelClientMode.live, .record(directory: URL(fileURLWithPath: "/r"))])
+    func theSettingsFlagIsRefusedOutsideAReplayAndTheLiveFilesStay(mode: ModelClientMode) {
         let support = URL(fileURLWithPath: "/support/mentor", isDirectory: true)
-        let data = LaunchFiles(arguments: ["Mentor", "--data-dir", "/tmp/lane"], clientMode: .live, supportDirectory: support)
-        #expect(data.refusals == ["--data-dir applies only to --replay"])
-        #expect(data.dataDirectory == support)
-        let settings = LaunchFiles(arguments: ["Mentor", "--settings", "/tmp/s.json"], clientMode: .record(directory: URL(fileURLWithPath: "/r")), supportDirectory: support)
-        #expect(settings.refusals == ["--settings applies only to --replay"])
-        #expect(settings.settingsSource == support.appendingPathComponent("settings.json"))
-        #expect(!settings.settingsGiven)
-        let both = LaunchFiles(arguments: ["Mentor", "--data-dir", "/tmp/lane", "--settings", "/tmp/s.json"], clientMode: .live, supportDirectory: support)
-        #expect(both.refusals == ["--data-dir and --settings apply only to --replay"])
-        #expect(both.dataDirectory == support)
+        let files = LaunchFiles(arguments: ["Mentor", "--settings", "/tmp/s.json"], clientMode: mode, supportDirectory: support)
+        #expect(files.refusals == ["--settings applies only to --replay"])
+        #expect(files.settingsSource == support.appendingPathComponent("settings.json"))
+        #expect(!files.settingsGiven)
+        #expect(files.dataDirectory == support)
     }
 
     /// With no flag every replay launch gets a directory of its own, named
@@ -74,7 +69,6 @@ private func finishedLaunch(
         let support = URL(fileURLWithPath: "/support/mentor", isDirectory: true)
         let files = LaunchFiles(arguments: ["Mentor", "--replay", "/fixtures"], clientMode: replay, supportDirectory: support, launchName: "launch-7-0123abcd")
         #expect(files.dataDirectory == support.appendingPathComponent("replay/launch-7-0123abcd", isDirectory: true))
-        #expect(files.isPerLaunch)
         #expect(files.settingsSource == support.appendingPathComponent("settings.json"))
         #expect(files.refusals.isEmpty)
 
@@ -85,28 +79,22 @@ private func finishedLaunch(
         #expect(first.dataDirectory.lastPathComponent.hasPrefix("launch-\(getpid())-"))
 
         let refused = LaunchFiles(arguments: ["Mentor", "--record", "--replay", "/f"], clientMode: .invalid("--record and --replay cannot be combined"), supportDirectory: support)
-        #expect(refused.isPerLaunch)
         #expect(refused.dataDirectory.deletingLastPathComponent() == AppPaths.replayRoot(in: support))
     }
 
-    @Test func aGivenDataDirectoryAndSettingsFileAreUsedAsGiven() {
+    /// A given settings file is used as given, and the replay still keeps a
+    /// directory of its own, which nothing outside the app ever names.
+    @Test func aGivenSettingsFileIsUsedAsGivenAndTheReplayKeepsItsOwnDirectory() {
+        let support = URL(fileURLWithPath: "/support/mentor", isDirectory: true)
         let files = LaunchFiles(
-            arguments: ["Mentor", "--replay", "/f", "--data-dir", "~/lanes/a", "--settings", "/tmp/check/../settings.json"],
-            clientMode: replay, supportDirectory: URL(fileURLWithPath: "/support/mentor")
+            arguments: ["Mentor", "--replay", "/f", "--settings", "/tmp/check/../settings.json"],
+            clientMode: replay, supportDirectory: support, launchName: "launch-7-0123abcd"
         )
-        #expect(files.dataDirectory == URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("lanes/a", isDirectory: true))
-        #expect(!files.isPerLaunch)
         #expect(files.settingsSource.path == "/tmp/settings.json")
         #expect(files.settingsGiven)
+        #expect(files.dataDirectory == AppPaths.replayRoot(in: support).appendingPathComponent("launch-7-0123abcd", isDirectory: true))
         #expect(files.store.url == files.dataDirectory.appendingPathComponent("settings.json"))
         #expect(files.refusals.isEmpty)
-    }
-
-    @Test(arguments: [["--data-dir"], ["--data-dir", "--settings"], ["--data-dir", ""]])
-    func aDataDirectoryFlagWithNoValueIsRefusedAndTheLaunchGetsItsOwn(flag: [String]) {
-        let files = LaunchFiles(arguments: ["Mentor", "--replay", "/f"] + flag, clientMode: replay, supportDirectory: URL(fileURLWithPath: "/s"))
-        #expect(files.refusals.first == "--data-dir needs a directory")
-        #expect(files.isPerLaunch)
     }
 
     @Test func aSettingsFlagWithNoValueIsRefusedAndTheLiveSettingsStay() {
@@ -146,41 +134,6 @@ private func finishedLaunch(
         #expect(files.store.url != checkURL)
         #expect(try Data(contentsOf: checkURL) == checkBytes)
         #expect(try Data(contentsOf: SettingsStore.defaultURL(in: support)) == liveBytes)
-    }
-
-    /// `--settings` is read and never written, so the one file it may not name
-    /// is the one this launch saves its own settings to: the launch records
-    /// them there as it starts and again when it quits, so the next run of the
-    /// same check would start from whatever the last one changed.
-    @Test func aSettingsFileInsideTheDataDirectoryRefusesToStart() throws {
-        let support = scratch()
-        let lane = scratch()
-        defer {
-            try? FileManager.default.removeItem(at: support)
-            try? FileManager.default.removeItem(at: lane)
-        }
-        // Owner-only, so it is the settings file that decides this launch.
-        try FileManager.default.createDirectory(at: lane, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        var check = SensingSettings()
-        check.idleThreshold = 900
-        let given = SettingsStore.defaultURL(in: lane)
-        try SettingsStore(url: given).save(check)
-        let bytes = try Data(contentsOf: given)
-
-        var files = LaunchFiles(
-            arguments: ["Mentor", "--replay", "/f", "--data-dir", lane.path, "--settings", given.path],
-            clientMode: replay, supportDirectory: support
-        )
-        guard case .refusedToStart(let reason) = files.claim(clientMode: replay, supportDirectory: support) else {
-            Issue.record("a replay was allowed to start from the file it writes")
-            return
-        }
-        #expect(reason.contains(LaunchFiles.settingsFlag))
-        #expect(reason.contains(given.path))
-        #expect(files.refusals == [reason])
-        // The launch never ran, so the file it was given is exactly as it was.
-        #expect(try Data(contentsOf: given) == bytes)
-        #expect(!FileManager.default.fileExists(atPath: lane.appendingPathComponent(DataDirectoryLock.fileName).path))
     }
 
     /// A settings file that is not there at all is refused, and the replay
@@ -276,171 +229,6 @@ private func finishedLaunch(
             return
         }
         #expect(!FileManager.default.fileExists(atPath: files.dataDirectory.path))
-    }
-
-    /// A replay given a directory another replay holds does not start at all,
-    /// and never quietly writes somewhere else: the flag exists so the caller
-    /// knows which journal to read, and the harness reads exactly that path.
-    @Test func aReplayGivenADirectoryAnotherReplayHoldsRefusesToStart() {
-        let support = scratch()
-        let lanes = scratch()
-        defer {
-            try? FileManager.default.removeItem(at: support)
-            try? FileManager.default.removeItem(at: lanes)
-        }
-        let lane = lanes.appendingPathComponent("lane", isDirectory: true)
-        let arguments = ["Mentor", "--replay", "/f", "--data-dir", lane.path]
-
-        var first = LaunchFiles(arguments: arguments, clientMode: replay, supportDirectory: support)
-        guard case .held(let lock) = first.claim(clientMode: replay, supportDirectory: support) else {
-            Issue.record("the first replay did not take its directory")
-            return
-        }
-        #expect(first.dataDirectory == lane)
-        #expect(first.refusals.isEmpty)
-
-        var second = LaunchFiles(arguments: arguments, clientMode: replay, supportDirectory: support)
-        guard case .refusedToStart(let reason) = second.claim(clientMode: replay, supportDirectory: support) else {
-            Issue.record("the second replay was allowed to start")
-            return
-        }
-        #expect(reason == "--data-dir \(lane.path) is in use by another Mentor (pid \(getpid()))")
-        #expect(second.dataDirectory == lane)
-        #expect(!second.isPerLaunch)
-        #expect(second.refusals == [reason])
-        // Nothing of the second launch reached the directory the first holds.
-        #expect(try! FileManager.default.contentsOfDirectory(atPath: lane.path) == [DataDirectoryLock.fileName])
-        #expect(!FileManager.default.fileExists(atPath: AppPaths.replayRoot(in: support).path))
-        _ = lock
-    }
-
-    /// Nothing a replay does may reach the live journal or the live settings,
-    /// so the one directory `--data-dir` may never name is the live data
-    /// folder, however it is spelled. The replay root inside it is what
-    /// replays are for, so a lane under it still starts.
-    /// A journal holds thumbnails and recognized text from the real screen, so
-    /// it never goes in a directory anyone but its owner can reach into. A
-    /// directory the operator named is never chmodded, since it can be a home
-    /// or a folder shared on purpose: the launch stops instead and says so.
-    @Test(arguments: [0o750, 0o705, 0o755, 0o770, 0o707] as [Int], [false, true])
-    func aReplayGivenADataDirectoryOthersCanReachRefusesToStart(mode: Int, throughALink: Bool) throws {
-        let root = scratch()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let support = root.appendingPathComponent("support", isDirectory: true)
-        let target = root.appendingPathComponent("target", isDirectory: true)
-        let manager = FileManager.default
-        try manager.createDirectory(at: target, withIntermediateDirectories: true)
-        try manager.setAttributes([.posixPermissions: mode], ofItemAtPath: target.path)
-        // A symlink's own mode is always 755 on macOS, so judging the link
-        // rather than what it points at would both refuse an owner-only lane
-        // for a reason chmod cannot fix and wave a world-readable one through.
-        var lane = target
-        if throughALink {
-            lane = root.appendingPathComponent("link", isDirectory: true)
-            try manager.createSymbolicLink(at: lane, withDestinationURL: target)
-        }
-
-        var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--data-dir", lane.path], clientMode: replay, supportDirectory: support)
-        guard case .refusedToStart(let reason) = files.claim(clientMode: replay, supportDirectory: support) else {
-            Issue.record("a replay was allowed to write its journal into a \(String(mode, radix: 8)) directory")
-            return
-        }
-        #expect(reason.contains(lane.path))
-        #expect(reason.contains(String(format: "%03o", mode)))
-        // The chmod it advises is one that can be carried out: the directory
-        // the journal would land in, not a link whose mode chmod never changes.
-        #expect(reason.contains("chmod 700 \(target.path)"))
-        #expect(files.refusals == [reason])
-        // The refused launch neither wrote in it nor changed what it found.
-        #expect(try manager.contentsOfDirectory(atPath: target.path).isEmpty)
-        let after = try #require(manager.attributesOfItem(atPath: target.path)[.posixPermissions] as? NSNumber)
-        #expect(after.int16Value == Int16(mode))
-    }
-
-    /// An owner-only lane reached through a symlink starts: the link's own mode
-    /// is 755 and says nothing about where the journal lands.
-    @Test func anOwnerOnlyDataDirectoryReachedThroughALinkStarts() throws {
-        let root = scratch()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let support = root.appendingPathComponent("support", isDirectory: true)
-        let manager = FileManager.default
-        let target = root.appendingPathComponent("target", isDirectory: true)
-        try manager.createDirectory(at: target, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        let link = root.appendingPathComponent("link", isDirectory: true)
-        try manager.createSymbolicLink(at: link, withDestinationURL: target)
-
-        var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--data-dir", link.path], clientMode: replay, supportDirectory: support)
-        guard case .held(let lock) = files.claim(clientMode: replay, supportDirectory: support) else {
-            Issue.record("a replay was refused an owner-only lane reached through a link")
-            return
-        }
-        _ = lock
-    }
-
-    /// The owner-only cases: a directory that is already owner-only is used as
-    /// it is, and one that is not there yet is made owner-only here.
-    @Test func aDataDirectoryThatIsOwnerOnlyOrNotThereYetStarts() throws {
-        let root = scratch()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let support = root.appendingPathComponent("support", isDirectory: true)
-        let manager = FileManager.default
-        let existing = root.appendingPathComponent("existing", isDirectory: true)
-        try manager.createDirectory(at: existing, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        let fresh = root.appendingPathComponent("fresh", isDirectory: true)
-
-        for lane in [existing, fresh] {
-            var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--data-dir", lane.path], clientMode: replay, supportDirectory: support)
-            guard case .held(let lock) = files.claim(clientMode: replay, supportDirectory: support) else {
-                Issue.record("a replay was refused the owner-only directory \(lane.path)")
-                continue
-            }
-            let mode = try #require(manager.attributesOfItem(atPath: lane.path)[.posixPermissions] as? NSNumber)
-            #expect(mode.int16Value == 0o700)
-            _ = lock
-        }
-    }
-
-    @Test func aReplayGivenTheLiveDataFolderRefusesToStart() throws {
-        let root = scratch()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let support = root.appendingPathComponent("mentor", isDirectory: true)
-        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
-        let linked = root.appendingPathComponent("linked-mentor", isDirectory: true)
-        try FileManager.default.createSymbolicLink(at: linked, withDestinationURL: support)
-
-        func claimed(_ path: String) -> LaunchFiles.Claim {
-            var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--data-dir", path], clientMode: replay, supportDirectory: support)
-            return files.claim(clientMode: replay, supportDirectory: support)
-        }
-
-        // The folder itself, spelled four ways, and something inside it.
-        for path in [
-            support.path,
-            support.path + "/",
-            support.path.uppercased(),
-            linked.path,
-            support.appendingPathComponent("recordings").path,
-            linked.appendingPathComponent("recordings").path,
-        ] {
-            guard case .refusedToStart(let reason) = claimed(path) else {
-                Issue.record("a replay was allowed to use \(path)")
-                continue
-            }
-            #expect(reason.contains(LaunchFiles.dataDirectoryFlag))
-            #expect(reason.contains(support.path))
-        }
-        // Nothing of any refused launch reached the live folder.
-        #expect(try FileManager.default.contentsOfDirectory(atPath: support.path).isEmpty)
-
-        // The replay root and a lane under it are what a replay's files are for,
-        // and are how scripts/e2e names the directory it reads.
-        for path in [AppPaths.replayRoot(in: support).path, AppPaths.replayRoot(in: support).appendingPathComponent("lane-a").path] {
-            guard case .held(let lock) = claimed(path) else {
-                Issue.record("a replay was refused \(path)")
-                continue
-            }
-            _ = lock
-        }
     }
 
     /// A replay that makes its own directory still starts, and the claim
@@ -652,53 +440,6 @@ private func finishedLaunch(
             == ["journal.sqlite", "journal.sqlite-wal"])
     }
 
-    /// A `--data-dir` that names the replay root is the shared journal, and is
-    /// swept like one once it is past its window; a `--data-dir` of any other
-    /// name is left alone however old it is, since nothing sweeps a directory
-    /// whose name a launch chose.
-    @Test func onlyAReplayRootLaneIsSweptLikeTheSharedJournal() throws {
-        let support = scratch()
-        defer { try? FileManager.default.removeItem(at: support) }
-        let root = AppPaths.replayRoot(in: support)
-        let manager = FileManager.default
-        let now = Date(timeIntervalSince1970: 1_789_000_000)
-        let named = root.appendingPathComponent("my-lane", isDirectory: true)
-
-        for lane in [root, named] {
-            try manager.createDirectory(at: lane, withIntermediateDirectories: true)
-            let journal = Journal.defaultURL(in: lane)
-            try Data("captured screen".utf8).write(to: journal)
-            try manager.setAttributes([.modificationDate: now - 30 * 86400], ofItemAtPath: journal.path)
-        }
-
-        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
-        #expect(!manager.fileExists(atPath: Journal.defaultURL(in: root).path))
-        #expect(manager.fileExists(atPath: Journal.defaultURL(in: named).path))
-    }
-
-    /// The end-to-end harness hands a replay the replay root itself as its
-    /// `--data-dir`, so while a replay holds it those files are its own and the
-    /// sweep must not touch them, however old they look.
-    @Test func theSharedReplayJournalIsLeftAloneWhileAReplayHoldsTheRoot() throws {
-        let support = scratch()
-        defer { try? FileManager.default.removeItem(at: support) }
-        let root = AppPaths.replayRoot(in: support)
-        let manager = FileManager.default
-        let now = Date(timeIntervalSince1970: 1_789_000_000)
-
-        var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--data-dir", root.path], clientMode: replay, supportDirectory: support)
-        guard case .held(let lock) = files.claim(clientMode: replay, supportDirectory: support) else {
-            Issue.record("a replay was refused the replay root")
-            return
-        }
-        let journal = Journal.defaultURL(in: root)
-        try Data("captured screen".utf8).write(to: journal)
-        try manager.setAttributes([.modificationDate: now - 365 * 86400], ofItemAtPath: journal.path)
-
-        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
-        #expect(manager.fileExists(atPath: journal.path))
-        _ = lock
-    }
 }
 
 /// The one line a launch writes for whoever started it, which
@@ -709,20 +450,38 @@ private func finishedLaunch(
     /// check: it is a failed launch, not a started one, however well the rest
     /// of the launch went.
     @Test func aJournalThatWillNotOpenIsAFailedLaunchNotAStartedOne() {
-        let failed = LaunchReport(pid: 4242, journalError: "Could not open the journal at /lanes/a/journal.sqlite: disk I/O error")
+        let lane = URL(fileURLWithPath: "/lanes/a", isDirectory: true)
+        let failed = LaunchReport(pid: 4242, dataDirectory: lane, journalError: "Could not open the journal at /lanes/a/journal.sqlite: disk I/O error")
         #expect(failed == .didNotStart("Could not open the journal at /lanes/a/journal.sqlite: disk I/O error"))
+        // Literally, the way the started line below is. `scripts/launch.sh`
+        // carries this same text by hand on the other side of a language
+        // boundary, and an assertion against the constant would hold for any
+        // spelling, including one the launcher would no longer recognize.
+        #expect(failed.line == "Mentor did not start: Could not open the journal at /lanes/a/journal.sqlite: disk I/O error\n")
         #expect(failed.line.hasPrefix(LaunchReport.didNotStartMarker))
-        #expect(failed.line.contains("/lanes/a/journal.sqlite"))
-        #expect(!failed.line.contains("Mentor started"))
 
-        #expect(LaunchReport(pid: 4242, journalError: nil) == .started(pid: 4242))
-        #expect(LaunchReport(pid: 4242, journalError: nil).line == "Mentor started: pid 4242\n")
+        let up = LaunchReport(pid: 4242, dataDirectory: lane, journalError: nil)
+        #expect(up == .started(pid: 4242, dataDirectory: lane))
+        #expect(up.line == "Mentor started: pid 4242 in /lanes/a\n")
+    }
+
+    /// The started line ends in the data directory and nothing follows it, so a
+    /// reader takes everything past the first ` in ` and needs no quoting: that
+    /// is how `scripts/launch.sh` and the end-to-end harness learn where the
+    /// journal is now that nothing can name it beforehand.
+    @Test(arguments: ["/lanes/a", "/Users/x/My Lanes/replay/launch-7-0123abcd", "/x/in the middle/lane"])
+    func theStartedLineCarriesTheDataDirectoryWhateverItsPathLooksLike(path: String) {
+        let line = LaunchReport.started(pid: 7, dataDirectory: URL(fileURLWithPath: path, isDirectory: true)).line
+        #expect(line == "Mentor started: pid 7 in \(path)\n")
+        // What the shell does: everything past the first " in ".
+        let read = line.dropLast().range(of: " in ").map { String(line.dropLast()[$0.upperBound...]) }
+        #expect(read == path)
     }
 
     /// Every line ends in a newline of its own, since a launcher reads them as
     /// they arrive rather than waiting for the process to end.
     @Test func everyReportIsOneWholeLine() {
-        for report in [LaunchReport.started(pid: 7), .didNotStart("a reason")] {
+        for report in [LaunchReport.started(pid: 7, dataDirectory: URL(fileURLWithPath: "/lanes/b")), .didNotStart("a reason")] {
             #expect(report.line.hasSuffix("\n"))
             #expect(report.line.dropLast().contains("\n") == false)
         }

@@ -200,24 +200,32 @@ PY
 # it launched before, and the second stops every Mentor on the Mac, including
 # other lanes' and the owner's own.
 #
-# `--data-dir` names the run's journal and settings directory, so the run reads
-# its own journal at a known path. Without it a replay makes a new directory per
-# launch inside the home's `replay` (README "Replays side by side"), which is
-# what keeps two runs apart; here the scratch home already does that, and the
-# flag keeps the path predictable for a relaunch in the same home.
+# Where the run's journal is, is the app's to say: a replay makes a directory
+# per launch inside the home's `replay` (README "Replays side by side") and
+# names it on the line it writes when it starts, which app.log catches. Reading
+# it from there rather than dictating it means the path is known only once it
+# is real, and the run never guesses at a directory the app did not make.
 launch_mentor() {
 	local home="$1"
 	shift
 	local profile="$RUN_DIR/isolate.sb"
-	local data="$home/Library/Application Support/mentor/replay"
 	sed "s#__LIVE_SUPPORT__#$LIVE_SUPPORT#" "$E2E_DIR/lib/isolate.sb" >"$profile"
 	CFFIXED_USER_HOME="$home" HOME="$home" \
-		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" --data-dir "$data" "$@" \
+		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" "$@" \
 		>>"$RUN_DIR/app.log" 2>&1 &
 	MENTOR_PID=$!
-	JOURNAL="$data/journal.sqlite"
+	JOURNAL=""
 	log "launched Mentor pid=$MENTOR_PID (replay, sandboxed, home=$home)"
-	local i
+	local i started
+	for i in $(seq 1 90); do
+		kill -0 "$MENTOR_PID" 2>/dev/null || die "Mentor exited during launch; see $RUN_DIR/app.log"
+		# Its own pid, so a relaunch in the same home never reads the last one's.
+		started="$(grep -m 1 "^Mentor started: pid $MENTOR_PID in " "$RUN_DIR/app.log" 2>/dev/null || true)"
+		if [ -n "$started" ]; then JOURNAL="${started#* in }/journal.sqlite"; break; fi
+		sleep 0.5
+	done
+	[ -n "$JOURNAL" ] || die "Mentor never said where it keeps its journal; see $RUN_DIR/app.log"
+	log "journal at $JOURNAL"
 	for i in $(seq 1 90); do
 		kill -0 "$MENTOR_PID" 2>/dev/null || die "Mentor exited during launch; see $RUN_DIR/app.log"
 		if "$DRIVE" ready "$MENTOR_PID" 2>/dev/null | grep -q READY; then
