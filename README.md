@@ -62,7 +62,7 @@ below the desktop picture, where the window server still composites glass and
 controls and ScreenCaptureKit still captures it, so nothing appears on screen
 (the run puts no item in the menu bar either) and a tall Settings pane renders
 whole. Replay mode has renders of its own.
-`open build/Mentor.app --args --open debug` (or `settings`, `settings:<pane>`
+`open -n build/Mentor.app --args --open debug` (or `settings`, `settings:<pane>`
 for `general`, `contexts`, `models`, `capture`, `journal`, or `privacy`,
 `permissions`, `history`) launches the app with that window already open, which
 is how the live panel gets screenshotted from a shell. `--replay <dir>` and
@@ -328,8 +328,10 @@ of them disturbs another or the live app:
   an argument the app ignores, so two launches from one checkout that overlap
   can never adopt each other's process. The pid is reported only once the app
   itself says it started, on the line it writes past every reason it could
-  refuse the launch, never after an elapsed time that proves nothing on a busy
-  Mac. A launch that quits as it starts, a replay given a directory another one
+  refuse the launch and past the point where it is listening for a clock
+  request, never after an elapsed time that proves nothing on a busy Mac. So a
+  `scripts/advance-clock.sh` sent the moment the pid file appears is heard
+  rather than posted into a channel nobody is observing yet. A launch that quits as it starts, a replay given a directory another one
   holds among them, is reported as the failure it is, with what the app said,
   and leaves no pid file behind. Two lanes run side by side:
 

@@ -129,7 +129,8 @@ enum WindowID {
 }
 
 /// Developer aids on the command line: `Mentor --open debug|settings|permissions|history`
-/// presents that window at launch (for example `open build/Mentor.app --args --open debug`),
+/// presents that window at launch (for example `open -n build/Mentor.app --args --open debug`;
+/// a plain `open` brings an already running Mentor forward and drops the arguments),
 /// `--open settings:models` opens Settings on that pane (`SettingsPane`), `--snapshot <dir>`
 /// is handled by `Snapshots`, `--replay <dir>`, `--allow-stale-fixtures`, and
 /// `--record [<dir>]` choose where model calls go (`ModelClientMode`), and
@@ -168,11 +169,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AppState.log.error("did not start: \(refusal, privacy: .public)")
             exit(2)
         }
-        // Past every reason this launch could refuse itself, so a launcher
-        // waiting on this line knows it started rather than guessing from
-        // elapsed time. Written unbuffered, since stdout to a file is not.
-        let pid = ProcessInfo.processInfo.processIdentifier
-        FileHandle.standardOutput.write(Data("Mentor started: pid \(pid)\n".utf8))
         if let directory = Snapshots.requestedDirectory {
             Task { @MainActor in
                 do {
@@ -187,6 +183,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         AppState.shared.start()
+        // Past every reason this launch could refuse itself, and past `start`,
+        // so a launcher waiting on this line knows the lane is up rather than
+        // guessing from elapsed time: by now the clock channel is listening,
+        // so a request sent the moment this is read is heard. Written
+        // unbuffered, since stdout to a file is not.
+        let pid = ProcessInfo.processInfo.processIdentifier
+        FileHandle.standardOutput.write(Data("Mentor started: pid \(pid)\n".utf8))
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

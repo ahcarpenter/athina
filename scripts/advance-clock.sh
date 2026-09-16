@@ -22,7 +22,15 @@ pid="$1"
 interval="$2"
 timeout="${MENTOR_CLOCK_TIMEOUT:-10}"
 
-reply="$(mktemp "${TMPDIR:-/tmp}/mentor-clock-XXXXXXXX")"
+# A replay answers only inside its own temporary directory, so the reply path
+# has to be built the way the app builds NSTemporaryDirectory: launchd's
+# per-user directory, which is what an app started by `open` inherits, not this
+# shell's TMPDIR. They are the same in a login shell and differ over ssh, under
+# cron or launchd, and after `env -i`, where naming /tmp would have every
+# request refused into the unified log and nothing but a timeout here.
+temporary="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)"
+[ -n "$temporary" ] || temporary="${TMPDIR:-/tmp}"
+reply="$(mktemp "${temporary%/}/mentor-clock-XXXXXXXX")"
 rm -f "$reply"
 cleanup() { rm -f "$reply"; }
 trap cleanup EXIT
@@ -43,7 +51,11 @@ SCRIPT
 deadline=$(( $(date +%s) + timeout ))
 while ! /usr/bin/python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$reply" 2>/dev/null; do
   if [ "$(date +%s)" -ge "$deadline" ]; then
-    echo "advance-clock: pid $pid did not answer within ${timeout}s; it may not be a running replay, or it may still be starting" >&2
+    {
+      echo "advance-clock: pid $pid did not answer at $reply within ${timeout}s"
+      echo "  it may not be a running replay, it may still be starting, or it may have refused to answer there"
+      echo "  (a replay answers only at a new file inside $temporary): log show --last 2m --predicate 'subsystem == \"com.ahcarpenter.mentor\"'"
+    } >&2
     exit 1
   fi
   sleep 0.1

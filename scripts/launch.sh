@@ -16,8 +16,9 @@
 # two launches from this checkout overlap, which "any number of replays at
 # once" invites. The pid is reported, and written to the pid file, only once
 # the app itself says it started, on the line it writes past every reason it
-# could refuse this launch. Elapsed time is never taken as proof: on a loaded
-# Mac the app can still be short of that point after seconds.
+# could refuse this launch and past the point where it is listening for a clock
+# request. Elapsed time is never taken as proof: on a loaded Mac the app can
+# still be short of that point after seconds.
 #
 # `--live` guards the live files. Before this script, every launch target began
 # with `pkill -x Mentor`, so two live instances were impossible; two of them
@@ -57,18 +58,28 @@ ours() {
 }
 
 # Every Mentor on this Mac that is not a replay or a snapshot render, whatever
-# checkout or bundle it came from, as "<pid> <command>" lines. The bundle path
-# has to be the command itself, as in `ours` and `started`: a process that only
-# names it in its arguments, this script's own awk helpers among them, is not a
-# running Mentor.
+# checkout or bundle it came from, as "<pid> <command>" lines.
+#
+# Which process is a Mentor is decided on `comm`, the executable alone, never
+# on the joined command line: a path with a space in it cannot be told from a
+# path followed by an argument once they are joined, so a checkout under, say,
+# "My Projects" would be invisible here and a second live Mentor would start on
+# the owner's journal, settings and bill. The command line is read only to say
+# which ones are replays or snapshot renders, and to name them.
 live_mentors() {
-	ps -axo pid=,command= | awk '{
-		pid = $1
-		sub(/^ *[0-9]+ +/, "")
-		if ($0 !~ /^[^ ]*\/Mentor\.app\/Contents\/MacOS\/Mentor($| )/) next
-		if ($0 ~ /--replay($| )/ || $0 ~ /--snapshot($| )/) next
-		print pid, $0
-	}'
+	{ ps -axo pid=,comm=; echo "|"; ps -axo pid=,command=; } | awk '
+		$0 == "|" { commands = 1; next }
+		{
+			pid = $1
+			sub(/^ *[0-9]+ +/, "")
+			if (!commands) {
+				if ($0 ~ /\/Mentor\.app\/Contents\/MacOS\/Mentor$/) mentor[pid] = 1
+				next
+			}
+			if (!(pid in mentor)) next
+			if ($0 ~ /--replay($| )/ || $0 ~ /--snapshot($| )/) next
+			print pid, $0
+		}'
 }
 
 stop_previous() {
@@ -143,7 +154,12 @@ for _ in $(seq 100); do
 	sleep 0.1
 done
 if [ -z "$pid" ]; then
-	echo "launch: Mentor did not start from $APP" >&2
+	{
+		echo "launch: Mentor did not start from $APP"
+		# It can refuse itself and be gone before the poll above ever sees it,
+		# and what it said on the way out is the only explanation there is.
+		if [ -s "$STARTUP_ERRORS" ]; then sed 's/^/  /' <"$STARTUP_ERRORS"; fi
+	} >&2
 	exit 1
 fi
 

@@ -264,6 +264,20 @@ final class AppState {
     func start() {
         guard !isRunning else { return }
         isRunning = true
+        // First of all, and before the journal or the fixtures: a distributed
+        // notification reaches only the observers registered when it is
+        // posted, so anything slow ahead of this would drop a clock request
+        // that arrived in the meantime rather than queue it. A journal that
+        // will not open returns below, and the channel stays live even then.
+        if ClockRemote.listens(in: clockMode) {
+            clockRemoteObserver = DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name(ClockRemote.name), object: ClockRemote.object(for: getpid()), queue: .main
+            ) { [weak self] notification in
+                let request = ClockRemote.seconds(from: notification.userInfo)
+                let replyURL = ClockRemote.replyURL(from: notification.userInfo)
+                MainActor.assumeIsolated { self?.advanceClock(onRequest: request, answeringAt: replyURL) }
+            }
+        }
         // The keychain may put up its prompt on the first read after a
         // rebuild; off the main thread it never freezes the app behind it.
         reloadKeyHint()
@@ -314,16 +328,6 @@ final class AppState {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.displayConfigurationChanged() }
         }
-        if ClockRemote.listens(in: clockMode) {
-            clockRemoteObserver = DistributedNotificationCenter.default().addObserver(
-                forName: Notification.Name(ClockRemote.name), object: ClockRemote.object(for: getpid()), queue: .main
-            ) { [weak self] notification in
-                let request = ClockRemote.seconds(from: notification.userInfo)
-                let replyURL = ClockRemote.replyURL(from: notification.userInfo)
-                MainActor.assumeIsolated { self?.advanceClock(onRequest: request, answeringAt: replyURL) }
-            }
-        }
-
         eventTask = Task { [weak self] in
             // A replay's clock carries on from its journal before anything runs on it.
             await self?.startReplayClock(journal: journal)
