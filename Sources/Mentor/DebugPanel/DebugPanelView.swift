@@ -703,7 +703,7 @@ private struct MentorCard: View {
                 let now = state.clock.date
                 // Model reasons can run long; four lines keeps spend and cadence in view.
                 VStack(alignment: .leading, spacing: 4) {
-                    ForEach(clientModeFields, id: \.label) { field in
+                    ForEach(clientModeFields + launchFilesFields, id: \.label) { field in
                         Field(label: field.label, value: field.value, lineLimit: field.lineLimit, truncation: field.truncation)
                     }
                     if let clock = clock(now: now) {
@@ -791,6 +791,24 @@ private struct MentorCard: View {
                 ModeField(label: "From", value: Formatting.path(directory), truncation: .middle),
             ]
         }
+    }
+
+    /// A replay's own files and the settings it started from, and any file
+    /// flag that was refused; nothing for a live launch that was given none.
+    private var launchFilesFields: [ModeField] {
+        let files = state.launchFiles
+        var fields: [ModeField] = []
+        if state.clientMode.isOffline {
+            // Cut in the middle, so a per-launch directory's name, with its pid, stays readable.
+            fields.append(ModeField(label: "Data", value: Formatting.path(files.dataDirectory), truncation: .middle))
+            fields.append(ModeField(
+                label: "Settings", value: files.settingsGiven ? "from \(Formatting.path(files.settingsSource))" : "from the live settings", truncation: .middle
+            ))
+        }
+        if !files.refusals.isEmpty {
+            fields.append(ModeField(label: "Refused", value: files.refusals.joined(separator: "\n"), lineLimit: 4))
+        }
+        return fields
     }
 
     /// The last callout decision with both coordinate spaces: the frame

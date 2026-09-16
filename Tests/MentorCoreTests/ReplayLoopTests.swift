@@ -217,9 +217,9 @@ import Testing
     @Test func aReplaySessionLeavesTheLiveJournalAndSettingsByteIdentical() async throws {
         let support = FileManager.default.temporaryDirectory.appendingPathComponent("mentor-support-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: support) }
-        let live = AppPaths.dataDirectory(for: .live, supportDirectory: support)
+        let live = LaunchFiles(arguments: ["Mentor"], clientMode: .live, supportDirectory: support).dataDirectory
         #expect(live == support)
-        #expect(AppPaths.dataDirectory(for: .record(directory: support.appendingPathComponent("recordings")), supportDirectory: support) == live)
+        #expect(LaunchFiles(arguments: ["Mentor", "--record"], clientMode: .record(directory: support.appendingPathComponent("recordings")), supportDirectory: support).dataDirectory == live)
 
         // A lived-in live app: settings of its own, and a journal holding a call.
         var liveSettings = SensingSettings()
@@ -237,13 +237,13 @@ import Testing
         #expect(before["settings.json"] != nil && before["journal.sqlite"] != nil)
 
         let replayMode = ModelClientMode.replay(directory: URL(fileURLWithPath: "/fixtures"), allowStale: false)
-        let replay = AppPaths.dataDirectory(for: replayMode, supportDirectory: support)
+        var launch = LaunchFiles(arguments: ["Mentor", "--replay", "/fixtures"], clientMode: replayMode, supportDirectory: support)
+        let replay = launch.dataDirectory
         #expect(replay != live)
-        #expect(AppPaths.dataDirectory(for: .invalid("--record and --replay cannot be combined"), supportDirectory: support) == replay)
+        #expect(replay.deletingLastPathComponent() == AppPaths.replayRoot(in: support))
 
-        let launch = SettingsStore.forLaunch(replayMode, supportDirectory: support)
         let store = launch.store
-        var settings = launch.settings
+        var settings = launch.loadSettings(supportDirectory: support)
         #expect(store.url == SettingsStore.defaultURL(in: replay))
         #expect(settings.mentor.hourlySpendCap == 3)
         let journal = try Journal(url: Journal.defaultURL(in: replay))
@@ -275,7 +275,12 @@ import Testing
         let replayMode = ModelClientMode.replay(directory: URL(fileURLWithPath: "/fixtures"), allowStale: false)
         let messages = "com.apple.MobileSMS"
 
-        let first = SettingsStore.forLaunch(replayMode, supportDirectory: support)
+        func launch(_ mode: ModelClientMode = replayMode) -> (store: SettingsStore, settings: SensingSettings) {
+            var files = LaunchFiles(arguments: ["Mentor", "--replay", "/fixtures"], clientMode: mode, supportDirectory: support)
+            return (files.store, files.loadSettings(supportDirectory: support))
+        }
+
+        let first = launch()
         #expect(first.settings == SensingSettings())
         #expect(!first.settings.isExcluded(bundleID: messages))
 
@@ -286,19 +291,19 @@ import Testing
         try liveStore.save(liveSettings)
         let liveBytes = try Data(contentsOf: liveStore.url)
 
-        let launch = SettingsStore.forLaunch(replayMode, supportDirectory: support)
-        #expect(launch.settings.isExcluded(bundleID: messages))
-        #expect(launch.settings.thumbnailRetention == 3600)
+        let second = launch()
+        #expect(second.settings.isExcluded(bundleID: messages))
+        #expect(second.settings.thumbnailRetention == 3600)
 
         // A replay that drops the exclusion saves only to its own file, and
         // the next replay launch is excluded again.
-        var edited = launch.settings
+        var edited = second.settings
         edited.excludedBundleIDs.removeAll { $0 == messages }
-        try launch.store.save(edited)
-        #expect(launch.store.url != liveStore.url)
-        #expect(!launch.store.load().isExcluded(bundleID: messages))
-        #expect(SettingsStore.forLaunch(replayMode, supportDirectory: support).settings.isExcluded(bundleID: messages))
-        #expect(SettingsStore.forLaunch(.invalid("--replay needs the directory of fixtures to replay"), supportDirectory: support).settings.isExcluded(bundleID: messages))
+        try second.store.save(edited)
+        #expect(second.store.url != liveStore.url)
+        #expect(!second.store.load().isExcluded(bundleID: messages))
+        #expect(launch().settings.isExcluded(bundleID: messages))
+        #expect(launch(.invalid("--replay needs the directory of fixtures to replay")).settings.isExcluded(bundleID: messages))
         #expect(try Data(contentsOf: liveStore.url) == liveBytes)
     }
 

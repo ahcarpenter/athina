@@ -118,9 +118,18 @@ final class AppState {
 
     /// Whether the permissions window should open at launch.
     let needsPermissionsOnboarding: Bool
-    /// The live files, or a replay's own (`AppPaths.dataDirectory(for:)`).
+    /// The live files, or a replay's own (`LaunchFiles`).
     let journalURL: URL
     let settingsURL: URL
+    /// Where this launch keeps its files, the settings it started from, and
+    /// any flag that was refused.
+    let launchFiles: LaunchFiles
+    /// Keeps a replay's data directory its own while the app runs.
+    private let dataDirectoryLock: DataDirectoryLock?
+    /// Why this launch must not start, when a replay was given a `--settings`
+    /// file that is not settings. The app says so and exits rather than running
+    /// on settings nobody asked for.
+    let startupRefusal: String?
 
     // MARK: Model client mode
 
@@ -175,6 +184,8 @@ final class AppState {
     /// newest kept frame; nil once a newer frame is kept.
     private var lastNearDuplicateAt: Date?
     private var screenObserver: (any NSObjectProtocol)?
+    /// Listens for another process moving a replay's clock (`ClockRemote`).
+    private var clockRemoteObserver: (any NSObjectProtocol)?
     private let listener: SpeechListener
     private var listeningLimitTask: Task<Void, Never>?
     /// Finishes the transcript after the key comes up; cancelled with the exchange.
@@ -186,15 +197,30 @@ final class AppState {
         (clock, clockControl) = clockMode.makeClock()
         toast = ToastController(clock: clock)
         listener = SpeechListener(clock: clock)
-        journalURL = Journal.defaultURL(in: AppPaths.dataDirectory(for: clientMode))
-        let launch = SettingsStore.forLaunch(clientMode)
-        store = launch.store
-        settingsURL = launch.store.url
+        var files = LaunchFiles(arguments: CommandLine.arguments, clientMode: clientMode)
+        // The settings first, so that a --settings file that is there but is
+        // not settings is one of the reasons `claim` refuses the launch.
+        let launchSettings = files.loadSettings()
+        switch files.claim(clientMode: clientMode) {
+        case .notNeeded:
+            dataDirectoryLock = nil
+            startupRefusal = nil
+        case .held(let lock):
+            dataDirectoryLock = lock
+            startupRefusal = nil
+        case .refusedToStart(let reason):
+            dataDirectoryLock = nil
+            startupRefusal = reason
+        }
+        launchFiles = files
+        journalURL = Journal.defaultURL(in: files.dataDirectory)
+        store = files.store
+        settingsURL = files.store.url
         // Neither a replay nor a snapshot render needs a key, so neither reads
         // the keychain, and its per-build access prompt never blocks them.
         keyStore = clientMode.isOffline || Snapshots.isActive ? InMemoryKeyStore() : KeychainKeyStore()
         isSample = false
-        settings = launch.settings
+        settings = launchSettings
         let status = PermissionProbe.current()
         permissions = status
         undeterminedPermissions = Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
@@ -216,9 +242,12 @@ final class AppState {
         (clock, clockControl) = clockMode.makeClock(base: AdjustableClock(startingAt: Date()))
         toast = ToastController(clock: clock)
         listener = SpeechListener(clock: clock)
-        let dataDirectory = AppPaths.dataDirectory(for: clientMode)
-        journalURL = Journal.defaultURL(in: dataDirectory)
-        settingsURL = SettingsStore.defaultURL(in: dataDirectory)
+        // A fixed per-launch name, so a replay render reads the same every time.
+        launchFiles = LaunchFiles(arguments: [], clientMode: clientMode, launchName: "launch-4242-5a1e0c9d")
+        dataDirectoryLock = nil
+        startupRefusal = nil
+        journalURL = Journal.defaultURL(in: launchFiles.dataDirectory)
+        settingsURL = launchFiles.store.url
         keyStore = clientMode.isOffline ? InMemoryKeyStore() : InMemoryKeyStore(key: "sk-ant-sample-key-0000-7Q2x")
         isSample = true
         self.settings = settings
@@ -234,6 +263,20 @@ final class AppState {
     func start() {
         guard !isRunning else { return }
         isRunning = true
+        // First of all, and before the journal or the fixtures: a distributed
+        // notification reaches only the observers registered when it is
+        // posted, so anything slow ahead of this would drop a clock request
+        // that arrived in the meantime rather than queue it. A journal that
+        // will not open returns below, and the channel stays live even then.
+        if ClockRemote.listens(in: clockMode) {
+            clockRemoteObserver = DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name(ClockRemote.name), object: ClockRemote.object(for: getpid()), queue: .main
+            ) { [weak self] notification in
+                let request = ClockRemote.seconds(from: notification.userInfo)
+                let replyURL = ClockRemote.replyURL(from: notification.userInfo)
+                MainActor.assumeIsolated { self?.advanceClock(onRequest: request, answeringAt: replyURL) }
+            }
+        }
         // The keychain may put up its prompt on the first read after a
         // rebuild; off the main thread it never freezes the app behind it.
         reloadKeyHint()
@@ -271,6 +314,7 @@ final class AppState {
         recordingUnavailableReason = clientSetup.recordingUnavailableReason
         AppState.log.notice("model calls: \(self.clientModeLog, privacy: .public)")
         AppState.log.notice("clock: \(self.clockLog, privacy: .public)")
+        AppState.log.notice("files: \(self.launchFilesLog, privacy: .public)")
         toast.onAction = { [weak self] id, feedback in
             self?.respond(to: id, with: feedback)
         }
@@ -283,10 +327,10 @@ final class AppState {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.displayConfigurationChanged() }
         }
-
+        // Where a replay's clock starts, before anything runs on it and before
+        // the line that says this lane is up.
+        startReplayClock()
         eventTask = Task { [weak self] in
-            // A replay's clock carries on from its journal before anything runs on it.
-            await self?.startReplayClock(journal: journal)
             let stream = await pipeline.events()
             let mentorStream = await pipeline.events()
             let mentor = MentorLoop(
@@ -316,15 +360,9 @@ final class AppState {
         }
     }
 
-    private func startReplayClock(journal: Journal) async {
+    private func startReplayClock() {
         guard let clockControl else { return }
-        var newest: Date?
-        do {
-            newest = try await journal.newestTimestamp()
-        } catch {
-            AppState.log.error("clock starts at real time, the journal's newest time is unreadable: \(String(describing: error), privacy: .public)")
-        }
-        clockMode.startReplay(clockControl, journalNewest: newest)
+        clockMode.startReplay(clockControl)
         clockMovedAhead = clockControl.movedAhead.timeInterval
         AppState.log.notice("clock: \(self.clockLog, privacy: .public)")
     }
@@ -355,6 +393,9 @@ final class AppState {
         stopCalloutWatch()
         if let screenObserver {
             NotificationCenter.default.removeObserver(screenObserver)
+        }
+        if let clockRemoteObserver {
+            DistributedNotificationCenter.default().removeObserver(clockRemoteObserver)
         }
         try? store.save(settings)
         await mentor?.stop()
@@ -1226,6 +1267,45 @@ final class AppState {
         clockMovedAhead = clockControl.movedAhead.timeInterval
         AppState.log.notice("clock moved ahead \(ClockInterval.description(of: seconds), privacy: .public): \(self.clockLog, privacy: .public)")
         return true
+    }
+
+    /// Moves a replay's clock ahead for another process (`ClockRemote`), and
+    /// answers the request where it asked, so the script that made it knows it
+    /// was heard rather than assuming so.
+    private func advanceClock(onRequest request: Result<TimeInterval, ClockRemote.Refusal>, answeringAt replyURL: URL?) {
+        var reply: ClockRemote.Reply
+        switch request {
+        case .success(let seconds):
+            if advanceClock(by: seconds) {
+                reply = ClockRemote.Reply(moved: true, movedAhead: clockMovedAhead, now: clock.date)
+            } else {
+                let reason = "this launch has no replay clock"
+                AppState.log.error("clock advance request refused: \(reason, privacy: .public)")
+                reply = ClockRemote.Reply(moved: false, reason: reason, movedAhead: clockMovedAhead, now: clock.date)
+            }
+        case .failure(let refusal):
+            AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
+            reply = ClockRemote.Reply(moved: false, reason: refusal.reason, movedAhead: clockMovedAhead, now: clock.date)
+        }
+        do {
+            try ClockRemote.answer(reply, at: replyURL)
+        } catch {
+            AppState.log.error("could not answer the clock request at \(replyURL?.path ?? "", privacy: .public): \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    // MARK: Launch files
+
+    /// One line for the menu when a file flag was refused, or nil.
+    var launchFilesLine: String? {
+        launchFiles.refusals.isEmpty ? nil : "Refused: \(launchFiles.refusals.joined(separator: "; "))"
+    }
+
+    /// For the log at launch.
+    private var launchFilesLog: String {
+        var line = "data in \(launchFiles.dataDirectory.path)\(clientMode.isOffline ? " (this launch only)" : ""), settings from \(launchFiles.settingsSource.path)"
+        if !launchFiles.refusals.isEmpty { line += ", refused: \(launchFiles.refusals.joined(separator: "; "))" }
+        return line
     }
 
     /// One line for the menu saying where calls go, or nil when they are live.

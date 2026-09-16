@@ -129,11 +129,18 @@ enum WindowID {
 }
 
 /// Developer aids on the command line: `Mentor --open debug|settings|permissions|history`
-/// presents that window at launch (for example `open build/Mentor.app --args --open debug`),
+/// presents that window at launch (for example
+/// `open -n build/Mentor.app --args --replay <dir> --open debug`; a plain `open`
+/// brings an already running Mentor forward and drops the arguments, and without
+/// `--replay` the new instance is a second live Mentor on the live journal, the
+/// live settings and the same bill, which only `scripts/launch.sh` refuses),
 /// `--open settings:models` opens Settings on that pane (`SettingsPane`), `--snapshot <dir>`
 /// is handled by `Snapshots`, `--replay <dir>`, `--allow-stale-fixtures`, and
 /// `--record [<dir>]` choose where model calls go (`ModelClientMode`), and
-/// `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock (`ClockMode`).
+/// `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock (`ClockMode`), and
+/// `--settings <path>` chooses the settings a replay starts from (`LaunchFiles`).
+/// Where a replay keeps its files is never an argument: it makes a directory of
+/// its own and says which on the line it writes when it starts.
 enum LaunchArguments {
     private static var openArgument: String? {
         let arguments = CommandLine.arguments
@@ -159,6 +166,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // A launch that must not run says so and goes, rather than running
+        // on something nobody asked for: a replay given a --settings file
+        // that is not settings is the one that reaches here.
+        if let refusal = AppState.shared.startupRefusal {
+            FileHandle.standardError.write(Data(LaunchReport.didNotStart(refusal).line.utf8))
+            AppState.log.error("did not start: \(refusal, privacy: .public)")
+            exit(2)
+        }
         if let directory = Snapshots.requestedDirectory {
             Task { @MainActor in
                 do {
@@ -173,6 +188,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         AppState.shared.start()
+        // Past every reason this launch could refuse itself, and past `start`,
+        // so a launcher waiting on this line knows the lane is up rather than
+        // guessing from elapsed time: by now the clock channel is listening,
+        // so a request sent the moment this is read is heard. A journal that
+        // would not open is the one thing `start` finds out for itself, and it
+        // leaves the lane unable to journal anything, so it is reported as the
+        // failed launch it is. The app stays up either way, so the person at
+        // the screen can read the error in the menu and the debug panel.
+        let report = LaunchReport(
+            pid: ProcessInfo.processInfo.processIdentifier,
+            dataDirectory: AppState.shared.launchFiles.dataDirectory,
+            journalError: AppState.shared.journalError
+        )
+        switch report {
+        case .started:
+            FileHandle.standardOutput.write(Data(report.line.utf8))
+        case .didNotStart(let reason):
+            FileHandle.standardError.write(Data(report.line.utf8))
+            AppState.log.error("did not start: \(reason, privacy: .public)")
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -198,6 +233,9 @@ struct MenuBarContent: View {
             Text(line)
         }
         if let line = state.clockLine {
+            Text(line)
+        }
+        if let line = state.launchFilesLine {
             Text(line)
         }
         if let action = state.menuStatusAction {
