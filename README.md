@@ -333,10 +333,13 @@ of them disturbs another or the live app:
   replay's own data directory is refused rather than quietly written: that is
   the file the replay records its own settings in as it starts and saves again
   when it quits, so the next run of the same check would start from whatever
-  the last one changed. A file that is missing or is not settings is refused,
-  and the replay starts from the live settings, so the apps you excluded stay
-  excluded. Put every app a replayed callout must not
-  cover in that file's excluded apps.
+  the last one changed. A file that is there but is not settings stops the
+  launch, naming the file and what was wrong with it: a check that generated
+  its settings and got truncated JSON would otherwise run on your live
+  thresholds, contexts and retention and could report a pass on settings it
+  never chose. A file that is not there at all is refused more gently, and the
+  replay starts from the live settings, so the apps you excluded stay excluded.
+  Put every app a replayed callout must not cover in that file's excluded apps.
 - **Both flags apply only to a replay.** On a live or recording launch they
   are refused, like the clock flags: the app uses the live files, and the menu,
   the Mentor card, and the log say why. The live app's files never move.

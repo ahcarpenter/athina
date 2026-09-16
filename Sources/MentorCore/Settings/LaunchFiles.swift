@@ -16,7 +16,9 @@ import Foundation
 /// - `--data-dir <path>`: that directory; a relaunch with the same one
 ///   carries on from its journal, clock included
 /// - `--settings <path>`: starts from that settings file instead of the live
-///   one; the file is read and never written
+///   one; the file is read and never written, and one that is there but is
+///   not settings stops the launch rather than quietly standing the live
+///   settings in its place
 ///
 /// Every replay starts from settings it reads and never writes, and keeps its
 /// own `settings.json` in its data directory: the settings it started with,
@@ -44,6 +46,11 @@ public struct LaunchFiles: Equatable, Sendable {
     public var settingsGiven: Bool
     /// Why a flag was not accepted, in the order they were found.
     public var refusals: [String]
+    /// Why this launch must not start at all, set by `loadSettings` when the
+    /// `--settings` file is there but is not settings. `claim` is what turns
+    /// it into a refusal, so every reason a launch must not start leaves by
+    /// the one door.
+    public private(set) var unusableSettings: String?
 
     public init(
         arguments: [String],
@@ -61,6 +68,7 @@ public struct LaunchFiles: Equatable, Sendable {
         let settingsValue = value(after: LaunchFiles.settingsFlag)
         let liveSettings = SettingsStore.defaultURL(in: supportDirectory)
         refusals = []
+        unusableSettings = nil
         settingsGiven = false
         settingsSource = liveSettings
 
@@ -99,16 +107,27 @@ public struct LaunchFiles: Equatable, Sendable {
         SettingsStore(url: SettingsStore.defaultURL(in: dataDirectory))
     }
 
-    /// The settings the launch starts from. A `--settings` file that cannot
-    /// be read or decoded is refused, and the replay starts from the live
-    /// settings instead, so the apps the user excluded stay excluded; the
-    /// defaults stand in only when there is no live settings file either.
+    /// The settings the launch starts from. Must be called before `claim`,
+    /// which is where a file that refuses the launch is reported.
+    ///
+    /// A `--settings` file that is there but is not settings stops the launch:
+    /// a check names a file it generated, and if that file came out truncated
+    /// the replay would otherwise run on the owner's live thresholds,
+    /// contexts and retention and report a pass on settings it never chose.
+    /// A file that is not there at all is a different mistake, and the replay
+    /// starts from the live settings so the apps the user excluded stay
+    /// excluded; the defaults stand in only when there is no live settings
+    /// file either.
     public mutating func loadSettings(supportDirectory: URL = AppPaths.supportDirectory()) -> SensingSettings {
         guard settingsGiven else { return SettingsStore(url: settingsSource).load() }
         do {
             return try SettingsStore(url: settingsSource).loadStrictly()
         } catch {
-            refusals.append("\(LaunchFiles.settingsFlag) could not use \(settingsSource.path): \(error.localizedDescription)")
+            let reason = "\(LaunchFiles.settingsFlag) could not use \(settingsSource.path): \(error.localizedDescription)"
+            refusals.append(reason)
+            if FileManager.default.fileExists(atPath: settingsSource.path) {
+                unusableSettings = reason
+            }
             settingsSource = SettingsStore.defaultURL(in: supportDirectory)
             settingsGiven = false
             return SettingsStore(url: settingsSource).load()
@@ -137,6 +156,11 @@ public struct LaunchFiles: Equatable, Sendable {
     /// was given one, sweeps the finished per-launch directories as it starts
     /// (`pruneFinishedLaunches`).
     ///
+    /// A `--settings` file that is there but is not settings refuses the
+    /// launch as well, on the reason `loadSettings` left behind, so a check
+    /// whose generated settings came out unreadable stops rather than running
+    /// on settings it never chose.
+    ///
     /// A `--settings` file that is the very file this launch would save its
     /// own settings to is refused too: the launch records its settings there
     /// as it starts and saves them again when it quits, so a check that asked
@@ -154,6 +178,9 @@ public struct LaunchFiles: Equatable, Sendable {
         supportDirectory: URL = AppPaths.supportDirectory()
     ) -> Claim {
         guard clientMode.isOffline else { return .notNeeded }
+        if let unusableSettings {
+            return .refusedToStart(unusableSettings)
+        }
         if !isPerLaunch,
            AppPaths.isAt(dataDirectory, orInside: supportDirectory),
            !AppPaths.isAt(dataDirectory, orInside: AppPaths.replayRoot(in: supportDirectory)) {

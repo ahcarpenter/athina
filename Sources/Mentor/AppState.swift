@@ -198,6 +198,9 @@ final class AppState {
         toast = ToastController(clock: clock)
         listener = SpeechListener(clock: clock)
         var files = LaunchFiles(arguments: CommandLine.arguments, clientMode: clientMode)
+        // The settings first, so that a --settings file that is there but is
+        // not settings is one of the reasons `claim` refuses the launch.
+        let launchSettings = files.loadSettings()
         switch files.claim(clientMode: clientMode) {
         case .notNeeded:
             dataDirectoryLock = nil
@@ -209,7 +212,6 @@ final class AppState {
             dataDirectoryLock = nil
             startupRefusal = reason
         }
-        let launchSettings = files.loadSettings()
         if dataDirectoryLock != nil {
             files.recordSettings(launchSettings)
         }

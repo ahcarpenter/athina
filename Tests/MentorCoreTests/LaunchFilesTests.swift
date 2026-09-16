@@ -181,11 +181,10 @@ private func finishedLaunch(
         #expect(!FileManager.default.fileExists(atPath: lane.appendingPathComponent(DataDirectoryLock.fileName).path))
     }
 
-    /// A settings file that is missing or is not settings is refused, and the
-    /// replay starts from the live settings, so excluded apps stay excluded,
-    /// rather than from the defaults a silent fallback would give.
-    @Test(arguments: ["missing", "garbage"])
-    func anUnusableSettingsFileIsRefusedAndTheReplayStartsFromTheLiveSettings(kind: String) throws {
+    /// A settings file that is not there at all is refused, and the replay
+    /// starts from the live settings, so excluded apps stay excluded, rather
+    /// than from the defaults a silent fallback would give.
+    @Test func aSettingsFileThatIsNotThereLeavesTheReplayOnTheLiveSettings() throws {
         let root = scratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let support = root.appendingPathComponent("support", isDirectory: true)
@@ -193,7 +192,6 @@ private func finishedLaunch(
         live.excludedBundleIDs.append("com.apple.MobileSMS")
         try SettingsStore(url: SettingsStore.defaultURL(in: support)).save(live)
         let given = root.appendingPathComponent("given.json")
-        if kind == "garbage" { try Data("not settings".utf8).write(to: given) }
 
         var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--settings", given.path], clientMode: replay, supportDirectory: support)
         let settings = files.loadSettings(supportDirectory: support)
@@ -202,6 +200,44 @@ private func finishedLaunch(
         #expect(files.refusals.first?.hasPrefix("--settings could not use \(given.path)") == true)
         #expect(!files.settingsGiven)
         #expect(files.settingsSource == SettingsStore.defaultURL(in: support))
+        // It still starts: the live settings are a base a replay may run on.
+        guard case .held(let lock) = files.claim(clientMode: replay, supportDirectory: support) else {
+            Issue.record("a replay was refused over a settings file that was not there")
+            return
+        }
+        _ = lock
+    }
+
+    /// A settings file that is there but is not settings stops the launch. A
+    /// check names a file it generated; if that file came out truncated, a
+    /// replay that carried on would run on the owner's live thresholds,
+    /// contexts and retention and could report a pass on settings it never
+    /// chose, which is the one silent success left in these flags.
+    @Test(arguments: ["not settings at all", "{\"idleThreshold\": ", ""])
+    func aSettingsFileThatIsNotSettingsRefusesToStart(content: String) throws {
+        let root = scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let support = root.appendingPathComponent("support", isDirectory: true)
+        var live = SensingSettings()
+        live.excludedBundleIDs.append("com.apple.MobileSMS")
+        try SettingsStore(url: SettingsStore.defaultURL(in: support)).save(live)
+        let liveBytes = try Data(contentsOf: SettingsStore.defaultURL(in: support))
+        let given = root.appendingPathComponent("given.json")
+        try Data(content.utf8).write(to: given)
+
+        var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--settings", given.path], clientMode: replay, supportDirectory: support)
+        _ = files.loadSettings(supportDirectory: support)
+        guard case .refusedToStart(let reason) = files.claim(clientMode: replay, supportDirectory: support) else {
+            Issue.record("a replay started from a file that is not settings")
+            return
+        }
+        #expect(reason.hasPrefix("--settings could not use \(given.path)"))
+        #expect(files.unusableSettings == reason)
+        #expect(files.refusals == [reason])
+        // Nothing of the refused launch reached the live settings or the disk.
+        #expect(try Data(contentsOf: SettingsStore.defaultURL(in: support)) == liveBytes)
+        #expect(try Data(contentsOf: given) == Data(content.utf8))
+        #expect(!FileManager.default.fileExists(atPath: AppPaths.replayRoot(in: support).path))
     }
 
     // MARK: Holding a data directory
