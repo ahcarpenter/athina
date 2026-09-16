@@ -164,15 +164,17 @@ struct UnderstandingCard: View {
 
     // MARK: Text
 
-    /// The interval a refresh will actually be held to: the set one stretched
-    /// by the cadence multiplier, as `nextRefreshAllowed` stretches it, so this
-    /// can never disagree with the countdown beside it.
+    /// The interval a refresh is held to. Once the cadence counts as slowed
+    /// this is the stretched figure `nextRefreshAllowed` uses, named beside
+    /// what it was stretched from, so it cannot disagree with the countdown
+    /// beside it; below that the stretch is seconds, and the set interval is
+    /// stated plainly rather than as a figure every call moves.
     private var refreshInterval: String {
         let set = state.settings.mentor.understandingRefreshInterval
-        let multiplier = max(1, state.mentorStatus.cadenceMultiplier)
-        let text = "every \(ClockInterval.description(of: set * multiplier)) of active use"
-        guard multiplier > 1 else { return text }
-        return text + ", slowed \(Formatting.multiplier(multiplier)) from \(ClockInterval.description(of: set))"
+        let status = state.mentorStatus
+        guard status.isCadenceSlowed else { return "every \(ClockInterval.description(of: set)) of active use" }
+        let slowed = ClockInterval.description(of: set * status.cadenceMultiplier)
+        return "every \(slowed) of active use, slowed \(Formatting.multiplier(status.cadenceMultiplier)) from \(ClockInterval.description(of: set))"
     }
 
     private func nextRefresh(now: Date) -> String {
@@ -192,12 +194,13 @@ struct UnderstandingCard: View {
 
     /// Whether a hold is worth repeating beside the countdown. A not-due hold
     /// names the time the countdown already shows, and a call in flight is the
-    /// progress row above when the call in flight is the refresh itself; a call
-    /// in flight for another tier is news, so it is shown.
+    /// progress row above when the refresh is the call in flight, or nothing to
+    /// report once the call it named has finished; a call of another tier still
+    /// in flight is news, so it is shown.
     private func repeats(_ hold: MentorScheduler.RefreshHold) -> Bool {
         switch hold {
         case .notDue: false
-        case .callInFlight: state.mentorStatus.inFlight != .understanding
+        case .callInFlight: state.mentorStatus.inFlight.map { $0 != .understanding } ?? false
         default: true
         }
     }

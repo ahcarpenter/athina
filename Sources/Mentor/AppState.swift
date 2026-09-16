@@ -1273,7 +1273,7 @@ final class AppState {
             if case .capReached = mentorStatus.availability {
                 return "Mentor: \(spend) of \(cap) this hour, cap reached"
             }
-            if mentorStatus.cadenceMultiplier > 1.05 {
+            if mentorStatus.isCadenceSlowed {
                 return "Mentor: \(spend) of \(cap) this hour, slowed \(Formatting.multiplier(mentorStatus.cadenceMultiplier))"
             }
             return "Mentor: \(spend) of \(cap) this hour"

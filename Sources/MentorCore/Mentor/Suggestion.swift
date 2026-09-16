@@ -444,6 +444,11 @@ public struct MentorStatus: Equatable, Sendable {
         self.pendingFollowUp = pendingFollowUp
     }
 
+    /// Whether the cadence is stretched enough to call it slowed. The spend
+    /// slowdown leaves 1 with the first cheap call of the hour, so a readout
+    /// only names it past a slowdown a person would notice.
+    public var isCadenceSlowed: Bool { cadenceMultiplier > 1.05 }
+
     /// Where the periodic refresh stands now, for a readout.
     public enum RefreshStanding: Equatable, Sendable {
         /// The mode counts no active use, so no refresh is due until it does.

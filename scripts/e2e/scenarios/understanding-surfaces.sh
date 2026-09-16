@@ -74,7 +74,7 @@ has_text() {
 }
 
 scenario_run() {
-	local goal head
+	local goal head revisions
 	stage_flip_window
 	wait_toast >/dev/null || return 1
 	wait_understanding || { log "no understanding was written"; return 1; }
@@ -83,7 +83,10 @@ scenario_run() {
 	# match any file, so a record with no goal to follow stops the scenario.
 	[ -n "$goal" ] || { log "the understanding names no goal to follow"; return 1; }
 	log "the understanding names \"$goal\""
-	check "the mentor call wrote an understanding" "1" "$(journal_count understanding)"
+	# Revisions are inserted, never updated, so a second mentor call before the
+	# toast leaves two rows; what matters here is that a revision was written.
+	check "the mentor call wrote an understanding" "yes" \
+		"$([ "$(journal_count understanding)" -ge 1 ] && echo yes || echo no)"
 
 	# The menu shows the goal, clipped to fit a menu item, so only its start
 	# can be compared with the record.
@@ -118,6 +121,7 @@ scenario_run() {
 	sleep 0.5
 
 	# Asking first, and Cancel keeping every revision.
+	revisions="$(journal_count understanding)"
 	"$DRIVE" ax "$MENTOR_PID" pressx AXButton "Reset Understanding…" --scope "Debug Panel" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
 	sleep 1.5
 	window_texts "Debug Panel" "confirmation"
@@ -126,7 +130,7 @@ scenario_run() {
 	check "the confirmation offers Cancel" "yes" "$(has_text confirmation-texts.txt "Cancel")"
 	"$DRIVE" ax "$MENTOR_PID" pressx AXButton "Cancel" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
 	sleep 1
-	check "Cancel keeps the understanding" "1" "$(journal_count understanding)"
+	check "Cancel keeps every revision" "$revisions" "$(journal_count understanding)"
 	check "Cancel journals no reset" "0" "$(reset_events)"
 
 	"$DRIVE" ax "$MENTOR_PID" pressx AXButton "Reset Understanding…" --scope "Debug Panel" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
