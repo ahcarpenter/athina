@@ -168,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the caller named that directory to read its journal, so running
         // against another one would answer with the wrong files.
         if let refusal = AppState.shared.startupRefusal {
-            FileHandle.standardError.write(Data("Mentor did not start: \(refusal)\n".utf8))
+            FileHandle.standardError.write(Data(LaunchReport.didNotStart(refusal).line.utf8))
             AppState.log.error("did not start: \(refusal, privacy: .public)")
             exit(2)
         }
@@ -189,10 +189,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Past every reason this launch could refuse itself, and past `start`,
         // so a launcher waiting on this line knows the lane is up rather than
         // guessing from elapsed time: by now the clock channel is listening,
-        // so a request sent the moment this is read is heard. Written
-        // unbuffered, since stdout to a file is not.
-        let pid = ProcessInfo.processInfo.processIdentifier
-        FileHandle.standardOutput.write(Data("Mentor started: pid \(pid)\n".utf8))
+        // so a request sent the moment this is read is heard. A journal that
+        // would not open is the one thing `start` finds out for itself, and it
+        // leaves the lane unable to journal anything, so it is reported as the
+        // failed launch it is. The app stays up either way, so the person at
+        // the screen can read the error in the menu and the debug panel.
+        let report = LaunchReport(pid: ProcessInfo.processInfo.processIdentifier, journalError: AppState.shared.journalError)
+        switch report {
+        case .started:
+            FileHandle.standardOutput.write(Data(report.line.utf8))
+        case .didNotStart(let reason):
+            FileHandle.standardError.write(Data(report.line.utf8))
+            AppState.log.error("did not start: \(reason, privacy: .public)")
+        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

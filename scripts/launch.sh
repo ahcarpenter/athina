@@ -173,10 +173,16 @@ fi
 # or goes away. The timeout is in tenths of a second, and generous: it is there
 # to end the wait, not to time the app.
 STARTED_TIMEOUT=600
+# The app's own way of saying it is not up (`LaunchReport` in MentorCore), on
+# stderr; a snapshot render says `snapshot failed:` the same way.
+DID_NOT_START='^\(Mentor did not start: \|snapshot failed: \)'
 ready=0
 for _ in $(seq "$STARTED_TIMEOUT"); do
 	if [ -s "$STARTED_LINE" ]; then ready=1; break; fi
-	if [ -s "$STARTUP_ERRORS" ]; then break; fi
+	# Only what the app says about itself, never merely that stderr has bytes on
+	# it: `open --stderr` catches every framework diagnostic too, and one of those
+	# arriving first would have this kill a lane that was starting perfectly well.
+	if grep -q "$DID_NOT_START" "$STARTUP_ERRORS" 2>/dev/null; then break; fi
 	if ! kill -0 "$pid" 2>/dev/null; then break; fi
 	sleep 0.1
 done
@@ -187,16 +193,25 @@ if [ "$ready" = 0 ]; then
 	# sweep skips while it holds it, and a live one goes on billing.
 	started_ours=0
 	if ours | grep -qxF "$pid"; then started_ours=1; fi
+	said_no=0
+	if grep -q "$DID_NOT_START" "$STARTUP_ERRORS" 2>/dev/null; then said_no=1; fi
 	{
-		if [ "$started_ours" = 1 ]; then
-			echo "launch: Mentor (lane $LANE, pid $pid) never wrote the line it writes once it has started, after $((STARTED_TIMEOUT / 10))s; stopping it, so this lane leaves nothing running:"
+		# Why the wait ended, rather than the one reason it used to have: a lane
+		# that said it did not start is not a lane that said nothing for a minute.
+		if [ "$said_no" = 1 ]; then
+			echo "launch: Mentor (lane $LANE) said it did not start:"
+		elif [ "$started_ours" = 1 ]; then
+			echo "launch: Mentor (lane $LANE, pid $pid) never wrote the line it writes once it has started, after $((STARTED_TIMEOUT / 10))s:"
 		else
-			echo "launch: Mentor (lane $LANE) quit as it started, so nothing is running:"
+			echo "launch: Mentor (lane $LANE) quit as it started:"
 		fi
 		if [ -s "$STARTUP_ERRORS" ]; then
 			sed 's/^/  /' <"$STARTUP_ERRORS"
 		else
 			echo "  it said nothing; try: log show --last 2m --predicate 'subsystem == \"com.ahcarpenter.mentor\"'"
+		fi
+		if [ "$started_ours" = 1 ]; then
+			echo "  it is still running, so this lane stops it and claims nothing"
 		fi
 	} >&2
 	if [ "$started_ours" = 1 ]; then stop_pid "$pid"; fi

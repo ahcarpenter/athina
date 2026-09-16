@@ -331,11 +331,12 @@ of them disturbs another or the live app:
   window and goes ahead once both are past it as well. It cannot wait on their
   mere presence: Mentor never closes its connection, so SQLite leaves both
   behind on every quit and the sweep would never run at all. The sweep never
-  removes one a running replay holds,
-  including the replay root itself when a `--data-dir` names it, and never a
-  directory with any other name, so a `--data-dir` you named is yours to keep.
-  The debug panel's Mentor card and the log at launch show which directory a
-  replay uses.
+  removes one a running replay holds, the replay root itself included when a
+  `--data-dir` names it. A `--data-dir` that names the replay root is that
+  shared journal, though, so once it has quit it is swept as one; a
+  `--data-dir` of any other name is never swept, whatever it holds and however
+  old it is. The debug panel's Mentor card and the log at launch show which
+  directory a replay uses.
 - **`--settings <path>`** (`make run-replay SETTINGS=<path>`) starts the
   replay from that settings file instead of the live one. It is read and never
   written, so a scripted check keeps its settings in a file of its own and
@@ -362,9 +363,13 @@ of them disturbs another or the live app:
   refuse the launch and past the point where it is listening for a clock
   request, never after an elapsed time that proves nothing on a busy Mac. So a
   `scripts/advance-clock.sh` sent the moment the pid file appears is heard
-  rather than posted into a channel nobody is observing yet. A launch that quits as it starts, a replay given a directory another one
-  holds among them, is reported as the failure it is, with what the app said,
-  and leaves no pid file behind. Two lanes run side by side:
+  rather than posted into a channel nobody is observing yet. A launch that
+  quits as it starts, a replay given a directory another one holds among them,
+  is reported as the failure it is, with what the app said, and leaves no pid
+  file behind. So is a lane whose journal will not open: it can journal no
+  event and answer no check, so it is reported as a failed launch and stopped,
+  even though the app itself stays up when you start it by hand so you can read
+  the error in the menu and the debug panel. Two lanes run side by side:
 
 ```sh
 make run-replay LANE=a SETTINGS=/tmp/a/settings.json TIME_SCALE=60

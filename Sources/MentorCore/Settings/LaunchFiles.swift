@@ -229,11 +229,19 @@ public struct LaunchFiles: Equatable, Sendable {
     /// its owner can reach into it, and a replay's journal holds what was on
     /// the real screen. Nil when it is owner-only, and nil when it is not
     /// there yet, since one made here is made owner-only.
+    ///
+    /// The mode is the one the directory the journal lands in has, read
+    /// through any symlink as `AppPaths.isAt` reads a path beside it. A
+    /// symlink's own mode is always `755` on macOS and `chmod` follows the
+    /// link, so judging the link would refuse every symlinked lane for a
+    /// reason its owner cannot fix, and would pass a link to a directory
+    /// anyone can read.
     static func openToOthersRefusal(_ directory: URL) -> String? {
-        let attributes = try? FileManager.default.attributesOfItem(atPath: directory.path)
+        let resolved = AppPaths.resolvedPath(directory)
+        let attributes = try? FileManager.default.attributesOfItem(atPath: resolved)
         guard let mode = attributes?[.posixPermissions] as? NSNumber, mode.int16Value & 0o077 != 0 else { return nil }
         let spelled = String(format: "%03o", mode.int16Value)
-        return "\(dataDirectoryFlag) \(directory.path) is mode \(spelled), which group or other can reach into, and a replay's journal holds what was on the real screen: make it owner-only (chmod 700 \(directory.path)) or name a directory that is not there yet"
+        return "\(dataDirectoryFlag) \(directory.path) is mode \(spelled), which group or other can reach into, and a replay's journal holds what was on the real screen: make it owner-only (chmod 700 \(resolved)) or name a directory that is not there yet"
     }
 
     /// Writes the settings this launch runs with into its own data directory,
@@ -396,5 +404,38 @@ public final class DataDirectoryLock: @unchecked Sendable {
             throw Failure.system("cannot write \(url.path): \(reason)")
         }
         return DataDirectoryLock(url: url, descriptor: descriptor)
+    }
+}
+
+/// What a launch tells whoever started it, on the one line `scripts/launch.sh`
+/// waits for before it writes a pid file. Every reason a lane is not up has to
+/// arrive here rather than look like one, which is why the journal is part of
+/// the question: a lane whose journal did not open never starts its sensing
+/// pipeline, never positions its replay clock, and journals no event, so a
+/// check that took its pid would wait on a lane that can never answer.
+///
+/// `started` goes to stdout and `didNotStart` to stderr, both unbuffered,
+/// since stdout to a file is not line buffered.
+public enum LaunchReport: Equatable, Sendable {
+    case started(pid: Int32)
+    case didNotStart(String)
+
+    /// How the app says a lane is not up. `scripts/launch.sh` waits on this,
+    /// so it is the app's own word rather than merely something on stderr,
+    /// which carries framework diagnostics too.
+    public static let didNotStartMarker = "Mentor did not start: "
+
+    /// What a launch is once `AppState.start` has returned: up, unless the
+    /// journal it has to write is unopenable.
+    public init(pid: Int32, journalError: String?) {
+        self = journalError.map { .didNotStart($0) } ?? .started(pid: pid)
+    }
+
+    /// The line itself, newline included.
+    public var line: String {
+        switch self {
+        case .started(let pid): "Mentor started: pid \(pid)\n"
+        case .didNotStart(let reason): "\(LaunchReport.didNotStartMarker)\(reason)\n"
+        }
     }
 }

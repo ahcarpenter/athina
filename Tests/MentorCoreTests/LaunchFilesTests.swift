@@ -322,15 +322,23 @@ private func finishedLaunch(
     /// it never goes in a directory anyone but its owner can reach into. A
     /// directory the operator named is never chmodded, since it can be a home
     /// or a folder shared on purpose: the launch stops instead and says so.
-    @Test(arguments: [0o750, 0o705, 0o755, 0o770, 0o707])
-    func aReplayGivenADataDirectoryOthersCanReachRefusesToStart(mode: Int) throws {
+    @Test(arguments: [0o750, 0o705, 0o755, 0o770, 0o707] as [Int], [false, true])
+    func aReplayGivenADataDirectoryOthersCanReachRefusesToStart(mode: Int, throughALink: Bool) throws {
         let root = scratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let support = root.appendingPathComponent("support", isDirectory: true)
-        let lane = root.appendingPathComponent("lane", isDirectory: true)
+        let target = root.appendingPathComponent("target", isDirectory: true)
         let manager = FileManager.default
-        try manager.createDirectory(at: lane, withIntermediateDirectories: true)
-        try manager.setAttributes([.posixPermissions: mode], ofItemAtPath: lane.path)
+        try manager.createDirectory(at: target, withIntermediateDirectories: true)
+        try manager.setAttributes([.posixPermissions: mode], ofItemAtPath: target.path)
+        // A symlink's own mode is always 755 on macOS, so judging the link
+        // rather than what it points at would both refuse an owner-only lane
+        // for a reason chmod cannot fix and wave a world-readable one through.
+        var lane = target
+        if throughALink {
+            lane = root.appendingPathComponent("link", isDirectory: true)
+            try manager.createSymbolicLink(at: lane, withDestinationURL: target)
+        }
 
         var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--data-dir", lane.path], clientMode: replay, supportDirectory: support)
         guard case .refusedToStart(let reason) = files.claim(clientMode: replay, supportDirectory: support) else {
@@ -339,11 +347,34 @@ private func finishedLaunch(
         }
         #expect(reason.contains(lane.path))
         #expect(reason.contains(String(format: "%03o", mode)))
+        // The chmod it advises is one that can be carried out: the directory
+        // the journal would land in, not a link whose mode chmod never changes.
+        #expect(reason.contains("chmod 700 \(target.path)"))
         #expect(files.refusals == [reason])
         // The refused launch neither wrote in it nor changed what it found.
-        #expect(try manager.contentsOfDirectory(atPath: lane.path).isEmpty)
-        let after = try #require(manager.attributesOfItem(atPath: lane.path)[.posixPermissions] as? NSNumber)
+        #expect(try manager.contentsOfDirectory(atPath: target.path).isEmpty)
+        let after = try #require(manager.attributesOfItem(atPath: target.path)[.posixPermissions] as? NSNumber)
         #expect(after.int16Value == Int16(mode))
+    }
+
+    /// An owner-only lane reached through a symlink starts: the link's own mode
+    /// is 755 and says nothing about where the journal lands.
+    @Test func anOwnerOnlyDataDirectoryReachedThroughALinkStarts() throws {
+        let root = scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let support = root.appendingPathComponent("support", isDirectory: true)
+        let manager = FileManager.default
+        let target = root.appendingPathComponent("target", isDirectory: true)
+        try manager.createDirectory(at: target, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let link = root.appendingPathComponent("link", isDirectory: true)
+        try manager.createSymbolicLink(at: link, withDestinationURL: target)
+
+        var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--data-dir", link.path], clientMode: replay, supportDirectory: support)
+        guard case .held(let lock) = files.claim(clientMode: replay, supportDirectory: support) else {
+            Issue.record("a replay was refused an owner-only lane reached through a link")
+            return
+        }
+        _ = lock
     }
 
     /// The owner-only cases: a directory that is already owner-only is used as
@@ -621,6 +652,30 @@ private func finishedLaunch(
             == ["journal.sqlite", "journal.sqlite-wal"])
     }
 
+    /// A `--data-dir` that names the replay root is the shared journal, and is
+    /// swept like one once it is past its window; a `--data-dir` of any other
+    /// name is left alone however old it is, since nothing sweeps a directory
+    /// whose name a launch chose.
+    @Test func onlyAReplayRootLaneIsSweptLikeTheSharedJournal() throws {
+        let support = scratch()
+        defer { try? FileManager.default.removeItem(at: support) }
+        let root = AppPaths.replayRoot(in: support)
+        let manager = FileManager.default
+        let now = Date(timeIntervalSince1970: 1_789_000_000)
+        let named = root.appendingPathComponent("my-lane", isDirectory: true)
+
+        for lane in [root, named] {
+            try manager.createDirectory(at: lane, withIntermediateDirectories: true)
+            let journal = Journal.defaultURL(in: lane)
+            try Data("captured screen".utf8).write(to: journal)
+            try manager.setAttributes([.modificationDate: now - 30 * 86400], ofItemAtPath: journal.path)
+        }
+
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
+        #expect(!manager.fileExists(atPath: Journal.defaultURL(in: root).path))
+        #expect(manager.fileExists(atPath: Journal.defaultURL(in: named).path))
+    }
+
     /// The end-to-end harness hands a replay the replay root itself as its
     /// `--data-dir`, so while a replay holds it those files are its own and the
     /// sweep must not touch them, however old they look.
@@ -643,6 +698,34 @@ private func finishedLaunch(
         LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
         #expect(manager.fileExists(atPath: journal.path))
         _ = lock
+    }
+}
+
+/// The one line a launch writes for whoever started it, which
+/// `scripts/launch.sh` turns into a pid file or a reported failure.
+@Suite struct LaunchReportTests {
+    /// A lane whose journal did not open never starts its sensing pipeline and
+    /// never positions its replay clock, so it journals nothing and answers no
+    /// check: it is a failed launch, not a started one, however well the rest
+    /// of the launch went.
+    @Test func aJournalThatWillNotOpenIsAFailedLaunchNotAStartedOne() {
+        let failed = LaunchReport(pid: 4242, journalError: "Could not open the journal at /lanes/a/journal.sqlite: disk I/O error")
+        #expect(failed == .didNotStart("Could not open the journal at /lanes/a/journal.sqlite: disk I/O error"))
+        #expect(failed.line.hasPrefix(LaunchReport.didNotStartMarker))
+        #expect(failed.line.contains("/lanes/a/journal.sqlite"))
+        #expect(!failed.line.contains("Mentor started"))
+
+        #expect(LaunchReport(pid: 4242, journalError: nil) == .started(pid: 4242))
+        #expect(LaunchReport(pid: 4242, journalError: nil).line == "Mentor started: pid 4242\n")
+    }
+
+    /// Every line ends in a newline of its own, since a launcher reads them as
+    /// they arrive rather than waiting for the process to end.
+    @Test func everyReportIsOneWholeLine() {
+        for report in [LaunchReport.started(pid: 7), .didNotStart("a reason")] {
+            #expect(report.line.hasSuffix("\n"))
+            #expect(report.line.dropLast().contains("\n") == false)
+        }
     }
 }
 
