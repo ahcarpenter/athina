@@ -289,10 +289,14 @@ of them disturbs another or the live app:
   read its journal and a replay writing somewhere else would leave a check
   reading a stale journal. A replay with no `--data-dir` always gets a
   directory of its own, so it never collides. Each replay launch that makes a
-  new directory removes finished ones past the newest 10,
-  never one a running replay holds, and never a directory with any other name.
-  The debug panel's Mentor card and the log at launch show which directory a
-  replay uses.
+  new directory removes finished ones past the newest 10, and finished ones
+  older than the thumbnail retention window (6 hours by default): a finished
+  replay's journal is never opened again, so retention can never age the
+  thumbnails and recognized text it captured from the real screen, and the
+  whole directory goes at the shortest window instead. It never removes one a
+  running replay holds, and never a directory with any other name, so a
+  `--data-dir` you named is yours to keep. The debug panel's Mentor card and
+  the log at launch show which directory a replay uses.
 - **`--settings <path>`** (`make run-replay SETTINGS=<path>`) starts the
   replay from that settings file instead of the live one. It is read and never
   written, so a scripted check keeps its settings in a file of its own and
@@ -307,7 +311,10 @@ of them disturbs another or the live app:
   replay its lane (`LANE`, default `replay`) launched from this checkout, and
   finds that instance exactly: the launch carries a unique `--launch-token`,
   an argument the app ignores, so two launches from one checkout that overlap
-  can never adopt each other's process. Two lanes run side by side:
+  can never adopt each other's process. A launch that quits as it starts, a
+  replay given a directory another one holds among them, is reported as the
+  failure it is, with what the app said, and leaves no pid file behind. Two
+  lanes run side by side:
 
 ```sh
 make run-replay LANE=a SETTINGS=/tmp/a/settings.json TIME_SCALE=60
@@ -1107,7 +1114,10 @@ counted (see Iterating without the network).
   wide stare, and a held mentor tier winks (see Design conventions).
 - Thumbnails expire after 6 hours and text after 7 days by default; the journal
   is capped at 500 MB; all three are adjustable, and the journal can be cleared
-  at any time.
+  at any time. A replay senses the real screen too, and a finished replay's
+  journal is never opened again, so nothing can age it in place: its whole
+  per-launch directory is removed instead, at the thumbnail window (see Replays
+  side by side).
 - The journal directory is created with mode 0700.
 
 ## Debug panel

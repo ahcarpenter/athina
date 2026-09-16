@@ -1543,7 +1543,7 @@ import Testing
         await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
         await h.client.enqueue(json: Self.suggestion(category: "shortcut"), model: "claude-opus-5")
         await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
-        #expect(await h.loop.currentStatus().lastMentor?.detail == "Use --filter (snoozed until \(ClockFormat.time(until)))")
+        #expect(await h.loop.currentStatus().lastMentor?.detail == "Use --filter (snoozed until \(until.formatted(date: .omitted, time: .shortened)))")
 
         // Three minutes before it runs out it still holds.
         h.clock.advance(toDate: until.addingTimeInterval(-180))

@@ -50,7 +50,7 @@ run-replay: build
 	@dir="$(REPLAY_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
 	test -d "$$dir" || { echo "run-replay: no fixture directory at $$dir" >&2; exit 1; }; \
 	data="$(DATA_DIR)"; case "$$data" in "~"|"~/"*) data="$$HOME$${data#\~}";; esac; \
-	if [ -n "$$data" ]; then mkdir -p "$$data" && data="$$(cd "$$data" && pwd)" || exit 1; fi; \
+	if [ -n "$$data" ]; then mkdir -p -m 700 "$$data" && data="$$(cd "$$data" && pwd)" || exit 1; fi; \
 	settings="$(SETTINGS)"; case "$$settings" in "~"|"~/"*) settings="$$HOME$${settings#\~}";; esac; \
 	if [ -n "$$settings" ]; then test -f "$$settings" || { echo "run-replay: no settings file at $$settings" >&2; exit 1; }; \
 		settings="$$(cd "$$(dirname "$$settings")" && pwd)/$$(basename "$$settings")"; fi; \

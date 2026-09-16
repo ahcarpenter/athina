@@ -152,6 +152,10 @@ import Testing
         var lock: DataDirectoryLock? = try DataDirectoryLock.acquire(in: directory, pid: 4242)
         let pidFile = directory.appendingPathComponent(DataDirectoryLock.fileName)
         #expect(try String(contentsOf: pidFile, encoding: .utf8) == "4242\n")
+        // The hold is taken before the journal opens, so it is what makes the
+        // directory owner-only that the privacy model promises.
+        let mode = try FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions] as? NSNumber
+        #expect(mode?.int16Value == 0o700)
         // flock holds per open file, so a second open in this process is refused like another process would be.
         #expect(throws: DataDirectoryLock.Failure.inUse(pid: 4242)) { try DataDirectoryLock.acquire(in: directory, pid: 99) }
         #expect(throws: DataDirectoryLock.Failure.inUse(pid: 4242)) { try DataDirectoryLock.acquire(in: directory, pid: nil) }
@@ -244,9 +248,37 @@ import Testing
         try manager.createDirectory(at: root.appendingPathComponent("my-lane", isDirectory: true), withIntermediateDirectories: true)
         try Data().write(to: root.appendingPathComponent("journal.sqlite"))
 
-        LaunchFiles.pruneFinishedLaunches(in: root, keeping: 2)
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: 2, olderThan: 6 * 3600, now: base + 300)
         let left = Set(try manager.contentsOfDirectory(atPath: root.path))
         #expect(left == [names[0], names[3], names[4], "my-lane", "journal.sqlite"])
+        _ = running
+    }
+
+    /// A finished replay's journal is never opened again, so retention can
+    /// never age the thumbnails and recognized text it captured from the real
+    /// screen: a directory past the retention window goes even when the count
+    /// alone would have kept it, and one a running replay holds still does not.
+    @Test func finishedLaunchesPastTheRetentionWindowArePruned() throws {
+        let support = Self.scratch()
+        defer { try? FileManager.default.removeItem(at: support) }
+        let root = AppPaths.replayRoot(in: support)
+        let manager = FileManager.default
+        let now = Date(timeIntervalSince1970: 1_789_000_000)
+        let ages: [TimeInterval] = [7 * 3600, 5 * 3600, 30 * 86400]
+        var names: [String] = []
+        for (index, age) in ages.enumerated() {
+            let name = String(format: "launch-%d-%08x", 200 + index, index)
+            let url = root.appendingPathComponent(name, isDirectory: true)
+            try manager.createDirectory(at: url, withIntermediateDirectories: true)
+            try manager.setAttributes([.creationDate: now - age], ofItemAtPath: url.path)
+            names.append(name)
+        }
+        // The oldest of all is still running, so nothing may touch it.
+        let running = try DataDirectoryLock.acquire(in: root.appendingPathComponent(names[2], isDirectory: true), pid: 200)
+
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, olderThan: 6 * 3600, now: now)
+        let left = Set(try manager.contentsOfDirectory(atPath: root.path))
+        #expect(left == [names[1], names[2]])
         _ = running
     }
 }
@@ -296,13 +328,10 @@ import Testing
         let moved = ClockRemote.Reply(moved: true, by: 7200, movedAhead: 9000, now: now, pid: 4242)
         try ClockRemote.answer(moved, at: url)
         #expect(try ClockRemote.Reply.decode(Data(contentsOf: url)) == moved)
-        #expect(moved.summary.contains("pid 4242 moved its clock ahead 2h, 2h 30m in all"))
 
         let refused = ClockRemote.Reply(moved: false, reason: "this launch has no replay clock", movedAhead: 0, now: now, pid: 7)
         try ClockRemote.answer(refused, at: url)
-        let read = try ClockRemote.Reply.decode(Data(contentsOf: url))
-        #expect(read == refused)
-        #expect(read.summary == "pid 7 refused: this launch has no replay clock")
+        #expect(try ClockRemote.Reply.decode(Data(contentsOf: url)) == refused)
 
         // A request that named no file is answered nowhere, and says so by not throwing.
         try ClockRemote.answer(moved, at: nil)

@@ -76,11 +76,11 @@ public struct MentorScheduler: Equatable, Sendable {
             case .waitingForPermissions: "waiting for permissions"
             case .notSensing: "not sensing"
             case .callInFlight: "a call is in flight"
-            case .spendCapReached(let until): "spend cap reached until \(ClockFormat.time(until))"
+            case .spendCapReached(let until): "spend cap reached until \(until.formatted(date: .omitted, time: .shortened))"
             case .notAChangeMoment(let reason): "not a change moment (\(reason.label))"
             case .noContextsDeclared: "only mentoring inside declared contexts, and none is declared"
             case .stale(let age): "observation is \(Int(age))s old"
-            case .tooSoon(let until): "too soon, next at \(ClockFormat.time(until))"
+            case .tooSoon(let until): "too soon, next at \(until.formatted(date: .omitted, time: .standard))"
             case .nearIdentical(let similarity): "screen text \(Int((similarity * 100).rounded()))% the same as last triaged"
             }
         }
@@ -107,8 +107,8 @@ public struct MentorScheduler: Equatable, Sendable {
             switch self {
             case .outOfContext(let exclusion): "outside every declared context (\(exclusion.label))"
             case .triageSaidNo(let reason): "triage passed: \(reason)"
-            case .tooSoon(let until): "too soon, next at \(ClockFormat.time(until))"
-            case .spendCapReached(let until): "spend cap reached until \(ClockFormat.time(until))"
+            case .tooSoon(let until): "too soon, next at \(until.formatted(date: .omitted, time: .standard))"
+            case .spendCapReached(let until): "spend cap reached until \(until.formatted(date: .omitted, time: .shortened))"
             }
         }
     }
@@ -280,7 +280,7 @@ public struct MentorScheduler: Equatable, Sendable {
             case .outOfContext(let exclusion): "outside every declared context (\(exclusion.label))"
             case .notPlacedInAContext: "not yet placed in a declared context"
             case .callInFlight: "a call is in flight"
-            case .notDue(let until): "not due, next at \(ClockFormat.time(until))"
+            case .notDue(let until): "not due, next at \(until.formatted(date: .omitted, time: .standard))"
             case .noNewActivity: "nothing observed yet"
             }
         }

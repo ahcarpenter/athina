@@ -131,16 +131,28 @@ public struct LaunchFiles: Equatable, Sendable {
     /// exactly the path it passed, so a replay writing somewhere else would
     /// leave a check reading a stale journal and reporting a pass that never
     /// happened. A launch that makes its own directory also removes finished
-    /// per-launch directories past the newest `keptFinishedLaunches`.
+    /// per-launch directories: those past the newest `keptFinishedLaunches`,
+    /// and those older than `thumbnailRetention`. A replay senses the real
+    /// screen, and its journal is never opened again once it quits, so the
+    /// retention sweep can never age the thumbnails and recognized text inside
+    /// it; the whole directory goes at the shortest retention window instead.
     public mutating func claim(
         clientMode: ModelClientMode,
-        supportDirectory: URL = AppPaths.supportDirectory()
+        supportDirectory: URL = AppPaths.supportDirectory(),
+        thumbnailRetention: TimeInterval = SensingSettings().thumbnailRetention
     ) -> Claim {
         guard clientMode.isOffline else { return .notNeeded }
         do {
             let lock = try DataDirectoryLock.acquire(in: dataDirectory)
             if isPerLaunch {
-                LaunchFiles.pruneFinishedLaunches(in: AppPaths.replayRoot(in: supportDirectory), keeping: LaunchFiles.keptFinishedLaunches)
+                // A directory's age is filesystem wall-clock, one of the system
+                // measurements that stay real however fast a replay clock runs.
+                LaunchFiles.pruneFinishedLaunches(
+                    in: AppPaths.replayRoot(in: supportDirectory),
+                    keeping: LaunchFiles.keptFinishedLaunches,
+                    olderThan: thumbnailRetention,
+                    now: Date()
+                )
             }
             return .held(lock)
         } catch DataDirectoryLock.Failure.inUse(let pid) {
@@ -166,9 +178,11 @@ public struct LaunchFiles: Equatable, Sendable {
     }
 
     /// Removes the per-launch directories in `root` that no running replay
-    /// holds, past the newest `keeping` by creation date. Anything else in
-    /// `root` is left alone.
-    public static func pruneFinishedLaunches(in root: URL, keeping: Int) {
+    /// holds: those past the newest `keeping` by creation date, and those
+    /// created more than `maxAge` before `now`, whose captured screen content
+    /// has outlived the retention window no one will ever apply to it again.
+    /// Anything else in `root` is left alone.
+    public static func pruneFinishedLaunches(in root: URL, keeping: Int, olderThan maxAge: TimeInterval, now: Date) {
         let manager = FileManager.default
         guard let names = try? manager.contentsOfDirectory(atPath: root.path) else { return }
         var finished: [(url: URL, created: Date, lock: DataDirectoryLock)] = []
@@ -178,7 +192,9 @@ public struct LaunchFiles: Equatable, Sendable {
             let created = (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
             finished.append((url, created, lock))
         }
-        for entry in finished.sorted(by: { $0.created > $1.created }).dropFirst(keeping) {
+        let expired = now.addingTimeInterval(-maxAge)
+        for (index, entry) in finished.sorted(by: { $0.created > $1.created }).enumerated()
+        where index >= keeping || entry.created < expired {
             try? manager.removeItem(at: entry.url)
         }
     }
@@ -212,9 +228,12 @@ public final class DataDirectoryLock: @unchecked Sendable {
     /// Takes the hold, creating the directory unless `create` is false, and
     /// writes `pid` into the file; a nil `pid` only checks that no one holds
     /// it and leaves the file as it was.
+    ///
+    /// The directory is made owner-only, like the journal directory it holds:
+    /// this runs before `Journal` opens, so it is what decides the mode.
     public static func acquire(in directory: URL, pid: Int32? = getpid(), create: Bool = true) throws -> DataDirectoryLock {
         if create {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         }
         let url = directory.appendingPathComponent(fileName)
         let descriptor = open(url.path, O_RDWR | O_CREAT | O_CLOEXEC, 0o644)

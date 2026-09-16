@@ -244,13 +244,6 @@ public enum ClockRemote {
             decoder.dateDecodingStrategy = .iso8601
             return try decoder.decode(Reply.self, from: data)
         }
-
-        /// One line for a script to print.
-        public var summary: String {
-            moved
-                ? "pid \(pid) moved its clock ahead \(ClockInterval.description(of: by)), \(ClockInterval.description(of: movedAhead)) in all, now \(ClockFormat.dayAndTime(now))"
-                : "pid \(pid) refused: \(reason ?? "unknown reason")"
-        }
     }
 
     /// Answers the request at the path it named, atomically so a waiting

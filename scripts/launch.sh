@@ -11,9 +11,11 @@
 #
 # The instance is identified exactly, not guessed: the launch carries
 # `--launch-token <id>`, a unique argument the app ignores, and the pid is the
-# process whose arguments hold that token. Diffing the set of Mentor processes
-# before and after would adopt the wrong one when two launches from this
-# checkout overlap, which "any number of replays at once" invites.
+# one running this checkout's bundle with that token in its arguments. Diffing
+# the set of Mentor processes before and after would adopt the wrong one when
+# two launches from this checkout overlap, which "any number of replays at
+# once" invites. The pid is reported, and written to the pid file, only once
+# the app has lived past the point where it refuses a launch it must not make.
 #
 # `--live` guards the live files. Before this script, every launch target began
 # with `pkill -x Mentor`, so two live instances were impossible; two of them
@@ -37,7 +39,9 @@ while [ "$#" -gt 0 ]; do
 	esac
 done
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# The physical path, because that is the one `ps` reports for the running
+# process, and both pid searches below match on it.
+ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 APP="$ROOT/build/Mentor.app"
 EXECUTABLE="$APP/Contents/MacOS/Mentor"
 PID_FILE="$ROOT/build/$LANE.pid"
@@ -98,20 +102,59 @@ if [ "$LIVE" = 1 ] && [ "$ALLOW_SECOND_LIVE" = 0 ]; then
 	fi
 fi
 
+# The pid of this checkout's Mentor carrying this launch's token. The bundle
+# has to match as well as the token: `ps` lists the searching awk too, and its
+# own command line holds the token, so a token-only search finds awk first.
+started() {
+	ps -axo pid=,command= | awk -v exe="$EXECUTABLE" -v token="$TOKEN" '{
+		pid = $1
+		sub(/^ *[0-9]+ +/, "")
+		if (index($0, exe " ") != 1) next
+		if (index($0, token)) print pid
+	}' | head -n 1
+}
+
+# `open` hands the app its own stderr, so a refusal it prints there would
+# otherwise reach nothing but the unified log.
+STARTUP_ERRORS="$(mktemp "${TMPDIR:-/tmp}/mentor-launch-XXXXXXXX")"
+trap 'rm -f "$STARTUP_ERRORS"' EXIT
+
 if [ "$#" -gt 0 ]; then
-	open -n "$APP" --args "$@" --launch-token "$TOKEN"
+	open -n --stderr "$STARTUP_ERRORS" "$APP" --args "$@" --launch-token "$TOKEN"
 else
-	open -n "$APP" --args --launch-token "$TOKEN"
+	open -n --stderr "$STARTUP_ERRORS" "$APP" --args --launch-token "$TOKEN"
 fi
 
+pid=""
 for _ in $(seq 100); do
-	pid="$(ps -axo pid=,command= | awk -v token="$TOKEN" 'index($0, token) { print $1 }' | head -n 1 || true)"
-	if [ -n "$pid" ]; then
-		echo "$pid" >"$PID_FILE"
-		echo "Mentor running as pid $pid (lane $LANE)"
-		exit 0
-	fi
+	pid="$(started || true)"
+	if [ -n "$pid" ]; then break; fi
 	sleep 0.1
 done
-echo "launch: Mentor did not start from $APP" >&2
-exit 1
+if [ -z "$pid" ]; then
+	echo "launch: Mentor did not start from $APP" >&2
+	exit 1
+fi
+
+# A pid is not yet a running Mentor: the app refuses a launch it must not make,
+# such as a --data-dir another replay holds, from applicationDidFinishLaunching,
+# a moment after its process appears. Reporting the pid before then would hand
+# back a pid file for a process that is already gone.
+for _ in $(seq 20); do
+	sleep 0.1
+	kill -0 "$pid" 2>/dev/null || break
+done
+if ! kill -0 "$pid" 2>/dev/null; then
+	{
+		echo "launch: Mentor (lane $LANE) quit as it started, so nothing is running:"
+		if [ -s "$STARTUP_ERRORS" ]; then
+			sed 's/^/  /' <"$STARTUP_ERRORS"
+		else
+			echo "  it said nothing; try: log show --last 2m --predicate 'subsystem == \"com.ahcarpenter.mentor\"'"
+		fi
+	} >&2
+	exit 1
+fi
+
+echo "$pid" >"$PID_FILE"
+echo "Mentor running as pid $pid (lane $LANE)"

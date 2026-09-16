@@ -198,7 +198,10 @@ final class AppState {
         toast = ToastController(clock: clock)
         listener = SpeechListener(clock: clock)
         var files = LaunchFiles(arguments: CommandLine.arguments, clientMode: clientMode)
-        switch files.claim(clientMode: clientMode) {
+        // Settings first, so pruning finished replay directories uses the
+        // retention window this launch actually runs with.
+        let launchSettings = files.loadSettings()
+        switch files.claim(clientMode: clientMode, thumbnailRetention: launchSettings.thumbnailRetention) {
         case .notNeeded:
             dataDirectoryLock = nil
             startupRefusal = nil
@@ -209,7 +212,6 @@ final class AppState {
             dataDirectoryLock = nil
             startupRefusal = reason
         }
-        let launchSettings = files.loadSettings()
         launchFiles = files
         journalURL = Journal.defaultURL(in: files.dataDirectory)
         store = files.store
