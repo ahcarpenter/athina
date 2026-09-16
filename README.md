@@ -1123,7 +1123,11 @@ particular to this app:
 - **Settings is the SwiftUI `Settings` scene**: a toolbar of panes, the window
   titled by its pane, the last pane remembered, each pane a fixed-size grouped
   form that scrolls. Rows use the form's own label and subtitle styling, and a
-  place elsewhere in Settings is a link, not a description.
+  place elsewhere in Settings is a link, not a description. A row offers only
+  what its setting accepts: a duration's unit pop-up lists the units its range
+  holds a whole amount of, and an amount typed outside the range settles at the
+  nearest allowed one as the edit ends, rather than being clamped out of sight
+  afterwards.
 - **Status is never color alone.** Inline messages are `StatusLabel` and badges
   are `StatusBadge` (`Sources/Mentor/Components.swift`): the symbol or capsule
   carries the color, the words stay in a label color. Text uses system text
