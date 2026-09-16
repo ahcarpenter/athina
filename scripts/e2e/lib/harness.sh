@@ -482,20 +482,6 @@ wait_item_title() {
 	return 1
 }
 
-# Every extra left of Mentor's, as "app@x" left to right. Status items are
-# anchored at the right of the bar, so these are the ones an item that changes
-# width pushes sideways.
-extras_left_of_mentor() {
-	"$DRIVE" bar | awk -v mine="pid=$MENTOR_PID" '
-		/^extra / {
-			match($0, /app="[^"]*"/); app = substr($0, RSTART + 5, RLENGTH - 6)
-			match($0, /pid=[0-9]+/); pid = substr($0, RSTART, RLENGTH)
-			match($0, /x=[-0-9.]+/); x = substr($0, RSTART + 2, RLENGTH - 2)
-			if (pid == mine) { anchor = x } else { n++; apps[n] = app; xs[n] = x }
-		}
-		END { for (i = 1; i <= n; i++) if (xs[i] + 0 < anchor + 0) printf "%s@%s ", apps[i], xs[i] }'
-}
-
 # --- Watchers -----------------------------------------------------------------
 
 watch_announcements() {
