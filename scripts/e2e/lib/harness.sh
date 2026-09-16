@@ -213,6 +213,7 @@ launch_mentor() {
 		kill -0 "$MENTOR_PID" 2>/dev/null || die "Mentor exited during launch; see $RUN_DIR/app.log"
 		if "$DRIVE" ready "$MENTOR_PID" 2>/dev/null | grep -q READY; then
 			log "Mentor ready after $((i / 2))s"
+			wake_input
 			return 0
 		fi
 		# A macOS consent prompt can stall a launch silently; say so rather than
@@ -263,6 +264,15 @@ cleanup() {
 
 # --- Waits --------------------------------------------------------------------
 
+# Sensing watches nothing while the session is idle, and a scenario is not a
+# person: with nobody at the Mac the app journals "no input for ..." and
+# captures nothing at all. A Shift press counts as session input, wakes
+# sensing, and brings on an input-settled capture; it types nothing into
+# whatever is in front.
+wake_input() {
+	"$DRIVE" key 56 >/dev/null 2>&1 || true
+}
+
 hid_idle_seconds() {
 	ioreg -c IOHIDSystem | awk '/HIDIdleTime/ {printf "%d", $NF / 1000000000; exit}'
 }
@@ -296,6 +306,7 @@ wait_first_observation() {
 	for i in $(seq 1 "$limit"); do
 		[ "$(journal_count observations)" -ge 1 ] && { log "first observation after ${i}s"; return 0; }
 		kill -0 "$MENTOR_PID" 2>/dev/null || die "Mentor exited while waiting for the first capture"
+		[ $((i % 3)) = 0 ] && wake_input
 		sleep 1
 	done
 	return 1
@@ -336,6 +347,7 @@ wait_toast() {
 			# switch is what makes the next capture a focus-change one, so
 			# both nudges go together.
 			[ -n "${FLIP_PID:-}" ] && { kill -USR1 "$FLIP_PID" 2>/dev/null || true; }
+			wake_input
 			if [ -n "${TEXTEDIT_PID:-}" ]; then
 				if [ $((switches % 2)) = 0 ]; then
 					raise_window "$TEXTEDIT_PID" plan.txt

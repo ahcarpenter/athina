@@ -103,6 +103,9 @@ cmd_warm() {
 	ensure_drive
 	RUN_DIR="$RUNS_ROOT/warm-$(date '+%Y%m%d-%H%M%S')"
 	mkdir -p "$RUN_DIR"
+	# Keep the half-built home if this fails: its journal is the only place
+	# that says why no capture arrived.
+	KEEP_HOME=1
 	trap cleanup EXIT
 	prefs_save
 
@@ -114,14 +117,22 @@ cmd_warm() {
 
 	local started elapsed
 	started=$(date +%s)
+	# Sensing captures nothing while an excluded app is in front, and the
+	# terminal a run is started from is excluded, so warming needs the same
+	# staged app a scenario has.
+	stage_text_document
 	launch_mentor "$building"
 	stage_flip_window
 	log "waiting for the first capture with recognised text (this is the slow one, once)"
-	local ocr=0
+	local ocr=0 tick=0
 	for _ in $(seq 1 180); do
+		tick=$((tick + 1))
 		kill -USR1 "$FLIP_PID" 2>/dev/null || true
+		wake_input
+		[ $((tick % 5)) = 0 ] && raise_window "$TEXTEDIT_PID" notes.txt
 		ocr="$(sqlite3 -readonly "$JOURNAL" "select coalesce(max(length(ocr_text)), 0) from observations" 2>/dev/null || echo 0)"
 		[ "${ocr:-0}" -gt 0 ] && break
+		[ $((tick % 20)) = 0 ] && log "still waiting: $(journal_count observations) capture(s), $(journal_count events) event(s)"
 		sleep 1
 	done
 	elapsed=$(( $(date +%s) - started ))
@@ -138,6 +149,7 @@ cmd_warm() {
 	mkdir -p "$(dirname "$WARM_HOME")"
 	mv "$building" "$WARM_HOME"
 	HOME_DIR=""
+	rm -rf "$CACHE_ROOT/warm-home.building"
 	log "warm home ready at $WARM_HOME (cold first capture took ${elapsed}s; clones pay none of it)"
 	printf '{"warm_home": "%s", "cold_first_capture_seconds": %d}\n' "$WARM_HOME" "$elapsed"
 }
