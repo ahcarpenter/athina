@@ -39,9 +39,9 @@ func run(_ invocation: DriveInvocation) throws {
         say("screenRecording=\(CGPreflightScreenCaptureAccess() ? "yes" : "no")")
 
     case "ready":
-        let pid = try invocation.pid(0)
-        say(statusItem(of: pid) == nil ? "NOT READY" : "READY")
-        exit(statusItem(of: pid) == nil ? 2 : 0)
+        let ready = statusItem(of: try invocation.pid(0)) != nil
+        say(ready ? "READY" : "NOT READY")
+        exit(ready ? 0 : 2)
 
     case "windows":
         let pid = try invocation.pid(0)
