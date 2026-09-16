@@ -302,7 +302,13 @@ of them disturbs another or the live app:
   files a live Mentor may be using at that moment. Such a launch is refused
   and names the path, however it is spelled, symlinks and case included; the
   `replay` folder inside it is the one place there that is for a replay's
-  files, so a lane under it is allowed. A replay with no `--data-dir` always
+  files, so a lane under it is allowed. A `--data-dir` that is already there
+  and that group or other can read, write or search is refused too, naming the
+  path and the mode it found: the journal about to be written in it holds
+  thumbnails and recognized text from the real screen. Its mode is never
+  changed for you, since the path you named can be a home or a folder you
+  share on purpose; `chmod 700` it, or name one that does not exist yet, which
+  Mentor then creates owner-only. A replay with no `--data-dir` always
   gets a directory of its own, so it never collides. Every replay launch sweeps the
   finished per-launch directories as it starts, whether it made its own or was
   given one with `--data-dir`, and removes those past the newest 10 and those
@@ -1167,7 +1173,10 @@ counted (see Iterating without the network).
   removes it, its `-wal` and `-shm` files and the settings file beside it, once
   none of them has been written for longer than the window that settings file
   recorded.
-- The journal directory is created with mode 0700.
+- A journal directory Mentor creates is created with mode 0700. One you name
+  with `--data-dir` keeps the mode it already has, so a launch that would put a
+  journal somewhere group or other can reach is refused instead (see Replays
+  side by side).
 
 ## Debug panel
 

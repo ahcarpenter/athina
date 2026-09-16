@@ -104,15 +104,28 @@ public enum ClockMode: Equatable, Sendable {
         }
     }
 
-    /// Moves a replay's clock to where the replay starts, before anything
-    /// runs on it: never behind the newest time in the replay's own journal,
-    /// which a faster or advanced session leaves stamped ahead of real time,
-    /// so a relaunch carries on where the last one stopped instead of going
-    /// back in time; then `--advance-clock` further.
+    /// Moves a replay's clock to where the replay starts: never behind the
+    /// newest time in the replay's own journal, which a faster or advanced
+    /// session leaves stamped ahead of real time, so a relaunch carries on
+    /// where the last one stopped instead of going back in time; then
+    /// `--advance-clock` further.
+    ///
+    /// The catch-up is how far the journal is ahead of the time this clock
+    /// would read had nothing moved it ahead, added on, rather than a move to
+    /// that date. The journal is read on the way here, and a request over
+    /// `ClockRemote` can be served while that read is outstanding; measured
+    /// against the clock as it reads now, a catch-up would find the gap
+    /// already closed by that request and swallow it, leaving the clock where
+    /// it would have been had the request never arrived while the script that
+    /// made it was told it moved. This way the two commute.
     public func startReplay(_ clock: AdjustableClock, journalNewest: Date?) {
         guard case .replay(_, let ahead, _) = self else { return }
         if let journalNewest {
-            clock.advance(toDate: journalNewest)
+            let unmoved = clock.date.addingTimeInterval(-clock.movedAhead.timeInterval)
+            let gap = journalNewest.timeIntervalSince(unmoved)
+            if gap > 0 {
+                clock.advance(by: .seconds(gap))
+            }
         }
         if ahead > 0 {
             clock.advance(by: .seconds(ahead))

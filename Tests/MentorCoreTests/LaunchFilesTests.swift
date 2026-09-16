@@ -159,6 +159,8 @@ private func finishedLaunch(
             try? FileManager.default.removeItem(at: support)
             try? FileManager.default.removeItem(at: lane)
         }
+        // Owner-only, so it is the settings file that decides this launch.
+        try FileManager.default.createDirectory(at: lane, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         var check = SensingSettings()
         check.idleThreshold = 900
         let given = SettingsStore.defaultURL(in: lane)
@@ -316,6 +318,57 @@ private func finishedLaunch(
     /// so the one directory `--data-dir` may never name is the live data
     /// folder, however it is spelled. The replay root inside it is what
     /// replays are for, so a lane under it still starts.
+    /// A journal holds thumbnails and recognized text from the real screen, so
+    /// it never goes in a directory anyone but its owner can reach into. A
+    /// directory the operator named is never chmodded, since it can be a home
+    /// or a folder shared on purpose: the launch stops instead and says so.
+    @Test(arguments: [0o750, 0o705, 0o755, 0o770, 0o707])
+    func aReplayGivenADataDirectoryOthersCanReachRefusesToStart(mode: Int) throws {
+        let root = scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let support = root.appendingPathComponent("support", isDirectory: true)
+        let lane = root.appendingPathComponent("lane", isDirectory: true)
+        let manager = FileManager.default
+        try manager.createDirectory(at: lane, withIntermediateDirectories: true)
+        try manager.setAttributes([.posixPermissions: mode], ofItemAtPath: lane.path)
+
+        var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--data-dir", lane.path], clientMode: replay, supportDirectory: support)
+        guard case .refusedToStart(let reason) = files.claim(clientMode: replay, supportDirectory: support) else {
+            Issue.record("a replay was allowed to write its journal into a \(String(mode, radix: 8)) directory")
+            return
+        }
+        #expect(reason.contains(lane.path))
+        #expect(reason.contains(String(format: "%03o", mode)))
+        #expect(files.refusals == [reason])
+        // The refused launch neither wrote in it nor changed what it found.
+        #expect(try manager.contentsOfDirectory(atPath: lane.path).isEmpty)
+        let after = try #require(manager.attributesOfItem(atPath: lane.path)[.posixPermissions] as? NSNumber)
+        #expect(after.int16Value == Int16(mode))
+    }
+
+    /// The owner-only cases: a directory that is already owner-only is used as
+    /// it is, and one that is not there yet is made owner-only here.
+    @Test func aDataDirectoryThatIsOwnerOnlyOrNotThereYetStarts() throws {
+        let root = scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let support = root.appendingPathComponent("support", isDirectory: true)
+        let manager = FileManager.default
+        let existing = root.appendingPathComponent("existing", isDirectory: true)
+        try manager.createDirectory(at: existing, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let fresh = root.appendingPathComponent("fresh", isDirectory: true)
+
+        for lane in [existing, fresh] {
+            var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--data-dir", lane.path], clientMode: replay, supportDirectory: support)
+            guard case .held(let lock) = files.claim(clientMode: replay, supportDirectory: support) else {
+                Issue.record("a replay was refused the owner-only directory \(lane.path)")
+                continue
+            }
+            let mode = try #require(manager.attributesOfItem(atPath: lane.path)[.posixPermissions] as? NSNumber)
+            #expect(mode.int16Value == 0o700)
+            _ = lock
+        }
+    }
+
     @Test func aReplayGivenTheLiveDataFolderRefusesToStart() throws {
         let root = scratch()
         defer { try? FileManager.default.removeItem(at: root) }

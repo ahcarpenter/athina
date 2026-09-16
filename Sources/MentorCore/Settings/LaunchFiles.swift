@@ -156,6 +156,12 @@ public struct LaunchFiles: Equatable, Sendable {
     /// was given one, sweeps the finished per-launch directories as it starts
     /// (`pruneFinishedLaunches`).
     ///
+    /// A `--data-dir` that is already there and that group or other can read,
+    /// write or search is refused as well: the journal about to be written in
+    /// it holds thumbnails and recognized text from the real screen, and the
+    /// mode of a directory the operator named is never changed here, since
+    /// that path can be a home or a folder shared on purpose.
+    ///
     /// A `--settings` file that is there but is not settings refuses the
     /// launch as well, on the reason `loadSettings` left behind, so a check
     /// whose generated settings came out unreadable stops rather than running
@@ -188,6 +194,10 @@ public struct LaunchFiles: Equatable, Sendable {
             refusals.append(reason)
             return .refusedToStart(reason)
         }
+        if !isPerLaunch, let reason = LaunchFiles.openToOthersRefusal(dataDirectory) {
+            refusals.append(reason)
+            return .refusedToStart(reason)
+        }
         if settingsGiven, AppPaths.isAt(settingsSource, orInside: store.url) {
             let reason = "\(LaunchFiles.settingsFlag) \(settingsSource.path) is the file this replay saves its own settings to (\(store.url.path)), and \(LaunchFiles.settingsFlag) is read and never written: keep it outside the data directory \(dataDirectory.path)"
             refusals.append(reason)
@@ -213,6 +223,17 @@ public struct LaunchFiles: Equatable, Sendable {
             refusals.append(reason)
             return .refusedToStart(reason)
         }
+    }
+
+    /// Why a data directory that is already there may not be used: anyone but
+    /// its owner can reach into it, and a replay's journal holds what was on
+    /// the real screen. Nil when it is owner-only, and nil when it is not
+    /// there yet, since one made here is made owner-only.
+    static func openToOthersRefusal(_ directory: URL) -> String? {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: directory.path)
+        guard let mode = attributes?[.posixPermissions] as? NSNumber, mode.int16Value & 0o077 != 0 else { return nil }
+        let spelled = String(format: "%03o", mode.int16Value)
+        return "\(dataDirectoryFlag) \(directory.path) is mode \(spelled), which group or other can reach into, and a replay's journal holds what was on the real screen: make it owner-only (chmod 700 \(directory.path)) or name a directory that is not there yet"
     }
 
     /// Writes the settings this launch runs with into its own data directory,
@@ -348,8 +369,11 @@ public final class DataDirectoryLock: @unchecked Sendable {
     /// writes `pid` into the file; a nil `pid` only checks that no one holds
     /// it and leaves the file as it was.
     ///
-    /// The directory is made owner-only, like the journal directory it holds:
-    /// this runs before `Journal` opens, so it is what decides the mode.
+    /// A directory made here is made owner-only, like the journal directory it
+    /// holds: this runs before `Journal` opens, so for a directory that was
+    /// not there it is what decides the mode. One that is already there keeps
+    /// the mode it has, which is why `LaunchFiles.claim` refuses a `--data-dir`
+    /// group or other can reach into rather than changing it.
     public static func acquire(in directory: URL, pid: Int32? = getpid(), create: Bool = true) throws -> DataDirectoryLock {
         if create {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])

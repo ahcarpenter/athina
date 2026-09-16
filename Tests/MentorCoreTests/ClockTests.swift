@@ -243,6 +243,30 @@ import Testing
         #expect(untouched.date == now)
     }
 
+    /// The journal is read before the clock is positioned, and a request over
+    /// `ClockRemote` can be served while that read is outstanding. Catching up
+    /// to the journal must add to whatever that request already moved rather
+    /// than swallow it, or the clock ends where it would have been had the
+    /// request never arrived while the script that made it was told it moved.
+    @Test func anAdvanceThatLandsBeforeTheJournalCatchUpIsAddedNotSwallowed() {
+        let now = Date(timeIntervalSince1970: 1_789_473_600)
+        let mode = ClockMode.replay(scale: 1, ahead: 0)
+        let journalNewest = now + 7200
+
+        let inOrder = AdjustableClock(startingAt: now)
+        mode.startReplay(inOrder, journalNewest: journalNewest)
+        inOrder.advance(by: .seconds(7200))
+
+        // The same two moves, the request first, as the race delivers them.
+        let raced = AdjustableClock(startingAt: now)
+        raced.advance(by: .seconds(7200))
+        mode.startReplay(raced, journalNewest: journalNewest)
+
+        #expect(raced.date == now + 14_400)
+        #expect(raced.date == inOrder.date)
+        #expect(raced.movedAhead == inOrder.movedAhead)
+    }
+
     @Test func aJournalsNewestTimeIsItsLatestStampAnywhere() async throws {
         let journal = try Journal.inMemory()
         #expect(try await journal.newestTimestamp() == nil)
