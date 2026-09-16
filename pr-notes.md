@@ -5,6 +5,9 @@
 - Countdowns across the debug panel read in minutes past sixty seconds (`Formatting.countdown` uses `ClockInterval.description`).
 - The duration unit pop-up is a fixed width, so duration rows in one section line up; this also moves the Journal pane's retention rows into line.
 
+- The debug panel's combined rows now say they are text, so VoiceOver names their role as it does for the panel's other rows.
+- In the end-to-end harness's own tool: `mentor-drive ax texts` also reports a row SwiftUI combined into one element (role AXUnknown), which it skipped before, and `ax set` sends a number as a number, so a scenario can scroll a SwiftUI pane to what it wants to see.
+
 No prompt, schema, fixture, gating, or sensing change; no live model call.
 
 ## Evidence
