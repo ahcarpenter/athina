@@ -499,7 +499,8 @@ Sources/MentorCore            library, fully testable
                               ToastCountdown (a toast's countdown, held and resumed), MentorLoop (orchestration)
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory), MentorClock (the one time source: SystemClock,
-                              and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
+                              and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags),
+                              MenuBarIcon (the sensing mode's symbol in a fixed-width template image)
 Sources/Mentor                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
                               (on-device speech recognition), HotKeyCenter (Carbon, press and release),
@@ -1107,7 +1108,8 @@ the understanding's encoding, versioning, bounding and expiry, prompt assembly
 with and without one, request and response coding against fixture JSON,
 recording, redaction, replay matching and stale refusal, launch flags, a
 replay's separate files, the clocks and a replay's clock flags, the toast
-countdown, callout mapping and every anchor rejection, a callout aging out,
+countdown, the menu bar icon's one width in every sensing mode, callout
+mapping and every anchor rejection, a callout aging out,
 transcript matching, the follow-up prompt and gate, the toast rule for voice
 input, the whole loop against a scripted client, follow-ups included, and the
 whole loop against the committed replay fixtures, replayed strictly, a region
