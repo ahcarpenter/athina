@@ -136,11 +136,25 @@ public struct LaunchFiles: Equatable, Sendable {
     /// happened. Every replay launch, whether it makes its own directory or
     /// was given one, sweeps the finished per-launch directories as it starts
     /// (`pruneFinishedLaunches`).
+    ///
+    /// A `--data-dir` in the live data folder is refused for the same reason:
+    /// the folder holds the live journal and the live settings, and a replay
+    /// given it would write its replayed suggestions, feedback and clock-ahead
+    /// rows into them, while a live Mentor may be running against the same two
+    /// files. The replay root inside it is the one place there that is for a
+    /// replay's files, so a lane under it is allowed.
     public mutating func claim(
         clientMode: ModelClientMode,
         supportDirectory: URL = AppPaths.supportDirectory()
     ) -> Claim {
         guard clientMode.isOffline else { return .notNeeded }
+        if !isPerLaunch,
+           AppPaths.isAt(dataDirectory, orInside: supportDirectory),
+           !AppPaths.isAt(dataDirectory, orInside: AppPaths.replayRoot(in: supportDirectory)) {
+            let reason = "\(LaunchFiles.dataDirectoryFlag) \(dataDirectory.path) is the live data folder \(supportDirectory.path), or inside it, which a replay may not use: nothing a replay does may reach the live journal or the live settings"
+            refusals.append(reason)
+            return .refusedToStart(reason)
+        }
         do {
             let lock = try DataDirectoryLock.acquire(in: dataDirectory)
             // A directory's age is filesystem wall-clock, one of the system

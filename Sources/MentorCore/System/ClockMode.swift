@@ -246,11 +246,37 @@ public enum ClockRemote {
         }
     }
 
-    /// Answers the request at the path it named, atomically so a waiting
-    /// script never reads half a file. Does nothing when it named none.
-    public static func answer(_ reply: Reply, at url: URL?) throws {
+    /// Answers the request at the path it named, and only where a request may
+    /// make a replay write: a file that does not exist yet, inside the system
+    /// temporary directory, never inside the live data folder. Does nothing
+    /// when the request named none, and throws rather than writing otherwise,
+    /// which the caller logs.
+    ///
+    /// Nothing authenticates this channel. The notification name is a
+    /// constant and a replay's pid is in `ps`, so any process in the login
+    /// session can ask a running replay to answer somewhere; an unconstrained
+    /// path would make that a way to create or replace any file the user can
+    /// write, the live settings among them. Refusing to replace a file is
+    /// what closes it: the exclusive create fails on a symlink too, so a link
+    /// planted in the temporary directory leads nowhere. It costs
+    /// `scripts/advance-clock.sh` nothing, which names a fresh `mktemp` path
+    /// under `TMPDIR` that it has already removed.
+    public static func answer(
+        _ reply: Reply,
+        at url: URL?,
+        temporaryDirectory: URL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true),
+        supportDirectory: URL = AppPaths.supportDirectory()
+    ) throws {
         guard let url else { return }
-        try reply.encoded().write(to: url, options: .atomic)
+        guard AppPaths.isAt(url, orInside: temporaryDirectory),
+              !AppPaths.isAt(url, orInside: supportDirectory) else {
+            throw Refusal(reason: "\(url.path) is not somewhere a clock request may be answered: it must be inside \(temporaryDirectory.path) and outside \(supportDirectory.path)")
+        }
+        do {
+            try reply.encoded().write(to: url, options: .withoutOverwriting)
+        } catch let error as CocoaError where error.code == .fileWriteFileExists {
+            throw Refusal(reason: "\(url.path) already exists, and a clock request never replaces a file")
+        }
     }
 
     public struct Refusal: Error, Equatable {

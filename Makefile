@@ -42,7 +42,9 @@ run: build
 ## no network, no API key, no spend (see README, "Iterating without the network").
 ## Replaces only the replay this checkout's lane launched before, in a data directory
 ## of its own. A leading ~ in REPLAY_DIR, RECORD_DIR, DATA_DIR, or SETTINGS is
-## expanded here, because zsh leaves it after `=`.
+## expanded here, because zsh leaves it after `=`. Each path is added to the
+## argument list on its own, so one with a space in it stays one argument
+## whatever shell runs the recipe.
 run-replay: build
 	@dir="$(REPLAY_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
 	test -d "$$dir" || { echo "run-replay: no fixture directory at $$dir" >&2; exit 1; }; \
@@ -51,8 +53,10 @@ run-replay: build
 	settings="$(SETTINGS)"; case "$$settings" in "~"|"~/"*) settings="$$HOME$${settings#\~}";; esac; \
 	if [ -n "$$settings" ]; then test -f "$$settings" || { echo "run-replay: no settings file at $$settings" >&2; exit 1; }; \
 		settings="$$(cd "$$(dirname "$$settings")" && pwd)/$$(basename "$$settings")"; fi; \
-	scripts/launch.sh "$(LANE)" -- --replay "$$(cd "$$dir" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures) $(if $(TIME_SCALE),--time-scale $(TIME_SCALE)) \
-		$${data:+--data-dir "$$data"} $${settings:+--settings "$$settings"}
+	set -- --replay "$$(cd "$$dir" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures) $(if $(TIME_SCALE),--time-scale $(TIME_SCALE)); \
+	if [ -n "$$data" ]; then set -- "$$@" --data-dir "$$data"; fi; \
+	if [ -n "$$settings" ]; then set -- "$$@" --settings "$$settings"; fi; \
+	scripts/launch.sh "$(LANE)" -- "$$@"
 
 ## Build and launch the app live, writing every model call to a fixture file.
 ## This spends API credits: use it only to record fixtures on purpose.
@@ -61,7 +65,9 @@ run-replay: build
 record: build
 	@dir="$(RECORD_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
 	if [ -n "$$dir" ]; then mkdir -p -m 700 "$$dir" && dir="$$(cd "$$dir" && pwd)" || exit 1; fi; \
-	scripts/launch.sh live --live -- --record $${dir:+"$$dir"}
+	set -- --record; \
+	if [ -n "$$dir" ]; then set -- "$$@" "$$dir"; fi; \
+	scripts/launch.sh live --live -- "$$@"
 
 ## Delete the app's own recordings directory and every recorded call in it
 clear-recordings:

@@ -36,10 +36,12 @@ function run(argv) {
 }
 SCRIPT
 
-# The replay answers on its main actor, so the wait is a poll of the file it
-# writes atomically; a partial read is impossible.
+# The replay answers on its main actor, into the file named above, which it
+# creates rather than replaces (`ClockRemote.answer`). The wait is therefore a
+# poll for an answer that parses, so a read that caught the write half done is
+# simply retried rather than reported as a refusal.
 deadline=$(( $(date +%s) + timeout ))
-while [ ! -s "$reply" ]; do
+while ! /usr/bin/python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$reply" 2>/dev/null; do
   if [ "$(date +%s)" -ge "$deadline" ]; then
     echo "advance-clock: pid $pid did not answer within ${timeout}s; it may not be a running replay, or it may still be starting" >&2
     exit 1

@@ -55,4 +55,37 @@ public enum AppPaths {
     public static func replayRoot(in supportDirectory: URL = supportDirectory()) -> URL {
         supportDirectory.appendingPathComponent("replay", isDirectory: true)
     }
+
+    /// True when `url` names `directory` itself or something inside it, as the
+    /// file system sees it rather than as it was spelled: symlinks resolved, a
+    /// trailing slash and `..` normalized, and case ignored, since the boot
+    /// volume is case-insensitive by default. Used wherever a path someone
+    /// else chose must be kept out of somewhere (`LaunchFiles.claim`,
+    /// `ClockRemote.answer`), so spelling it differently is never a way in.
+    public static func isAt(_ url: URL, orInside directory: URL) -> Bool {
+        let subject = resolvedPath(url)
+        let parent = resolvedPath(directory)
+        if subject.compare(parent, options: .caseInsensitive) == .orderedSame { return true }
+        return subject.range(of: parent + "/", options: [.caseInsensitive, .anchored]) != nil
+    }
+
+    /// `url` with every symlink in it resolved. `resolvingSymlinksInPath`
+    /// gives up on a path that does not exist yet, which a data directory or a
+    /// reply file usually is, so the deepest part that does exist is resolved
+    /// and the rest put back on.
+    static func resolvedPath(_ url: URL) -> String {
+        var missing: [String] = []
+        var existing = url.standardizedFileURL
+        while !FileManager.default.fileExists(atPath: existing.path) {
+            let parent = existing.deletingLastPathComponent().standardizedFileURL
+            guard parent.path != existing.path else { break }
+            missing.append(existing.lastPathComponent)
+            existing = parent
+        }
+        var resolved = existing.resolvingSymlinksInPath().standardizedFileURL
+        for component in missing.reversed() {
+            resolved.appendPathComponent(component)
+        }
+        return resolved.standardizedFileURL.path
+    }
 }

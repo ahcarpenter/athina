@@ -85,6 +85,12 @@ stop_previous() {
 		if kill -0 "$previous" 2>/dev/null; then
 			echo "launch: pid $previous did not quit, stopping it" >&2
 			kill -KILL "$previous" 2>/dev/null || true
+			# A killed app is still listed while the kernel tears it down, and the
+			# live guard below would read that as a live Mentor already running.
+			for i in $(seq 50); do
+				kill -0 "$previous" 2>/dev/null || break
+				sleep 0.1
+			done
 		fi
 	fi
 	rm -f "$PID_FILE"

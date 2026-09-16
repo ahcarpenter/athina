@@ -3,15 +3,16 @@ import Foundation
 import Testing
 @testable import MentorCore
 
+/// A directory of this test's own, which nothing else in the run touches.
+private func scratch() -> URL {
+    FileManager.default.temporaryDirectory.appendingPathComponent("mentor-files-\(UUID().uuidString)", isDirectory: true)
+}
+
 /// Where a launch keeps its journal and settings: the live files for a live
 /// or recording launch, whatever flags it was given, and files of its own for
 /// every replay, so replays running at once never share a journal or settings.
 @Suite struct LaunchFilesTests {
     private let replay = ModelClientMode.replay(directory: URL(fileURLWithPath: "/fixtures"), allowStale: false)
-
-    private static func scratch() -> URL {
-        FileManager.default.temporaryDirectory.appendingPathComponent("mentor-files-\(UUID().uuidString)", isDirectory: true)
-    }
 
     // MARK: Paths
 
@@ -94,7 +95,7 @@ import Testing
     /// A replay started from a settings file of its own reads it and never
     /// writes it, and the live settings file is not read at all.
     @Test func aReplayStartsFromAGivenSettingsFileAndNeverWritesIt() throws {
-        let root = Self.scratch()
+        let root = scratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let support = root.appendingPathComponent("support", isDirectory: true)
         var live = SensingSettings()
@@ -126,7 +127,7 @@ import Testing
     /// rather than from the defaults a silent fallback would give.
     @Test(arguments: ["missing", "garbage"])
     func anUnusableSettingsFileIsRefusedAndTheReplayStartsFromTheLiveSettings(kind: String) throws {
-        let root = Self.scratch()
+        let root = scratch()
         defer { try? FileManager.default.removeItem(at: root) }
         let support = root.appendingPathComponent("support", isDirectory: true)
         var live = SensingSettings()
@@ -147,7 +148,7 @@ import Testing
     // MARK: Holding a data directory
 
     @Test func aDataDirectoryIsHeldByOneProcessAtATimeAndLetGoOnRelease() throws {
-        let directory = Self.scratch()
+        let directory = scratch()
         defer { try? FileManager.default.removeItem(at: directory) }
         var lock: DataDirectoryLock? = try DataDirectoryLock.acquire(in: directory, pid: 4242)
         let pidFile = directory.appendingPathComponent(DataDirectoryLock.fileName)
@@ -172,7 +173,7 @@ import Testing
     }
 
     @Test func aLiveLaunchHoldsNothing() {
-        var files = LaunchFiles(arguments: ["Mentor"], clientMode: .live, supportDirectory: Self.scratch())
+        var files = LaunchFiles(arguments: ["Mentor"], clientMode: .live, supportDirectory: scratch())
         guard case .notNeeded = files.claim(clientMode: .live) else {
             Issue.record("a live launch claimed a directory")
             return
@@ -184,9 +185,13 @@ import Testing
     /// and never quietly writes somewhere else: the flag exists so the caller
     /// knows which journal to read, and the harness reads exactly that path.
     @Test func aReplayGivenADirectoryAnotherReplayHoldsRefusesToStart() {
-        let support = Self.scratch()
-        defer { try? FileManager.default.removeItem(at: support) }
-        let lane = support.appendingPathComponent("lane", isDirectory: true)
+        let support = scratch()
+        let lanes = scratch()
+        defer {
+            try? FileManager.default.removeItem(at: support)
+            try? FileManager.default.removeItem(at: lanes)
+        }
+        let lane = lanes.appendingPathComponent("lane", isDirectory: true)
         let arguments = ["Mentor", "--replay", "/f", "--data-dir", lane.path]
 
         var first = LaunchFiles(arguments: arguments, clientMode: replay, supportDirectory: support)
@@ -212,10 +217,57 @@ import Testing
         _ = lock
     }
 
+    /// Nothing a replay does may reach the live journal or the live settings,
+    /// so the one directory `--data-dir` may never name is the live data
+    /// folder, however it is spelled. The replay root inside it is what
+    /// replays are for, so a lane under it still starts.
+    @Test func aReplayGivenTheLiveDataFolderRefusesToStart() throws {
+        let root = scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let support = root.appendingPathComponent("mentor", isDirectory: true)
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        let linked = root.appendingPathComponent("linked-mentor", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: linked, withDestinationURL: support)
+
+        func claimed(_ path: String) -> LaunchFiles.Claim {
+            var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f", "--data-dir", path], clientMode: replay, supportDirectory: support)
+            return files.claim(clientMode: replay, supportDirectory: support)
+        }
+
+        // The folder itself, spelled four ways, and something inside it.
+        for path in [
+            support.path,
+            support.path + "/",
+            support.path.uppercased(),
+            linked.path,
+            support.appendingPathComponent("recordings").path,
+            linked.appendingPathComponent("recordings").path,
+        ] {
+            guard case .refusedToStart(let reason) = claimed(path) else {
+                Issue.record("a replay was allowed to use \(path)")
+                continue
+            }
+            #expect(reason.contains(LaunchFiles.dataDirectoryFlag))
+            #expect(reason.contains(support.path))
+        }
+        // Nothing of any refused launch reached the live folder.
+        #expect(try FileManager.default.contentsOfDirectory(atPath: support.path).isEmpty)
+
+        // The replay root and a lane under it are what a replay's files are for,
+        // and are how scripts/e2e names the directory it reads.
+        for path in [AppPaths.replayRoot(in: support).path, AppPaths.replayRoot(in: support).appendingPathComponent("lane-a").path] {
+            guard case .held(let lock) = claimed(path) else {
+                Issue.record("a replay was refused \(path)")
+                continue
+            }
+            _ = lock
+        }
+    }
+
     /// A replay that makes its own directory still starts, and the claim
     /// gives it the lock that keeps it its own.
     @Test func aReplayWithNoDataDirectoryTakesItsOwnAndStarts() {
-        let support = Self.scratch()
+        let support = scratch()
         defer { try? FileManager.default.removeItem(at: support) }
         var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f"], clientMode: replay, supportDirectory: support)
         guard case .held(let lock) = files.claim(clientMode: replay, supportDirectory: support) else {
@@ -230,7 +282,7 @@ import Testing
     /// A replay launch removes finished per-launch directories past the
     /// newest few, and never one a running replay holds or anything else.
     @Test func finishedLaunchesPastTheNewestFewArePruned() throws {
-        let support = Self.scratch()
+        let support = scratch()
         defer { try? FileManager.default.removeItem(at: support) }
         let root = AppPaths.replayRoot(in: support)
         let manager = FileManager.default
@@ -259,7 +311,7 @@ import Testing
     /// screen: a directory past the retention window goes even when the count
     /// alone would have kept it, and one a running replay holds still does not.
     @Test func finishedLaunchesPastTheRetentionWindowArePruned() throws {
-        let support = Self.scratch()
+        let support = scratch()
         defer { try? FileManager.default.removeItem(at: support) }
         let root = AppPaths.replayRoot(in: support)
         let manager = FileManager.default
@@ -287,7 +339,7 @@ import Testing
     /// that captured its screen content, and one that recorded none by the
     /// documented default.
     @Test func eachFinishedLaunchIsPrunedByItsOwnRecordedWindow() throws {
-        let support = Self.scratch()
+        let support = scratch()
         defer { try? FileManager.default.removeItem(at: support) }
         let root = AppPaths.replayRoot(in: support)
         let manager = FileManager.default
@@ -357,19 +409,58 @@ import Testing
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("mentor-clock-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
+        let support = scratch()
         let url = directory.appendingPathComponent("reply.json")
         let now = Date(timeIntervalSince1970: 1_789_473_600)
 
         let moved = ClockRemote.Reply(moved: true, by: 7200, movedAhead: 9000, now: now, pid: 4242)
-        try ClockRemote.answer(moved, at: url)
+        try ClockRemote.answer(moved, at: url, temporaryDirectory: directory, supportDirectory: support)
         #expect(try ClockRemote.Reply.decode(Data(contentsOf: url)) == moved)
 
         let refused = ClockRemote.Reply(moved: false, reason: "this launch has no replay clock", movedAhead: 0, now: now, pid: 7)
-        try ClockRemote.answer(refused, at: url)
-        #expect(try ClockRemote.Reply.decode(Data(contentsOf: url)) == refused)
+        let second = directory.appendingPathComponent("second.json")
+        try ClockRemote.answer(refused, at: second, temporaryDirectory: directory, supportDirectory: support)
+        #expect(try ClockRemote.Reply.decode(Data(contentsOf: second)) == refused)
 
         // A request that named no file is answered nowhere, and says so by not throwing.
-        try ClockRemote.answer(moved, at: nil)
+        try ClockRemote.answer(moved, at: nil, temporaryDirectory: directory, supportDirectory: support)
+    }
+
+    /// Nothing authenticates the channel, so a request must never be able to
+    /// make the replay create or replace a file of the sender's choosing: the
+    /// answer goes to a new file in the temporary directory or nowhere.
+    @Test func aRequestIsNotAnsweredWhereItCouldClobberAFile() throws {
+        let root = scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let temporary = root.appendingPathComponent("tmp", isDirectory: true)
+        let support = root.appendingPathComponent("mentor", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
+        let reply = ClockRemote.Reply(moved: true, by: 900, movedAhead: 900, now: Date(timeIntervalSince1970: 1_789_473_600), pid: 11)
+
+        func answer(at url: URL) throws {
+            try ClockRemote.answer(reply, at: url, temporaryDirectory: temporary, supportDirectory: support)
+        }
+
+        // The live settings, named outright and by a path that only resolves there.
+        let settings = SettingsStore.defaultURL(in: support)
+        try Data("{\"idleThreshold\":900}".utf8).write(to: settings)
+        #expect(throws: ClockRemote.Refusal.self) { try answer(at: settings) }
+        try FileManager.default.createSymbolicLink(at: temporary.appendingPathComponent("aimed"), withDestinationURL: settings)
+        #expect(throws: ClockRemote.Refusal.self) { try answer(at: temporary.appendingPathComponent("aimed")) }
+        #expect(try String(contentsOf: settings, encoding: .utf8) == "{\"idleThreshold\":900}")
+
+        // Anywhere else outside the temporary directory, and a file that is already there.
+        #expect(throws: ClockRemote.Refusal.self) { try answer(at: root.appendingPathComponent("elsewhere.json")) }
+        let taken = temporary.appendingPathComponent("taken.json")
+        try Data("mine".utf8).write(to: taken)
+        #expect(throws: ClockRemote.Refusal.self) { try answer(at: taken) }
+        #expect(try String(contentsOf: taken, encoding: .utf8) == "mine")
+
+        // The fresh path under the temporary directory that advance-clock.sh names.
+        let fresh = temporary.appendingPathComponent("mentor-clock-abcd1234")
+        try answer(at: fresh)
+        #expect(try ClockRemote.Reply.decode(Data(contentsOf: fresh)) == reply)
     }
 
     @Test func aRequestWithNoIntervalIsRefused() {

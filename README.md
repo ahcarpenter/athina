@@ -232,7 +232,12 @@ open -n build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1
   posted and says nothing about who heard it, so a request sent to a replay
   that is still starting, to a live Mentor, or to a pid that is not Mentor
   would otherwise look exactly like success and leave a check waiting on a
-  clock that never moved. It exits 0 with what the clock now reads, 1 when no
+  clock that never moved. Nothing authenticates the channel, so a replay
+  answers only at a file that does not exist yet, inside the system temporary
+  directory and outside the live data folder, and refuses anything else into
+  the log: otherwise a request would be a way for any process in the login
+  session to create or replace a file the user can write, the live settings
+  among them. It exits 0 with what the clock now reads, 1 when no
   answer arrives inside `MENTOR_CLOCK_TIMEOUT` (10 seconds by default), naming
   the pid, and 3 when the replay refused the interval.
 - The debug panel's Mentor card has an **Advance** field (accessibility label
@@ -286,8 +291,15 @@ of them disturbs another or the live app:
   pid; a second replay given a directory another one holds does not start at
   all, and says which pid holds it, because the caller named that directory to
   read its journal and a replay writing somewhere else would leave a check
-  reading a stale journal. A replay with no `--data-dir` always gets a
-  directory of its own, so it never collides. Every replay launch sweeps the
+  reading a stale journal. A replay may not be pointed at the live data folder
+  (`~/Library/Application Support/mentor`) or anything else inside it: that
+  folder holds the live journal and the live settings, so a replay given it
+  would write replayed suggestions, feedback and clock-ahead rows into the
+  files a live Mentor may be using at that moment. Such a launch is refused
+  and names the path, however it is spelled, symlinks and case included; the
+  `replay` folder inside it is the one place there that is for a replay's
+  files, so a lane under it is allowed. A replay with no `--data-dir` always
+  gets a directory of its own, so it never collides. Every replay launch sweeps the
   finished per-launch directories as it starts, whether it made its own or was
   given one with `--data-dir`, and removes those past the newest 10 and those
   whose own retention window has run out: a finished replay's journal is never
