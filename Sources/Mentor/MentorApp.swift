@@ -14,7 +14,7 @@ struct MentorApp: App {
             MenuBarContent()
                 .environment(state)
         } label: {
-            MenuBarLabel(mode: state.mode, badge: state.clientModeBadge, statusLine: state.statusLine)
+            MenuBarLabel(mark: state.menuBarMark, badge: state.clientModeBadge, statusLine: state.statusLine)
         }
         .menuBarExtraStyle(.menu)
 
@@ -54,30 +54,37 @@ struct MentorApp: App {
     }
 }
 
-/// The menu bar item: the sensing mode's symbol in a fixed-width template
-/// image (`MenuBarIcon`), so the item keeps one width in every mode. While
-/// calls are replayed or recorded, a word beside the icon says so, so a replay
+/// The menu bar item: the variant of the mark for what Mentor is doing. Every
+/// variant is the same size, so the item keeps one width in every mode. While
+/// calls are replayed or recorded, a word beside the mark says so, so a replay
 /// is never mistaken for a live call.
 struct MenuBarLabel: View {
-    let mode: SensingMode
+    let mark: MenuBarMark
     let badge: String?
     let statusLine: String
 
     var body: some View {
         if let badge {
             HStack(spacing: 3) {
-                icon
+                MenuBarLabelImage(mark: mark)
                 Text(badge)
             }
             .accessibilityLabel("Mentor, \(badge), \(statusLine)")
         } else {
-            icon
+            MenuBarLabelImage(mark: mark)
                 .accessibilityLabel("Mentor, \(statusLine)")
         }
     }
+}
 
-    private var icon: Image {
-        Image(nsImage: MenuBarIcon.image(for: mode))
+/// The mark itself, at the size the menu bar draws it.
+struct MenuBarLabelImage: View {
+    let mark: MenuBarMark
+
+    var body: some View {
+        if let image = MenuBarMarkImage.image(for: mark) {
+            Image(nsImage: image).renderingMode(.template)
+        }
     }
 }
 

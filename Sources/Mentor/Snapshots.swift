@@ -54,7 +54,7 @@ enum Snapshots {
             ("toast-answered", CGSize(width: ToastController.panelWidth, height: 400), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: Date(), suggestionID: 4), suggestionID: 4)), state),
             ("toast-note", CGSize(width: ToastController.panelWidth, height: 120), AnyView(SampleToastNote()), state),
             ("callout", CGSize(width: 900, height: 620), AnyView(SampleCallout()), state),
-            ("menu-bar-item", CGSize(width: 312, height: 216), AnyView(SampleMenuBarItems()), state),
+            ("menu-bar-marks", SampleMenuBarMarks.wholeSize, AnyView(SampleMenuBarMarks()), state),
             ("debug-panel-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), replay),
             ("debug-panel-calls-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
             ("settings-models-replay", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), replay),
@@ -424,26 +424,70 @@ struct StatusMessagesPreview: View {
     }
 }
 
-/// The menu bar item's label in every sensing mode, live and in replay, each
-/// in an outline of its image's width, so the renders show it never changes.
-struct SampleMenuBarItems: View {
+/// Every variant of the menu bar mark, at the size the menu bar draws it,
+/// with the word a replay puts beside it, and enlarged.
+///
+/// The menu bar itself cannot be rendered into a window, so this is how a
+/// change to the mark gets looked at without a person at the screen, and how
+/// CI keeps a picture of all six. Each mark is a template image drawn on the
+/// window's own background, so it takes the foreground colour the way it does
+/// in the bar, in both appearances; the bar's material is not reproduced here.
+/// The two labels are drawn in an outline of the width the bar gives them, so
+/// the renders show the mark itself never changes width.
+struct SampleMenuBarMarks: View {
+    private static let enlargement = 4.0
+    private static let spacing = 22.0
+    private static let padding = 28.0
+
+    /// The mark's own size, read from the asset the menu bar draws, so the
+    /// enlargement reserves exactly the room it takes.
+    @MainActor private static var markSize: CGSize {
+        MenuBarMarkImage.image(for: .watching)?.size ?? CGSize(width: 14, height: 16)
+    }
+
+    /// A window tall enough for every variant, so the picture is of all six
+    /// rather than of however many a fixed height happened to leave room for.
+    @MainActor static var wholeSize: CGSize {
+        let rows = Double(MenuBarMark.allCases.count)
+        return CGSize(
+            width: 480,
+            height: padding * 2 + markSize.height * enlargement * rows + spacing * (rows - 1)
+        )
+    }
+
     var body: some View {
-        Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
-            ForEach(SensingMode.allCases, id: \.self) { mode in
-                GridRow {
-                    Text(mode.label)
-                        .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: Self.spacing) {
+            ForEach(MenuBarMark.allCases, id: \.self) { mark in
+                HStack(spacing: 18) {
+                    Text(mark.rawValue)
+                        .font(.system(.body, design: .monospaced))
+                        .frame(width: 160, alignment: .leading)
+                    // At the size the menu bar draws it, live and in replay.
                     ForEach([nil, "Replay"], id: \.self) { badge in
-                        MenuBarLabel(mode: mode, badge: badge, statusLine: mode.label)
+                        MenuBarLabel(mark: mark, badge: badge, statusLine: mark.rawValue)
                             .font(Font(NSFont.menuBarFont(ofSize: 0)))
                             .fixedSize()
                             .border(.separator)
                     }
+                    Divider().frame(height: 26)
+                    // And enlarged, so the drawing can be looked at closely:
+                    // the same template PDF drawn at that size, so the curves
+                    // and the eyes are the vector rather than the small render
+                    // magnified.
+                    if let image = MenuBarMarkImage.image(for: mark) {
+                        Image(nsImage: image)
+                            .renderingMode(.template)
+                            .resizable()
+                            .frame(width: Self.markSize.width * Self.enlargement,
+                                   height: Self.markSize.height * Self.enlargement)
+                    }
                 }
+                .foregroundStyle(.primary)
             }
         }
-        .padding(16)
+        .padding(Self.padding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(.background)
     }
 }
 

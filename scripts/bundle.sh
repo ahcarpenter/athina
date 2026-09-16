@@ -30,6 +30,11 @@ sed "s/__BUILD_NUMBER__/$BUILD_NUMBER/" "$ROOT/Resources/Info.plist" > "$APP/Con
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
   cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 fi
+# The menu bar mark, one template PDF per variant, built from
+# Resources/Mark/MentorOwl.svg by `make mark`, as the icon above is from
+# MentorMark.svg. Both are committed, so a plain build needs nothing but the
+# repository.
+cp "$ROOT"/Resources/Mark/MenuBarMark-*.pdf "$APP/Contents/Resources/"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 identity="${MENTOR_SIGN_IDENTITY:-}"

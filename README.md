@@ -29,6 +29,7 @@ Halt-and-redirect and learned suppression are later phases.
 
 ```sh
 make build            # builds build/Mentor.app from the SwiftPM binary
+make mark             # rebuilds the app icon and the menu bar mark from the two SVG masters (their outputs are committed, so a plain build never needs it)
 make run              # builds, quits a running copy, and launches the app
 make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
 make record           # the same, live, writing every model call to a fixture file (spends API credits)
@@ -150,7 +151,7 @@ real session and uses the live files.
 
 Nothing about a replay can be mistaken for a live call:
 
-- the menu bar shows **Replay** beside the eye, and the menu says where the
+- the menu bar shows **Replay** beside the mark, and the menu says where the
   answers come from and that nothing is billed;
 - the debug panel's status bar and Mentor card carry a Replay badge, the card
   lists the fixtures by kind with their directory, and every replayed row in
@@ -266,7 +267,7 @@ the app creates the directory and writes and removes a probe file there; if
 that fails, every call is refused with the reason, which shows in the menu,
 the Mentor card, and the call log, so a recording that could write nothing
 never spends anything. Those refused calls are journaled as live errors that
-cost nothing, not as replays. The menu bar shows **Recording** beside the eye
+cost nothing, not as replays. The menu bar shows **Recording** beside the mark
 while it runs. `make clear-recordings` deletes the app's own recordings
 directory, `~/Library/Application Support/mentor/recordings`.
 
@@ -365,6 +366,7 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 | `other-app-click` | a real click inside a staged TextEdit window dismisses the suggestion |
 | `menubar-keyboard` | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one menu bar scenario that needs no idle input |
 | `menubar-width` | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
+| `menubar-mark` | Mentor's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
@@ -497,11 +499,11 @@ Sources/MentorCore            library, fully testable
                               rendering, and expiry), Suggestion, FollowUp and ModelCallRecord, Callout
                               (CalloutRegion, CalloutAnchor: frame-to-screen mapping and every rule that
                               refuses a callout), TalkBack (TranscriptMatcher, FollowUp, TalkBackState),
-                              ToastCountdown (a toast's countdown, held and resumed), MentorLoop (orchestration)
+                              ToastCountdown (a toast's countdown, held and resumed), MenuBarMark (which variant
+                              of the mark the menu bar shows), MentorLoop (orchestration)
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory), MentorClock (the one time source: SystemClock,
-                              and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags),
-                              MenuBarIcon (the sensing mode's symbol in a fixed-width template image)
+                              and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
 Sources/Mentor                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
                               (on-device speech recognition), HotKeyCenter (Carbon, press and release),
@@ -1016,9 +1018,9 @@ counted (see Iterating without the network).
   for the purpose, never the captain's or any user's real work. Every recording
   is read, text and screenshot, before it is committed.
 - **Pause** from the menu or with the global hotkey (default ⌃⌥⌘P) stops all
-  sensing; the menu bar icon switches from a filled eye to a crossed eye. Idle
-  shows an outlined eye, an excluded app a raised hand, and missing permissions
-  an eye with a warning badge.
+  sensing; the menu bar owl closes its eyes and two z's drift off it. Idle
+  drops a lid over them, an excluded app looks away, missing permissions is a
+  wide stare, and a held mentor tier winks (see Design conventions).
 - Thumbnails expire after 6 hours and text after 7 days by default; the journal
   is capped at 500 MB; all three are adjustable, and the journal can be cleared
   at any time.
@@ -1068,10 +1070,45 @@ particular to this app:
   as a missing key, is the command that fixes it), then commands, windows, and
   the app menu's About and Quit. Menu items use title case and an ellipsis only
   where more input follows, and no standard keyboard shortcut is repurposed.
-  The icon is a template SF Symbol per sensing mode, with a word beside it only
-  in replay or recording. The item keeps one width in every mode: the symbol is
-  drawn centred in an image as wide as the widest mode symbol (`MenuBarIcon`),
-  so switching to an excluded app never shifts the menu bar extras beside it.
+  The icon is the owl as a template image, one variant per mode, with a word
+  beside it only in replay or recording.
+- **The mark is the artist's drawing, and every asset comes from a vector.**
+  `Resources/Mark/MentorMark.svg` is the master for the app icon: a profile in a crested
+  Corinthian helmet over a flat cream circle, square and hexagon, in the
+  reference bitmap's own coordinates, with the line art and the cream shapes in
+  separate groups so either stands alone. Ink is `#332C2B` and cream `#F1DEB7`,
+  both sampled from the drawing rather than chosen. `make mark`
+  (`scripts/mark-assets.swift`) builds the app icon from it and the menu bar
+  mark from the second master, the owl below; their outputs are committed, so a
+  plain `make build` needs nothing else, and `MarkAssetTests` fails when either
+  master or the script changes without `make mark` being run. The script is in
+  that record because most of the drawing lives there rather than in the
+  masters: the menu bar inset, the eye treatments, the z's and the per-size
+  thickening are all constants in it.
+- **The app icon is the full artwork, full bleed.** macOS 26 masks a legacy
+  `.icns` to the standard app icon shape itself and adds the shadow, in Finder,
+  in the Dock and in About, scaling the artwork into the 824 of 1024 body, so
+  the icon draws no rounded rectangle and no shadow of its own and keeps the
+  drawing clear of the corners the mask rounds away. Each size is drawn from
+  the vector and weighted for itself, which is what the `.icns` format exists
+  to allow: the drawing's stroke is under a pixel by 32 px and would otherwise
+  grey out.
+- **The menu bar mark is the owl, at one width in every mode.**
+  `Resources/Mark/MentorOwl.svg` is a second master, for the menu bar only: a
+  solid owl silhouette, so it sits among the bar's other extras instead of
+  reading lighter than all of them the way a line drawing does at 16 points.
+  It ships as a template PDF per mode, so macOS tints it like every other extra
+  and one file serves every display scale. The states are made out of the
+  drawing rather than hung off it: the owl's eyes are the boldest thing in it
+  at this size and they are what watching means, so they carry the modes and
+  the silhouette never changes. Paused also gets two z's drifting off it, drawn
+  in the clear upper left of the owl's own bounding box: with the pupils gone
+  the eyes are the whitest thing in the set and read wide awake rather than
+  shut, so the z's are what actually say asleep. Every state, the z's included,
+  is made inside the owl's own box, which is what keeps the item one width
+  throughout, so the other extras never shift sideways when Mentor's state
+  changes. Which variant a mode gets is `MenuBarMark.resolve`, a pure function
+  with the whole table under test.
 - **The toast is a non-activating panel, not a notification.** It floats under
   the menu bar on Liquid Glass and never takes keyboard focus, with corners
   concentric with its small capsule buttons. Because it cannot be focused, the
@@ -1112,13 +1149,13 @@ the understanding's encoding, versioning, bounding and expiry, prompt assembly
 with and without one, request and response coding against fixture JSON,
 recording, redaction, replay matching and stale refusal, launch flags, a
 replay's separate files, the clocks and a replay's clock flags, the toast
-countdown, the menu bar icon's one width in every sensing mode, callout
-mapping and every anchor rejection, a callout aging out,
-transcript matching, the follow-up prompt and gate, the toast rule for voice
-input, the whole loop against a scripted client, follow-ups included, and the
-whole loop against the committed replay fixtures, replayed strictly, a region
-and a follow-up answer included, and every time-based behavior of the loop on
-the test clock) and Vision OCR on a drawn bitmap, so they need no
+countdown, which variant of the mark the menu bar shows and that every variant
+is committed at one size, callout mapping and every anchor rejection, a callout
+aging out, transcript matching, the follow-up prompt and gate, the toast rule
+for voice input, the whole loop against a scripted client, follow-ups included,
+and the whole loop against the committed replay fixtures, replayed strictly, a
+region and a follow-up answer included, and every time-based behavior of the
+loop on the test clock) and Vision OCR on a drawn bitmap, so they need no
 permissions, display, network, microphone, or API key. A committed fixture that
 is stale, or a tier with no committed fixture, fails the run (see The committed
 fixtures). The snapshot run covers every window and Settings pane with sample
@@ -1126,5 +1163,6 @@ data, their empty states (no suggestions, no frames, no contexts, contexts at
 the cap), the callout over the sample frame, the toast collapsed, expanded,
 listening, thinking, answered, and as a note, the context editor with a
 duplicate name, the transient status messages (a connection test, a refused
-or recording shortcut, on-device recognition unavailable), and the menu bar
-item's label in every sensing mode, live and in replay.
+or recording shortcut, on-device recognition unavailable), and every variant of
+the menu bar mark, at the size the bar draws it, with the word a replay puts
+beside it, and enlarged.
