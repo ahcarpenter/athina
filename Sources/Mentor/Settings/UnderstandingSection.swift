@@ -49,7 +49,7 @@ struct UnderstandingSection: View {
             Text("Understanding")
         } footer: {
             // The link opens the Journal pane in place rather than describing where it is.
-            Text("Mentor keeps a short written record of what you appear to be working toward and what has happened so far, so it can judge what you do against that goal rather than recent screens alone. The model writes it, and it stays in the journal on this Mac until it is forgotten, reset here, or cleared with the journal in [Journal settings](mentor-settings:journal).")
+            Text("Mentor keeps a short written record of what you appear to be working toward and what has happened so far, so it can judge what you do against that goal rather than recent screens alone. The model writes it, and once it is forgotten Mentor starts a fresh one. Its revisions stay in the journal on this Mac until they are reset here, or age out or are cleared with the rest of the journal in [Journal settings](mentor-settings:journal).")
                 .settingsPaneLinks()
         }
     }

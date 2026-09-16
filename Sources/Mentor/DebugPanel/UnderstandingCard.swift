@@ -167,8 +167,9 @@ struct UnderstandingCard: View {
     /// The interval a refresh is held to. Once the cadence counts as slowed
     /// this is the stretched figure `nextRefreshAllowed` uses, named beside
     /// what it was stretched from, so it cannot disagree with the countdown
-    /// beside it; below that the stretch is seconds, and the set interval is
-    /// stated plainly rather than as a figure every call moves.
+    /// beside it. Below that the set interval is stated plainly rather than as
+    /// a figure every call moves, while the scheduler still stretches it, so
+    /// the countdown can run past the figure shown by up to a twentieth of it.
     private var refreshInterval: String {
         let set = state.settings.mentor.understandingRefreshInterval
         let status = state.mentorStatus
