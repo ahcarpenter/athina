@@ -1148,6 +1148,17 @@ final class AppState {
 
     // MARK: Presentation helpers
 
+    /// Which variant of the mark the menu bar draws. The decision itself is a
+    /// pure function in `MenuBarMark`, so it is covered by tests and so
+    /// choosing a different set later changes one table rather than the app.
+    var menuBarMark: MenuBarMark {
+        MenuBarMark.resolve(
+            mode: mode,
+            availability: mentorStatus.availability,
+            offline: clientMode.isOffline
+        )
+    }
+
     var statusLine: String {
         switch mode {
         case .watching, .screenOnly, .accessibilityOnly:
