@@ -211,8 +211,10 @@ public struct LaunchFiles: Equatable, Sendable {
     /// read rewrites, so a read-only read never keeps a finished lane longer.
     /// A read-write reader, the `sqlite3` CLI at its default among them, runs
     /// a checkpoint as it closes that touches both files, and so can put the
-    /// lane's removal off by up to one window.
-    /// To do instead: date a lane by the newest timestamp inside its journal.
+    /// lane's removal off by up to one window. The stamps inside the journal
+    /// cannot date a lane instead: they come from the replay's clock, which
+    /// `--time-scale`, `--advance-clock` and `ClockRemote` run ahead of real
+    /// time, so they would keep its captures long past the window.
     /// `.distantPast` when there is none to read, so a directory holding no
     /// journal at all is swept rather than kept forever.
     private static func lastWritten(_ journal: URL) -> Date {
