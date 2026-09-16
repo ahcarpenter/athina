@@ -623,6 +623,19 @@ struct DurationRow: View {
         }
     }
 
+    /// The width the unit pop-up reserves. A menu-style Picker sizes to the
+    /// unit it is showing, not to the widest in its menu, and a form's rows are
+    /// trailing aligned, so a row showing "minutes" puts its field and stepper
+    /// 12 pt left of a row showing "hours". Reserving what a pop-up needs for
+    /// the widest unit word holds every duration row on one x whatever unit
+    /// each is showing, and measuring it rather than naming a number keeps that
+    /// true whatever font the control draws in.
+    @MainActor private static let unitWidth: CGFloat = {
+        let sizing = NSPopUpButton(frame: .zero, pullsDown: false)
+        sizing.addItems(withTitles: Unit.allCases.map(\.rawValue))
+        return sizing.intrinsicContentSize.width
+    }()
+
     @State private var amount: Double = 1
     @State private var unit: Unit = .hours
     @FocusState private var editing: Bool
@@ -668,13 +681,11 @@ struct DurationRow: View {
                     }
                 }
                 .labelsHidden()
-                // A menu-style Picker sizes to the unit it is showing, not to
-                // the widest in its menu, so without a floor two duration rows
-                // in one section put their fields and steppers at different x
-                // positions, 12 px apart in the Journal pane. The floor holds
-                // them on one edge, and it is a minimum rather than a width so
-                // a longer unit word grows the control instead of clipping.
-                .frame(minWidth: 84, alignment: .trailing)
+                // A minimum rather than a width, so a unit word wider than the
+                // measurement grows the control instead of clipping, and
+                // trailing so the pop-up keeps the form's edge and the slack a
+                // shorter word leaves falls between it and the stepper.
+                .frame(minWidth: Self.unitWidth, alignment: .trailing)
                 .onChange(of: unit) { _, _ in push() }
             }
         } label: {

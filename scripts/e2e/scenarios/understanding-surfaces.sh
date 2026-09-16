@@ -69,12 +69,26 @@ window_texts() {
 	return 0
 }
 
+# The x a duration row's amount field starts at, read from the live
+# accessibility geometry of a window. Two duration rows in one section are in
+# line only when their fields start at the same x, whatever unit word each
+# row's pop-up happens to be showing. The field is named "<row title>, in
+# <unit>", which is how each row's field is told from the other's.
+row_field_x() {
+	awk -v want="desc=\"$2, in " '
+		$1 == "AXTextField" && index($0, want) && match($0, /pos=\([-0-9]+,/) {
+			print substr($0, RSTART + 5, RLENGTH - 6)
+			exit
+		}
+	' "$RUN_DIR/$1"
+}
+
 has_text() {
 	grep -qF "$2" "$RUN_DIR/$1" && echo yes || echo no
 }
 
 scenario_run() {
-	local goal head revisions
+	local goal head revisions refresh_x idle_x
 	stage_flip_window
 	wait_toast >/dev/null || return 1
 	wait_understanding || { log "no understanding was written"; return 1; }
@@ -117,6 +131,19 @@ scenario_run() {
 	wait_window "Models" || { log "Settings never opened on the Models pane"; return 1; }
 	window_texts "Models" "settings"
 	check "Settings shows the current goal" "yes" "$(has_text settings-texts.txt "$goal")"
+
+	# The section's two duration rows show different unit words, minutes beside
+	# hours with the shipped defaults, and a unit pop-up sizes to the word it is
+	# showing, so this is where a row that reserves only its own word pushes its
+	# field and stepper off the other row's x.
+	"$DRIVE" ax "$MENTOR_PID" dump --scope Models >"$RUN_DIR/models-dump.txt" 2>&1 || true
+	refresh_x="$(row_field_x models-dump.txt "Refresh at most every")"
+	idle_x="$(row_field_x models-dump.txt "Forget after no activity for")"
+	# Two empty readings would match each other, so nothing to measure is a
+	# scenario failure rather than a check that passes by saying nothing.
+	[ -n "$refresh_x" ] && [ -n "$idle_x" ] || { log "the Models pane showed no duration fields to measure"; return 1; }
+	check "the duration rows start their fields on one x" "$refresh_x" "$idle_x"
+
 	"$DRIVE" close "$MENTOR_PID" Models >>"$RUN_DIR/transcript.log" 2>&1 || true
 	sleep 0.5
 
