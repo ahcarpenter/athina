@@ -1067,17 +1067,18 @@ particular to this app:
   as a missing key, is the command that fixes it), then commands, windows, and
   the app menu's About and Quit. Menu items use title case and an ellipsis only
   where more input follows, and no standard keyboard shortcut is repurposed.
-  The icon is Mentor's own mark as a template image, one variant per mode, with
-  a word beside it only in replay or recording.
+  The icon is the owl as a template image, one variant per mode, with a word
+  beside it only in replay or recording.
 - **The mark is the artist's drawing, and both assets come from one vector.**
-  `Resources/Mark/MentorMark.svg` is the master source: a profile in a crested
+  `Resources/Mark/MentorMark.svg` is the master for the app icon: a profile in a crested
   Corinthian helmet over a flat cream circle, square and hexagon, in the
   reference bitmap's own coordinates, with the line art and the cream shapes in
   separate groups so either stands alone. Ink is `#332C2B` and cream `#F1DEB7`,
   both sampled from the drawing rather than chosen. `make mark`
   (`scripts/mark-assets.swift`) builds the app icon and the menu bar mark from
-  it; their outputs are committed, so a plain `make build` needs nothing else,
-  and `MarkAssetTests` fails when they fall out of step with the code.
+  it, along with the owl the menu bar uses; their outputs are committed, so a
+  plain `make build` needs nothing else, and `MarkAssetTests` fails when either
+  master changes without `make mark` being run.
 - **The app icon is the full artwork, full bleed.** macOS 26 masks a legacy
   `.icns` to the standard app icon shape itself and adds the shadow, in Finder,
   in the Dock and in About, scaling the artwork into the 824 of 1024 body, so
@@ -1086,18 +1087,19 @@ particular to this app:
   the vector and weighted for itself, which is what the `.icns` format exists
   to allow: the drawing's stroke is under a pixel by 32 px and would otherwise
   grey out.
-- **The menu bar mark is the line art alone, at one width in every mode.** No
-  cream shapes behind it, and a template PDF per variant, so macOS tints it
-  like every other extra and one file serves every display scale. The whole
-  drawing does not survive 16 points, so the menu bar shows the helmeted head,
-  cropped where no stroke is cut part way through, at a weight set for that
-  size rather than scaled down. The drawing itself never changes between
-  modes: watching is the mark alone, paused draws a slash across it, and idle,
-  an excluded app, needing something and being held each put one badge in a
-  lane every variant reserves. That keeps the item the same 19 by 16 points
-  throughout, so the menu bar's other extras never shift sideways when
-  Mentor's state changes. Which variant a mode gets is `MenuBarMark.resolve`,
-  a pure function with the whole table under test.
+- **The menu bar mark is the owl, at one width in every mode.**
+  `Resources/Mark/MentorOwl.svg` is a second master, for the menu bar only: a
+  solid owl silhouette, so it sits among the bar's other extras instead of
+  reading lighter than all of them the way a line drawing does at 16 points.
+  It ships as a template PDF per mode, so macOS tints it like every other extra
+  and one file serves every display scale. The states are made out of the
+  drawing rather than hung off it: the owl's eyes are the boldest thing in it
+  at this size and they are what watching means, so they carry the modes and
+  the silhouette never changes. That is what keeps the item one width
+  throughout, so the other extras never shift sideways when Mentor's state
+  changes. Which variant a mode gets is `MenuBarMark.resolve`, a pure function
+  with the whole table under test.
+
 - **The toast is a non-activating panel, not a notification.** It floats under
   the menu bar on Liquid Glass and never takes keyboard focus, with corners
   concentric with its small capsule buttons. Because it cannot be focused, the

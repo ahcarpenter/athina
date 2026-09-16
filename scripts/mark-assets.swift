@@ -398,164 +398,204 @@ func writeIcon() throws {
     print("  Resources/AppIcon.icns  (\(sizes.count) sizes, drawing at \(iconHeightFraction) of the canvas)")
 }
 
-enum Failure: Error { case iconutil, pdfLengthChanged }
+enum Failure: Error { case iconutil, pdfLengthChanged, owlShape(String) }
 
 // MARK: The menu bar mark
 
-// The menu bar shows the line art alone, with no cream shapes behind it.
+// The menu bar shows the owl, the captain's own artwork, not a reduction of
+// the Athena drawing: it is a solid silhouette, so it sits among the menu
+// bar's other extras instead of reading lighter than all of them the way a
+// line drawing does at 16 points.
 //
-// The whole drawing does not survive 16 points. At its own proportions it is
-// 11 points wide, and its stroke lands on half a pixel, so the crest and the
-// face grey into one another. What is drawn instead is the helmeted head: the
-// part of the drawing that is a complete subject on its own, cropped where no
-// stroke is cut part way through, at a weight set for this size the way SF
-// Symbols are drawn per optical size rather than scaled up and down.
+// Its states are made out of the drawing rather than hung off it. The owl's
+// eyes are the boldest thing in it at this size and they are what watching
+// means, so they carry the states: the silhouette never changes, and the item
+// keeps ONE width in every mode.
 
-/// The region of the master the menu bar draws, in its coordinates. Its left
-/// edge sits right of the crest's trailing line, so nothing is cut mid stroke.
-let crop = CGRect(x: 235, y: 470, width: 581, height: 731)
+let owlMaster = root.appendingPathComponent("Resources/Mark/MentorOwl.svg")
+let owl = try SVG.parse(contentsOf: owlMaster)
 
-/// Stroke weight added for this size, in the master's units.
-let menuBarThicken = 10.0
+/// The owl is one path made of four closed subpaths. They are told apart by
+/// what they are rather than by the order they happen to be written in, so a
+/// re-export of the artwork does not silently swap them.
+struct Owl {
+    var body: CGPath
+    var faceCutout: CGPath
+    var pupils: [CGPath]
+    /// The white of each eye, concentric with its pupil. Measured from the
+    /// drawing: the cutout reaches 35.8 units from each pupil's centre before
+    /// the body's ink begins again.
+    var eyes: [CGPath]
+    var bounds: CGRect
 
-/// The item's height in points, the size the menu bar gives a symbol.
-let menuBarHeight = 16.0
-/// The drawing's width at that height, from the crop's own proportions.
-let drawingWidth = (menuBarHeight * crop.width / crop.height).rounded()
-/// A lane beside the drawing that only a badge ever occupies. Every variant
-/// reserves it, watching included, so the mark is never covered and the item
-/// keeps ONE width in every mode: the menu bar's other extras never shift
-/// sideways when Mentor's state changes.
-let badgeLane = 6.0
-let menuBarWidth = drawingWidth + badgeLane
+    static func read(_ document: SVG.Document) throws -> Owl {
+        var subpaths: [CGPath] = []
+        var current = CGMutablePath()
+        for element in document.elements {
+            element.path.applyWithBlock { pointer in
+                let e = pointer.pointee
+                switch e.type {
+                case .moveToPoint:
+                    if !current.isEmpty { subpaths.append(current.copy()!) }
+                    current = CGMutablePath()
+                    current.move(to: e.points[0])
+                case .addLineToPoint: current.addLine(to: e.points[0])
+                case .addCurveToPoint: current.addCurve(to: e.points[2], control1: e.points[0], control2: e.points[1])
+                case .addQuadCurveToPoint: current.addQuadCurve(to: e.points[1], control: e.points[0])
+                case .closeSubpath: current.closeSubpath()
+                @unknown default: break
+                }
+            }
+        }
+        if !current.isEmpty { subpaths.append(current.copy()!) }
+        guard subpaths.count == 4 else { throw Failure.owlShape("expected 4 subpaths, found \(subpaths.count)") }
 
-/// What distinguishes a variant of the mark. The drawing itself never changes.
-///
-/// Changing this table is the whole of changing the set: the modes, their
-/// names and the resolution that picks between them live in
-/// `MenuBarMark` and do not move.
-enum Badge: String {
-    case none, moon, slash, noEntry, exclamation, pause
+        let byArea = subpaths.sorted {
+            $0.boundingBoxOfPath.width * $0.boundingBoxOfPath.height
+                > $1.boundingBoxOfPath.width * $1.boundingBoxOfPath.height
+        }
+        let body = byArea[0], faceCutout = byArea[1]
+        // The pupils are the two small round ones, left first.
+        let pupils = byArea[2...].sorted { $0.boundingBoxOfPath.midX < $1.boundingBoxOfPath.midX }
+        for pupil in pupils {
+            let box = pupil.boundingBoxOfPath
+            guard abs(box.width - box.height) < 1, box.width < faceCutout.boundingBoxOfPath.width / 3 else {
+                throw Failure.owlShape("a pupil is not the round shape it should be: \(box)")
+            }
+        }
+        let eyeRadius = 35.8
+        let eyes = pupils.map { pupil -> CGPath in
+            let centre = pupil.boundingBoxOfPath
+            return CGPath(ellipseIn: CGRect(x: centre.midX - eyeRadius, y: centre.midY - eyeRadius,
+                                            width: eyeRadius * 2, height: eyeRadius * 2), transform: nil)
+        }
+        return Owl(body: body, faceCutout: faceCutout, pupils: pupils, eyes: eyes,
+                   bounds: body.boundingBoxOfPath)
+    }
+
+    /// Everything but the eyes: the silhouette with the face cut out of it.
+    /// Every state starts here, which is why none of them can change the
+    /// outline or the width.
+    var base: CGPath { body.subtracting(faceCutout) }
 }
 
-let set: [(mark: String, badge: Badge)] = [
-    ("watching", .none),
-    ("idle", .moon),
-    ("paused", .slash),
-    ("excluded", .noEntry),
-    ("needsSomething", .exclamation),
-    ("held", .pause),
+let parts = try Owl.read(owl)
+
+/// What a state does to the owl's eyes. The drawing carries the state; nothing
+/// is hung off the side of it.
+enum Eyes: String {
+    /// Both pupils where the artist put them.
+    case open
+    /// No pupils, so the eye cutouts read as closed. The captain's own words:
+    /// "in the paused state have it have no dots in it's eyes as if they're
+    /// closed".
+    case closed
+    /// A lid down over the top of each eye, pupils still under it.
+    case halfLidded
+    /// Pupils pushed to one side: awake, looking away from what is in front.
+    case asideRight
+    /// Pupils grown to fill most of the eye: a wide stare.
+    case wide
+    /// One eye open and one closed.
+    case winking
+    /// Both eyes filled in. Not in the shipped set: it is here so the captain
+    /// can compare it against `closed`, because removing the pupils leaves the
+    /// whitest eyes in the set, which reads wide awake rather than shut.
+    case closedFilled
+    /// Both eyes filled in but for a slit, the way a closed eye is usually
+    /// drawn. Also a comparison, not in the shipped set.
+    case closedSlit
+}
+
+func drawEyes(_ eyes: Eyes) -> CGPath {
+    var path = parts.base
+    func addPupil(_ index: Int, offsetBy dx: Double = 0, scaledBy factor: Double = 1) {
+        let box = parts.pupils[index].boundingBoxOfPath
+        let radius = box.width / 2 * factor
+        let disc = CGPath(ellipseIn: CGRect(x: box.midX + dx - radius, y: box.midY - radius,
+                                            width: radius * 2, height: radius * 2), transform: nil)
+        path = path.union(disc)
+    }
+    switch eyes {
+    case .open:
+        addPupil(0); addPupil(1)
+    case .closed:
+        break
+    case .halfLidded:
+        // The lid is the top of the eye's own disc, so it can never spill past
+        // the cutout and change the silhouette.
+        for (index, eye) in parts.eyes.enumerated() {
+            let box = eye.boundingBoxOfPath
+            let lid = CGPath(rect: CGRect(x: box.minX - 1, y: box.midY - box.height * 0.06,
+                                          width: box.width + 2, height: box.height), transform: nil)
+            path = path.union(eye.intersection(lid))
+            _ = index
+        }
+        addPupil(0); addPupil(1)
+    case .asideRight:
+        // Far enough to sit against the rim of the eye without touching it.
+        let shift = 13.0
+        addPupil(0, offsetBy: shift); addPupil(1, offsetBy: shift)
+    case .wide:
+        addPupil(0, scaledBy: 1.7); addPupil(1, scaledBy: 1.7)
+    case .winking:
+        addPupil(0)
+        // The closed eye is filled in, so only one eye is still looking.
+        path = path.union(parts.eyes[1])
+    case .closedFilled:
+        for eye in parts.eyes { path = path.union(eye) }
+    case .closedSlit:
+        for eye in parts.eyes {
+            let box = eye.boundingBoxOfPath
+            let slit = CGPath(rect: CGRect(x: box.minX - 1, y: box.midY - box.height * 0.09,
+                                           width: box.width + 2, height: box.height * 0.18), transform: nil)
+            path = path.union(eye.subtracting(slit))
+        }
+    }
+    return path
+}
+
+/// The item's height in points, the size the menu bar gives a symbol, and the
+/// owl's width at that height from its own proportions.
+let menuBarHeight = 16.0
+let menuBarWidth = (menuBarHeight * parts.bounds.width / parts.bounds.height * 2).rounded() / 2
+
+/// Which treatment each state gets.
+///
+/// Changing this table is the whole of changing the set: the modes, their
+/// names and the resolution that picks between them live in `MenuBarMark` and
+/// do not move.
+let set: [(mark: String, eyes: Eyes)] = [
+    ("watching", .open),
+    ("idle", .halfLidded),
+    ("paused", .closed),
+    ("excluded", .asideRight),
+    ("needsSomething", .wide),
+    ("held", .winking),
 ]
 
-/// Draws one variant into a context already sized in points.
-///
-/// Every shape here is made by clipping rather than by erasing: a PDF has no
-/// notion of clearing pixels that are already down, so a blend mode that works
-/// on a bitmap silently does nothing in the file the app actually loads.
-func drawMenuBarMark(_ badge: Badge, into context: CGContext) {
+func drawMenuBarMark(_ eyes: Eyes, into context: CGContext) {
     context.setAllowsAntialiasing(true)
     context.setFillColor(ink)
-    context.setStrokeColor(ink)
-    let box = CGRect(x: 0, y: 0, width: menuBarWidth, height: menuBarHeight)
-
-    /// Clips to everything outside `shape`, so what is drawn next appears to
-    /// have had a margin taken out of it.
-    func clippingOutside(_ shape: CGPath, _ body: () -> Void) {
-        context.saveGState()
-        context.addRect(box.insetBy(dx: -menuBarWidth, dy: -menuBarHeight))
-        context.addPath(shape)
-        context.clip(using: .evenOdd)
-        body()
-        context.restoreGState()
-    }
-
-    // A slash is the one variant drawn across the drawing rather than beside
-    // it, because "not watching at all" is the state that has to read at a
-    // glance. It stays inside the drawing's own box, and the drawing keeps a
-    // clear margin around it, the way a slashed SF Symbol does.
-    let inset = menuBarHeight * 0.08
-    let slash = CGMutablePath()
-    slash.move(to: CGPoint(x: inset, y: inset))
-    slash.addLine(to: CGPoint(x: drawingWidth - inset, y: menuBarHeight - inset))
-    let slashWidth = menuBarHeight * 0.115
-    let gap = slash.copy(strokingWithWidth: CGFloat(slashWidth + menuBarHeight * 0.13),
-                         lineCap: .round, lineJoin: .round, miterLimit: 10)
-
-    func drawDrawing() {
-        context.saveGState()
-        let scale = menuBarHeight / crop.height
-        context.translateBy(x: 0, y: CGFloat(menuBarHeight))
-        context.scaleBy(x: CGFloat(scale), y: CGFloat(-scale))
-        context.translateBy(x: -crop.minX, y: -crop.minY)
-        context.clip(to: crop)
-        for element in document.elements where element.group == "lineart" {
-            context.addPath(element.path)
-            context.fillPath(using: element.evenOdd ? .evenOdd : .winding)
-            context.addPath(element.path)
-            context.setLineWidth(CGFloat(menuBarThicken))
-            context.setLineJoin(.round)
-            context.strokePath()
-        }
-        context.restoreGState()
-    }
-
-    if badge == .slash {
-        clippingOutside(gap) { drawDrawing() }
-        context.setLineWidth(CGFloat(slashWidth))
-        context.setLineCap(.round)
-        context.addPath(slash)
-        context.strokePath()
-        return
-    }
-    drawDrawing()
-    guard badge != .none else { return }
-
-    // Everything else sits in the reserved lane, aligned low the way an SF
-    // Symbols badge sits under its symbol.
-    let side = badgeLane - 1
-    let cell = CGRect(x: drawingWidth + 0.5, y: menuBarHeight * 0.06, width: side, height: side)
-    let centre = CGPoint(x: cell.midX, y: cell.midY)
-    switch badge {
-    case .moon:
-        // A disc with a second disc taken out of it, which keeps its crescent
-        // at five points where a drawn moon would not.
-        let bite = CGPath(ellipseIn: CGRect(x: centre.x - side * 0.16, y: centre.y - side * 0.40,
-                                            width: side * 0.92, height: side * 0.92), transform: nil)
-        clippingOutside(bite) {
-            context.fillEllipse(in: CGRect(x: centre.x - side * 0.5, y: centre.y - side * 0.5,
-                                           width: side, height: side))
-        }
-    case .noEntry:
-        let radius = side * 0.5
-        let bar = CGPath(rect: CGRect(x: centre.x - radius * 0.58, y: centre.y - radius * 0.20,
-                                      width: radius * 1.16, height: radius * 0.40), transform: nil)
-        clippingOutside(bar) {
-            context.fillEllipse(in: CGRect(x: centre.x - radius, y: centre.y - radius,
-                                           width: radius * 2, height: radius * 2))
-        }
-    case .exclamation:
-        let barWidth = side * 0.26
-        context.fill(CGRect(x: centre.x - barWidth / 2, y: centre.y - side * 0.10,
-                            width: barWidth, height: side * 0.60))
-        context.fillEllipse(in: CGRect(x: centre.x - barWidth / 2, y: centre.y - side * 0.48,
-                                       width: barWidth, height: barWidth))
-    case .pause:
-        let barWidth = side * 0.26, between = side * 0.24
-        context.fill(CGRect(x: centre.x - between / 2 - barWidth, y: centre.y - side * 0.46,
-                            width: barWidth, height: side * 0.92))
-        context.fill(CGRect(x: centre.x + between / 2, y: centre.y - side * 0.46,
-                            width: barWidth, height: side * 0.92))
-    case .none, .slash:
-        break
-    }
+    context.saveGState()
+    let scale = menuBarHeight / parts.bounds.height
+    // The owl's own extent, centred in the item's box. SVG counts y down the
+    // page and a PDF counts it up, so the drawing is flipped as well as
+    // scaled, or the owl stands on its head.
+    let drawnWidth = parts.bounds.width * scale
+    context.translateBy(x: CGFloat((menuBarWidth - drawnWidth) / 2), y: CGFloat(menuBarHeight))
+    context.scaleBy(x: CGFloat(scale), y: CGFloat(-scale))
+    context.translateBy(x: -parts.bounds.minX, y: -parts.bounds.minY)
+    context.addPath(drawEyes(eyes))
+    context.fillPath(using: .winding)
+    context.restoreGState()
 }
 
 /// Core Graphics stamps every PDF it writes with the time it was written and
 /// an id derived from it, so two runs over the same drawing produce two
 /// different files. These are committed, so that would dirty all six on every
-/// `make mark` and make "regenerate and check nothing moved" impossible.
-/// Rewriting both fields, the id from the file's own content, leaves the
-/// output a pure function of the master SVG and this script.
+/// `make mark`. Rewriting both fields, the id from the file's own content,
+/// leaves the output a pure function of the masters and this script.
 func makeReproducible(_ url: URL) throws {
     var bytes = try Data(contentsOf: url)
     let before = bytes.count
@@ -590,8 +630,6 @@ func makeReproducible(_ url: URL) throws {
         rewrite(after: "<", until: ">", with: value, from: trailer.lowerBound)
     }
     rewriteIDs(with: blank)
-    // Hashed from the file with the ids blanked, so it still changes when the
-    // drawing does and never when only the clock has.
     let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined().prefix(32)
     rewriteIDs(with: String(digest))
 
@@ -602,18 +640,19 @@ func makeReproducible(_ url: URL) throws {
 /// PDF, so one file serves every display scale the menu bar is drawn at, and
 /// so it stays a template: shape and alpha only, no colour of its own.
 func writeMenuBarMarks() throws {
-    for (mark, badge) in set {
+    for (mark, eyes) in set {
         let url = markDirectory.appendingPathComponent("MenuBarMark-\(mark).pdf")
-        var box = CGRect(x: 0, y: 0, width: menuBarWidth, height: menuBarHeight)
+        var page = CGRect(x: 0, y: 0, width: menuBarWidth, height: menuBarHeight)
         guard let consumer = CGDataConsumer(url: url as CFURL),
-              let context = CGContext(consumer: consumer, mediaBox: &box, nil) else { throw Failure.iconutil }
+              let context = CGContext(consumer: consumer, mediaBox: &page, nil) else { throw Failure.iconutil }
         context.beginPDFPage(nil)
-        drawMenuBarMark(badge, into: context)
+        drawMenuBarMark(eyes, into: context)
         context.endPDFPage()
         context.closePDF()
         try makeReproducible(url)
     }
-    print("  Resources/Mark/MenuBarMark-*.pdf  (\(set.count) variants, \(Int(menuBarWidth)) x \(Int(menuBarHeight)) pt, one width in every mode)")
+    print("  Resources/Mark/MenuBarMark-*.pdf  (\(set.count) states of the owl, "
+          + "\(menuBarWidth) x \(Int(menuBarHeight)) pt, one width in every mode)")
 }
 
 /// Records which master the committed assets were built from.
@@ -625,18 +664,20 @@ func writeMenuBarMarks() throws {
 /// records: `MarkAssetTests` fails when the master has changed and `make mark`
 /// has not been run.
 func writeProvenance() throws {
-    let svg = try Data(contentsOf: master)
-    let digest = SHA256.hash(data: svg).map { String(format: "%02x", $0) }.joined()
+    let digest = try [master, owlMaster].map { url -> String in
+        let data = try Data(contentsOf: url)
+        return url.lastPathComponent + " " + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }.joined(separator: "\n")
     let text = """
     # Which master Resources/AppIcon.icns and the MenuBarMark PDFs beside it
     # were built from. Written by scripts/mark-assets.swift; run `make mark`
     # after changing MentorMark.svg or the variant set, never edit this by hand.
-    MentorMark.svg \(digest)
+    \(digest)
     variants \(set.map(\.mark).joined(separator: " "))
 
     """
     try text.write(to: markDirectory.appendingPathComponent("built-from.txt"), atomically: true, encoding: .utf8)
-    print("  Resources/Mark/built-from.txt  (master \(digest.prefix(12))...)")
+    print("  Resources/Mark/built-from.txt  (both masters recorded)")
 }
 
 try writeIcon()

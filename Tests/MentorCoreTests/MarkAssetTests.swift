@@ -77,12 +77,16 @@ import Testing
     /// It compares what the assets were built from rather than rebuilding
     /// them, because Core Graphics stamps the running macOS version into every
     /// PDF it writes, so two machines cannot produce the same bytes.
-    @Test func theAssetsWereBuiltFromTheMasterThatIsHereNow() throws {
+    @Test func theAssetsWereBuiltFromTheMastersThatAreHereNow() throws {
         let record = try String(contentsOf: markDirectory.appendingPathComponent("built-from.txt"), encoding: .utf8)
-        let svg = try Data(contentsOf: markDirectory.appendingPathComponent("MentorMark.svg"))
-        let digest = SHA256.hash(data: svg).map { String(format: "%02x", $0) }.joined()
-        #expect(record.contains("MentorMark.svg \(digest)"),
-                "Resources/Mark/MentorMark.svg has changed since the assets were built; run `make mark`")
+        // Two masters: the Athena drawing behind the app icon, and the owl
+        // behind the menu bar.
+        for name in ["MentorMark.svg", "MentorOwl.svg"] {
+            let svg = try Data(contentsOf: markDirectory.appendingPathComponent(name))
+            let digest = SHA256.hash(data: svg).map { String(format: "%02x", $0) }.joined()
+            #expect(record.contains("\(name) \(digest)"),
+                    "Resources/Mark/\(name) has changed since the assets were built; run `make mark`")
+        }
         // And the set it was built for is the set the code can ask for.
         let variants = record.split(separator: "\n")
             .first { $0.hasPrefix("variants ") }?
@@ -93,7 +97,7 @@ import Testing
                 "the variant set has changed since the assets were built; run `make mark`")
     }
 
-    @Test func theMasterCarriesBothGroupsSoEitherCanBeUsedAlone() throws {
+    @Test func theIconMasterCarriesBothGroupsSoEitherCanBeUsedAlone() throws {
         let svg = try String(contentsOf: markDirectory.appendingPathComponent("MentorMark.svg"), encoding: .utf8)
         #expect(svg.contains("id=\"shapes\""))
         #expect(svg.contains("id=\"lineart\""))
@@ -101,6 +105,27 @@ import Testing
         #expect(svg.contains("<circle"))
         #expect(svg.contains("<rect"))
         #expect(svg.contains("<polygon"))
+    }
+
+    /// The owl's states are made out of its own parts, so the menu bar asset
+    /// depends on the drawing still being four closed subpaths: the body, the
+    /// cutout holding both eyes, and a pupil in each. A re-export that merged
+    /// or split them would change what the states mean.
+    @Test func theOwlMasterStillHasTheFourPartsTheStatesAreMadeFrom() throws {
+        let svg = try String(contentsOf: markDirectory.appendingPathComponent("MentorOwl.svg"), encoding: .utf8)
+        // Counted inside the path data, not over the whole file, so the
+        // comment at the top cannot be mistaken for geometry.
+        guard let open = svg.range(of: " d=\""),
+              let close = svg[open.upperBound...].range(of: "\"") else {
+            Issue.record("the owl master has no path data")
+            return
+        }
+        let data = svg[open.upperBound..<close.lowerBound]
+        let subpaths = data.filter { $0 == "M" || $0 == "m" }.count
+        #expect(subpaths == 4, "the owl should be four subpaths, found \(subpaths)")
+        // Content credentials belong with the artwork, not in a built asset.
+        #expect(!svg.contains("c2pa"))
+        #expect(!svg.contains("<metadata"))
     }
 
     /// The icon carries every size the format holds, so macOS never has to
