@@ -26,9 +26,10 @@ import Foundation
 
 enum Failure: Error { case iconutil, pdfLengthChanged, owlShape(String), svg(String) }
 
-/// A small reader for the subset of SVG this project's mark uses: groups with
-/// transforms, paths, and the three primitives the cream layer is made of.
-/// Enough to rasterise the committed master source, and no more.
+/// A small reader for the subset of SVG this project's mark uses: groups,
+/// paths, and the three primitives the cream layer is made of, all in one flat
+/// coordinate space. Enough to rasterise the committed master source, and no
+/// more.
 ///
 /// Anything outside that subset stops the build. Both assets are generated and
 /// committed, so a master carrying something this reader does not understand
@@ -49,39 +50,43 @@ enum SVG {
     static func parse(contentsOf url: URL) throws -> Document {
         guard let root = try XMLDocument(contentsOf: url).rootElement() else { return Document(elements: []) }
         var elements: [Element] = []
-        try read(root, into: &elements, transform: .identity,
-                 fill: CGColor(red: 0, green: 0, blue: 0, alpha: 1), group: nil)
+        try read(root, into: &elements, fill: CGColor(red: 0, green: 0, blue: 0, alpha: 1), group: nil)
         return Document(elements: elements)
     }
 
     // MARK: Reading
 
     /// Walks the tree, carrying down what an element inherits from the groups
-    /// it sits in: the transform, the fill, and the name of the group itself.
+    /// it sits in: the fill, and the name of the group itself.
     ///
     /// Only `svg` and `g` hold other elements. Anything else is drawn or
     /// refused, never descended into: `defs`, `clipPath` and `mask` carry
     /// geometry that is referred to rather than painted, and painting it fills
     /// the icon with a shape that was never meant to be seen.
+    ///
+    /// A `transform` is refused too. The masters are written in one flat
+    /// coordinate space, so nothing here needs one, and an implementation
+    /// nothing exercises is one that quietly draws the wrong geometry the day
+    /// a re-export does carry it.
     private static func read(
         _ element: XMLElement, into elements: inout [Element],
-        transform inherited: CGAffineTransform, fill inheritedFill: CGColor?, group: String?
+        fill inheritedFill: CGColor?, group: String?
     ) throws {
-        var local = inherited
-        if let own = attribute("transform", of: element) { local = transform(own).concatenating(local) }
-        let fill = attribute("fill", of: element).map(colour) ?? inheritedFill
         let name = element.name ?? ""
+        if attribute("transform", of: element) != nil {
+            throw Failure.svg("<\(name)> carries a transform, which this reader does not apply; the "
+                              + "masters are written in one flat coordinate space and need none")
+        }
+        let fill = attribute("fill", of: element).map(colour) ?? inheritedFill
         guard name == "svg" || name == "g" else {
-            let transformed = CGMutablePath()
-            transformed.addPath(try shape(of: element), transform: local)
-            elements.append(Element(path: transformed, fill: fill,
+            elements.append(Element(path: try shape(of: element), fill: fill,
                                     evenOdd: attribute("fill-rule", of: element) == "evenodd", group: group))
             return
         }
         let group = name == "g" ? attribute("id", of: element) ?? group : group
         for child in element.children ?? [] {
             guard let child = child as? XMLElement else { continue }
-            try read(child, into: &elements, transform: local, fill: fill, group: group)
+            try read(child, into: &elements, fill: fill, group: group)
         }
     }
 
@@ -154,27 +159,6 @@ enum SVG {
         guard let n = UInt32(value, radix: 16) else { return nil }
         return CGColor(red: CGFloat((n >> 16) & 0xFF) / 255, green: CGFloat((n >> 8) & 0xFF) / 255,
                        blue: CGFloat(n & 0xFF) / 255, alpha: 1)
-    }
-
-    private static func transform(_ text: String) -> CGAffineTransform {
-        var result = CGAffineTransform.identity
-        var index = text.startIndex
-        while let open = text[index...].firstIndex(of: "(") {
-            let name = text[index..<open].trimmingCharacters(in: CharacterSet(charactersIn: " ,\n\t"))
-            guard let close = text[open...].firstIndex(of: ")") else { break }
-            let n = numbers(String(text[text.index(after: open)..<close]))
-            var step = CGAffineTransform.identity
-            switch name {
-            case "translate": step = CGAffineTransform(translationX: n[0], y: n.count > 1 ? n[1] : 0)
-            case "scale": step = CGAffineTransform(scaleX: n[0], y: n.count > 1 ? n[1] : n[0])
-            case "matrix": step = CGAffineTransform(a: n[0], b: n[1], c: n[2], d: n[3], tx: n[4], ty: n[5])
-            case "rotate": step = CGAffineTransform(rotationAngle: n[0] * .pi / 180)
-            default: break
-            }
-            result = step.concatenating(result)
-            index = text.index(after: close)
-        }
-        return result
     }
 
     private static func pathData(_ d: String) throws -> CGMutablePath {
