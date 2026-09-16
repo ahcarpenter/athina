@@ -1,6 +1,6 @@
-# Which master Resources/AppIcon.icns and the MenuBarMark PDFs beside it
+# Which masters Resources/AppIcon.icns and the MenuBarMark PDFs beside it
 # were built from. Written by scripts/mark-assets.swift; run `make mark`
-# after changing MentorMark.svg or the variant set, never edit this by hand.
+# after changing either master or the variant set, never edit this by hand.
 MentorMark.svg 832953963c962bb27b706577f40bb85a0846df46deb870979f3e6f68dcdc9f01
 MentorOwl.svg dabbfd228654157e6b629d5a3fa039b49abcf0c2c043959885aac45dfce6f4a0
 variants watching idle paused excluded needsSomething held

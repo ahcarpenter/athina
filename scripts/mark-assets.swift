@@ -40,101 +40,73 @@ enum SVG {
     }
 
     static func parse(contentsOf url: URL) throws -> Document {
-        let text = try String(contentsOf: url, encoding: .utf8)
+        guard let root = try XMLDocument(contentsOf: url).rootElement() else { return Document(elements: []) }
         var elements: [Element] = []
-        var transforms: [CGAffineTransform] = [.identity]
-        var fills: [CGColor?] = [CGColor(red: 0, green: 0, blue: 0, alpha: 1)]
-        var groups: [String?] = [nil]
-
-        for token in tags(in: text) {
-            let name = tagName(token)
-            let closing = token.hasPrefix("</")
-            let selfClosing = token.hasSuffix("/>")
-            if name == "g" {
-                if closing {
-                    if transforms.count > 1 { transforms.removeLast(); fills.removeLast(); groups.removeLast() }
-                    continue
-                }
-                let t = attribute("transform", in: token).map(transform) ?? .identity
-                transforms.append(t.concatenating(transforms.last!))
-                fills.append(attribute("fill", in: token).map(colour) ?? fills.last!)
-                groups.append(attribute("id", in: token) ?? groups.last!)
-                if selfClosing { transforms.removeLast(); fills.removeLast(); groups.removeLast() }
-                continue
-            }
-            guard !closing else { continue }
-            var local = transforms.last!
-            if let own = attribute("transform", in: token) { local = transform(own).concatenating(local) }
-            let fill = attribute("fill", in: token).map(colour) ?? fills.last!
-            let evenOdd = attribute("fill-rule", in: token) == "evenodd"
-            var built: CGMutablePath?
-            switch name {
-            case "path":
-                if let d = attribute("d", in: token) { built = pathData(d) }
-            case "circle":
-                let cx = number("cx", token), cy = number("cy", token), r = number("r", token)
-                let p = CGMutablePath()
-                p.addEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
-                built = p
-            case "rect":
-                let p = CGMutablePath()
-                p.addRect(CGRect(x: number("x", token), y: number("y", token),
-                                 width: number("width", token), height: number("height", token)))
-                built = p
-            case "polygon":
-                if let points = attribute("points", in: token) {
-                    let n = numbers(points)
-                    let p = CGMutablePath()
-                    for i in stride(from: 0, to: n.count - 1, by: 2) {
-                        let pt = CGPoint(x: n[i], y: n[i + 1])
-                        if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
-                    }
-                    p.closeSubpath()
-                    built = p
-                }
-            default: continue
-            }
-            guard let built else { continue }
-            let transformed = CGMutablePath()
-            transformed.addPath(built, transform: local)
-            elements.append(Element(path: transformed, fill: fill, evenOdd: evenOdd, group: groups.last!))
-        }
+        read(root, into: &elements, transform: .identity,
+             fill: CGColor(red: 0, green: 0, blue: 0, alpha: 1), group: nil)
         return Document(elements: elements)
     }
 
     // MARK: Reading
 
-    private static func tags(in text: String) -> [String] {
-        var found: [String] = []
-        var current = ""
-        var inside = false
-        for character in text {
-            if character == "<" { inside = true; current = "<" }
-            else if character == ">" && inside { current.append(">"); found.append(current); inside = false }
-            else if inside { current.append(character) }
+    /// Walks the tree, carrying down what an element inherits from the groups
+    /// it sits in: the transform, the fill, and the name of the group itself.
+    private static func read(
+        _ element: XMLElement, into elements: inout [Element],
+        transform inherited: CGAffineTransform, fill inheritedFill: CGColor?, group: String?
+    ) {
+        var local = inherited
+        if let own = attribute("transform", of: element) { local = transform(own).concatenating(local) }
+        let fill = attribute("fill", of: element).map(colour) ?? inheritedFill
+        if let built = shape(of: element) {
+            let transformed = CGMutablePath()
+            transformed.addPath(built, transform: local)
+            elements.append(Element(path: transformed, fill: fill,
+                                    evenOdd: attribute("fill-rule", of: element) == "evenodd", group: group))
+            return
         }
-        return found
-    }
-
-    private static func tagName(_ token: String) -> String {
-        var name = ""
-        for character in token.dropFirst() {
-            if character == "/" && name.isEmpty { continue }
-            if character.isWhitespace || character == ">" || character == "/" { break }
-            name.append(character)
+        let group = element.name == "g" ? attribute("id", of: element) ?? group : group
+        for child in element.children ?? [] {
+            guard let child = child as? XMLElement else { continue }
+            read(child, into: &elements, transform: local, fill: fill, group: group)
         }
-        return name
     }
 
-    private static func attribute(_ name: String, in token: String) -> String? {
-        guard let range = token.range(of: "\(name)=\"") else { return nil }
-        let rest = token[range.upperBound...]
-        guard let end = rest.firstIndex(of: "\"") else { return nil }
-        return String(rest[..<end])
+    /// One drawable element's geometry in its own coordinates: a path, or one
+    /// of the three primitives the cream layer is made of. Nil for anything
+    /// else, which is a container to descend into.
+    private static func shape(of element: XMLElement) -> CGPath? {
+        func number(_ name: String) -> Double { attribute(name, of: element).flatMap(Double.init) ?? 0 }
+        switch element.name {
+        case "path":
+            guard let d = attribute("d", of: element) else { return nil }
+            return pathData(d)
+        case "circle":
+            let cx = number("cx"), cy = number("cy"), r = number("r")
+            let p = CGMutablePath()
+            p.addEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
+            return p
+        case "rect":
+            let p = CGMutablePath()
+            p.addRect(CGRect(x: number("x"), y: number("y"),
+                             width: number("width"), height: number("height")))
+            return p
+        case "polygon":
+            guard let points = attribute("points", of: element) else { return nil }
+            let n = numbers(points)
+            let p = CGMutablePath()
+            for i in stride(from: 0, to: n.count - 1, by: 2) {
+                let pt = CGPoint(x: n[i], y: n[i + 1])
+                if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+            }
+            p.closeSubpath()
+            return p
+        default: return nil
+        }
     }
 
-    private static func number(_ name: String, _ token: String) -> Double {
-        attribute(name, in: token).flatMap(Double.init) ?? 0
+    private static func attribute(_ name: String, of element: XMLElement) -> String? {
+        element.attribute(forName: name)?.stringValue
     }
 
     private static func numbers(_ text: String) -> [Double] {
@@ -240,8 +212,6 @@ enum SVG {
                 path.addCurve(to: p, control1: c1, control2: c2); point = p
             case "Z", "z":
                 path.closeSubpath(); point = start
-                if i < tokens.count, tokens[i].count == 1, tokens[i].first!.isLetter { } else { i += 0 }
-                if i < tokens.count, !(tokens[i].count == 1 && tokens[i].first!.isLetter) { }
                 // Nothing follows a close but the next command.
                 if i < tokens.count, let c = tokens[i].first, !c.isLetter { i += 1 }
             default:
@@ -508,14 +478,15 @@ func drawEyes(_ eyes: Eyes) -> CGPath {
     case .closed:
         break
     case .halfLidded:
-        // The lid is the top of the eye's own disc, so it can never spill past
-        // the cutout and change the silhouette.
-        for (index, eye) in parts.eyes.enumerated() {
+        // A drowsy eye closes from the top, and y runs down the page here, so
+        // the lid falls from the eye's own minY to just past its centre. It is
+        // cut to the eye's disc, so it can never spill past the cutout and
+        // change the silhouette, and the pupils still show beneath it.
+        for eye in parts.eyes {
             let box = eye.boundingBoxOfPath
-            let lid = CGPath(rect: CGRect(x: box.minX - 1, y: box.midY - box.height * 0.06,
-                                          width: box.width + 2, height: box.height), transform: nil)
+            let lid = CGPath(rect: CGRect(x: box.minX - 1, y: box.minY,
+                                          width: box.width + 2, height: box.height * 0.56), transform: nil)
             path = path.union(eye.intersection(lid))
-            _ = index
         }
         addPupil(0); addPupil(1)
     case .asideRight:
@@ -647,9 +618,9 @@ func writeProvenance() throws {
         return url.lastPathComponent + " " + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }.joined(separator: "\n")
     let text = """
-    # Which master Resources/AppIcon.icns and the MenuBarMark PDFs beside it
+    # Which masters Resources/AppIcon.icns and the MenuBarMark PDFs beside it
     # were built from. Written by scripts/mark-assets.swift; run `make mark`
-    # after changing MentorMark.svg or the variant set, never edit this by hand.
+    # after changing either master or the variant set, never edit this by hand.
     \(digest)
     variants \(set.map(\.mark).joined(separator: " "))
 

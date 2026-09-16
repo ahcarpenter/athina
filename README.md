@@ -1069,14 +1069,14 @@ particular to this app:
   where more input follows, and no standard keyboard shortcut is repurposed.
   The icon is the owl as a template image, one variant per mode, with a word
   beside it only in replay or recording.
-- **The mark is the artist's drawing, and both assets come from one vector.**
+- **The mark is the artist's drawing, and every asset comes from a vector.**
   `Resources/Mark/MentorMark.svg` is the master for the app icon: a profile in a crested
   Corinthian helmet over a flat cream circle, square and hexagon, in the
   reference bitmap's own coordinates, with the line art and the cream shapes in
   separate groups so either stands alone. Ink is `#332C2B` and cream `#F1DEB7`,
   both sampled from the drawing rather than chosen. `make mark`
-  (`scripts/mark-assets.swift`) builds the app icon and the menu bar mark from
-  it, along with the owl the menu bar uses; their outputs are committed, so a
+  (`scripts/mark-assets.swift`) builds the app icon from it and the menu bar
+  mark from the second master, the owl below; their outputs are committed, so a
   plain `make build` needs nothing else, and `MarkAssetTests` fails when either
   master changes without `make mark` being run.
 - **The app icon is the full artwork, full bleed.** macOS 26 masks a legacy
