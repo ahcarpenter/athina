@@ -3,7 +3,7 @@
 # same lane launched before from this checkout: never a Mentor from another
 # checkout, another lane, or anything started some other way.
 #
-# Usage: scripts/launch.sh <lane> [--live] [--allow-second-live] [-- app arguments...]
+# Usage: scripts/launch.sh <lane> [--live] [-- app arguments...]
 #
 # <lane> names the pid file, build/<lane>.pid. `make run` and `make record`
 # share the lane "live", since both use the live journal and settings;
@@ -15,25 +15,25 @@
 # the set of Mentor processes before and after would adopt the wrong one when
 # two launches from this checkout overlap, which "any number of replays at
 # once" invites. The pid is reported, and written to the pid file, only once
-# the app has lived past the point where it refuses a launch it must not make.
+# the app itself says it started, on the line it writes past every reason it
+# could refuse this launch. Elapsed time is never taken as proof: on a loaded
+# Mac the app can still be short of that point after seconds.
 #
 # `--live` guards the live files. Before this script, every launch target began
 # with `pkill -x Mentor`, so two live instances were impossible; two of them
 # share one journal, both write the whole settings file when they quit, and
 # both bill the API. A live launch therefore refuses to start while another
-# live Mentor runs, naming it, unless `--allow-second-live` says that is
-# wanted. A replay needs no such guard: its data directory is its own.
+# live Mentor runs, naming it. A replay needs no such guard: its data
+# directory is its own.
 set -euo pipefail
 
-[ "$#" -ge 1 ] || { echo "usage: scripts/launch.sh <lane> [--live] [--allow-second-live] [-- app arguments...]" >&2; exit 2; }
+[ "$#" -ge 1 ] || { echo "usage: scripts/launch.sh <lane> [--live] [-- app arguments...]" >&2; exit 2; }
 LANE="$1"
 shift
 LIVE=0
-ALLOW_SECOND_LIVE=0
 while [ "$#" -gt 0 ]; do
 	case "$1" in
 	--live) LIVE=1; shift ;;
-	--allow-second-live) ALLOW_SECOND_LIVE=1; shift ;;
 	--) shift; break ;;
 	*) break ;;
 	esac
@@ -57,13 +57,15 @@ ours() {
 }
 
 # Every Mentor on this Mac that is not a replay or a snapshot render, whatever
-# checkout or bundle it came from, as "<pid> <command>" lines.
+# checkout or bundle it came from, as "<pid> <command>" lines. The bundle path
+# has to be the command itself, as in `ours` and `started`: a process that only
+# names it in its arguments, this script's own awk helpers among them, is not a
+# running Mentor.
 live_mentors() {
 	ps -axo pid=,command= | awk '{
-		line = $0
 		pid = $1
 		sub(/^ *[0-9]+ +/, "")
-		if ($0 !~ /\/Mentor\.app\/Contents\/MacOS\/Mentor($| )/) next
+		if ($0 !~ /^[^ ]*\/Mentor\.app\/Contents\/MacOS\/Mentor($| )/) next
 		if ($0 ~ /--replay($| )/ || $0 ~ /--snapshot($| )/) next
 		print pid, $0
 	}'
@@ -90,13 +92,13 @@ stop_previous() {
 
 stop_previous
 
-if [ "$LIVE" = 1 ] && [ "$ALLOW_SECOND_LIVE" = 0 ]; then
+if [ "$LIVE" = 1 ]; then
 	running="$(live_mentors || true)"
 	if [ -n "$running" ]; then
 		{
 			echo "launch: a live Mentor is already running, so this one would share its journal, its settings, and its API spend:"
 			echo "$running" | sed 's/^/  /'
-			echo "Quit it first (kill <pid>), or pass ALLOW_SECOND_LIVE=1 to start a second live copy on purpose."
+			echo "Quit it first (kill <pid>)."
 		} >&2
 		exit 1
 	fi
@@ -114,15 +116,18 @@ started() {
 	}' | head -n 1
 }
 
-# `open` hands the app its own stderr, so a refusal it prints there would
-# otherwise reach nothing but the unified log.
+# `open` hands the app its own stdout and stderr, so the line it writes once it
+# has started, and any refusal it prints, would otherwise reach nothing but the
+# unified log. Both files are this launch's alone, so only the app it started
+# ever writes to them.
+STARTED_LINE="$(mktemp "${TMPDIR:-/tmp}/mentor-started-XXXXXXXX")"
 STARTUP_ERRORS="$(mktemp "${TMPDIR:-/tmp}/mentor-launch-XXXXXXXX")"
-trap 'rm -f "$STARTUP_ERRORS"' EXIT
+trap 'rm -f "$STARTED_LINE" "$STARTUP_ERRORS"' EXIT
 
 if [ "$#" -gt 0 ]; then
-	open -n --stderr "$STARTUP_ERRORS" "$APP" --args "$@" --launch-token "$TOKEN"
+	open -n --stdout "$STARTED_LINE" --stderr "$STARTUP_ERRORS" "$APP" --args "$@" --launch-token "$TOKEN"
 else
-	open -n --stderr "$STARTUP_ERRORS" "$APP" --args --launch-token "$TOKEN"
+	open -n --stdout "$STARTED_LINE" --stderr "$STARTUP_ERRORS" "$APP" --args --launch-token "$TOKEN"
 fi
 
 pid=""
@@ -138,15 +143,26 @@ fi
 
 # A pid is not yet a running Mentor: the app refuses a launch it must not make,
 # such as a --data-dir another replay holds, from applicationDidFinishLaunching,
-# a moment after its process appears. Reporting the pid before then would hand
-# back a pid file for a process that is already gone.
-for _ in $(seq 20); do
+# and how long that takes to reach is a property of the Mac, not of this launch.
+# So wait for the app to say it started, and stop early when it says it did not
+# or goes away. The timeout is in tenths of a second, and generous: it is there
+# to end the wait, not to time the app.
+STARTED_TIMEOUT=600
+ready=0
+for _ in $(seq "$STARTED_TIMEOUT"); do
+	if [ -s "$STARTED_LINE" ]; then ready=1; break; fi
+	if [ -s "$STARTUP_ERRORS" ]; then break; fi
+	if ! kill -0 "$pid" 2>/dev/null; then break; fi
 	sleep 0.1
-	kill -0 "$pid" 2>/dev/null || break
 done
-if ! kill -0 "$pid" 2>/dev/null; then
+
+if [ "$ready" = 0 ]; then
 	{
-		echo "launch: Mentor (lane $LANE) quit as it started, so nothing is running:"
+		if kill -0 "$pid" 2>/dev/null; then
+			echo "launch: Mentor (lane $LANE, pid $pid) never wrote the line it writes once it has started, after $((STARTED_TIMEOUT / 10))s; it is running but not started, so this lane claims nothing:"
+		else
+			echo "launch: Mentor (lane $LANE) quit as it started, so nothing is running:"
+		fi
 		if [ -s "$STARTUP_ERRORS" ]; then
 			sed 's/^/  /' <"$STARTUP_ERRORS"
 		else

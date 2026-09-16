@@ -46,9 +46,8 @@ replays, and a Mentor started any other way keep running. `make run` and
 `make record` share the lane `live`; `make run-replay` uses `replay`, or
 `LANE=<name>` (see Replays side by side). Because two live Mentors would share
 one journal, one settings file, and one API bill, a live launch refuses to
-start while another live Mentor runs and names it; `ALLOW_SECOND_LIVE=1` starts
-one anyway. Nothing stops a person launching a second copy from Finder, which
-was equally true before.
+start while another live Mentor runs and names it. Nothing stops a person
+launching a second copy from Finder, which was equally true before.
 
 There is no Xcode project. `Package.swift` defines the targets and
 `scripts/bundle.sh` wraps the release binary in an app bundle with
@@ -288,15 +287,19 @@ of them disturbs another or the live app:
   all, and says which pid holds it, because the caller named that directory to
   read its journal and a replay writing somewhere else would leave a check
   reading a stale journal. A replay with no `--data-dir` always gets a
-  directory of its own, so it never collides. Each replay launch that makes a
-  new directory removes finished ones past the newest 10, and finished ones
-  older than the thumbnail retention window (6 hours by default): a finished
-  replay's journal is never opened again, so retention can never age the
-  thumbnails and recognized text it captured from the real screen, and the
-  whole directory goes at the shortest window instead. It never removes one a
-  running replay holds, and never a directory with any other name, so a
-  `--data-dir` you named is yours to keep. The debug panel's Mentor card and
-  the log at launch show which directory a replay uses.
+  directory of its own, so it never collides. Every replay launch sweeps the
+  finished per-launch directories as it starts, whether it made its own or was
+  given one with `--data-dir`, and removes those past the newest 10 and those
+  whose own retention window has run out: a finished replay's journal is never
+  opened again, so retention can never age the thumbnails and recognized text
+  it captured from the real screen, and the whole directory goes at its
+  thumbnail window (6 hours by default) instead. Each directory is swept by the
+  window the launch that wrote it ran with, recorded in its own `settings.json`,
+  so a check started with `--settings` of its own never decides how long
+  another run's captures are kept. The sweep never removes one a running replay
+  holds, and never a directory with any other name, so a `--data-dir` you named
+  is yours to keep. The debug panel's Mentor card and the log at launch show
+  which directory a replay uses.
 - **`--settings <path>`** (`make run-replay SETTINGS=<path>`) starts the
   replay from that settings file instead of the live one. It is read and never
   written, so a scripted check keeps its settings in a file of its own and
@@ -311,10 +314,12 @@ of them disturbs another or the live app:
   replay its lane (`LANE`, default `replay`) launched from this checkout, and
   finds that instance exactly: the launch carries a unique `--launch-token`,
   an argument the app ignores, so two launches from one checkout that overlap
-  can never adopt each other's process. A launch that quits as it starts, a
-  replay given a directory another one holds among them, is reported as the
-  failure it is, with what the app said, and leaves no pid file behind. Two
-  lanes run side by side:
+  can never adopt each other's process. The pid is reported only once the app
+  itself says it started, on the line it writes past every reason it could
+  refuse the launch, never after an elapsed time that proves nothing on a busy
+  Mac. A launch that quits as it starts, a replay given a directory another one
+  holds among them, is reported as the failure it is, with what the app said,
+  and leaves no pid file behind. Two lanes run side by side:
 
 ```sh
 make run-replay LANE=a SETTINGS=/tmp/a/settings.json TIME_SCALE=60
@@ -1115,8 +1120,9 @@ counted (see Iterating without the network).
 - Thumbnails expire after 6 hours and text after 7 days by default; the journal
   is capped at 500 MB; all three are adjustable, and the journal can be cleared
   at any time. A replay senses the real screen too, and a finished replay's
-  journal is never opened again, so nothing can age it in place: its whole
-  per-launch directory is removed instead, at the thumbnail window (see Replays
+  journal is never opened again, so nothing can age it in place: the next
+  replay launch removes its whole per-launch directory instead, once that
+  directory is past the thumbnail window it recorded for itself (see Replays
   side by side).
 - The journal directory is created with mode 0700.
 

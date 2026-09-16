@@ -168,6 +168,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AppState.log.error("did not start: \(refusal, privacy: .public)")
             exit(2)
         }
+        // Past every reason this launch could refuse itself, so a launcher
+        // waiting on this line knows it started rather than guessing from
+        // elapsed time. Written unbuffered, since stdout to a file is not.
+        let pid = ProcessInfo.processInfo.processIdentifier
+        FileHandle.standardOutput.write(Data("Mentor started: pid \(pid)\n".utf8))
         if let directory = Snapshots.requestedDirectory {
             Task { @MainActor in
                 do {

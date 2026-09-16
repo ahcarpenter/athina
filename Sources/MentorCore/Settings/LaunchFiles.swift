@@ -18,16 +18,19 @@ import Foundation
 /// - `--settings <path>`: starts from that settings file instead of the live
 ///   one; the file is read and never written
 ///
-/// Every replay starts from settings it reads and never writes, and saves what
-/// it changes only to `settings.json` in its data directory. Either flag on a
-/// live or recording launch is refused, like the clock flags: the launch uses
-/// the live files and says why. A flag with no value is refused the same way,
-/// and the replay keeps its own per-launch directory or the live settings.
+/// Every replay starts from settings it reads and never writes, and keeps its
+/// own `settings.json` in its data directory: the settings it started with,
+/// recorded there as it starts (`recordSettings`), and anything it changes
+/// afterwards. Either flag on a live or recording launch is refused, like the
+/// clock flags: the launch uses the live files and says why. A flag with no
+/// value is refused the same way, and the replay keeps its own per-launch
+/// directory or the live settings.
 public struct LaunchFiles: Equatable, Sendable {
     public static let dataDirectoryFlag = "--data-dir"
     public static let settingsFlag = "--settings"
     /// Finished per-launch directories a replay launch leaves in place, newest
-    /// first, so a check can still read the journal of one that just quit.
+    /// first, so a check can still read the journal of one that just quit and
+    /// is still inside its own retention window.
     public static let keptFinishedLaunches = 10
 
     /// Holds the journal and the settings the launch saves.
@@ -130,30 +133,23 @@ public struct LaunchFiles: Equatable, Sendable {
     /// caller knows where the journal is, and the end-to-end harness reads
     /// exactly the path it passed, so a replay writing somewhere else would
     /// leave a check reading a stale journal and reporting a pass that never
-    /// happened. A launch that makes its own directory also removes finished
-    /// per-launch directories: those past the newest `keptFinishedLaunches`,
-    /// and those older than `thumbnailRetention`. A replay senses the real
-    /// screen, and its journal is never opened again once it quits, so the
-    /// retention sweep can never age the thumbnails and recognized text inside
-    /// it; the whole directory goes at the shortest retention window instead.
+    /// happened. Every replay launch, whether it makes its own directory or
+    /// was given one, sweeps the finished per-launch directories as it starts
+    /// (`pruneFinishedLaunches`).
     public mutating func claim(
         clientMode: ModelClientMode,
-        supportDirectory: URL = AppPaths.supportDirectory(),
-        thumbnailRetention: TimeInterval = SensingSettings().thumbnailRetention
+        supportDirectory: URL = AppPaths.supportDirectory()
     ) -> Claim {
         guard clientMode.isOffline else { return .notNeeded }
         do {
             let lock = try DataDirectoryLock.acquire(in: dataDirectory)
-            if isPerLaunch {
-                // A directory's age is filesystem wall-clock, one of the system
-                // measurements that stay real however fast a replay clock runs.
-                LaunchFiles.pruneFinishedLaunches(
-                    in: AppPaths.replayRoot(in: supportDirectory),
-                    keeping: LaunchFiles.keptFinishedLaunches,
-                    olderThan: thumbnailRetention,
-                    now: Date()
-                )
-            }
+            // A directory's age is filesystem wall-clock, one of the system
+            // measurements that stay real however fast a replay clock runs.
+            LaunchFiles.pruneFinishedLaunches(
+                in: AppPaths.replayRoot(in: supportDirectory),
+                keeping: LaunchFiles.keptFinishedLaunches,
+                now: Date()
+            )
             return .held(lock)
         } catch DataDirectoryLock.Failure.inUse(let pid) {
             let holder = pid.map { "pid \($0)" } ?? "another process"
@@ -167,6 +163,16 @@ public struct LaunchFiles: Equatable, Sendable {
         }
     }
 
+    /// Writes the settings this launch runs with into its own data directory,
+    /// as soon as the directory is its own, so that a later replay launch
+    /// sweeps this directory by the retention window it actually ran with.
+    /// Only a launch holding its directory may call this: a live launch's
+    /// store is the live settings file, and a refused replay's directory
+    /// belongs to the replay that holds it.
+    public func recordSettings(_ settings: SensingSettings) {
+        try? store.save(settings)
+    }
+
     /// A per-launch directory's name: this process's id, then eight random
     /// hex digits, so a script can find its replay's files by pid.
     public static func launchName(pid: Int32 = getpid()) -> String {
@@ -178,23 +184,29 @@ public struct LaunchFiles: Equatable, Sendable {
     }
 
     /// Removes the per-launch directories in `root` that no running replay
-    /// holds: those past the newest `keeping` by creation date, and those
-    /// created more than `maxAge` before `now`, whose captured screen content
-    /// has outlived the retention window no one will ever apply to it again.
-    /// Anything else in `root` is left alone.
-    public static func pruneFinishedLaunches(in root: URL, keeping: Int, olderThan maxAge: TimeInterval, now: Date) {
+    /// holds: those past the newest `keeping` by creation date, and those whose
+    /// own recorded thumbnail retention window has run out by `now`. A replay
+    /// senses the real screen, and its journal is never opened again once it
+    /// quits, so retention can never age the thumbnails and recognized text
+    /// inside it and the whole directory goes at that window instead. The
+    /// window is each directory's own (`recordSettings`), never the sweeping
+    /// launch's, so a check with settings of its own never governs how long
+    /// another run's captured screen content is kept; a directory that records
+    /// none is swept at the default window. Anything else in `root` is left
+    /// alone.
+    public static func pruneFinishedLaunches(in root: URL, keeping: Int, now: Date) {
         let manager = FileManager.default
         guard let names = try? manager.contentsOfDirectory(atPath: root.path) else { return }
-        var finished: [(url: URL, created: Date, lock: DataDirectoryLock)] = []
+        var finished: [(url: URL, created: Date, expired: Bool, lock: DataDirectoryLock)] = []
         for name in names where isLaunchName(name) {
             let url = root.appendingPathComponent(name, isDirectory: true)
             guard let lock = try? DataDirectoryLock.acquire(in: url, pid: nil, create: false) else { continue }
             let created = (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
-            finished.append((url, created, lock))
+            let window = SettingsStore(url: SettingsStore.defaultURL(in: url)).load().thumbnailRetention
+            finished.append((url, created, created < now.addingTimeInterval(-window), lock))
         }
-        let expired = now.addingTimeInterval(-maxAge)
         for (index, entry) in finished.sorted(by: { $0.created > $1.created }).enumerated()
-        where index >= keeping || entry.created < expired {
+        where index >= keeping || entry.expired {
             try? manager.removeItem(at: entry.url)
         }
     }

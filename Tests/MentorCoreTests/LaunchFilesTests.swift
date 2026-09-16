@@ -248,7 +248,7 @@ import Testing
         try manager.createDirectory(at: root.appendingPathComponent("my-lane", isDirectory: true), withIntermediateDirectories: true)
         try Data().write(to: root.appendingPathComponent("journal.sqlite"))
 
-        LaunchFiles.pruneFinishedLaunches(in: root, keeping: 2, olderThan: 6 * 3600, now: base + 300)
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: 2, now: base + 300)
         let left = Set(try manager.contentsOfDirectory(atPath: root.path))
         #expect(left == [names[0], names[3], names[4], "my-lane", "journal.sqlite"])
         _ = running
@@ -276,10 +276,45 @@ import Testing
         // The oldest of all is still running, so nothing may touch it.
         let running = try DataDirectoryLock.acquire(in: root.appendingPathComponent(names[2], isDirectory: true), pid: 200)
 
-        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, olderThan: 6 * 3600, now: now)
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
         let left = Set(try manager.contentsOfDirectory(atPath: root.path))
         #expect(left == [names[1], names[2]])
         _ = running
+    }
+
+    /// Whose retention applies never depends on which lane starts next: each
+    /// finished directory is swept by the window recorded in it by the launch
+    /// that captured its screen content, and one that recorded none by the
+    /// documented default.
+    @Test func eachFinishedLaunchIsPrunedByItsOwnRecordedWindow() throws {
+        let support = Self.scratch()
+        defer { try? FileManager.default.removeItem(at: support) }
+        let root = AppPaths.replayRoot(in: support)
+        let manager = FileManager.default
+        let now = Date(timeIntervalSince1970: 1_789_000_000)
+        let replay = self.replay
+
+        func finishedLaunch(_ name: String, aged age: TimeInterval, recording window: TimeInterval?) throws {
+            let files = LaunchFiles(arguments: ["Mentor", "--replay", "/f"], clientMode: replay, supportDirectory: support, launchName: name)
+            try manager.createDirectory(at: files.dataDirectory, withIntermediateDirectories: true)
+            if let window {
+                var settings = SensingSettings()
+                settings.thumbnailRetention = window
+                files.recordSettings(settings)
+            }
+            try manager.setAttributes([.creationDate: now - age], ofItemAtPath: files.dataDirectory.path)
+        }
+
+        // A day old: gone under an hour's window, kept under a week's.
+        try finishedLaunch("launch-301-0000000a", aged: 86400, recording: 3600)
+        try finishedLaunch("launch-302-0000000b", aged: 86400, recording: 7 * 86400)
+        // No record of its own, so the documented 6 hour default applies.
+        try finishedLaunch("launch-303-0000000c", aged: 86400, recording: nil)
+        try finishedLaunch("launch-304-0000000d", aged: 3600, recording: nil)
+
+        LaunchFiles.pruneFinishedLaunches(in: root, keeping: LaunchFiles.keptFinishedLaunches, now: now)
+        let left = Set(try manager.contentsOfDirectory(atPath: root.path))
+        #expect(left == ["launch-302-0000000b", "launch-304-0000000d"])
     }
 }
 
