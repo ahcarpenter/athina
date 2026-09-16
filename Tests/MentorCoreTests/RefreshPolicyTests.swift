@@ -414,24 +414,6 @@ import Testing
         #expect(status.refreshStanding(mode: .watching) == .notStarted)
     }
 
-    /// While a refresh call is in flight that is its standing, whatever the
-    /// mode and whatever the gate held before it; another tier's call in flight
-    /// leaves the standing as it was.
-    @Test func aRefreshCallInFlightIsTheStanding() {
-        var status = heldNotDue(until: t0.addingTimeInterval(600))
-        status.inFlight = .understanding
-        for mode in SensingMode.allCases {
-            #expect(status.refreshStanding(mode: mode) == .refreshing)
-        }
-        status.nextRefreshAt = nil
-        #expect(status.refreshStanding(mode: .watching) == .refreshing)
-        for tier in ModelTier.allCases where tier != .understanding {
-            status.inFlight = tier
-            #expect(status.refreshStanding(mode: .watching) == .notStarted)
-            #expect(status.refreshStanding(mode: .paused) == .notCounting(.paused))
-        }
-    }
-
     /// Once the next refresh moves, as after a pause, a new record, or a
     /// changed interval, a not-due hold naming the old time is not in force.
     @Test func aNotDueHoldNamingAnotherTimeIsNotShown() {

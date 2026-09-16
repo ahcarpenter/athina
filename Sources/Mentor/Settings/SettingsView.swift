@@ -604,6 +604,11 @@ private struct NumberControls<Field: View, StepperView: View>: View {
 struct DurationRow: View {
     let title: String
     @Binding var value: TimeInterval
+    /// The seconds the setting itself accepts, where it bounds them. A unit is
+    /// offered only where the range holds a whole amount of it, and the stepper
+    /// and a typed amount are held inside it, so the row cannot offer a
+    /// duration `MentorSettings.validated()` would clamp away.
+    let range: ClosedRange<TimeInterval>?
     var help: String?
 
     private enum Unit: String, CaseIterable, Identifiable {
@@ -621,11 +626,24 @@ struct DurationRow: View {
     @State private var amount: Double = 1
     @State private var unit: Unit = .hours
 
-    init(_ title: String, value: Binding<TimeInterval>, help: String? = nil) {
+    init(_ title: String, value: Binding<TimeInterval>, range: ClosedRange<TimeInterval>? = nil, help: String? = nil) {
         self.title = title
         _value = value
+        self.range = range
         self.help = help
     }
+
+    /// The whole amounts of `unit` the range allows, or the unbounded row's
+    /// own 1...10_000 where the setting has no range. Nil where the range holds
+    /// no whole amount of the unit, which is how that unit is left out.
+    private func amounts(in unit: Unit) -> ClosedRange<Double>? {
+        guard let range else { return 1...10_000 }
+        let low = max(1, (range.lowerBound / unit.seconds).rounded(.up))
+        let high = (range.upperBound / unit.seconds).rounded(.down)
+        return low <= high ? low...high : nil
+    }
+
+    private var units: [Unit] { Unit.allCases.filter { amounts(in: $0) != nil } }
 
     var body: some View {
         LabeledContent {
@@ -635,10 +653,10 @@ struct DurationRow: View {
                     .multilineTextAlignment(.trailing)
                     .frame(width: 72)
                     .onSubmit(push)
-                Stepper(title, value: $amount, in: 1...10_000, step: 1, onEditingChanged: { _ in push() })
+                Stepper(title, value: $amount, in: amounts(in: unit) ?? 1...10_000, step: 1, onEditingChanged: { _ in push() })
                     .labelsHidden()
                 Picker("Unit", selection: $unit) {
-                    ForEach(Unit.allCases) { unit in
+                    ForEach(units) { unit in
                         Text(unit.rawValue).tag(unit)
                     }
                 }
@@ -660,20 +678,22 @@ struct DurationRow: View {
 
     private func pull() {
         let seconds = value
+        let offered = units
         let chosen: Unit
-        if seconds >= 86400, seconds.truncatingRemainder(dividingBy: 86400) == 0 {
+        if offered.contains(.days), seconds >= 86400, seconds.truncatingRemainder(dividingBy: 86400) == 0 {
             chosen = .days
-        } else if seconds >= 3600 {
+        } else if offered.contains(.hours), seconds >= 3600 {
             chosen = .hours
         } else {
-            chosen = .minutes
+            chosen = offered.first ?? .minutes
         }
         unit = chosen
         amount = (seconds / chosen.seconds * 10).rounded() / 10
     }
 
     private func push() {
-        value = max(60, amount * unit.seconds)
+        let seconds = amount * unit.seconds
+        value = range.map { seconds.clamped(to: $0) } ?? max(60, seconds)
     }
 }
 

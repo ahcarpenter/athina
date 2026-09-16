@@ -28,6 +28,7 @@ struct UnderstandingSection: View {
             }
             DurationRow(
                 "Refresh at most every", value: $state.settings.mentor.understandingRefreshInterval,
+                range: MentorSettings.refreshIntervalRange,
                 help: "Every mentor call also rewrites the understanding, at no extra cost. After this much active use with no mentor call, Mentor makes a refresh call of its own."
             )
             IntRow(

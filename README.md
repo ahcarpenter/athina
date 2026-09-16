@@ -1166,9 +1166,11 @@ permissions, display, network, microphone, or API key. A committed fixture that
 is stale, or a tier with no committed fixture, fails the run (see The committed
 fixtures). The snapshot run covers every window and Settings pane with sample
 data, their empty states (no suggestions, no frames, no contexts, contexts at
-the cap), the callout over the sample frame, the toast collapsed, expanded,
-listening, thinking, answered, and as a note, the context editor with a
-duplicate name, the transient status messages (a connection test, a refused
-or recording shortcut, on-device recognition unavailable), and every variant of
-the menu bar mark, at the size the bar draws it, with the word a replay puts
-beside it, and enlarged.
+the cap), the Understanding card with a record, with none, paused, with a
+refresh call in flight, and after a failed refresh, the Understanding settings
+section with and without a record, the callout over the sample frame, the toast
+collapsed, expanded, listening, thinking, answered, and as a note, the context
+editor with a duplicate name, the transient status messages (a connection test,
+a refused or recording shortcut, on-device recognition unavailable), and every
+variant of the menu bar mark, at the size the bar draws it, with the word a
+replay puts beside it, and enlarged.

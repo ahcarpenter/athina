@@ -168,19 +168,28 @@ struct UnderstandingCard: View {
 
     private func nextRefresh(now: Date) -> String {
         switch state.mentorStatus.refreshStanding(mode: state.mode) {
-        case .refreshing:
-            return "refreshing now"
         case .notCounting(let mode):
             return "not counting: \(mode.label.lowercased())"
         case .notStarted:
             return "not counting until the next screen"
         case .counting(let next, let hold):
             var text = Formatting.countdown(to: next, now: now)
-            // A not-due hold only repeats when the next refresh is.
-            if let hold, !hold.hold.isNotDue {
+            if let hold, repeats(hold.hold) {
                 text += ", held \(Formatting.age(hold.at, now: now)): \(hold.hold.label)"
             }
             return text
+        }
+    }
+
+    /// Whether a hold is worth repeating beside the countdown. A not-due hold
+    /// names the time the countdown already shows, and a call in flight is the
+    /// progress row above when the call in flight is the refresh itself; a call
+    /// in flight for another tier is news, so it is shown.
+    private func repeats(_ hold: MentorScheduler.RefreshHold) -> Bool {
+        switch hold {
+        case .notDue: false
+        case .callInFlight: state.mentorStatus.inFlight != .understanding
+        default: true
         }
     }
 
@@ -194,12 +203,5 @@ struct UnderstandingCard: View {
         text += "\(call.replayed ? Formatting.unbroken("not billed") : Formatting.dollars(call.cost)), \(Formatting.seconds(call.latency))"
         if let detail = call.detail, !detail.isEmpty { text += "\n\(detail)" }
         return text
-    }
-}
-
-private extension MentorScheduler.RefreshHold {
-    var isNotDue: Bool {
-        if case .notDue = self { return true }
-        return false
     }
 }

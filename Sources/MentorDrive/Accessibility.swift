@@ -100,11 +100,18 @@ enum Accessibility {
             default:
                 let newValue = try invocation.positional(4)
                 AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-                // A number goes in as a number: a scroll bar's value, for one,
-                // refuses a string, and scrolling a SwiftUI pane to what a
-                // scenario wants to see is setting that value.
-                let payload: CFTypeRef = Double(newValue).map { NSNumber(value: $0) as CFTypeRef } ?? (newValue as CFTypeRef)
+                // A number goes in as a number only where the element's value
+                // already is one, as a scroll bar's is: a text field, which is
+                // most of what a scenario sets, refuses anything but a string.
+                var payload = newValue as CFTypeRef
+                if let current = attr(element, kAXValueAttribute), CFGetTypeID(current) == CFNumberGetTypeID(),
+                   let number = Double(newValue) {
+                    payload = NSNumber(value: number) as CFTypeRef
+                }
                 let status = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, payload)
+                if status != .success {
+                    fail("ax set: \(role(element)) refused \"\(newValue)\" -> \(status.rawValue), value still \"\(value(element).prefix(200))\"", code: 2)
+                }
                 say("set \(role(element)) -> \(status.rawValue) now value=\"\(value(element).prefix(200))\"")
             }
 
