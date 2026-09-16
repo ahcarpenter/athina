@@ -309,20 +309,20 @@ of them disturbs another or the live app:
   finished lane's journal with `sqlite3 -readonly`, which modifies neither: a
   plain `sqlite3`, or any reader that opens it read-write, runs a checkpoint as
   it closes that modifies both, and so can keep the directory up to one window
-  longer. The sweep takes the
-  directory's lock before it removes anything, so it never touches one a
-  running replay holds, and it never touches a directory whose name is not a
-  launch's own.
+  longer. The sweep takes the directory's lock before it removes anything, so
+  it never touches one a running replay holds, and it never touches a
+  directory whose name is not a launch's own.
 - **`--settings <path>`** (`make run-replay SETTINGS=<path>`) starts the
   replay from that settings file instead of the live one. It is read and never
   written, so a scripted check keeps its settings in a file of its own and
-  never has to swap the live settings. A file that is there but is not settings stops the
-  launch, naming the file and what was wrong with it: a check that generated
-  its settings and got truncated JSON would otherwise run on your live
-  thresholds, contexts and retention and could report a pass on settings it
-  never chose. A file that is not there at all is refused more gently, and the
-  replay starts from the live settings, so the apps you excluded stay excluded.
-  Put every app a replayed callout must not cover in that file's excluded apps.
+  never has to swap the live settings. A file that is there but is not
+  settings stops the launch, naming the file and what was wrong with it: a
+  check that generated its settings and got truncated JSON would otherwise run
+  on your live thresholds, contexts and retention and could report a pass on
+  settings it never chose. A file that is not there at all is refused more
+  gently, and the replay starts from the live settings, so the apps you
+  excluded stay excluded. Put every app a replayed callout must not cover in
+  that file's excluded apps.
 - **`--settings` applies only to a replay.** On a live or recording launch it
   is refused, like the clock flags: the app uses the live files, and the menu,
   the Mentor card, and the log say why. The live app's files never move.
@@ -330,18 +330,23 @@ of them disturbs another or the live app:
   replay its lane (`LANE`, default `replay`) launched from this checkout, and
   finds that instance exactly: the launch carries a unique `--launch-token`,
   an argument the app ignores, so two launches from one checkout that overlap
-  can never adopt each other's process. The pid is reported only once the app
-  itself says it started, on the line it writes past every reason it could
-  refuse the launch and past the point where it is listening for a clock
-  request, never after an elapsed time that proves nothing on a busy Mac. So a
+  can never adopt each other's process. The token is kept beside the pid, in
+  `build/<lane>.token`, and the next launch in that lane stops the pid only
+  while it still carries that token: a lane stopped outside make leaves its pid
+  file behind, and when the Mac has since given that pid to another lane, the
+  other lane keeps running. The pid is reported only once the app itself says
+  it started, on the line it writes past every reason it could refuse the
+  launch and past the point where it is listening for a clock request, never
+  after an elapsed time that proves nothing on a busy Mac. So a
   `scripts/advance-clock.sh` sent the moment the pid file appears is heard
   rather than posted into a channel nobody is observing yet. A launch that
   quits as it starts, a replay given a `--settings` file that is not settings
   among them, is reported as the failure it is, with what the app said, and
-  leaves no pid file behind. So is a lane whose journal will not open: it can journal no
-  event and answer no check, so it is reported as a failed launch and stopped,
-  even though the app itself stays up when you start it by hand so you can read
-  the error in the menu and the debug panel. Two lanes run side by side:
+  leaves no pid file behind. So is a lane whose journal will not open: it can
+  journal no event and answer no check, so it is reported as a failed launch
+  and stopped, even though the app itself stays up when you start it by hand
+  so you can read the error in the menu and the debug panel. Two lanes run
+  side by side:
 
 ```sh
 make run-replay LANE=a SETTINGS=/tmp/a/settings.json TIME_SCALE=60
@@ -353,10 +358,10 @@ scripts/advance-clock.sh "$(cat build/a.pid)" 2h  # moves only lane a's clock, a
   An on-screen check drives the app through `scripts/e2e/mentor-e2e` (see
   End-to-end harness) rather than launching it itself: the harness already runs
   each check in a scratch home, excludes the owner's apps, and stops only the
-  pids it started. A launch outside make uses `open -n` (a plain `open` can bring an already
-  running Mentor forward instead of starting one) and finds its instance by
-  pid: `lsof -p <pid> | grep journal.sqlite`, or `mentor.pid` in the data
-  directory. Stop a replay with `kill <pid>`, never by name.
+  pids it started. A launch outside make uses `open -n` (a plain `open` can
+  bring an already running Mentor forward instead of starting one) and finds
+  its instance by pid: `lsof -p <pid> | grep journal.sqlite`, or `mentor.pid`
+  in the data directory. Stop a replay with `kill <pid>`, never by name.
 
 ### Record
 
@@ -420,9 +425,9 @@ is added, re-record the committed set live in the same change so the tests
 pass. It is a deliberate `make record` session of a few cents, on a staged
 scenario and an empty journal:
 
-1. Quit the live Mentor and move the journal aside (keep it to put back). Triage and
-   mentor requests carry recent journal events and screens, so a recording made
-   on a lived-in journal carries that history too.
+1. Quit the live Mentor and move the journal aside (keep it to put back).
+   Triage and mentor requests carry recent journal events and screens, so a
+   recording made on a lived-in journal carries that history too.
 2. Stage a synthetic scenario in real windows that fill the display (the
    documents in the fixture directory's `scenario/` folder work), and add every
    other running app to Settings > Privacy > Excluded apps.
@@ -1189,6 +1194,9 @@ kind and their directory, and any stale ones), and each replayed call in the
 log is tagged Replay and not billed. In a replay the Mentor card shows what the
 clock reads and has the Advance field that moves it ahead, and the badge says
 how much faster the clock runs when it does (Replay 60x; see A faster clock).
+A replay's card also shows its own data directory and the settings it started
+from, and on any launch the card says why a `--settings` flag was refused (see
+Replays side by side).
 
 ## Design conventions
 
@@ -1284,15 +1292,17 @@ accounting, snooze and never-for-this rules per category, the rolling window,
 the understanding's encoding, versioning, bounding and expiry, prompt assembly
 with and without one, request and response coding against fixture JSON,
 recording, redaction, replay matching and stale refusal, launch flags, a
-replay's separate files, per-launch directories, their locks and pruning, and
-the replay-only file flags, the clocks and a replay's clock flags, the toast
-countdown, which variant of the mark the menu bar shows and that every variant
-is committed at one size, callout mapping and every anchor rejection, a callout
-aging out, transcript matching, the follow-up prompt and gate, the toast rule
-for voice input, the whole loop against a scripted client, follow-ups included,
-and the whole loop against the committed replay fixtures, replayed strictly, a
-region and a follow-up answer included, and every time-based behavior of the
-loop on the test clock) and Vision OCR on a drawn bitmap, so they need no
+replay's separate files, per-launch directories with their locks and pruning,
+the replay-only `--settings` flag, the line a launch writes as it starts, the
+clocks, a replay's clock flags, the clock requests a script sends and where a
+replay may answer them, the toast countdown, which variant of the mark the menu
+bar shows and that every variant is committed at one size, callout mapping and
+every anchor rejection, a callout aging out, transcript matching, the follow-up
+prompt and gate, the toast rule for voice input, the whole loop against a
+scripted client, follow-ups included, and the whole loop against the committed
+replay fixtures, replayed strictly, a region and a follow-up answer included,
+and every time-based behavior of the loop on the test clock) and Vision OCR on a
+drawn bitmap, so they need no
 permissions, display, network, microphone, or API key. A committed fixture that
 is stale, or a tier with no committed fixture, fails the run (see The committed
 fixtures). The snapshot run covers every window and Settings pane with sample

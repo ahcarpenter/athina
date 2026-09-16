@@ -93,15 +93,15 @@ live_mentors() {
 # killed app is still listed while the kernel tears it down, and the live guard
 # would read that as a live Mentor already running.
 stop_pid() {
-	local victim="$1" i
+	local victim="$1"
 	kill -TERM "$victim" 2>/dev/null || true
-	for i in $(seq 50); do
+	for _ in $(seq 50); do
 		kill -0 "$victim" 2>/dev/null || return 0
 		sleep 0.1
 	done
 	echo "launch: pid $victim did not quit, stopping it" >&2
 	kill -KILL "$victim" 2>/dev/null || true
-	for i in $(seq 50); do
+	for _ in $(seq 50); do
 		kill -0 "$victim" 2>/dev/null || return 0
 		sleep 0.1
 	done

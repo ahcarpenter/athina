@@ -32,8 +32,7 @@ temporary="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)"
 [ -n "$temporary" ] || temporary="${TMPDIR:-/tmp}"
 reply="$(mktemp "${temporary%/}/mentor-clock-XXXXXXXX")"
 rm -f "$reply"
-cleanup() { rm -f "$reply"; }
-trap cleanup EXIT
+trap 'rm -f "$reply"' EXIT
 
 osascript -l JavaScript - "$pid" "$interval" "$reply" <<'SCRIPT'
 ObjC.import('Foundation')

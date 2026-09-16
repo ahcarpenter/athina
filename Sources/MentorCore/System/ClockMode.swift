@@ -249,7 +249,8 @@ public enum ClockRemote {
     /// write, the live settings among them. Refusing to replace a file closes
     /// the rest: the exclusive create fails on a symlink too. It costs
     /// `scripts/advance-clock.sh` nothing, which names a fresh `mktemp` path
-    /// under `TMPDIR` that it has already removed.
+    /// that it has already removed, in the per-user temporary directory
+    /// (`getconf DARWIN_USER_TEMP_DIR`) that `NSTemporaryDirectory` names.
     ///
     /// The path is resolved once and that one path is both checked and written
     /// to. Checking what was asked for and writing to it are not the same

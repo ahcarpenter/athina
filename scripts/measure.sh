@@ -18,7 +18,7 @@ if [ -z "$pid" ]; then
     exit 1
   fi
   if [ "$(echo "$running" | wc -l)" -gt 1 ]; then
-    echo "several Mentors are running ($(echo $running)); choose one with MENTOR_PID=<pid>" >&2
+    echo "several Mentors are running (${running//$'\n'/ }); choose one with MENTOR_PID=<pid>" >&2
     exit 1
   fi
   pid="$running"
