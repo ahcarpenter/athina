@@ -1095,8 +1095,11 @@ particular to this app:
   and one file serves every display scale. The states are made out of the
   drawing rather than hung off it: the owl's eyes are the boldest thing in it
   at this size and they are what watching means, so they carry the modes and
-  the silhouette never changes. That is what keeps the item one width
-  throughout, so the other extras never shift sideways when Mentor's state
+  the silhouette never changes. Paused also gets two z's drifting off it, drawn
+  in the clear upper left of the owl's own bounding box: with the pupils gone
+  the eyes are the whitest thing in the set and read wide awake rather than
+  shut, so the z's are what actually say asleep. That is what keeps the item one
+  width throughout, so the other extras never shift sideways when Mentor's state
   changes. Which variant a mode gets is `MenuBarMark.resolve`, a pure function
   with the whole table under test.
 

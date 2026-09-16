@@ -507,6 +507,47 @@ enum Eyes: String {
     case closedSlit
 }
 
+/// Two z's drifting off the owl, in the style of the reference the captain
+/// sent: bold and geometric, square cut, the larger one nearest the owl and the
+/// smaller one rising away from it.
+///
+/// They sit in the clear upper left of the owl's own bounding box, which is
+/// empty in the drawing, so adding them does not widen the item. The width has
+/// to be the same in every state or the menu bar's other extras move when
+/// Mentor's does.
+func zed(height: Double, at origin: CGPoint) -> CGPath {
+    // Proportions taken from the reference: a little taller than wide, one
+    // weight for all three strokes, square cut ends, and counters left open
+    // enough to survive a few pixels.
+    let width = height * 0.80
+    let t = height * 0.24
+
+    // Built with y running up, which is how a Z reads when it is written out,
+    // and then flipped into the drawing's own space, where y runs down the
+    // page. Doing the flip here rather than by hand in the numbers is what
+    // keeps the diagonal from coming out as an N.
+    let top = origin.y + height - t
+    let glyph = CGMutablePath()
+    glyph.addRect(CGRect(x: origin.x, y: top, width: width, height: t))
+    glyph.addRect(CGRect(x: origin.x, y: origin.y, width: width, height: t))
+    let diagonal = CGMutablePath()
+    diagonal.move(to: CGPoint(x: origin.x + width - t / 2, y: top))
+    diagonal.addLine(to: CGPoint(x: origin.x + t / 2, y: origin.y + t))
+    let band = diagonal.copy(strokingWithWidth: CGFloat(t), lineCap: .butt, lineJoin: .miter, miterLimit: 10)
+    let upright = glyph.union(band)
+
+    var flip = CGAffineTransform(translationX: 0, y: CGFloat(2 * origin.y + height))
+        .scaledBy(x: 1, y: -1)
+    return upright.copy(using: &flip) ?? upright
+}
+
+/// The pair, in the clear upper left of the owl's own bounding box: the larger
+/// nearest the owl and the smaller drifting away from it, as in the reference.
+var sleepMarks: CGPath {
+    zed(height: 72, at: CGPoint(x: 70, y: 74))
+        .union(zed(height: 50, at: CGPoint(x: 26, y: 20)))
+}
+
 func drawEyes(_ eyes: Eyes) -> CGPath {
     var path = parts.base
     func addPupil(_ index: Int, offsetBy dx: Double = 0, scaledBy factor: Double = 1) {
@@ -565,16 +606,17 @@ let menuBarWidth = (menuBarHeight * parts.bounds.width / parts.bounds.height * 2
 /// Changing this table is the whole of changing the set: the modes, their
 /// names and the resolution that picks between them live in `MenuBarMark` and
 /// do not move.
-let set: [(mark: String, eyes: Eyes)] = [
-    ("watching", .open),
-    ("idle", .halfLidded),
-    ("paused", .closed),
-    ("excluded", .asideRight),
-    ("needsSomething", .wide),
-    ("held", .winking),
+let set: [(mark: String, eyes: Eyes, asleep: Bool)] = [
+    ("watching", .open, false),
+    ("idle", .halfLidded, false),
+    // Paused is the sleeping state, so it takes the z's as well as the eyes.
+    ("paused", .closed, true),
+    ("excluded", .asideRight, false),
+    ("needsSomething", .wide, false),
+    ("held", .winking, false),
 ]
 
-func drawMenuBarMark(_ eyes: Eyes, into context: CGContext) {
+func drawMenuBarMark(_ eyes: Eyes, asleep: Bool, into context: CGContext) {
     context.setAllowsAntialiasing(true)
     context.setFillColor(ink)
     context.saveGState()
@@ -586,7 +628,7 @@ func drawMenuBarMark(_ eyes: Eyes, into context: CGContext) {
     context.translateBy(x: CGFloat((menuBarWidth - drawnWidth) / 2), y: CGFloat(menuBarHeight))
     context.scaleBy(x: CGFloat(scale), y: CGFloat(-scale))
     context.translateBy(x: -parts.bounds.minX, y: -parts.bounds.minY)
-    context.addPath(drawEyes(eyes))
+    context.addPath(asleep ? drawEyes(eyes).union(sleepMarks) : drawEyes(eyes))
     context.fillPath(using: .winding)
     context.restoreGState()
 }
@@ -640,13 +682,13 @@ func makeReproducible(_ url: URL) throws {
 /// PDF, so one file serves every display scale the menu bar is drawn at, and
 /// so it stays a template: shape and alpha only, no colour of its own.
 func writeMenuBarMarks() throws {
-    for (mark, eyes) in set {
+    for (mark, eyes, asleep) in set {
         let url = markDirectory.appendingPathComponent("MenuBarMark-\(mark).pdf")
         var page = CGRect(x: 0, y: 0, width: menuBarWidth, height: menuBarHeight)
         guard let consumer = CGDataConsumer(url: url as CFURL),
               let context = CGContext(consumer: consumer, mediaBox: &page, nil) else { throw Failure.iconutil }
         context.beginPDFPage(nil)
-        drawMenuBarMark(eyes, into: context)
+        drawMenuBarMark(eyes, asleep: asleep, into: context)
         context.endPDFPage()
         context.closePDF()
         try makeReproducible(url)
