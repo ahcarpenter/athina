@@ -1,4 +1,5 @@
 import CoreGraphics
+import CryptoKit
 import Foundation
 import ImageIO
 import Testing
@@ -67,6 +68,29 @@ import Testing
             .filter { $0.hasPrefix("MenuBarMark-") }
         let expected = Set(MenuBarMark.allCases.map { "MenuBarMark-\($0.rawValue).pdf" })
         #expect(Set(files) == expected, "run `make mark` after changing the set")
+    }
+
+    /// The check that catches the one mistake that matters: the master was
+    /// edited and `make mark` was not run, so the icon and the mark in the
+    /// bundle are of an older drawing.
+    ///
+    /// It compares what the assets were built from rather than rebuilding
+    /// them, because Core Graphics stamps the running macOS version into every
+    /// PDF it writes, so two machines cannot produce the same bytes.
+    @Test func theAssetsWereBuiltFromTheMasterThatIsHereNow() throws {
+        let record = try String(contentsOf: markDirectory.appendingPathComponent("built-from.txt"), encoding: .utf8)
+        let svg = try Data(contentsOf: markDirectory.appendingPathComponent("MentorMark.svg"))
+        let digest = SHA256.hash(data: svg).map { String(format: "%02x", $0) }.joined()
+        #expect(record.contains("MentorMark.svg \(digest)"),
+                "Resources/Mark/MentorMark.svg has changed since the assets were built; run `make mark`")
+        // And the set it was built for is the set the code can ask for.
+        let variants = record.split(separator: "\n")
+            .first { $0.hasPrefix("variants ") }?
+            .dropFirst("variants ".count)
+            .split(separator: " ")
+            .map(String.init) ?? []
+        #expect(Set(variants) == Set(MenuBarMark.allCases.map(\.rawValue)),
+                "the variant set has changed since the assets were built; run `make mark`")
     }
 
     @Test func theMasterCarriesBothGroupsSoEitherCanBeUsedAlone() throws {

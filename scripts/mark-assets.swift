@@ -616,5 +616,29 @@ func writeMenuBarMarks() throws {
     print("  Resources/Mark/MenuBarMark-*.pdf  (\(set.count) variants, \(Int(menuBarWidth)) x \(Int(menuBarHeight)) pt, one width in every mode)")
 }
 
+/// Records which master the committed assets were built from.
+///
+/// Core Graphics stamps the running macOS version into every PDF it writes, so
+/// two machines cannot produce the same bytes and "rebuild and diff" is not a
+/// check that can hold. What matters is not the bytes but whether the assets
+/// came from the drawing that is in the tree now, and that is what this
+/// records: `MarkAssetTests` fails when the master has changed and `make mark`
+/// has not been run.
+func writeProvenance() throws {
+    let svg = try Data(contentsOf: master)
+    let digest = SHA256.hash(data: svg).map { String(format: "%02x", $0) }.joined()
+    let text = """
+    # Which master Resources/AppIcon.icns and the MenuBarMark PDFs beside it
+    # were built from. Written by scripts/mark-assets.swift; run `make mark`
+    # after changing MentorMark.svg or the variant set, never edit this by hand.
+    MentorMark.svg \(digest)
+    variants \(set.map(\.mark).joined(separator: " "))
+
+    """
+    try text.write(to: markDirectory.appendingPathComponent("built-from.txt"), atomically: true, encoding: .utf8)
+    print("  Resources/Mark/built-from.txt  (master \(digest.prefix(12))...)")
+}
+
 try writeIcon()
 try writeMenuBarMarks()
+try writeProvenance()

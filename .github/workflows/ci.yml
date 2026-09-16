@@ -23,15 +23,6 @@ jobs:
         # that never ends fails the job here rather than at the six-hour limit.
         timeout-minutes: 20
         run: swift test
-      - name: The committed mark assets match the master vector
-        # The app icon and the menu bar mark are generated from
-        # Resources/Mark/MentorMark.svg and committed, so a plain build needs
-        # nothing else. Rebuilding them is reproducible down to the byte, so
-        # anything left over here means the committed assets drifted from the
-        # drawing they claim to come from.
-        run: |
-          make mark
-          git diff --exit-code -- Resources/AppIcon.icns Resources/Mark
       - name: Build app bundle
         run: scripts/bundle.sh release
       - name: Render UI snapshots
