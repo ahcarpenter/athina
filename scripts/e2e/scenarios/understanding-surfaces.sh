@@ -15,7 +15,7 @@ SCENARIO_ARGS=(--open debug)
 # The goal the model wrote, strongest first, as the surfaces show it.
 understanding_goal() {
 	sqlite3 -readonly "$JOURNAL" \
-		"select json_extract(content_json, '\$.goals[0].goal') from understanding order by updated_at desc, id desc limit 1" 2>/dev/null
+		"select json_extract(content_json, '\$.goals[0].goal') from understanding order by updated_at desc, id desc limit 1" 2>/dev/null || echo ""
 }
 
 reset_events() {
@@ -65,6 +65,9 @@ scenario_run() {
 	wait_toast >/dev/null || return 1
 	wait_understanding || { log "no understanding was written"; return 1; }
 	goal="$(understanding_goal)"
+	# Every goal check below compares against this text, and an empty one would
+	# match any file, so a record with no goal to follow stops the scenario.
+	[ -n "$goal" ] || { log "the understanding names no goal to follow"; return 1; }
 	log "the understanding names \"$goal\""
 	check "the mentor call wrote an understanding" "1" "$(journal_count understanding)"
 

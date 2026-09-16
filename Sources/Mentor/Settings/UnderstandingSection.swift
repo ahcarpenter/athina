@@ -38,6 +38,7 @@ struct UnderstandingSection: View {
             )
             DurationRow(
                 "Forget after no activity for", value: $state.settings.mentor.understandingIdleGap,
+                range: MentorSettings.idleGapRange,
                 help: "It is also forgotten when a new day starts."
             )
             HStack {
