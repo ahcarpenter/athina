@@ -470,12 +470,17 @@ struct SampleMenuBarMarks: View {
                             .border(.separator)
                     }
                     Divider().frame(height: 26)
-                    // And enlarged, so the drawing can be looked at closely.
-                    MenuBarLabelImage(mark: mark)
-                        .scaleEffect(Self.enlargement, anchor: .leading)
-                        .frame(width: Self.markSize.width * Self.enlargement,
-                               height: Self.markSize.height * Self.enlargement,
-                               alignment: .leading)
+                    // And enlarged, so the drawing can be looked at closely:
+                    // the same template PDF drawn at that size, so the curves
+                    // and the eyes are the vector rather than the small render
+                    // magnified.
+                    if let image = MenuBarMarkImage.image(for: mark) {
+                        Image(nsImage: image)
+                            .renderingMode(.template)
+                            .resizable()
+                            .frame(width: Self.markSize.width * Self.enlargement,
+                                   height: Self.markSize.height * Self.enlargement)
+                    }
                 }
                 .foregroundStyle(.primary)
             }
