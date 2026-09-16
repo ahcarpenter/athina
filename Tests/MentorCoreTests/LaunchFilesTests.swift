@@ -169,31 +169,58 @@ import Testing
 
     @Test func aLiveLaunchHoldsNothing() {
         var files = LaunchFiles(arguments: ["Mentor"], clientMode: .live, supportDirectory: Self.scratch())
-        #expect(files.claim(clientMode: .live) == nil)
+        guard case .notNeeded = files.claim(clientMode: .live) else {
+            Issue.record("a live launch claimed a directory")
+            return
+        }
         #expect(!FileManager.default.fileExists(atPath: files.dataDirectory.path))
     }
 
-    /// Two replays given the same directory never share it: the second takes
-    /// a directory of its own and says why.
-    @Test func aReplayGivenADirectoryAnotherReplayHoldsTakesItsOwn() {
+    /// A replay given a directory another replay holds does not start at all,
+    /// and never quietly writes somewhere else: the flag exists so the caller
+    /// knows which journal to read, and the harness reads exactly that path.
+    @Test func aReplayGivenADirectoryAnotherReplayHoldsRefusesToStart() {
         let support = Self.scratch()
         defer { try? FileManager.default.removeItem(at: support) }
         let lane = support.appendingPathComponent("lane", isDirectory: true)
         let arguments = ["Mentor", "--replay", "/f", "--data-dir", lane.path]
 
         var first = LaunchFiles(arguments: arguments, clientMode: replay, supportDirectory: support)
-        let held = first.claim(clientMode: replay, supportDirectory: support)
-        #expect(held != nil)
+        guard case .held(let lock) = first.claim(clientMode: replay, supportDirectory: support) else {
+            Issue.record("the first replay did not take its directory")
+            return
+        }
         #expect(first.dataDirectory == lane)
         #expect(first.refusals.isEmpty)
 
         var second = LaunchFiles(arguments: arguments, clientMode: replay, supportDirectory: support)
-        let own = second.claim(clientMode: replay, supportDirectory: support, launchName: "launch-9-00000000")
-        #expect(own != nil)
-        #expect(second.dataDirectory == AppPaths.replayRoot(in: support).appendingPathComponent("launch-9-00000000", isDirectory: true))
-        #expect(second.isPerLaunch)
-        #expect(second.refusals == ["\(lane.path) is in use by another Mentor (pid \(getpid())), so this replay uses a new directory"])
-        _ = (held, own)
+        guard case .refusedToStart(let reason) = second.claim(clientMode: replay, supportDirectory: support) else {
+            Issue.record("the second replay was allowed to start")
+            return
+        }
+        #expect(reason == "--data-dir \(lane.path) is in use by another Mentor (pid \(getpid()))")
+        #expect(second.dataDirectory == lane)
+        #expect(!second.isPerLaunch)
+        #expect(second.refusals == [reason])
+        // Nothing of the second launch reached the directory the first holds.
+        #expect(try! FileManager.default.contentsOfDirectory(atPath: lane.path) == [DataDirectoryLock.fileName])
+        #expect(!FileManager.default.fileExists(atPath: AppPaths.replayRoot(in: support).path))
+        _ = lock
+    }
+
+    /// A replay that makes its own directory still starts, and the claim
+    /// gives it the lock that keeps it its own.
+    @Test func aReplayWithNoDataDirectoryTakesItsOwnAndStarts() {
+        let support = Self.scratch()
+        defer { try? FileManager.default.removeItem(at: support) }
+        var files = LaunchFiles(arguments: ["Mentor", "--replay", "/f"], clientMode: replay, supportDirectory: support)
+        guard case .held(let lock) = files.claim(clientMode: replay, supportDirectory: support) else {
+            Issue.record("a per-launch replay did not take its directory")
+            return
+        }
+        #expect(files.refusals.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: files.dataDirectory.appendingPathComponent(DataDirectoryLock.fileName).path))
+        _ = lock
     }
 
     /// A replay launch removes finished per-launch directories past the
@@ -245,6 +272,40 @@ import Testing
             Issue.record("accepted \(text)")
             return
         }
+    }
+
+    /// A request names a file to answer at, so a script can tell a clock that
+    /// moved from a post nobody heard. A relative path is not resolved: the
+    /// app's working directory is `/` when it was started with `open`.
+    @Test func aRequestCarriesWhereToAnswer() {
+        #expect(ClockRemote.replyURL(from: [ClockRemote.replyKey: "/tmp/reply.json"])?.path == "/tmp/reply.json")
+        #expect(ClockRemote.replyURL(from: [ClockRemote.intervalKey: "15m"]) == nil)
+        #expect(ClockRemote.replyURL(from: [ClockRemote.replyKey: "reply.json"]) == nil)
+        #expect(ClockRemote.replyURL(from: nil) == nil)
+    }
+
+    /// The answer is written whole or not at all, and says what the clock did,
+    /// so the waiting script never reads half a file and never has to guess.
+    @Test func anAnswerRoundTripsThroughTheFileItNames() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("mentor-clock-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("reply.json")
+        let now = Date(timeIntervalSince1970: 1_789_473_600)
+
+        let moved = ClockRemote.Reply(moved: true, by: 7200, movedAhead: 9000, now: now, pid: 4242)
+        try ClockRemote.answer(moved, at: url)
+        #expect(try ClockRemote.Reply.decode(Data(contentsOf: url)) == moved)
+        #expect(moved.summary.contains("pid 4242 moved its clock ahead 2h, 2h 30m in all"))
+
+        let refused = ClockRemote.Reply(moved: false, reason: "this launch has no replay clock", movedAhead: 0, now: now, pid: 7)
+        try ClockRemote.answer(refused, at: url)
+        let read = try ClockRemote.Reply.decode(Data(contentsOf: url))
+        #expect(read == refused)
+        #expect(read.summary == "pid 7 refused: this launch has no replay clock")
+
+        // A request that named no file is answered nowhere, and says so by not throwing.
+        try ClockRemote.answer(moved, at: nil)
     }
 
     @Test func aRequestWithNoIntervalIsRefused() {

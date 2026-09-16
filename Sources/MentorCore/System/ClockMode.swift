@@ -162,13 +162,21 @@ public enum ClockInterval {
 /// Moves a replay's clock from another process, with no accessibility: a
 /// distributed notification named `name`, whose object is the replay's
 /// process id as text and whose user info holds `intervalKey` with an interval
-/// as the debug panel's Advance field takes it (`15m`, `2h`, `1d`).
-/// `scripts/advance-clock.sh <pid> <interval>` posts one. Only a replay
-/// listens, and only for its own pid, so it can never reach a live or
-/// recording launch or another replay.
+/// as the debug panel's Advance field takes it (`15m`, `2h`, `1d`), and
+/// `replyKey` with a file path to answer at.
+///
+/// A distributed notification reaches only the observers registered when it is
+/// posted, and posting says nothing about whether anyone heard it, so a
+/// replay that is still starting, a pid that is not Mentor, or a live launch
+/// that never listens would all look like success. The reply file is what
+/// makes a request provable: the replay writes `Reply` there, and
+/// `scripts/advance-clock.sh` waits for that file and fails naming the pid
+/// when it never appears. Only a replay listens, and only for its own pid, so
+/// a request can never reach a live or recording launch or another replay.
 public enum ClockRemote {
     public static let name = "com.ahcarpenter.mentor.advance-clock"
     public static let intervalKey = "interval"
+    public static let replyKey = "replyTo"
 
     /// Whether a launch in `mode` listens at all.
     public static func listens(in mode: ClockMode) -> Bool {
@@ -190,6 +198,66 @@ public enum ClockRemote {
             return .failure(Refusal(reason: "\"\(text)\" is not an interval such as 15m, 2h, or 1d, up to \(ClockInterval.description(of: ClockMode.maxAdvance))"))
         }
         return .success(seconds)
+    }
+
+    /// Where the request asks for its answer, or nil when it asked for none.
+    /// A relative path is refused rather than resolved, because the app's
+    /// working directory is `/` when it was started with `open`.
+    public static func replyURL(from userInfo: [AnyHashable: Any]?) -> URL? {
+        guard let path = userInfo?[replyKey] as? String, path.hasPrefix("/") else { return nil }
+        return URL(fileURLWithPath: path)
+    }
+
+    /// What a replay answers a request with.
+    public struct Reply: Codable, Equatable, Sendable {
+        /// Whether the clock moved.
+        public var moved: Bool
+        /// Why it did not, when it did not.
+        public var reason: String?
+        /// How far this request moved the clock, in seconds.
+        public var by: TimeInterval
+        /// How far the clock has been moved ahead in all, in seconds.
+        public var movedAhead: TimeInterval
+        /// What the clock reads now.
+        public var now: Date
+        /// The replay that answered.
+        public var pid: Int32
+
+        public init(moved: Bool, reason: String? = nil, by: TimeInterval = 0, movedAhead: TimeInterval, now: Date, pid: Int32 = getpid()) {
+            self.moved = moved
+            self.reason = reason
+            self.by = by
+            self.movedAhead = movedAhead
+            self.now = now
+            self.pid = pid
+        }
+
+        public func encoded() throws -> Data {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            return try encoder.encode(self)
+        }
+
+        public static func decode(_ data: Data) throws -> Reply {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(Reply.self, from: data)
+        }
+
+        /// One line for a script to print.
+        public var summary: String {
+            moved
+                ? "pid \(pid) moved its clock ahead \(ClockInterval.description(of: by)), \(ClockInterval.description(of: movedAhead)) in all, now \(ClockFormat.dayAndTime(now))"
+                : "pid \(pid) refused: \(reason ?? "unknown reason")"
+        }
+    }
+
+    /// Answers the request at the path it named, atomically so a waiting
+    /// script never reads half a file. Does nothing when it named none.
+    public static func answer(_ reply: Reply, at url: URL?) throws {
+        guard let url else { return }
+        try reply.encoded().write(to: url, options: .atomic)
     }
 
     public struct Refusal: Error, Equatable {

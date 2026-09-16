@@ -112,32 +112,46 @@ public struct LaunchFiles: Equatable, Sendable {
         }
     }
 
-    /// Makes the replay's data directory its own for as long as the returned
-    /// lock lives: nothing for a live or recording launch. When another
-    /// running replay holds the directory, this launch takes a new per-launch
-    /// directory instead and says why. A per-launch launch also removes
-    /// finished per-launch directories past the newest `keptFinishedLaunches`.
+    /// What claiming the data directory gave this launch.
+    public enum Claim {
+        /// A live or recording launch, which holds nothing.
+        case notNeeded
+        /// The replay holds its directory for as long as the lock lives.
+        case held(DataDirectoryLock)
+        /// The launch must not start, and why.
+        case refusedToStart(String)
+    }
+
+    /// Makes the replay's data directory its own for as long as the lock in
+    /// the returned claim lives; a live or recording launch holds nothing.
+    ///
+    /// A `--data-dir` another running replay holds refuses the launch rather
+    /// than quietly using a different directory: the flag exists so that the
+    /// caller knows where the journal is, and the end-to-end harness reads
+    /// exactly the path it passed, so a replay writing somewhere else would
+    /// leave a check reading a stale journal and reporting a pass that never
+    /// happened. A launch that makes its own directory also removes finished
+    /// per-launch directories past the newest `keptFinishedLaunches`.
     public mutating func claim(
         clientMode: ModelClientMode,
-        supportDirectory: URL = AppPaths.supportDirectory(),
-        launchName: String = LaunchFiles.launchName()
-    ) -> DataDirectoryLock? {
-        guard clientMode.isOffline else { return nil }
+        supportDirectory: URL = AppPaths.supportDirectory()
+    ) -> Claim {
+        guard clientMode.isOffline else { return .notNeeded }
         do {
             let lock = try DataDirectoryLock.acquire(in: dataDirectory)
             if isPerLaunch {
                 LaunchFiles.pruneFinishedLaunches(in: AppPaths.replayRoot(in: supportDirectory), keeping: LaunchFiles.keptFinishedLaunches)
             }
-            return lock
-        } catch DataDirectoryLock.Failure.inUse(let pid) where !isPerLaunch {
+            return .held(lock)
+        } catch DataDirectoryLock.Failure.inUse(let pid) {
             let holder = pid.map { "pid \($0)" } ?? "another process"
-            refusals.append("\(dataDirectory.path) is in use by another Mentor (\(holder)), so this replay uses a new directory")
-            dataDirectory = AppPaths.replayRoot(in: supportDirectory).appendingPathComponent(launchName, isDirectory: true)
-            isPerLaunch = true
-            return claim(clientMode: clientMode, supportDirectory: supportDirectory, launchName: launchName)
+            let reason = "\(LaunchFiles.dataDirectoryFlag) \(dataDirectory.path) is in use by another Mentor (\(holder))"
+            refusals.append(reason)
+            return .refusedToStart(reason)
         } catch {
-            refusals.append("could not hold \(dataDirectory.path) for this replay: \(error)")
-            return nil
+            let reason = "could not hold \(dataDirectory.path) for this replay: \(error)"
+            refusals.append(reason)
+            return .refusedToStart(reason)
         }
     }
 

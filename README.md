@@ -44,7 +44,11 @@ only the copy its own lane launched earlier from this checkout, by the pid
 `scripts/launch.sh` wrote to `build/<lane>.pid`, so other checkouts, other
 replays, and a Mentor started any other way keep running. `make run` and
 `make record` share the lane `live`; `make run-replay` uses `replay`, or
-`LANE=<name>` (see Replays side by side).
+`LANE=<name>` (see Replays side by side). Because two live Mentors would share
+one journal, one settings file, and one API bill, a live launch refuses to
+start while another live Mentor runs and names it; `ALLOW_SECOND_LIVE=1` starts
+one anyway. Nothing stops a person launching a second copy from Finder, which
+was equally true before.
 
 There is no Xcode project. `Package.swift` defines the targets and
 `scripts/bundle.sh` wraps the release binary in an app bundle with
@@ -223,8 +227,15 @@ open -n build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1
   ahead from a script, exactly as the Advance field below does, with no
   accessibility and no window. It posts a distributed notification addressed
   to that pid (`ClockRemote`); only a replay listens, and only for its own pid,
-  so a live or recording Mentor and every other replay ignore it. The replay
-  logs "clock moved ahead" or why it refused.
+  so a live or recording Mentor and every other replay ignore it. The request
+  names a file for the replay to answer at, and the script waits for that
+  answer: a notification reaches only the observers registered when it is
+  posted and says nothing about who heard it, so a request sent to a replay
+  that is still starting, to a live Mentor, or to a pid that is not Mentor
+  would otherwise look exactly like success and leave a check waiting on a
+  clock that never moved. It exits 0 with what the clock now reads, 1 when no
+  answer arrives inside `MENTOR_CLOCK_TIMEOUT` (10 seconds by default), naming
+  the pid, and 3 when the replay refused the interval.
 - The debug panel's Mentor card has an **Advance** field (accessibility label
   "Advance clock"): type an interval and press Return, and the clock moves
   ahead at once, as if that much time went by with the Mac awake in the mode
@@ -273,9 +284,12 @@ of them disturbs another or the live app:
   run-replay DATA_DIR=<path>`) uses that directory instead, and a relaunch with
   the same one carries on from its journal. A replay holds its directory for
   as long as it runs, with a lock on `mentor.pid` inside it that holds its
-  pid; a second replay given a directory another one holds takes a new one of
-  its own and says why in the menu, the Mentor card, and the log. Each replay
-  launch that makes a new directory removes finished ones past the newest 10,
+  pid; a second replay given a directory another one holds does not start at
+  all, and says which pid holds it, because the caller named that directory to
+  read its journal and a replay writing somewhere else would leave a check
+  reading a stale journal. A replay with no `--data-dir` always gets a
+  directory of its own, so it never collides. Each replay launch that makes a
+  new directory removes finished ones past the newest 10,
   never one a running replay holds, and never a directory with any other name.
   The debug panel's Mentor card and the log at launch show which directory a
   replay uses.
@@ -290,14 +304,16 @@ of them disturbs another or the live app:
   are refused, like the clock flags: the app uses the live files, and the menu,
   the Mentor card, and the log say why. The live app's files never move.
 - **Launching never quits another Mentor.** `make run-replay` replaces only the
-  replay its lane (`LANE`, default `replay`) launched from this checkout, so
-  two lanes run side by side:
+  replay its lane (`LANE`, default `replay`) launched from this checkout, and
+  finds that instance exactly: the launch carries a unique `--launch-token`,
+  an argument the app ignores, so two launches from one checkout that overlap
+  can never adopt each other's process. Two lanes run side by side:
 
 ```sh
 make run-replay LANE=a SETTINGS=/tmp/a/settings.json TIME_SCALE=60
 make run-replay LANE=b SETTINGS=/tmp/b/settings.json
 cat build/a.pid                                   # lane a's pid
-scripts/advance-clock.sh "$(cat build/a.pid)" 2h  # moves only lane a's clock
+scripts/advance-clock.sh "$(cat build/a.pid)" 2h  # moves only lane a's clock, and fails if it was not heard
 ```
 
   An on-screen check drives the app through `scripts/e2e/mentor-e2e` (see

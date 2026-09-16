@@ -15,6 +15,8 @@ SETTINGS ?=
 LANE ?= replay
 ## The pid `make measure` samples when several Mentors are running
 PID ?=
+## Set to 1 to start a second live Mentor on purpose, sharing the live journal, settings, and API spend
+ALLOW_SECOND_LIVE ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/mentor/recordings
 
@@ -32,9 +34,12 @@ mark:
 	swift scripts/mark-assets.swift .
 
 ## Build and launch the app, replacing only the copy this checkout's `make run`
-## or `make record` launched before (scripts/launch.sh); every other Mentor keeps running
+## or `make record` launched before (scripts/launch.sh); every other Mentor keeps
+## running. Refuses to start while another live Mentor is running, since two of
+## them share the live journal, settings, and API spend: ALLOW_SECOND_LIVE=1 to
+## start one anyway.
 run: build
-	@scripts/launch.sh live
+	@scripts/launch.sh live --live $(if $(ALLOW_SECOND_LIVE),--allow-second-live)
 
 ## Build and launch the app answering every model call from recorded fixtures:
 ## no network, no API key, no spend (see README, "Iterating without the network").
@@ -49,16 +54,18 @@ run-replay: build
 	settings="$(SETTINGS)"; case "$$settings" in "~"|"~/"*) settings="$$HOME$${settings#\~}";; esac; \
 	if [ -n "$$settings" ]; then test -f "$$settings" || { echo "run-replay: no settings file at $$settings" >&2; exit 1; }; \
 		settings="$$(cd "$$(dirname "$$settings")" && pwd)/$$(basename "$$settings")"; fi; \
-	scripts/launch.sh "$(LANE)" --replay "$$(cd "$$dir" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures) $(if $(TIME_SCALE),--time-scale $(TIME_SCALE)) \
+	scripts/launch.sh "$(LANE)" -- --replay "$$(cd "$$dir" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures) $(if $(TIME_SCALE),--time-scale $(TIME_SCALE)) \
 		$${data:+--data-dir "$$data"} $${settings:+--settings "$$settings"}
 
 ## Build and launch the app live, writing every model call to a fixture file.
 ## This spends API credits: use it only to record fixtures on purpose.
-## Replaces only the copy this checkout's `make run` or `make record` launched before.
+## Replaces only the copy this checkout's `make run` or `make record` launched
+## before, and refuses to start while another live Mentor is running
+## (ALLOW_SECOND_LIVE=1 to start one anyway).
 record: build
 	@dir="$(RECORD_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
 	if [ -n "$$dir" ]; then mkdir -p -m 700 "$$dir" && dir="$$(cd "$$dir" && pwd)" || exit 1; fi; \
-	scripts/launch.sh live --record $${dir:+"$$dir"}
+	scripts/launch.sh live --live $(if $(ALLOW_SECOND_LIVE),--allow-second-live) -- --record $${dir:+"$$dir"}
 
 ## Delete the app's own recordings directory and every recorded call in it
 clear-recordings:

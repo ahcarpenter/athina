@@ -160,6 +160,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // A replay given a data directory another replay holds never starts:
+        // the caller named that directory to read its journal, so running
+        // against another one would answer with the wrong files.
+        if let refusal = AppState.shared.startupRefusal {
+            FileHandle.standardError.write(Data("Mentor did not start: \(refusal)\n".utf8))
+            AppState.log.error("did not start: \(refusal, privacy: .public)")
+            exit(2)
+        }
         if let directory = Snapshots.requestedDirectory {
             Task { @MainActor in
                 do {

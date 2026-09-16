@@ -126,6 +126,10 @@ final class AppState {
     let launchFiles: LaunchFiles
     /// Keeps a replay's data directory its own while the app runs.
     private let dataDirectoryLock: DataDirectoryLock?
+    /// Why this launch must not start, when a replay was given a data
+    /// directory another one holds. The app says so and exits rather than
+    /// running against a directory nobody asked for.
+    let startupRefusal: String?
 
     // MARK: Model client mode
 
@@ -194,7 +198,17 @@ final class AppState {
         toast = ToastController(clock: clock)
         listener = SpeechListener(clock: clock)
         var files = LaunchFiles(arguments: CommandLine.arguments, clientMode: clientMode)
-        dataDirectoryLock = files.claim(clientMode: clientMode)
+        switch files.claim(clientMode: clientMode) {
+        case .notNeeded:
+            dataDirectoryLock = nil
+            startupRefusal = nil
+        case .held(let lock):
+            dataDirectoryLock = lock
+            startupRefusal = nil
+        case .refusedToStart(let reason):
+            dataDirectoryLock = nil
+            startupRefusal = reason
+        }
         let launchSettings = files.loadSettings()
         launchFiles = files
         journalURL = Journal.defaultURL(in: files.dataDirectory)
@@ -229,6 +243,7 @@ final class AppState {
         // A fixed per-launch name, so a replay render reads the same every time.
         launchFiles = LaunchFiles(arguments: [], clientMode: clientMode, launchName: "launch-4242-5a1e0c9d")
         dataDirectoryLock = nil
+        startupRefusal = nil
         journalURL = Journal.defaultURL(in: launchFiles.dataDirectory)
         settingsURL = launchFiles.store.url
         keyStore = clientMode.isOffline ? InMemoryKeyStore() : InMemoryKeyStore(key: "sk-ant-sample-key-0000-7Q2x")
@@ -301,7 +316,8 @@ final class AppState {
                 forName: Notification.Name(ClockRemote.name), object: ClockRemote.object(for: getpid()), queue: .main
             ) { [weak self] notification in
                 let request = ClockRemote.seconds(from: notification.userInfo)
-                MainActor.assumeIsolated { self?.advanceClock(onRequest: request) }
+                let replyURL = ClockRemote.replyURL(from: notification.userInfo)
+                MainActor.assumeIsolated { self?.advanceClock(onRequest: request, answeringAt: replyURL) }
             }
         }
 
@@ -1252,15 +1268,28 @@ final class AppState {
         return true
     }
 
-    /// Moves a replay's clock ahead for another process (`ClockRemote`).
-    private func advanceClock(onRequest request: Result<TimeInterval, ClockRemote.Refusal>) {
+    /// Moves a replay's clock ahead for another process (`ClockRemote`), and
+    /// answers the request where it asked, so the script that made it knows it
+    /// was heard rather than assuming so.
+    private func advanceClock(onRequest request: Result<TimeInterval, ClockRemote.Refusal>, answeringAt replyURL: URL?) {
+        var reply: ClockRemote.Reply
         switch request {
         case .success(let seconds):
-            if !advanceClock(by: seconds) {
-                AppState.log.error("clock advance request refused: this launch has no replay clock")
+            if advanceClock(by: seconds) {
+                reply = ClockRemote.Reply(moved: true, by: seconds, movedAhead: clockMovedAhead, now: clock.date)
+            } else {
+                let reason = "this launch has no replay clock"
+                AppState.log.error("clock advance request refused: \(reason, privacy: .public)")
+                reply = ClockRemote.Reply(moved: false, reason: reason, movedAhead: clockMovedAhead, now: clock.date)
             }
         case .failure(let refusal):
             AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
+            reply = ClockRemote.Reply(moved: false, reason: refusal.reason, movedAhead: clockMovedAhead, now: clock.date)
+        }
+        do {
+            try ClockRemote.answer(reply, at: replyURL)
+        } catch {
+            AppState.log.error("could not answer the clock request at \(replyURL?.path ?? "", privacy: .public): \(String(describing: error), privacy: .public)")
         }
     }
 
