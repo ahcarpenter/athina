@@ -25,9 +25,10 @@ enum Formatting {
         return "\(Int(seconds / 3600))h \(Int(seconds.truncatingRemainder(dividingBy: 3600) / 60))m ago"
     }
 
+    /// "in 45s", "in 8m 31s": a wait of minutes reads in minutes, not as a count of seconds.
     static func countdown(to date: Date, now: Date) -> String {
         let seconds = date.timeIntervalSince(now)
-        return seconds <= 0 ? "now" : "in \(Int(seconds.rounded(.up)))s"
+        return seconds <= 0 ? "now" : "in \(ClockInterval.description(of: seconds.rounded(.up)))"
     }
 
     static func duration(_ interval: TimeInterval) -> String {

@@ -374,6 +374,10 @@ struct Field: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .font(.callout)
+        // Label and value are one stop for VoiceOver, as they read on screen,
+        // and it is text, as the rows elsewhere in the panel are.
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isStaticText)
     }
 }
 
@@ -517,7 +521,7 @@ private struct OCRTextList: View {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 Text(String(format: "%.0f%%", block.confidence * 100))
                                     .font(.system(.caption, design: .monospaced))
-                                    .foregroundStyle(.tertiary)
+                                    .foregroundStyle(.secondary)
                                     .frame(width: 34, alignment: .trailing)
                                 Text(block.text)
                                     .font(.system(.callout, design: .monospaced))
@@ -667,7 +671,7 @@ private struct TimelineRow: View {
             case .suggested: .yellow
             case .feedback: .green
             case .talkBack: .teal
-            case .understanding: .teal
+            case .understanding: UnderstandingCard.tint
             default: .secondary
             }
         }
@@ -1075,7 +1079,7 @@ private struct CallLogRow: View {
         case .triage: .blue
         case .mentor: .purple
         case .followUp: .teal
-        case .understanding: .teal
+        case .understanding: UnderstandingCard.tint
         case .test: .gray
         }
     }

@@ -51,7 +51,12 @@ enum Accessibility {
             }
 
         case "texts":
-            let interesting = ["AXStaticText", "AXButton", "AXCheckBox", "AXTextField", "AXTextArea", "AXMenuItem", "AXMenuBarItem"]
+            // AXUnknown is in the list because that is the role SwiftUI gives a
+            // row whose parts are combined into one element, which is how
+            // VoiceOver reads most of Mentor's rows.
+            let interesting = [
+                "AXStaticText", "AXButton", "AXCheckBox", "AXTextField", "AXTextArea", "AXMenuItem", "AXMenuBarItem", "AXUnknown",
+            ]
             for root in roots() {
                 var found: [AXUIElement] = []
                 findAll(root, { interesting.contains(role($0)) }, into: &found)
@@ -95,7 +100,18 @@ enum Accessibility {
             default:
                 let newValue = try invocation.positional(4)
                 AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
-                let status = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, newValue as CFTypeRef)
+                // A number goes in as a number only where the element's value
+                // already is one, as a scroll bar's is: a text field, which is
+                // most of what a scenario sets, refuses anything but a string.
+                var payload = newValue as CFTypeRef
+                if let current = attr(element, kAXValueAttribute), CFGetTypeID(current) == CFNumberGetTypeID(),
+                   let number = Double(newValue) {
+                    payload = NSNumber(value: number) as CFTypeRef
+                }
+                let status = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, payload)
+                if status != .success {
+                    fail("ax set: \(role(element)) refused \"\(newValue)\" -> \(status.rawValue), value still \"\(value(element).prefix(200))\"", code: 2)
+                }
                 say("set \(role(element)) -> \(status.rawValue) now value=\"\(value(element).prefix(200))\"")
             }
 

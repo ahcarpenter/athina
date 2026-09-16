@@ -153,7 +153,7 @@ public struct MentorSettings: Codable, Equatable, Sendable {
         s.mentorWindowTokenBudget = s.mentorWindowTokenBudget.clamped(to: 500...60000)
         s.understandingRefreshInterval = s.understandingRefreshInterval.clamped(to: MentorSettings.refreshIntervalRange)
         s.understandingTokenBudget = s.understandingTokenBudget.clamped(to: MentorSettings.understandingTokenBudgetRange)
-        s.understandingIdleGap = s.understandingIdleGap.clamped(to: 600...(7 * 86400))
+        s.understandingIdleGap = s.understandingIdleGap.clamped(to: MentorSettings.idleGapRange)
         s.minimumConfidence = s.minimumConfidence.clamped(to: 0...1)
         s.toastTimeout = s.toastTimeout.clamped(to: 5...600)
         s.notNowSnooze = s.notNowSnooze.clamped(to: 60...(7 * 86400))
@@ -173,6 +173,9 @@ public struct MentorSettings: Codable, Equatable, Sendable {
 
     /// Settable range for the refresh interval.
     public static let refreshIntervalRange: ClosedRange<TimeInterval> = 300...43200
+
+    /// Settable range for how long a record survives with no activity.
+    public static let idleGapRange: ClosedRange<TimeInterval> = 600...(7 * 86400)
 
     /// Settable range for the token budget. The top leaves a mentor reply room
     /// for its thinking and a suggestion beside the record it carries.

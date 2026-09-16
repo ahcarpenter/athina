@@ -1273,7 +1273,7 @@ final class AppState {
             if case .capReached = mentorStatus.availability {
                 return "Mentor: \(spend) of \(cap) this hour, cap reached"
             }
-            if mentorStatus.cadenceMultiplier > 1.05 {
+            if mentorStatus.isCadenceSlowed {
                 return "Mentor: \(spend) of \(cap) this hour, slowed \(Formatting.multiplier(mentorStatus.cadenceMultiplier))"
             }
             return "Mentor: \(spend) of \(cap) this hour"
@@ -1316,7 +1316,7 @@ final class AppState {
     var understandingLine: String? {
         guard mentorStatus.availability.formsUnderstanding else { return nil }
         guard let goal = mentorStatus.understanding?.content.primaryGoal else {
-            return "Goal: still working it out"
+            return "Goal: not worked out yet"
         }
         return "Goal: \(Formatting.clipped(goal.goal, to: 64))"
     }

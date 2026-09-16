@@ -50,6 +50,25 @@ import Testing
         #expect(meter.cadenceMultiplier(now: t0 + 3000) == 1)
     }
 
+    // The multiplier leaves 1 with the first cheap call of the hour, so a
+    // readout that says "slowed" at any multiplier above 1 says it for almost
+    // the whole life of a session, and rounds it to "slowed 1.0x". The status
+    // decides when the word is earned, and every surface that says it asks.
+    @Test func oneCheapCallStretchesTheCadenceWithoutCallingItSlowed() {
+        var meter = SpendMeter(cap: MentorSettings().hourlySpendCap)
+        meter.record(cost: 0.0014, at: t0)
+        let afterOneTriage = meter.cadenceMultiplier(now: t0)
+        #expect(afterOneTriage > 1)
+        #expect(!MentorStatus(cadenceMultiplier: afterOneTriage).isCadenceSlowed)
+
+        // A twentieth of the cap is where the word is earned; just under it it is not.
+        #expect(!MentorStatus(cadenceMultiplier: SpendMeter.multiplier(forFraction: 0.047)).isCadenceSlowed)
+        #expect(MentorStatus(cadenceMultiplier: SpendMeter.multiplier(forFraction: 0.05)).isCadenceSlowed)
+
+        meter.record(cost: meter.cap / 2, at: t0 + 1)
+        #expect(MentorStatus(cadenceMultiplier: meter.cadenceMultiplier(now: t0 + 1)).isCadenceSlowed)
+    }
+
     @Test func negativeCostsAndZeroCapAreHarmless() {
         var meter = SpendMeter(cap: 0)
         meter.record(cost: -5, at: t0)
