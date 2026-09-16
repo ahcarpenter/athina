@@ -1104,8 +1104,9 @@ particular to this app:
   the silhouette never changes. Paused also gets two z's drifting off it, drawn
   in the clear upper left of the owl's own bounding box: with the pupils gone
   the eyes are the whitest thing in the set and read wide awake rather than
-  shut, so the z's are what actually say asleep. That is what keeps the item one
-  width throughout, so the other extras never shift sideways when Mentor's state
+  shut, so the z's are what actually say asleep. Every state, the z's included,
+  is made inside the owl's own box, which is what keeps the item one width
+  throughout, so the other extras never shift sideways when Mentor's state
   changes. Which variant a mode gets is `MenuBarMark.resolve`, a pure function
   with the whole table under test.
 - **The toast is a non-activating panel, not a notification.** It floats under
