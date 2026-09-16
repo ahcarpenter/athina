@@ -1,0 +1,12 @@
+;; The sandbox every harness run is launched under.
+;;
+;; A scratch home keeps the run's journal and settings apart, but nothing stops
+;; a bug or a wrong path from reaching the owner's real data, and nothing stops
+;; a live model call but the absence of a key. This denies both outright.
+;;
+;; __LIVE_SUPPORT__ is replaced with the owner's Application Support directory
+;; when a run writes its copy of this profile.
+(version 1)
+(allow default)
+(deny file* (subpath "__LIVE_SUPPORT__"))
+(deny network-outbound)

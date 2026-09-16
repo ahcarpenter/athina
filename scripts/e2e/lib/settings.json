@@ -1,0 +1,31 @@
+{
+  "idleThreshold": 300,
+  "excludedBundleIDs": [
+    "com.apple.keychainaccess",
+    "com.apple.Passwords",
+    "com.1password.1password",
+    "com.1password.1password-launcher",
+    "com.agilebits.onepassword7",
+    "com.agilebits.onepassword-osx",
+    "com.bitwarden.desktop",
+    "com.lastpass.LastPass",
+    "com.dashlane.DashlaneMacOS",
+    "com.dashlane.Dashlane",
+    "org.keepassxc.keepassxc",
+    "com.markmcguill.strongbox",
+    "in.sinew.Enpass-Desktop",
+    "com.nordpass.macos",
+    "com.protonmail.pass",
+    "com.roboform.mac",
+    "com.apple.Preview",
+    "com.github.wez.wezterm",
+    "com.google.Chrome",
+    "com.apple.MobileSMS",
+    "com.apple.Notes",
+    "com.todesktop.230313mzl4w4u92"
+  ],
+  "mentor": {
+    "toastTimeout": 600,
+    "mentorMinInterval": 30
+  }
+}
