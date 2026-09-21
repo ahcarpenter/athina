@@ -126,13 +126,16 @@ final class AppState {
     let launchFiles: LaunchFiles
     /// Keeps a replay's data directory its own while the app runs.
     private let dataDirectoryLock: DataDirectoryLock?
-    /// Why this launch must not start, when a replay was given a `--settings`
-    /// file that is not settings. The app says so and exits rather than running
-    /// on settings nobody asked for.
+    /// Why this launch must not start: a replay was given a `--settings` file
+    /// that is not settings, or the files the app kept as Mentor could not be
+    /// moved (`DataMigration.Outcome.stopsLaunch`). The app says so and exits
+    /// rather than running on settings nobody asked for, or on an empty
+    /// journal in place of the owner's.
     let startupRefusal: String?
     /// What this launch found and did about the files the app kept when it
     /// was called Mentor (`DataMigration`). Shown in Settings and the debug
-    /// panel, because a move that was refused is the owner's to settle.
+    /// panel, because a move that was refused is the owner's to settle; one
+    /// that could not be finished stops the launch (`startupRefusal`).
     let dataMigration: DataMigration.Outcome
     /// Whether this launch copies the API key saved under the old name
     /// (`KeyMigration`). Only a launch that reads the keychain at all does:
@@ -210,12 +213,12 @@ final class AppState {
         // Mentor move to the folder it keeps them in now. A replay's files
         // are its own and never the live ones, and a snapshot render reads
         // neither, so neither moves anything.
-        if clientMode.isOffline || Snapshots.isActive {
-            dataMigration = .nothingToMove
-        } else {
-            dataMigration = DataMigration.run()
-            PreferencesMigration.run()
-        }
+        let dataMigration: DataMigration.Outcome = clientMode.isOffline || Snapshots.isActive ? .nothingToMove : DataMigration.run()
+        self.dataMigration = dataMigration
+        // The preferences follow the files, so a launch that stops here
+        // leaves both for the next one.
+        let copiesFromMentor = !(clientMode.isOffline || Snapshots.isActive || dataMigration.stopsLaunch)
+        if copiesFromMentor { PreferencesMigration.run() }
         var files = LaunchFiles(arguments: CommandLine.arguments, clientMode: clientMode)
         // The settings first, so that a --settings file that is there but is
         // not settings is one of the reasons `claim` refuses the launch.
@@ -223,7 +226,7 @@ final class AppState {
         switch files.claim(clientMode: clientMode) {
         case .notNeeded:
             dataDirectoryLock = nil
-            startupRefusal = nil
+            startupRefusal = dataMigration.stopsLaunch ? dataMigration.note : nil
         case .held(let lock):
             dataDirectoryLock = lock
             startupRefusal = nil
@@ -238,7 +241,7 @@ final class AppState {
         // Neither a replay nor a snapshot render needs a key, so neither reads
         // the keychain, and its per-build access prompt never blocks them.
         keyStore = clientMode.isOffline || Snapshots.isActive ? InMemoryKeyStore() : KeychainKeyStore()
-        copyKeyFromMentor = !(clientMode.isOffline || Snapshots.isActive)
+        copyKeyFromMentor = copiesFromMentor
         isSample = false
         settings = launchSettings
         let status = PermissionProbe.current()
@@ -608,6 +611,10 @@ final class AppState {
             if copyKeyFromMentor {
                 let outcome = await Task.detached(priority: .userInitiated) { KeyMigration.run() }.value
                 if let note = outcome.note { AppState.log.notice("key from Mentor: \(note, privacy: .public)") }
+                // The loop reads the key once as it attaches, which can be
+                // before the owner has answered the keychain prompt this
+                // copy waited on. A loop attached later reads the copy itself.
+                if outcome == .copied { await self?.mentor?.apiKeyChanged() }
             }
             let outcome: Result<String?, Error>
             do {

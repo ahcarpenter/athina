@@ -11,8 +11,11 @@ let package = Package(
         .executable(name: "athina-drive", targets: ["AthinaDrive"]),
     ],
     targets: [
+        // The one SQLite call Swift cannot make for itself (see the header).
+        .target(name: "AthinaSQLiteShim", linkerSettings: [.linkedLibrary("sqlite3")]),
         .target(
             name: "AthinaCore",
+            dependencies: ["AthinaSQLiteShim"],
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
                 .linkedFramework("ScreenCaptureKit"),

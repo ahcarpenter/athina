@@ -1,3 +1,4 @@
+import AthinaSQLiteShim
 import Foundation
 import SQLite3
 
@@ -13,9 +14,11 @@ private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self
 final class SQLiteConnection {
     private var db: OpaquePointer?
 
-    init(path: String) throws {
+    /// `create` is false for a database that must already be there, so a
+    /// wrong path is an error rather than a new, empty file.
+    init(path: String, create: Bool = true) throws {
         var handle: OpaquePointer?
-        let flags = SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX
+        let flags = SQLITE_OPEN_READWRITE | (create ? SQLITE_OPEN_CREATE : 0) | SQLITE_OPEN_FULLMUTEX
         let rc = sqlite3_open_v2(path, &handle, flags, nil)
         guard rc == SQLITE_OK, let handle else {
             let message = handle.map { String(cString: sqlite3_errmsg($0)) } ?? "cannot open"
@@ -28,6 +31,13 @@ final class SQLiteConnection {
 
     deinit {
         if let db { sqlite3_close(db) }
+    }
+
+    /// Leaves the write-ahead log as it was found when this connection
+    /// closes, rather than folding it into the database file: for a database
+    /// that is only being read and must stay byte for byte what it was.
+    func keepWriteAheadLogOnClose() throws {
+        try check(athina_sqlite_keep_wal_on_close(db), "keep the write-ahead log on close")
     }
 
     private func check(_ rc: Int32, _ context: String) throws {

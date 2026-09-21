@@ -46,7 +46,8 @@ replays, and an Athina started any other way keep running. `make run` and
 `make record` share the lane `live`; `make run-replay` uses `replay`, or
 `LANE=<name>` (see Replays side by side). Because two live Athinas would share
 one journal, one settings file, and one API bill, a live launch refuses to
-start while another live Athina runs and names it. Nothing stops a person
+start while another live Athina runs and names it; a build from before the
+rename, running as Mentor, counts as one. Nothing stops a person
 launching a second copy from Finder, which was equally true before.
 
 There is no Xcode project. `Package.swift` defines the targets and
@@ -609,19 +610,39 @@ senses nothing until they are granted again, once, by hand:
 Nothing of yours is left behind or overwritten. On its first launch Athina
 moves what Mentor kept, `~/Library/Application Support/mentor` (the journal
 with its understanding, `settings.json`, and any recorded calls), to
-`~/Library/Application Support/athina`. The copy is assembled beside the new
-folder, compared file by file with what it came from, and put in place with
-one rename, so a move interrupted partway is started again rather than half
-adopted. The old folder is left exactly as it was, yours to keep or remove.
-Per-launch replay directories are not moved, since every replay makes its own.
+`~/Library/Application Support/athina`. Quit Mentor first: Athina takes
+SQLite's exclusive lock on the old journal for the whole move, and has SQLite
+itself copy it rather than copying a live write-ahead-log database file by
+file. The copy is assembled beside the new folder and checked there, the
+journal by SQLite's integrity check and a row count of every table against the
+original, every other file by SHA-256 digest, and only then put in place, with
+the marker `migrated-from-mentor.json` written last. The old folder is left
+exactly as it was, yours to keep or remove. Per-launch replay directories are
+not moved, since every replay makes its own, and a replay that ran under the
+new name first does not stand in the way: its `replay` folder is the app's own,
+not your data.
 
-If both folders already hold data, the move is refused rather than merged:
-Athina uses `athina`, leaves `mentor` untouched, and says so in Settings >
-Journal, in the debug panel, and in the log. Keep the one you want and move
-the other away.
+A move that cannot be finished stops that launch rather than starting an empty
+journal in place of yours. Athina says what failed, in an alert, on stderr and
+in the log, and quits:
+
+- The old journal is still open in Mentor or another copy of the app, so the
+  lock cannot be had. Quit it and open Athina again.
+- A copy or a check failed (a full disk, a file that cannot be read).
+
+Either way what Mentor kept is untouched, the attempt takes back whatever it
+put in the new folder and nothing else, and the next launch simply tries
+again. A move cut short by a crash is started again the same way.
+
+If both folders already hold real data, the move is refused rather than
+merged: Athina uses `athina`, leaves `mentor` untouched, and says so, naming
+what it found, in Settings > Journal, in the debug panel, and in the log. Keep
+the one you want and move the other away.
 
 The Settings pane you had open and the window positions move with the
-preferences domain, into a domain that holds nothing of its own.
+preferences domain on that same first live launch, laid over anything a replay
+wrote there beforehand; after it, what Athina has written is never
+overwritten.
 
 The Anthropic API key moves the same careful way. On the first launch Athina
 copies the keychain item saved under `com.ahcarpenter.mentor` to
@@ -672,6 +693,8 @@ Sources/AthinaCore            library, fully testable
                               ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
                               and ClockRemote (moving a replay's clock from a script)
+Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swift cannot make (it is variadic),
+                              so `DataMigration` can read the old journal without altering it
 Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
                               (on-device speech recognition), HotKeyCenter (Carbon, press and release),

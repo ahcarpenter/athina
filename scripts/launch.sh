@@ -65,7 +65,9 @@ lane_pid() {
 }
 
 # Every Athina on this Mac that is not a replay or a snapshot render, whatever
-# checkout or bundle it came from, as "<pid> <command>" lines.
+# checkout or bundle it came from, as "<pid> <command>" lines. A build from
+# before the rename is the same app under its old name, Mentor, spending on the
+# same key and holding the journal the first live Athina moves, so it counts.
 #
 # Which process is an Athina is decided on `comm`, the executable alone, never
 # on the joined command line: a path with a space in it cannot be told from a
@@ -81,6 +83,7 @@ live_athinas() {
 			sub(/^ *[0-9]+ +/, "")
 			if (!commands) {
 				if ($0 ~ /\/Athina\.app\/Contents\/MacOS\/Athina$/) athina[pid] = 1
+				if ($0 ~ /\/Mentor\.app\/Contents\/MacOS\/Mentor$/) athina[pid] = 1
 				next
 			}
 			if (!(pid in athina)) next
@@ -128,7 +131,7 @@ if [ "$LIVE" = 1 ]; then
 	running="$(live_athinas || true)"
 	if [ -n "$running" ]; then
 		{
-			echo "launch: a live Athina is already running, so this one would share its journal, its settings, and its API spend:"
+			echo "launch: a live Athina, or Mentor as it was called, is already running, so this one would share its journal, its settings, and its API spend:"
 			echo "  ${running//$'\n'/$'\n'  }"
 			echo "Quit it first (kill <pid>)."
 		} >&2
