@@ -410,9 +410,9 @@ let parts = try Owl.read(owl)
 enum Eyes: String {
     /// Both pupils where the artist put them.
     case open
-    /// No pupils, so the eye cutouts read as closed. The captain's own words:
-    /// "in the paused state have it have no dots in it's eyes as if they're
-    /// closed".
+    /// No pupils, so the eye cutouts read as closed. The captain's own words,
+    /// said of the sleeping state when idle and paused wore each other's
+    /// faces: "have it have no dots in it's eyes as if they're closed".
     case closed
     /// A lid down over the top of each eye, pupils still under it.
     case halfLidded
@@ -524,9 +524,10 @@ let menuBarWidth = (menuBarHeight * parts.bounds.width / parts.bounds.height * 2
 /// do not move.
 let set: [(mark: String, eyes: Eyes, asleep: Bool)] = [
     ("watching", .open, false),
-    ("idle", .halfLidded, false),
-    // Paused is the sleeping state, so it takes the z's as well as the eyes.
-    ("paused", .closed, true),
+    // Idle is the state that says the user has stepped away, so it is the
+    // sleeping one: it takes the z's as well as the eyes.
+    ("idle", .closed, true),
+    ("paused", .halfLidded, false),
     ("excluded", .asideRight, false),
     ("needsSomething", .wide, false),
     ("held", .winking, false),

@@ -4,5 +4,5 @@
 # script or the variant set, never edit this by hand.
 MentorMark.svg 832953963c962bb27b706577f40bb85a0846df46deb870979f3e6f68dcdc9f01
 MentorOwl.svg dabbfd228654157e6b629d5a3fa039b49abcf0c2c043959885aac45dfce6f4a0
-mark-assets.swift 13b4a1cdd737b451e360906ba5c49208e5e60a1db745ff27be5186f836c207ea
+mark-assets.swift 63a13ecee4325b7ab58e8c1ec1b8286db13fc65632659f1f9be76438b88a7189
 variants watching idle paused excluded needsSomething held
