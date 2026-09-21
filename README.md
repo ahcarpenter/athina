@@ -1142,9 +1142,9 @@ counted (see Iterating without the network).
   for the purpose, never the captain's or any user's real work. Every recording
   is read, text and screenshot, before it is committed.
 - **Pause** from the menu or with the global hotkey (default ⌃⌥⌘P) stops all
-  sensing; the menu bar owl closes its eyes and two z's drift off it. Idle
-  drops a lid over them, an excluded app looks away, missing permissions is a
-  wide stare, and a held mentor tier winks (see Design conventions).
+  sensing; the menu bar owl drops a lid over its eyes. Idle closes them and two
+  z's drift off it, an excluded app looks away, missing permissions is a wide
+  stare, and a held mentor tier winks (see Design conventions).
 - Thumbnails expire after 6 hours and text after 7 days by default; the journal
   is capped at 500 MB; all three are adjustable, and the journal can be cleared
   at any time. A replay senses the real screen too, and a finished replay's
@@ -1247,14 +1247,15 @@ particular to this app:
   and one file serves every display scale. The states are made out of the
   drawing rather than hung off it: the owl's eyes are the boldest thing in it
   at this size and they are what watching means, so they carry the modes and
-  the silhouette never changes. Paused also gets two z's drifting off it, drawn
-  in the clear upper left of the owl's own bounding box: with the pupils gone
-  the eyes are the whitest thing in the set and read wide awake rather than
-  shut, so the z's are what actually say asleep. Every state, the z's included,
-  is made inside the owl's own box, which is what keeps the item one width
-  throughout, so the other extras never shift sideways when Mentor's state
-  changes. Which variant a mode gets is `MenuBarMark.resolve`, a pure function
-  with the whole table under test.
+  the silhouette never changes. Idle, the state that says the user has stepped
+  away, also gets two z's drifting off it, drawn in the clear upper left of the
+  owl's own bounding box: with the pupils gone the eyes are the whitest thing
+  in the set and read wide awake rather than shut, so the z's are what actually
+  say asleep. Paused, the deliberate stop, takes the half-lidded eyes. Every
+  state, the z's included, is made inside the owl's own box, which is what
+  keeps the item one width throughout, so the other extras never shift
+  sideways when Mentor's state changes. Which variant a mode gets is
+  `MenuBarMark.resolve`, a pure function with the whole table under test.
 - **The toast is a non-activating panel, not a notification.** It floats under
   the menu bar on Liquid Glass and never takes keyboard focus, with corners
   concentric with its small capsule buttons. Because it cannot be focused, the
