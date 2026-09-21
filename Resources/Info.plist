@@ -5,17 +5,17 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>Mentor</string>
+	<string>Athina</string>
 	<key>CFBundleExecutable</key>
-	<string>Mentor</string>
+	<string>Athina</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.ahcarpenter.mentor</string>
+	<string>com.ahcarpenter.athina</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Mentor</string>
+	<string>Athina</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -39,12 +39,12 @@
 	<key>NSSupportsSuddenTermination</key>
 	<false/>
 	<key>NSAccessibilityUsageDescription</key>
-	<string>Mentor reads the focused window and element of the app you are using to understand what you are working on.</string>
+	<string>Athina reads the focused window and element of the app you are using to understand what you are working on.</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>Mentor captures the display you are working on and reads its text on this Mac to understand what you are doing.</string>
+	<string>Athina captures the display you are working on and reads its text on this Mac to understand what you are doing.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Mentor listens only while you hold the talk-back shortcut, so you can answer or ask about a suggestion by voice, and never stores the audio.</string>
+	<string>Athina listens only while you hold the talk-back shortcut, so you can answer or ask about a suggestion by voice, and never stores the audio.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Mentor turns what you say while you hold the talk-back shortcut into text on this Mac and sends only your questions to the mentor model.</string>
+	<string>Athina turns what you say while you hold the talk-back shortcut into text on this Mac and sends only your questions to the mentor model.</string>
 </dict>
 </plist>

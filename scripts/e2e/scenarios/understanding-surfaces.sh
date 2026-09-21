@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# SCENARIO_* below are read by scripts/e2e/mentor-e2e, which sources this file.
+# SCENARIO_* below are read by scripts/e2e/athina-e2e, which sources this file.
 # shellcheck disable=SC2034
 # The surfaces that show the standing understanding. The mentor call that
 # raises the first suggestion also writes the first understanding, so this
@@ -36,17 +36,17 @@ wait_understanding() {
 
 menu_items() {
 	local tag="$1"
-	"$DRIVE" ax "$MENTOR_PID" pressextra >>"$RUN_DIR/transcript.log" 2>&1 || return 1
+	"$DRIVE" ax "$ATHINA_PID" pressextra >>"$RUN_DIR/transcript.log" 2>&1 || return 1
 	sleep 0.8
-	"$DRIVE" ax "$MENTOR_PID" menuitems >"$RUN_DIR/$tag-menu-items.txt" 2>&1 || true
+	"$DRIVE" ax "$ATHINA_PID" menuitems >"$RUN_DIR/$tag-menu-items.txt" 2>&1 || true
 	snapshot_state "$tag"
-	"$DRIVE" ax "$MENTOR_PID" cancelmenu >>"$RUN_DIR/transcript.log" 2>&1 || true
+	"$DRIVE" ax "$ATHINA_PID" cancelmenu >>"$RUN_DIR/transcript.log" 2>&1 || true
 	sleep 0.4
 }
 
 # The id of the first window whose name starts with $1, empty when none is open.
 window_id() {
-	"$DRIVE" windows "$MENTOR_PID" \
+	"$DRIVE" windows "$ATHINA_PID" \
 		| awk -v want="$1" 'index($0, "name=\"" want) {sub("id=", "", $1); print $1; exit}' || echo ""
 }
 
@@ -63,7 +63,7 @@ wait_window() {
 # only a description rather than a title still shows up.
 window_texts() {
 	local scope="$1" tag="$2" id
-	"$DRIVE" ax "$MENTOR_PID" texts --scope "$scope" >"$RUN_DIR/$tag-texts.txt" 2>&1 || true
+	"$DRIVE" ax "$ATHINA_PID" texts --scope "$scope" >"$RUN_DIR/$tag-texts.txt" 2>&1 || true
 	id="$(window_id "$scope")"
 	[ -n "$id" ] && "$DRIVE" shot window "$id" "$RUN_DIR/$tag.png" >/dev/null 2>&1
 	return 0
@@ -110,10 +110,10 @@ row_field_value() {
 # Return. The amount the row is left showing is what the row committed.
 type_duration() {
 	local row="$1" unit="$2" typed="$3" tag="$4"
-	"$DRIVE" ax "$MENTOR_PID" set AXTextField "$row, in $unit" "$typed" --scope Models >>"$RUN_DIR/transcript.log" 2>&1 || return 1
-	"$DRIVE" ax "$MENTOR_PID" focus AXTextField "Size limit, in tokens" --scope Models >>"$RUN_DIR/transcript.log" 2>&1 || return 1
+	"$DRIVE" ax "$ATHINA_PID" set AXTextField "$row, in $unit" "$typed" --scope Models >>"$RUN_DIR/transcript.log" 2>&1 || return 1
+	"$DRIVE" ax "$ATHINA_PID" focus AXTextField "Size limit, in tokens" --scope Models >>"$RUN_DIR/transcript.log" 2>&1 || return 1
 	sleep 0.6
-	"$DRIVE" ax "$MENTOR_PID" dump --scope Models >"$RUN_DIR/$tag.txt" 2>&1 || true
+	"$DRIVE" ax "$ATHINA_PID" dump --scope Models >"$RUN_DIR/$tag.txt" 2>&1 || true
 	row_field_value "$tag.txt" "$row"
 }
 
@@ -144,7 +144,7 @@ scenario_run() {
 
 	# The card sits under the Mentor loop card in the Now pane, so the pane is
 	# scrolled to the end before the shot; AXScrollToVisible does nothing here.
-	"$DRIVE" ax "$MENTOR_PID" set AXScrollBar "" 1 --scope "Debug Panel" >>"$RUN_DIR/transcript.log" 2>&1 || true
+	"$DRIVE" ax "$ATHINA_PID" set AXScrollBar "" 1 --scope "Debug Panel" >>"$RUN_DIR/transcript.log" 2>&1 || true
 	sleep 0.5
 	window_texts "Debug Panel" "card"
 	check "the card shows the goal" "yes" "$(has_text card-texts.txt "$goal")"
@@ -157,11 +157,11 @@ scenario_run() {
 	defaults write "$PREFS_DOMAIN" SettingsPane models >>"$RUN_DIR/transcript.log" 2>&1 || true
 	# A menu item is only in the tree while the menu is open, so the extra is
 	# pressed right before it, and closed again in case the press left it up.
-	"$DRIVE" ax "$MENTOR_PID" pressextra >>"$RUN_DIR/transcript.log" 2>&1 || { log "the menu bar extra would not open"; return 1; }
+	"$DRIVE" ax "$ATHINA_PID" pressextra >>"$RUN_DIR/transcript.log" 2>&1 || { log "the menu bar extra would not open"; return 1; }
 	sleep 0.8
-	"$DRIVE" ax "$MENTOR_PID" pressx AXMenuItem "Settings…" --scope extras >>"$RUN_DIR/transcript.log" 2>&1 \
+	"$DRIVE" ax "$ATHINA_PID" pressx AXMenuItem "Settings…" --scope extras >>"$RUN_DIR/transcript.log" 2>&1 \
 		|| { log "the menu offered no Settings… item to press"; return 1; }
-	"$DRIVE" ax "$MENTOR_PID" cancelmenu >>"$RUN_DIR/transcript.log" 2>&1 || true
+	"$DRIVE" ax "$ATHINA_PID" cancelmenu >>"$RUN_DIR/transcript.log" 2>&1 || true
 	wait_window "Models" || { log "Settings never opened on the Models pane"; return 1; }
 	window_texts "Models" "settings"
 	check "Settings shows the current goal" "yes" "$(has_text settings-texts.txt "$goal")"
@@ -170,7 +170,7 @@ scenario_run() {
 	# hours with the shipped defaults, and a unit pop-up sizes to the word it is
 	# showing, so this is where a row that reserves only its own word pushes its
 	# field and stepper off the other row's x.
-	"$DRIVE" ax "$MENTOR_PID" dump --scope Models >"$RUN_DIR/models-dump.txt" 2>&1 || true
+	"$DRIVE" ax "$ATHINA_PID" dump --scope Models >"$RUN_DIR/models-dump.txt" 2>&1 || true
 	refresh_x="$(row_field_x models-dump.txt "Refresh at most every")"
 	idle_x="$(row_field_x models-dump.txt "Forget after no activity for")"
 	# Two empty readings would match each other, so nothing to measure is a
@@ -194,9 +194,9 @@ scenario_run() {
 	# A link inside a Text offers accessibility nothing to press, so this is the
 	# one step that needs the real pointer; the footer is below the fold, so the
 	# pane is scrolled to the end and the link found again before it is aimed at.
-	"$DRIVE" ax "$MENTOR_PID" set AXScrollBar "" 1 --scope Models >>"$RUN_DIR/transcript.log" 2>&1 || true
+	"$DRIVE" ax "$ATHINA_PID" set AXScrollBar "" 1 --scope Models >>"$RUN_DIR/transcript.log" 2>&1 || true
 	sleep 0.6
-	"$DRIVE" ax "$MENTOR_PID" dump --scope Models >"$RUN_DIR/footer-dump.txt" 2>&1 || true
+	"$DRIVE" ax "$ATHINA_PID" dump --scope Models >"$RUN_DIR/footer-dump.txt" 2>&1 || true
 	link="$(element_centre footer-dump.txt AXLink "Journal settings")"
 	[ -n "$link" ] || { log "the footer showed no Journal settings link to aim at"; return 1; }
 	# The flipping helper floats above the Settings window and has already
@@ -207,36 +207,36 @@ scenario_run() {
 	wait_idle_input || return 1
 	# A click into a window that is not key only makes it key, so the Settings
 	# window is brought forward before the pointer aims at anything inside it.
-	"$DRIVE" raise "$MENTOR_PID" Models >>"$RUN_DIR/transcript.log" 2>&1 || true
+	"$DRIVE" raise "$ATHINA_PID" Models >>"$RUN_DIR/transcript.log" 2>&1 || true
 	sleep 0.5
 	# shellcheck disable=SC2086
-	"$DRIVE" click window "$MENTOR_PID" $link --shot "$RUN_DIR/footer-link.png" >>"$RUN_DIR/transcript.log" 2>&1 \
+	"$DRIVE" click window "$ATHINA_PID" $link --shot "$RUN_DIR/footer-link.png" >>"$RUN_DIR/transcript.log" 2>&1 \
 		|| { log "the click on the Journal settings link would not land"; return 1; }
 	sleep 1
 	check "the footer link opens the Journal pane in place" "yes" \
 		"$([ -n "$(window_id "Journal")" ] && echo yes || echo no)"
 	window_texts "Journal" "journal-pane"
 
-	"$DRIVE" close "$MENTOR_PID" Journal >>"$RUN_DIR/transcript.log" 2>&1 || true
-	"$DRIVE" close "$MENTOR_PID" Models >>"$RUN_DIR/transcript.log" 2>&1 || true
+	"$DRIVE" close "$ATHINA_PID" Journal >>"$RUN_DIR/transcript.log" 2>&1 || true
+	"$DRIVE" close "$ATHINA_PID" Models >>"$RUN_DIR/transcript.log" 2>&1 || true
 	sleep 0.5
 
 	# Asking first, and Cancel keeping every revision.
 	revisions="$(journal_count understanding)"
-	"$DRIVE" ax "$MENTOR_PID" pressx AXButton "Reset Understanding…" --scope "Debug Panel" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
+	"$DRIVE" ax "$ATHINA_PID" pressx AXButton "Reset Understanding…" --scope "Debug Panel" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
 	sleep 1.5
 	window_texts "Debug Panel" "confirmation"
 	check "the confirmation asks before resetting" "yes" "$(has_text confirmation-texts.txt "Reset the understanding?")"
 	check "the confirmation says it cannot be undone" "yes" "$(has_text confirmation-texts.txt "You can't undo this action.")"
 	check "the confirmation offers Cancel" "yes" "$(has_text confirmation-texts.txt "Cancel")"
-	"$DRIVE" ax "$MENTOR_PID" pressx AXButton "Cancel" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
+	"$DRIVE" ax "$ATHINA_PID" pressx AXButton "Cancel" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
 	sleep 1
 	check "Cancel keeps every revision" "$revisions" "$(journal_count understanding)"
 	check "Cancel journals no reset" "0" "$(reset_events)"
 
-	"$DRIVE" ax "$MENTOR_PID" pressx AXButton "Reset Understanding…" --scope "Debug Panel" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
+	"$DRIVE" ax "$ATHINA_PID" pressx AXButton "Reset Understanding…" --scope "Debug Panel" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
 	sleep 1.5
-	"$DRIVE" ax "$MENTOR_PID" pressx AXButton "Reset Understanding" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
+	"$DRIVE" ax "$ATHINA_PID" pressx AXButton "Reset Understanding" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
 	sleep 2
 	check "Reset Understanding forgets every revision" "0" "$(journal_count understanding)"
 	check "the reset is journaled" "1" "$(reset_events)"

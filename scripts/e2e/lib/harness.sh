@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared machinery for the Mentor end-to-end harness. Sourced by scripts/e2e/mentor-e2e
+# Shared machinery for the Athina end-to-end harness. Sourced by scripts/e2e/athina-e2e
 # and by every scenario; never run on its own.
 #
 # What lives here is everything a scenario would otherwise write again: the
@@ -10,19 +10,19 @@
 
 E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="$(cd "$E2E_DIR/../.." && pwd)"
-APP="$ROOT/build/Mentor.app"
-APP_BINARY="$APP/Contents/MacOS/Mentor"
-DRIVE="$ROOT/.build/debug/mentor-drive"
-FIXTURES="$ROOT/Tests/MentorCoreTests/Fixtures/Replay"
+APP="$ROOT/build/Athina.app"
+APP_BINARY="$APP/Contents/MacOS/Athina"
+DRIVE="$ROOT/.build/debug/athina-drive"
+FIXTURES="$ROOT/Tests/AthinaCoreTests/Fixtures/Replay"
 SETTINGS_SEED="$E2E_DIR/lib/settings.json"
 
 # The owner's real data, which every run is sandboxed away from.
-LIVE_SUPPORT="$HOME/Library/Application Support/mentor"
-PREFS_DOMAIN="com.ahcarpenter.mentor"
+LIVE_SUPPORT="$HOME/Library/Application Support/athina"
+PREFS_DOMAIN="com.ahcarpenter.athina"
 
 # Homes and evidence live outside the repository: a warm home holds caches that
 # must not be committed, and a run holds screenshots of the real screen.
-CACHE_ROOT="${MENTOR_E2E_CACHE:-$HOME/Library/Caches/mentor-e2e}"
+CACHE_ROOT="${ATHINA_E2E_CACHE:-$HOME/Library/Caches/athina-e2e}"
 WARM_HOME="$CACHE_ROOT/warm-home"
 # Read by the entry point and by scenarios that source this file.
 # shellcheck disable=SC2034
@@ -33,7 +33,7 @@ RUNS_ROOT="$CACHE_ROOT/runs"
 RUN_DIR=""
 HOME_DIR=""
 JOURNAL=""
-MENTOR_PID=""
+ATHINA_PID=""
 EXCLUDED_PID=""
 HELPER_PIDS=()
 STAGED_PIDS=()
@@ -83,9 +83,9 @@ sources_newer_than() {
 }
 
 ensure_drive() {
-	if sources_newer_than "$DRIVE" "$ROOT/Sources/MentorDrive" "$ROOT/Sources/MentorE2E"; then
-		log "building mentor-drive"
-		(cd "$ROOT" && swift build --product mentor-drive >/dev/null) || die "could not build mentor-drive"
+	if sources_newer_than "$DRIVE" "$ROOT/Sources/AthinaDrive" "$ROOT/Sources/AthinaE2E"; then
+		log "building athina-drive"
+		(cd "$ROOT" && swift build --product athina-drive >/dev/null) || die "could not build athina-drive"
 	fi
 }
 
@@ -147,9 +147,9 @@ prefs_restore() {
 
 # --- Homes --------------------------------------------------------------------
 
-warm_home_stamp() { cat "$WARM_HOME/.mentor-e2e-warm" 2>/dev/null || echo "none"; }
+warm_home_stamp() { cat "$WARM_HOME/.athina-e2e-warm" 2>/dev/null || echo "none"; }
 
-have_warm_home() { [ -s "$WARM_HOME/.mentor-e2e-warm" ]; }
+have_warm_home() { [ -s "$WARM_HOME/.athina-e2e-warm" ]; }
 
 # A fresh home per run, cloned from the warm one.
 #
@@ -159,12 +159,12 @@ have_warm_home() { [ -s "$WARM_HOME/.mentor-e2e-warm" ]; }
 # journal shows events with no observations.
 new_home() {
 	local dest="$1"
-	have_warm_home || die "no warm home yet: run scripts/e2e/mentor-e2e warm first"
+	have_warm_home || die "no warm home yet: run scripts/e2e/athina-e2e warm first"
 	rm -rf "$dest"
 	cp -c -R "$WARM_HOME" "$dest" || die "could not clone the warm home into $dest"
 	# Start from an empty journal and settings; the caches are what we keep.
-	rm -rf "$dest/Library/Application Support/mentor"
-	mkdir -p "$dest/Library/Application Support/mentor"
+	rm -rf "$dest/Library/Application Support/athina"
+	mkdir -p "$dest/Library/Application Support/athina"
 }
 
 # The settings a replay starts from. Two things matter beyond the timings: the
@@ -186,7 +186,7 @@ def merge(into, extra):
             into[key] = value
 
 merge(base, overrides)
-path = pathlib.Path(os.environ["HOME_DIR"]) / "Library/Application Support/mentor/settings.json"
+path = pathlib.Path(os.environ["HOME_DIR"]) / "Library/Application Support/athina/settings.json"
 path.parent.mkdir(parents=True, exist_ok=True)
 path.write_text(json.dumps(base, indent=2))
 PY
@@ -196,8 +196,8 @@ PY
 
 # Replay only, sandboxed, in a scratch home, tracked by pid.
 #
-# Never `make run-replay` and never `pkill -x Mentor`: the first stops the lane
-# it launched before, and the second stops every Mentor on the Mac, including
+# Never `make run-replay` and never `pkill -x Athina`: the first stops the lane
+# it launched before, and the second stops every Athina on the Mac, including
 # other lanes' and the owner's own.
 #
 # Where the run's journal is, is the app's to say: a replay makes a directory
@@ -205,7 +205,7 @@ PY
 # names it on the line it writes when it starts, which app.log catches. Reading
 # it from there rather than dictating it means the path is known only once it
 # is real, and the run never guesses at a directory the app did not make.
-launch_mentor() {
+launch_athina() {
 	local home="$1"
 	shift
 	local profile="$RUN_DIR/isolate.sb"
@@ -213,23 +213,23 @@ launch_mentor() {
 	CFFIXED_USER_HOME="$home" HOME="$home" \
 		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" "$@" \
 		>>"$RUN_DIR/app.log" 2>&1 &
-	MENTOR_PID=$!
+	ATHINA_PID=$!
 	JOURNAL=""
-	log "launched Mentor pid=$MENTOR_PID (replay, sandboxed, home=$home)"
+	log "launched Athina pid=$ATHINA_PID (replay, sandboxed, home=$home)"
 	local i started
 	for i in $(seq 1 90); do
-		kill -0 "$MENTOR_PID" 2>/dev/null || die "Mentor exited during launch; see $RUN_DIR/app.log"
+		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited during launch; see $RUN_DIR/app.log"
 		# Its own pid, so a relaunch in the same home never reads the last one's.
-		started="$(grep -m 1 "^Mentor started: pid $MENTOR_PID in " "$RUN_DIR/app.log" 2>/dev/null || true)"
+		started="$(grep -m 1 "^Athina started: pid $ATHINA_PID in " "$RUN_DIR/app.log" 2>/dev/null || true)"
 		if [ -n "$started" ]; then JOURNAL="${started#* in }/journal.sqlite"; break; fi
 		sleep 0.5
 	done
-	[ -n "$JOURNAL" ] || die "Mentor never said where it keeps its journal; see $RUN_DIR/app.log"
+	[ -n "$JOURNAL" ] || die "Athina never said where it keeps its journal; see $RUN_DIR/app.log"
 	log "journal at $JOURNAL"
 	for i in $(seq 1 90); do
-		kill -0 "$MENTOR_PID" 2>/dev/null || die "Mentor exited during launch; see $RUN_DIR/app.log"
-		if "$DRIVE" ready "$MENTOR_PID" 2>/dev/null | grep -q READY; then
-			log "Mentor ready after $((i / 2))s"
+		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited during launch; see $RUN_DIR/app.log"
+		if "$DRIVE" ready "$ATHINA_PID" 2>/dev/null | grep -q READY; then
+			log "Athina ready after $((i / 2))s"
 			wake_input
 			return 0
 		fi
@@ -240,7 +240,7 @@ launch_mentor() {
 		fi
 		sleep 0.5
 	done
-	die "Mentor never became ready; see $RUN_DIR/app.log"
+	die "Athina never became ready; see $RUN_DIR/app.log"
 }
 
 stop_pid() {
@@ -271,7 +271,7 @@ cleanup() {
 	done
 	for pid in ${HELPER_PIDS[@]+"${HELPER_PIDS[@]}"}; do stop_pid "$pid"; done
 	for pid in ${STAGED_PIDS[@]+"${STAGED_PIDS[@]}"}; do stop_pid "$pid"; done
-	stop_pid "$MENTOR_PID"
+	stop_pid "$ATHINA_PID"
 	prefs_restore
 	if [ -n "$HOME_DIR" ] && [ "${KEEP_HOME:-0}" != 1 ]; then
 		rm -rf "$HOME_DIR"
@@ -322,14 +322,14 @@ wait_first_observation() {
 	local limit="${1:-120}" i
 	for i in $(seq 1 "$limit"); do
 		[ "$(journal_count observations)" -ge 1 ] && { log "first observation after ${i}s"; return 0; }
-		kill -0 "$MENTOR_PID" 2>/dev/null || die "Mentor exited while waiting for the first capture"
+		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited while waiting for the first capture"
 		[ $((i % 3)) = 0 ] && wake_input
 		sleep 1
 	done
 	return 1
 }
 
-toast_window() { "$DRIVE" toast "$MENTOR_PID" 2>/dev/null || true; }
+toast_window() { "$DRIVE" toast "$ATHINA_PID" 2>/dev/null || true; }
 
 newest_suggestion_open() {
 	sqlite3 -readonly "$JOURNAL" \
@@ -351,7 +351,7 @@ suggestion_feedback() {
 wait_toast() {
 	local limit="${1:-300}" i last_flip=0 last_capture=0 switches=0 now toast
 	for i in $(seq 1 "$limit"); do
-		kill -0 "$MENTOR_PID" 2>/dev/null || die "Mentor exited while waiting for a toast"
+		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited while waiting for a toast"
 		toast="$(toast_window)"
 		if [ -n "$toast" ] && [ "$(newest_suggestion_open)" = 1 ]; then
 			log "toast window $toast up for suggestion $(newest_suggestion_id)"
@@ -376,10 +376,10 @@ wait_toast() {
 			last_flip=$now
 		fi
 		if [ $((now - last_capture)) -ge 30 ]; then
-			"$DRIVE" ax "$MENTOR_PID" pressextra >/dev/null 2>&1
+			"$DRIVE" ax "$ATHINA_PID" pressextra >/dev/null 2>&1
 			sleep 0.5
-			"$DRIVE" ax "$MENTOR_PID" pressx AXMenuItem "Capture Now" --scope extras >/dev/null 2>&1
-			"$DRIVE" ax "$MENTOR_PID" cancelmenu >/dev/null 2>&1
+			"$DRIVE" ax "$ATHINA_PID" pressx AXMenuItem "Capture Now" --scope extras >/dev/null 2>&1
+			"$DRIVE" ax "$ATHINA_PID" cancelmenu >/dev/null 2>&1
 			last_capture=$(date +%s)
 		fi
 		sleep 1
@@ -447,7 +447,7 @@ TEXT
 	log "staged TextEdit pid=$TEXTEDIT_PID with notes.txt and plan.txt"
 }
 
-# An app Mentor is set to ignore, so a scenario can watch the item switch into
+# An app Athina is set to ignore, so a scenario can watch the item switch into
 # and out of the excluded mode. Calculator has no documents of the owner's to
 # reuse or close, and it is in the seeded exclusions beside his own apps.
 stage_excluded_app() {
@@ -474,25 +474,25 @@ raise_window() {
 
 # --- The menu bar -------------------------------------------------------------
 
-# Mentor's own status item, as one `extra` line of the bar report.
-mentor_extra() { "$DRIVE" bar | grep "^extra .*pid=$MENTOR_PID " || true; }
+# Athina's own status item, as one `extra` line of the bar report.
+athina_extra() { "$DRIVE" bar | grep "^extra .*pid=$ATHINA_PID " || true; }
 
-mentor_item_width() { mentor_extra | sed -n 's/.* w=\([0-9.]*\) .*/\1/p'; }
+athina_item_width() { athina_extra | sed -n 's/.* w=\([0-9.]*\) .*/\1/p'; }
 
 # The item's accessibility name, which is also how a scenario reads the mode.
-mentor_item_title() { mentor_extra | sed -n 's/.*title="\([^"]*\)".*/\1/p'; }
+athina_item_title() { athina_extra | sed -n 's/.*title="\([^"]*\)".*/\1/p'; }
 
 # The mode out of that name, without the app's own name or the replay badge.
 # The badge carries the clock's speed under --time-scale ("Replay 4.0x"), so a
 # check on the mode has to read past it.
-mentor_item_mode() { mentor_item_title | sed -E 's/^Mentor, (Recording, |Replay[^,]*, )?//'; }
+athina_item_mode() { athina_item_title | sed -E 's/^Athina, (Recording, |Replay[^,]*, )?//'; }
 
 # The item's name lags an app switch by a few seconds, so a measurement taken
 # right after one can still be of the mode before it.
 wait_item_title() {
 	local want="$1" limit="${2:-30}" i
 	for i in $(seq 1 "$limit"); do
-		case "$(mentor_item_title)" in *"$want"*) return 0 ;; esac
+		case "$(athina_item_title)" in *"$want"*) return 0 ;; esac
 		sleep 1
 	done
 	return 1
@@ -501,33 +501,33 @@ wait_item_title() {
 # --- Watchers -----------------------------------------------------------------
 
 watch_announcements() {
-	"$DRIVE" announce "$MENTOR_PID" >"$RUN_DIR/announcements.log" 2>&1 &
+	"$DRIVE" announce "$ATHINA_PID" >"$RUN_DIR/announcements.log" 2>&1 &
 	track_helper $!
 }
 
 watch_clicks() {
 	"$DRIVE" tap session >"$RUN_DIR/session-clicks.log" 2>&1 &
 	track_helper $!
-	"$DRIVE" tap pid "$MENTOR_PID" >"$RUN_DIR/mentor-clicks.log" 2>&1 &
+	"$DRIVE" tap pid "$ATHINA_PID" >"$RUN_DIR/athina-clicks.log" 2>&1 &
 	track_helper $!
 	sleep 0.5
 }
 
 # --- Evidence -----------------------------------------------------------------
 
-# The state of everything at one moment: Mentor's windows, a shot of the toast
+# The state of everything at one moment: Athina's windows, a shot of the toast
 # and of any open menu, and the journal.
 snapshot_state() {
 	local tag="$1" windows menu_id n=0
 	{
 		printf '=== %s at %s\n' "$tag" "$(date '+%H:%M:%S')"
-		windows="$("$DRIVE" windows "$MENTOR_PID")"
+		windows="$("$DRIVE" windows "$ATHINA_PID")"
 		printf '%s\n' "$windows"
 		printf -- '--- suggestions\n'
 		"$DRIVE" journal "$JOURNAL" suggestions
 	} >>"$RUN_DIR/transcript.log" 2>&1
 
-	windows="$("$DRIVE" windows "$MENTOR_PID")"
+	windows="$("$DRIVE" windows "$ATHINA_PID")"
 	while read -r menu_id; do
 		[ -n "$menu_id" ] || continue
 		n=$((n + 1))

@@ -2,17 +2,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "mentor",
+    name: "athina",
     platforms: [.macOS(.v26)],
     products: [
-        .executable(name: "Mentor", targets: ["Mentor"]),
-        .library(name: "MentorCore", targets: ["MentorCore"]),
+        .executable(name: "Athina", targets: ["Athina"]),
+        .library(name: "AthinaCore", targets: ["AthinaCore"]),
         // The end-to-end harness's drive tool (scripts/e2e, see README "End-to-end harness").
-        .executable(name: "mentor-drive", targets: ["MentorDrive"]),
+        .executable(name: "athina-drive", targets: ["AthinaDrive"]),
     ],
     targets: [
         .target(
-            name: "MentorCore",
+            name: "AthinaCore",
             linkerSettings: [
                 .linkedLibrary("sqlite3"),
                 .linkedFramework("ScreenCaptureKit"),
@@ -23,29 +23,29 @@ let package = Package(
             ]
         ),
         .executableTarget(
-            name: "Mentor",
-            dependencies: ["MentorCore"],
+            name: "Athina",
+            dependencies: ["AthinaCore"],
             linkerSettings: [
                 .linkedFramework("Carbon"),
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("Speech"),
             ]
         ),
-        .target(name: "MentorE2E"),
+        .target(name: "AthinaE2E"),
         .executableTarget(
-            name: "MentorDrive",
-            dependencies: ["MentorE2E"],
+            name: "AthinaDrive",
+            dependencies: ["AthinaE2E"],
             linkerSettings: [.linkedFramework("ApplicationServices")]
         ),
         .testTarget(
-            // MentorCore so the harness's journal queries are checked against a
+            // AthinaCore so the harness's journal queries are checked against a
             // journal the app itself just created, not a hand-written schema.
-            name: "MentorE2ETests",
-            dependencies: ["MentorE2E", "MentorCore"]
+            name: "AthinaE2ETests",
+            dependencies: ["AthinaE2E", "AthinaCore"]
         ),
         .testTarget(
-            name: "MentorCoreTests",
-            dependencies: ["MentorCore"],
+            name: "AthinaCoreTests",
+            dependencies: ["AthinaCore"],
             resources: [.copy("Fixtures")]
         ),
     ],
