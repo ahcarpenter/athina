@@ -85,8 +85,23 @@ public struct URLSessionModelTransport: ModelFileTransport {
         public var description: String {
             switch self {
             case .status(let code): "The server answered \(code) (\(HTTPURLResponse.localizedString(forStatusCode: code)))."
-            case .connection(let host, let detail): "This Mac could not reach \(host) (\(detail))."
+            case .connection(let host, let detail): "This Mac could not reach \(host): \(detail)."
             }
+        }
+
+        /// What went wrong with a connection, in words that fit after a colon:
+        /// the system's own sentence, without "The operation couldn't be
+        /// completed" in front of the reason and without its full stop.
+        static func detail(of error: Error) -> String {
+            let error = error as NSError
+            let text: String
+            if error.domain == NSPOSIXErrorDomain, let reason = strerror(Int32(error.code)).map({ String(cString: $0) }) {
+                text = reason
+            } else {
+                text = error.localizedDescription
+            }
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            return trimmed.prefix(1).lowercased() + trimmed.dropFirst()
         }
     }
 
@@ -175,7 +190,8 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
         } else if let error {
             // A failure of the transfer itself, whatever layer reported it,
             // is a host that could not be reached; its own words say how.
-            resume(with: .failure(URLSessionModelTransport.TransportError.connection(host: host, detail: error.localizedDescription)))
+            let detail = URLSessionModelTransport.TransportError.detail(of: error)
+            resume(with: .failure(URLSessionModelTransport.TransportError.connection(host: host, detail: detail)))
         } else if let moveError {
             resume(with: .failure(moveError))
         } else {
