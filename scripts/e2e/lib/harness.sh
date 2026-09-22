@@ -575,6 +575,23 @@ wait_athina_window() {
 	return 1
 }
 
+# Settings > General, open: the window --open settings:general put up, or, when
+# it is gone (something on a shared screen can close it during a long wait),
+# the Settings… item of Athina's own menu, as a person would reopen it. The
+# window list is kept either way, so a closed window is on record.
+ensure_general_open() {
+	[ -n "$(athina_window_id General)" ] && return 0
+	{ printf '=== General missing at %s\n' "$(date '+%H:%M:%S')"; "$DRIVE" windows "$ATHINA_PID"; } >>"$RUN_DIR/windows.log" 2>&1
+	log "Settings > General is not open; opening it from the menu"
+	"$DRIVE" ax "$ATHINA_PID" pressextra >>"$RUN_DIR/transcript.log" 2>&1 || return 1
+	sleep 0.8
+	"$DRIVE" ax "$ATHINA_PID" pressx AXMenuItem "Settings…" --scope extras >>"$RUN_DIR/transcript.log" 2>&1 || {
+		"$DRIVE" ax "$ATHINA_PID" cancelmenu >>"$RUN_DIR/transcript.log" 2>&1
+		return 1
+	}
+	wait_athina_window General 20
+}
+
 # A setting as the replay saved it, read from its own settings file: $1 is a
 # Python expression over `s`, the file's JSON.
 saved_setting() {
@@ -598,6 +615,9 @@ saved_speech_backend() {
 # save the choice.
 pick_speech_backend() {
 	local title="$1" raw="$2" i
+	ensure_general_open || { log "Settings > General could not be opened"; return 1; }
+	# The picker's row has to be on screen for accessibility to offer it.
+	scroll_general_to 0.38
 	press_named AXPopUpButton "Speech recognizer" || return 1
 	press_named AXMenuItem "$title" || return 1
 	for i in $(seq 1 20); do

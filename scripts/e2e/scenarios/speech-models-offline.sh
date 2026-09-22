@@ -31,7 +31,7 @@ scenario_run() {
 	local models handling i
 	stage_flip_window
 	wait_toast >/dev/null || return 1
-	wait_athina_window General || { log "Settings > General never opened"; return 1; }
+	wait_athina_window General || ensure_general_open || { log "Settings > General never opened"; return 1; }
 	models="$(replay_data_dir)/speech-models"
 	scroll_general_to 0.38
 
