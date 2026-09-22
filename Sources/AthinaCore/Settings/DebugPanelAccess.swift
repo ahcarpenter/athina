@@ -2,10 +2,12 @@ import Foundation
 
 /// Who reaches the debug panel, and how. It is a builder's window, so the app
 /// offers it only once the person turns on Settings > Advanced > Enable debug
-/// panel (`SensingSettings.showDebugPanel`), and then only from that pane.
-/// The builder's own launches, a replay or a recording, open it with
-/// `--open debug` whatever the switch says, so an end-to-end check or a
-/// recording session never has to change the owner's setting to see it.
+/// panel (`SensingSettings.showDebugPanel`): then from that pane and from a
+/// Debug Panel command in the menu bar menu, as Safari's Advanced pane adds
+/// its Develop menu. The builder's own launches, a replay or a recording,
+/// open it with `--open debug` whatever the switch says, so an end-to-end
+/// check or a recording session never has to change the owner's setting to
+/// see it.
 public enum DebugPanelAccess {
     /// Whether `--open debug` presents the panel at launch. A live launch
     /// honours the switch; a replay, a recording, and a command line that
@@ -15,5 +17,12 @@ public enum DebugPanelAccess {
         case .live: settings.showDebugPanel
         case .record, .replay, .invalid: true
         }
+    }
+
+    /// Whether the menu bar menu offers a Debug Panel command. It follows the
+    /// switch alone, in every mode: a replay's menu follows the settings the
+    /// replay started from, and changes the moment the switch does.
+    public static func menuOffersCommand(settings: SensingSettings) -> Bool {
+        settings.showDebugPanel
     }
 }
