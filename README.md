@@ -24,7 +24,7 @@ the dark. The owl of Athina does the same for you while you work: its eyes are
 open while it watches, closed when you step away, and half-lidded when you
 pause it.
 
-## The owl of Athena
+## The lore of the owl of Athina
 
 Athena was the Greek goddess of wisdom, of war and of craft, and the owl was
 hers from very early on: archaic images often show her with an owl perched on
