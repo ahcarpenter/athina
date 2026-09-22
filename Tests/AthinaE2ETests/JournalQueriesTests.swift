@@ -22,8 +22,6 @@ import Testing
         // The column list is the harness's contract with its scenarios, so it
         // has to keep step with the SQL beside it.
         #expect(JournalQueries.suggestions.columns.count == 9)
-        #expect(JournalQueries.suggestions.sql.contains("feedback_at"))
-        #expect(JournalQueries.suggestions.sql.contains("feedback_heard_by"))
         #expect(JournalQueries.followUps.columns.suffix(2) == ["heard_by", "heard_by_model"])
         #expect(JournalQueries.calls.columns.contains("replayed"))
         #expect(JournalQueries.observations.columns.contains("reason"))

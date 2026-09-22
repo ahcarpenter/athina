@@ -156,29 +156,39 @@ public enum SpeechLanguage {
 /// region of its choosing, English in France to South Africa, so it is the
 /// last resort: first the Mac's own locale, then the language the person
 /// prefers, then the language's usual region (English to the US, French to
-/// France), then any region of the same language.
+/// France), then any region of the same language. A language is always
+/// matched in the script it is written in, so Chinese in Taiwan or Hong
+/// Kong is never heard as mainland Chinese in Simplified characters.
 public enum SpeechLocaleChoice {
-    /// Nil when `supported` has nothing in the language at all.
+    /// Nil when `supported` has nothing in the language and script at all.
     public static func best(for current: Locale, preferredLanguage: String?, supported: [Locale]) -> Locale? {
         let byKey = Dictionary(supported.map { (key($0), $0) }, uniquingKeysWith: { first, _ in first })
         var candidates = [key(current)]
         if let preferredLanguage { candidates.append(key(Locale(identifier: preferredLanguage))) }
-        if let language = current.language.languageCode?.identifier {
-            let usual = Locale.Language(identifier: language).maximalIdentifier
-            candidates.append(key(Locale(identifier: usual)))
+        let language = written(current)
+        if let language {
+            candidates.append(key(Locale(identifier: Locale.Language(identifier: language).maximalIdentifier)))
         }
         for candidate in candidates {
             if let match = byKey[candidate] { return match }
         }
-        guard let language = current.language.languageCode?.identifier else { return nil }
+        guard let language else { return nil }
         return supported
-            .filter { $0.language.languageCode?.identifier == language }
+            .filter { written($0) == language }
             .min { $0.identifier < $1.identifier }
     }
 
-    /// Language and region, which is what tells two locales apart here.
+    /// Language, script, and region, which is what tells two locales apart here.
     static func key(_ locale: Locale) -> String {
-        let language = locale.language.languageCode?.identifier ?? locale.identifier
-        return [language, locale.region?.identifier].compactMap { $0 }.joined(separator: "_")
+        [written(locale) ?? locale.identifier, locale.region?.identifier].compactMap { $0 }.joined(separator: "-")
+    }
+
+    /// The language and the script it is written in, `zh-Hant` for Taiwan
+    /// and `zh-Hans` for the mainland, with the script a region implies
+    /// filled in; nil for a locale without a language.
+    static func written(_ locale: Locale) -> String? {
+        guard let language = locale.language.languageCode?.identifier else { return nil }
+        let script = Locale.Language(identifier: locale.language.maximalIdentifier).script?.identifier
+        return [language, script].compactMap { $0 }.joined(separator: "-")
     }
 }
