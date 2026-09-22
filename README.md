@@ -74,7 +74,7 @@ suppression are later phases.
 
 ```sh
 make build            # builds build/Athina.app from the SwiftPM binary
-make mark             # rebuilds the app icon and the menu bar mark from the two SVG masters (their outputs are committed, so a plain build never needs it)
+make mark             # rebuilds the app icon, the menu bar mark and this README's pictures from the two SVG masters (their outputs are committed, so a plain build never needs it)
 make run              # builds and launches the app, replacing only the copy this checkout's run or record launched
 make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
 make record           # the same, live, writing every model call to a fixture file (spends API credits)
@@ -1537,9 +1537,12 @@ particular to this app:
   separate groups so either stands alone. Ink is `#332C2B` and cream `#F1DEB7`,
   both sampled from the drawing rather than chosen. `make mark`
   (`scripts/mark-assets.swift`) builds the app icon from it and the menu bar
-  mark from the second master, the owl below; their outputs are committed, so a
-  plain `make build` needs nothing else, and `MarkAssetTests` fails when either
-  master or the script changes without `make mark` being run. The script is in
+  mark from the second master, the owl below, and the pictures at the top of
+  this README from both (the icon as macOS itself draws it, masked and
+  shadowed, and the owl in GitHub's light and dark text colours); their outputs
+  are committed, so a plain `make build` needs nothing else, and
+  `MarkAssetTests` fails when either master or the script changes without
+  `make mark` being run. The script is in
   that record because most of the drawing lives there rather than in the
   masters: the menu bar inset, the eye treatments, the z's and the per-size
   thickening are all constants in it.
