@@ -61,4 +61,23 @@ import Testing
         }
         #expect(Set(DriveArguments.commands.map(\.name)).count == DriveArguments.commands.count)
     }
+
+    /// README "Drive helpers" lists every command with the argument shape the
+    /// parser accepts, one row each, so the table cannot drift from the tool.
+    @Test func readmeListsEveryCommand() throws {
+        let readme = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()  // AthinaE2ETests
+            .deletingLastPathComponent()  // Tests
+            .deletingLastPathComponent()  // the repository
+            .appendingPathComponent("README.md")
+        let text = try String(contentsOf: readme, encoding: .utf8)
+        let section = try #require(text.components(separatedBy: "### Drive helpers").dropFirst().first)
+            .components(separatedBy: "\n### ").first ?? ""
+        let documented = section.split(separator: "\n")
+            .filter { $0.hasPrefix("| `") }
+            .compactMap { row in row.split(separator: "`", maxSplits: 2).dropFirst().first.map(String.init) }
+            .map { $0.replacingOccurrences(of: "\\|", with: "|") }
+        let accepted = DriveArguments.commands.map { [$0.name, $0.arguments].filter { !$0.isEmpty }.joined(separator: " ") }
+        #expect(documented == accepted)
+    }
 }
