@@ -21,7 +21,7 @@ struct PermissionsView: View {
                     Text("Athina needs two permissions")
                         .font(.title2.weight(.semibold))
                         .accessibilityAddTraits(.isHeader)
-                    Text("Athina watches what you are doing so it can understand your work. What it senses stays on this Mac, in a journal you control. It connects only to api.anthropic.com, and only after you save an API key.")
+                    Text("Athina watches what you are doing so it can understand your work. What it senses stays on this Mac, in a journal you control. It connects to api.anthropic.com only after you save an API key, and to Hugging Face only when you download a speech model.")
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

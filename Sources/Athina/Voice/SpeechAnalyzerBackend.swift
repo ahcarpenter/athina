@@ -24,18 +24,23 @@ struct AnalyzerLanguage: Equatable, Sendable {
     /// "English (US)".
     var languageName: String { SpeechLanguage.name(of: locale.identifier) }
 
-    /// The best match for `locale`, or nil when SpeechAnalyzer has none.
+    /// The best match for `locale` (`SpeechLocaleChoice`), or nil when
+    /// SpeechAnalyzer has none.
     static func resolve(for locale: Locale) async -> AnalyzerLanguage? {
-        guard SpeechTranscriber.isAvailable else {
-            return await DictationTranscriber.supportedLocale(equivalentTo: locale).map { AnalyzerLanguage(module: .dictation, locale: $0) }
+        let preferred = Locale.preferredLanguages.first
+        if SpeechTranscriber.isAvailable {
+            if let match = SpeechLocaleChoice.best(for: locale, preferredLanguage: preferred, supported: await SpeechTranscriber.supportedLocales) {
+                return AnalyzerLanguage(module: .transcriber, locale: match)
+            }
         }
-        if let match = await SpeechTranscriber.supportedLocale(equivalentTo: locale) {
-            return AnalyzerLanguage(module: .transcriber, locale: match)
-        }
-        if let match = await DictationTranscriber.supportedLocale(equivalentTo: locale) {
+        if let match = SpeechLocaleChoice.best(for: locale, preferredLanguage: preferred, supported: await DictationTranscriber.supportedLocales) {
             return AnalyzerLanguage(module: .dictation, locale: match)
         }
-        return nil
+        // A language only Apple's own equivalence knows, by script or variant.
+        if SpeechTranscriber.isAvailable, let match = await SpeechTranscriber.supportedLocale(equivalentTo: locale) {
+            return AnalyzerLanguage(module: .transcriber, locale: match)
+        }
+        return await DictationTranscriber.supportedLocale(equivalentTo: locale).map { AnalyzerLanguage(module: .dictation, locale: $0) }
     }
 
     /// A fresh module for one recording, reporting volatile results so the
