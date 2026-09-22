@@ -1437,10 +1437,10 @@ The builder's paths reach it without changing the owner's setting:
   `athina-drive ax ... --scope "Debug Panel"` reaches its controls. Capture Now
   is the menu's own command, not the panel's.
 - **Snapshots**: `--snapshot` draws the panel's view directly
-  (`debug-panel*`), the Advanced pane with the switch off and on
-  (`settings-advanced`, `settings-advanced-on`), and the menu bar menu without
-  and with the Debug Panel command (`menu`, `menu-debug-panel`), drawn from
-  the items `NSHostingMenu` makes of the real menu, light and dark.
+  (`debug-panel*`) and the Advanced pane with the switch off and on
+  (`settings-advanced`, `settings-advanced-on`). A menu opens only on screen,
+  so the `debug-panel-access` scenario screenshots the real menu without and
+  with the Debug Panel command.
 - **A live launch** given `--open debug` opens the panel only while the switch
   is on.
 
