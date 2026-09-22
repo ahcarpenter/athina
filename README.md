@@ -20,9 +20,34 @@
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="Resources/Mark/ReadmeOwl-dark.svg"><img src="Resources/Mark/ReadmeOwl-light.svg" height="16" alt="The owl of Athina"></picture> **Look for the owl of Athina in your menu bar.** As the story goes, Athena's
 owl sat on her shoulder and helped her see further, making things clear out of
-the dark. The owl of Athina does the same for you while you work: its eyes are
-open while it watches, closed when you step away, and half-lidded when you
-pause it.
+the dark. All that her owl was to her, the owl of Athina is to you while you
+work:
+
+- **A guide at your shoulder.** The owl showed Athena what she could not see;
+  the owl of Athina shows you a better way when there is one, and can point at
+  the spot on screen it means.
+- **Eyes that see in the dark.** It notices what you would miss: an approach
+  that will not reach your goal, one slower than an alternative you have, or
+  one that brings a side effect you would not want.
+- **Sight that reaches further.** Athena was *glaukopis*, bright-eyed; Athina
+  looks past the screen in front of you to where you are headed, and keeps
+  that goal in mind from one moment to the next.
+- **Wisdom.** The owl became the emblem of wisdom itself; Athina's advice is a
+  strong model's careful judgment, asked for only when a quick first look finds
+  something worth it.
+- **Watchful.** A night bird keeps watch while others sleep; the owl of Athina
+  watches how you work, change by change, and rests when you step away or
+  pause it.
+- **A sign you can read.** An owl overhead told the Athenians their goddess was
+  with them; the owl's eyes in your menu bar tell you at a glance whether
+  Athina is watching, resting, paused, or looking away from an app you
+  excluded.
+- **Quiet and discreet.** Athena sent away the crow for carrying tales and kept
+  the owl; the owl of Athina stays silent unless something is worth saying,
+  does not repeat itself, and keeps its journal on your Mac.
+- **Close at hand, and it listens.** The owl was never far from Athena; hold a
+  key and speak to answer the owl of Athina or ask it a follow-up, and it
+  learns from your answers.
 
 ## The lore of the owl of Athina
 
@@ -40,7 +65,13 @@ symbol of wisdom itself. The tale that her owl sat on her shoulder, on her
 blind side, and showed her the truths she could not see is later folklore
 rather than ancient myth, but it says the same thing.
 
-Athina carries the owl for that reason. It sits at the top of your screen,
+The owl was also the Athenians' own, stamped on their silver coins, and an
+owl in flight before a battle was taken as a sign of her favor: Plutarch tells
+of one that perched on Themistocles' ship before Salamis, and Aristophanes of
+one that flew over the Athenian army before it fought. In Ovid's retelling the crow, once the goddess's own bird, tells how it
+was sent away for carrying tales and the owl was put in its place.
+
+Athina carries the owl for all of this. It sits at the top of your screen,
 quietly watching, so that when something in your work could go better, it can
 help you see it.
 
