@@ -15,8 +15,9 @@
 #
 # Writes to build/release: Athina.app, Athina-<version>.dmg (the app beside a
 # link to Applications), Athina-<version>.zip, Athina-<version>.dSYM.zip for
-# crash reports, and Athina-<version>-notes.md. The version is
-# Resources/Info.plist's own, the one place it is set.
+# crash reports, and Athina-<version>-notes.md, stamped with the version and the
+# checksums, where the notes are written by hand before publishing. The version
+# is Resources/Info.plist's own, the one place it is set.
 #
 # Without a Developer ID identity or a notary profile it still runs every step
 # that needs no Apple credentials (the hardened runtime build, signed ad-hoc,
@@ -69,9 +70,8 @@ if tagged="$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" 2>/dev/null)" &
 	[ "$tagged" != "$(git rev-parse HEAD)" ]; then
 	fail "Athina $VERSION was already released from ${tagged:0:12} (tag $TAG); raise CFBundleShortVersionString and CFBundleVersion in Resources/Info.plist"
 fi
-# The release before this one, whose changes the notes start after and whose
-# build number this one has to exceed, since macOS and notarization order
-# copies of one app by it.
+# The release before this one, whose build number this one has to exceed,
+# since macOS and notarization order copies of one app by it.
 PREVIOUS_TAG="$(git tag --merged HEAD --list 'v[0-9]*' --sort=-v:refname | grep -vxF "$TAG" | head -n 1 || true)"
 if [ -n "$PREVIOUS_TAG" ]; then
 	previous_build="$(git show "$PREVIOUS_TAG:Resources/Info.plist" | plutil -extract CFBundleVersion raw -o - - 2>/dev/null || true)"
@@ -179,8 +179,9 @@ fi
 entitlements="$ENTITLEMENTS"
 
 # Nested code first, inside out, each with the same signature as the app, so
-# library validation accepts it: today Athina embeds none, but a library the
-# app loads from Contents/Frameworks is signed here without further change.
+# library validation accepts it. Athina embeds none yet; this covers the
+# libraries it will load from Contents/Frameworks, such as the local speech
+# models' runtime (whisper.cpp for Whisper and Parakeet), with no further change.
 nested=()
 if [ -d "$APP/Contents/Frameworks" ]; then
 	while IFS= read -r -d '' item; do nested+=("$item"); done < <(
@@ -208,8 +209,8 @@ if [ -z "$IDENTITY" ]; then
 fi
 codesign "${sign_args[@]}" "${app_args[@]}" "$APP"
 
-codesign --verify --deep --strict --verbose=2 "$APP" 2>/dev/null ||
-	fail "codesign --verify --deep --strict rejects $APP"
+err="$(codesign --verify --deep --strict --verbose=2 "$APP" 2>&1)" ||
+	fail "codesign --verify --deep --strict rejects $APP: $err"
 details="$(codesign -dvvv "$APP" 2>&1)"
 grep -q "^Identifier=$BUNDLE_ID\$" <<<"$details" || fail "the signature's identifier is not $BUNDLE_ID"
 grep -Eq '^CodeDirectory .*flags=0x[0-9a-f]+\([^)]*runtime' <<<"$details" ||
@@ -298,8 +299,9 @@ ok "zip $(basename "$ZIP")"
 # The app a download holds is the one just signed, byte for byte, and still
 # verifies once it has been through the image or the zip.
 verify_copy() {
-	local copy="$1" where="$2"
-	codesign --verify --deep --strict "$copy" 2>/dev/null || fail "codesign --verify --deep --strict rejects the app in $where"
+	local copy="$1" where="$2" err
+	err="$(codesign --verify --deep --strict "$copy" 2>&1)" ||
+		fail "codesign --verify --deep --strict rejects the app in $where: $err"
 	[ "$(codesign -dvvv "$copy" 2>&1 | sed -n 's/^CDHash=//p')" = "$CDHASH" ] ||
 		fail "the app in $where is not the one signed"
 	if [ "$NOTARIZE" = 1 ]; then
@@ -338,15 +340,8 @@ fi
 
 # --- Release notes ------------------------------------------------------------
 
-# A draft from the Conventional Commits since the last release, to edit before
-# publishing: features and fixes, each subject as a sentence.
-range="HEAD"
-[ -n "$PREVIOUS_TAG" ] && range="$PREVIOUS_TAG..HEAD"
-changes() {
-	git log --no-merges --format=%s "$range" |
-		sed -nE "s/^($1)(\([^)]*\))?!?: (.+)$/\3/p" |
-		awk '{ print "- " toupper(substr($0, 1, 1)) substr($0, 2) }'
-}
+# The facts of this build; what changed in it is written by hand in the marked
+# section before publishing.
 {
 	printf '# Athina %s (build %s)\n\n' "$VERSION" "$BUILD"
 	if [ "${#SKIPPED[@]}" -gt 0 ]; then
@@ -356,18 +351,15 @@ changes() {
 	fi
 	printf 'Requires macOS 26 or later, on Apple silicon or Intel.\n\n'
 	printf '## Install\n\n'
-	printf 'Open %s and drag Athina onto Applications, or unzip %s into Applications. ' "\`$(basename "$DMG")\`" "\`$(basename "$ZIP")\`"
-	printf 'On first launch Athina asks for Screen Recording and Accessibility, and moves what Mentor kept, if you used it, to its own folder.\n\n'
-	features="$(changes feat)"
-	fixes="$(changes 'fix|perf')"
-	if [ -n "$features" ]; then printf "## What's new\n\n%s\n\n" "$features"; fi
-	if [ -n "$fixes" ]; then printf '## Fixes\n\n%s\n\n' "$fixes"; fi
+	printf 'Open %s and drag Athina onto Applications, or unzip %s into Applications.\n\n' "\`$(basename "$DMG")\`" "\`$(basename "$ZIP")\`"
+	printf "## What's new\n\n"
+	printf 'TODO: write what changed in this release by hand before publishing.\n\n'
 	printf '## Checksums (SHA-256)\n\n```\n'
 	(cd "$OUT" && shasum -a 256 "$(basename "$DMG")" "$(basename "$ZIP")")
 	printf '```\n\nBuilt from %s%s.\n' "$(git rev-parse HEAD)" \
 		"$([ -z "$(git status --porcelain)" ] || echo ', with uncommitted changes')"
 } >"$NOTES"
-ok "release notes $(basename "$NOTES"), changes since ${PREVIOUS_TAG:-the first commit}"
+ok "release notes $(basename "$NOTES"), whose What's new is written by hand before publishing"
 
 # --- Summary ------------------------------------------------------------------
 

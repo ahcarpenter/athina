@@ -692,9 +692,10 @@ Review. `make release` (`scripts/release.sh`) does all of it:
 2. Signs it under the hardened runtime, which notarization requires, with a
    secure timestamp and `Resources/Athina.entitlements`, whose comments say
    why each entitlement is there (only `device.audio-input` today, for the
-   talk-back microphone), and signs any library nested in
-   `Contents/Frameworks` first with the same identity, so library validation
-   loads it.
+   talk-back microphone). Athina embeds no library yet; the libraries it will
+   load from `Contents/Frameworks`, such as the local speech models' runtime
+   (whisper.cpp for Whisper and Parakeet), are signed first with the same
+   identity, so library validation loads them.
 3. Submits the app to Apple's notary service, waits for the verdict, and
    staples the ticket to it.
 4. Packages it as `Athina-<version>.dmg`, the app beside a link to
@@ -707,8 +708,9 @@ Review. `make release` (`scripts/release.sh`) does all of it:
    `spctl` assessment of the app and the disk image as notarized Developer ID.
 6. Keeps `Athina-<version>.dSYM.zip`, the debug symbols of exactly that binary,
    for reading crash reports, and Apple's notary logs.
-7. Drafts `Athina-<version>-notes.md`: the `feat` and `fix` commits since the
-   last release's tag, install steps, and the SHA-256 of both downloads.
+7. Writes `Athina-<version>-notes.md`, stamped with the version and build,
+   with install steps, the SHA-256 of both downloads, and a marked What's new
+   section where the notes are written by hand before publishing.
 
 Everything lands in `build/release`. The version is set in one place,
 `Resources/Info.plist`: `CFBundleShortVersionString` is what people see
@@ -756,10 +758,11 @@ create goes in the repository.
    the last release's.
 3. Check the release build itself end to end, in replay as always:
    `ATHINA_E2E_APP=build/release/Athina.app scripts/e2e/athina-e2e run all`.
-4. Edit the notes, publish the disk image (and the zip, for anyone who prefers
-   it), and tag the commit: `git tag v0.2.0 && git push origin v0.2.0`. The tag
-   is where the next release's notes start and what stops a version being
-   built twice.
+4. Write the notes by hand into What's new in `Athina-<version>-notes.md`,
+   publish the disk image (and the zip, for anyone who prefers it), and tag the
+   commit: `git tag v0.2.0 && git push origin v0.2.0`. The tag is what the next
+   release's build number has to exceed and what stops a version being built
+   twice.
 
 There are no automatic updates yet: a new version is downloaded and dragged
 over the old one.
@@ -769,11 +772,12 @@ that needs no Apple credentials: the hardened runtime build, signed ad-hoc
 with the same bundle-identifier requirement a development build has, the disk
 image and zip, and every check that needs no Apple service. (Library
 validation loads only libraries signed by the app's own team, which an ad-hoc
-signature lacks, so if the bundle ever nests libraries, that local build alone
-turns library validation off; a Developer ID release never does.) It names each step
-it skipped and why (the missing identity or profile), marks the notes "Not for
-distribution", and exits 1. A profile that is set but does not work, or an
-identity that is named but missing, fails before anything is built.
+signature lacks, so once the bundle embeds libraries, such as the local speech
+models' runtime, that local build alone turns library validation off; a
+Developer ID release never does.) It names each step it skipped and why (the
+missing identity or profile), marks the notes "Not for distribution", and
+exits 1. A profile that is set but does not work, or an identity that is named
+but missing, fails before anything is built.
 
 ### A released copy and your data, grants, and key
 
@@ -794,7 +798,9 @@ wherever it was installed.
   hold for a released copy too; the reverse does not, and an ad-hoc build
   then reports the permission missing (Code signing). Once the Developer ID
   certificate is in the keychain, `make build` signs development builds with
-  it as well, so both meet one requirement.
+  it as well when it is the identity `scripts/bundle.sh` picks (the first
+  Apple Development or Developer ID Application one the keychain lists), or
+  when `ATHINA_SIGN_IDENTITY` names it, so both meet one requirement.
 - **The key.** The login keychain trusts a Developer ID app by its team rather
   than its exact binary, so a released copy asks once, Always Allow, to read a
   key a development build saved, and later releases do not ask.

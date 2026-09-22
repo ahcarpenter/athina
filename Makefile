@@ -24,7 +24,8 @@ build:
 
 ## Build, sign, notarize, and package a direct-download release into
 ## build/release: the universal app under the hardened runtime, a disk image,
-## a zip, the debug symbols, and draft release notes (see README, "Releasing").
+## a zip, the debug symbols, and the release notes file, whose notes are
+## written by hand before publishing (see README, "Releasing").
 ## ATHINA_RELEASE_IDENTITY names the Developer ID Application identity and
 ## ATHINA_NOTARY_PROFILE the notarytool keychain profile. Without them it runs
 ## every step that needs no Apple credentials, names each one it skipped, and
