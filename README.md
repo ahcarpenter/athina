@@ -23,31 +23,35 @@ owl sat on her shoulder and helped her see further, making things clear out of
 the dark. All that her owl was to her, the owl of Athina is to you while you
 work:
 
-- **A guide at your shoulder.** The owl showed Athena what she could not see;
-  the owl of Athina shows you a better way when there is one, and can point at
-  the spot on screen it means.
-- **Eyes that see in the dark.** It notices what you would miss: an approach
-  that will not reach your goal, one slower than an alternative you have, or
-  one that brings a side effect you would not want.
-- **Sight that reaches further.** Athena was *glaukopis*, bright-eyed; Athina
-  looks past the screen in front of you to where you are headed, and keeps
-  that goal in mind from one moment to the next.
-- **Wisdom.** The owl became the emblem of wisdom itself; Athina's advice is a
-  strong model's careful judgment, asked for only when a quick first look finds
-  something worth it.
-- **Watchful.** A night bird keeps watch while others sleep; the owl of Athina
-  watches how you work, change by change, and rests when you step away or
-  pause it.
-- **A sign you can read.** An owl overhead told the Athenians their goddess was
-  with them; the owl's eyes in your menu bar tell you at a glance whether
-  Athina is watching, resting, paused, or looking away from an app you
-  excluded.
-- **Quiet and discreet.** Athena barred the crow for carrying tales, while the
-  owl stayed hers; the owl of Athina stays silent unless something is worth
-  saying, does not repeat itself, and keeps its journal on your Mac.
-- **Close at hand, and it listens.** The owl was never far from Athena; hold a
-  key and speak to answer the owl of Athina or ask it a follow-up, and it
-  learns from your answers.
+- **A guide at your shoulder.** Perched on her blind side, the owl showed
+  Athena what she could not see; the owl of Athina offers its advice in a
+  panel beneath the menu bar, and can ring the very thing it concerns in a
+  soft glow.
+- **Eyes that see in the dark.** The owl saw by night what others could not;
+  the owl of Athina catches what is easy to miss mid-task: a dead end, a
+  slower route than one already at hand, a side effect you would not choose.
+- **Sight that reaches further.** Bright-eyed Athena, *glaukopis*, looked far
+  with her owl beside her; the owl of Athina keeps a short record of the
+  longer arc of your work, what you seem to be after and how it has gone, and
+  rewrites it as you go.
+- **Wisdom.** The owl became the very emblem of wisdom; the owl of Athina
+  calls on a strong model only for the moments a quick first look flags, so
+  its advice is considered rather than reflexive.
+- **Watchful.** A night bird, the owl kept watch while others slept; the owl
+  of Athina stands watch so your mind can stay on the work, taking a fresh
+  look whenever you switch windows or a burst of typing settles.
+- **A sign you can read.** An owl in flight before battle told the Athenians
+  their goddess was with them; the owl's eyes in your menu bar tell you at a
+  glance whether Athina is watching, asleep while you are away, half-lidded
+  when paused, or looking away from an excluded app.
+- **Quiet and discreet.** Athena barred the crow for carrying tales and kept
+  the owl; the owl of Athina keeps silent until something is worth your time,
+  makes each point once, lets one you waved away rest, and never reads a
+  password field.
+- **Close at hand, and it listens.** The owl was never far from Athena's
+  hand; give the owl of Athina a shortcut and it answers to your voice as well
+  as your clicks: tell it "not now", or ask it why and read its answer in the
+  same panel.
 
 ## The lore of the owl of Athina
 
