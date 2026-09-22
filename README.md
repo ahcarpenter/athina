@@ -489,6 +489,7 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 | `menubar-mark` | Athina's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
 | `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
+| `settings-pane-links` | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link rather than Markdown, and a real click on it changes the Settings window's pane in place rather than handing the link to the system |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
 every check it made, and the directory holding its evidence (transcript,
@@ -516,7 +517,7 @@ only and never looks an app up by name.
 | --- | --- |
 | `ready <pid>` / `toast <pid>` / `windows <pid>` | wait for the app to come up; the toast's window id; a pid's windows with ids and frames |
 | `bar [pid]` | menu bar extras and menu titles with frames, the gaps between neighbours, and a point on the bar that is on no item |
-| `click item <pid>` / `click at <x> <y>` / `click window <pid> <x> <y>` | post a real HID click, aborting if the pointer is moved or the target is not what was asked for, and log the accessibility element and topmost window under it |
+| `click item <pid>` / `click at <x> <y>` / `click window <pid> <x> <y>` | post a real HID click, aborting if the pointer is moved or the target is not what was asked for, and log the accessibility element and topmost window under it; a window that lets clicks through, such as a window manager's full-screen overlay, does not count as covering the target |
 | `menupick <pid> <row> <item>` | hover a submenu row and click one of its items with the pointer |
 | `ax <pid> <dump\|texts\|menuitems\|pressextra\|cancelmenu\|get\|press\|pressx\|focus\|set>` | read or press through accessibility, with no pointer |
 | `announce <pid>` | log every `AXAnnouncementRequested` the app posts |

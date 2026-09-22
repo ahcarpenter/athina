@@ -117,8 +117,8 @@ enum Clicker {
         var hit: AXUIElement?
         AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), Float(point.x), Float(point.y), &hit)
         var hitRole = ""
+        var hitPid: pid_t = 0
         if let hit {
-            var hitPid: pid_t = 0
             AXUIElementGetPid(hit, &hitPid)
             hitRole = role(hit)
             let app = NSRunningApplication(processIdentifier: hitPid)?.localizedName ?? "?"
@@ -135,7 +135,13 @@ enum Clicker {
                 fail("NOT CLICKING: \(point) is on a \(hitRole), not empty menu bar space", code: ClickExit.wrongTarget.rawValue)
             }
         case let .window(pid, _):
-            guard top?.pid == pid else {
+            // The window list cannot tell a window that lets clicks through
+            // from one that takes them, and a utility such as Magnet keeps a
+            // full-screen one above every app. The accessibility hit test
+            // skips such a window the way a click does, and names another
+            // app's window that would take the click, so either one naming
+            // the pid is enough.
+            guard top?.pid == pid || hitPid == pid else {
                 fail("NOT CLICKING: topmost window at \(point) is not pid \(pid)", code: ClickExit.wrongTarget.rawValue)
             }
         case .statusItem:
