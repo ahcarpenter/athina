@@ -9,12 +9,6 @@
 SCENARIO_SUMMARY="the debug panel's Timeline shows each startup row once"
 SCENARIO_ARGS=(--open debug)
 
-# The id of the first window whose name starts with $1, empty when none is open.
-window_id() {
-	"$DRIVE" windows "$ATHINA_PID" \
-		| awk -v want="$1" 'index($0, "name=\"" want) {sub("id=", "", $1); print $1; exit}' || echo ""
-}
-
 # Every row the Timeline can show: observations and events together.
 journal_rows() {
 	echo $(($(journal_count observations) + $(journal_count events)))

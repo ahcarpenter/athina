@@ -44,12 +44,6 @@ menu_items() {
 	sleep 0.4
 }
 
-# The id of the first window whose name starts with $1, empty when none is open.
-window_id() {
-	"$DRIVE" windows "$ATHINA_PID" \
-		| awk -v want="$1" 'index($0, "name=\"" want) {sub("id=", "", $1); print $1; exit}' || echo ""
-}
-
 wait_window() {
 	local want="$1" limit="${2:-10}" i
 	for i in $(seq 1 "$limit"); do

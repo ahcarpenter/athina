@@ -80,6 +80,29 @@ import Testing
         #expect(ids(timeline) == ["e6", "e5", "e1"])
     }
 
+    // Retention deleted every row while the person was away, so the journal
+    // gave the next rows the ids of rows the timeline still holds.
+    @Test func aRowUnderAReusedIdReplacesTheLeftoverFromTheStream() {
+        var timeline = JournalTimeline(limit: 300)
+        timeline.merge(startup + [observation(1, at: 1)])
+        timeline.insert(event(1, .retention, at: 3600))
+        timeline.insert(event(2, .idleEnd, at: 3601))
+        timeline.insert(observation(1, at: 3602))
+        #expect(timeline.entries == [
+            observation(1, at: 3602), event(2, .idleEnd, at: 3601), event(1, .retention, at: 3600),
+            event(3, .permissionsChanged),
+        ])
+    }
+
+    // A clear empties the journal, and a row from before it can still reach
+    // the timeline from the stream before the journal is read back.
+    @Test func aRowUnderAReusedIdReplacesTheLeftoverFromTheJournal() {
+        var timeline = JournalTimeline(limit: 300)
+        timeline.insert(event(1, .appSwitch, at: -60))
+        timeline.merge([observation(1, at: 1), event(1, .journalCleared)])
+        #expect(timeline.entries == [observation(1, at: 1), event(1, .journalCleared)])
+    }
+
     // A row the journal failed to store carries no id of its own, so two of
     // them are two rows rather than one row seen twice.
     @Test func rowsTheJournalCouldNotStoreAreNeverMerged() {

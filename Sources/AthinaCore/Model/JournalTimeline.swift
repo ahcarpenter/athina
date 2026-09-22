@@ -9,6 +9,11 @@ import Foundation
 /// arriving while the load is still reading. Rows are therefore merged by
 /// their journal id rather than appended, and kept in one order however they
 /// arrived.
+///
+/// The journal gives a new row the id of one it has deleted once a table
+/// empties, after a clear or when retention removes every row. What arrives is
+/// never older than what is held, so a row under an id already here takes the
+/// place of the one held.
 public struct JournalTimeline: Equatable, Sendable {
     public private(set) var entries: [JournalEntry] = []
     public let limit: Int
@@ -23,21 +28,26 @@ public struct JournalTimeline: Equatable, Sendable {
         merge([entry])
     }
 
-    /// Rows read back from the journal, or any other batch. A row already here
-    /// is kept as it is.
+    /// Rows read back from the journal, or any other batch. A row whose id is
+    /// already here replaces the one held.
     public mutating func merge(_ batch: [JournalEntry]) {
-        var known = Set(entries.compactMap(\.journalKey))
-        var added = false
+        var held = Dictionary(uniqueKeysWithValues: entries.indices.compactMap { index in
+            entries[index].journalKey.map { ($0, index) }
+        })
         for entry in batch {
             // A row the journal could not store has no id of its own, so it is
             // never taken for another row.
-            if let key = entry.journalKey {
-                guard known.insert(key).inserted else { continue }
+            guard let key = entry.journalKey else {
+                entries.append(entry)
+                continue
             }
-            entries.append(entry)
-            added = true
+            if let index = held[key] {
+                entries[index] = entry
+            } else {
+                held[key] = entries.endIndex
+                entries.append(entry)
+            }
         }
-        guard added else { return }
         entries.sort(by: JournalEntry.newerFirst)
         if entries.count > limit {
             entries.removeLast(entries.count - limit)
