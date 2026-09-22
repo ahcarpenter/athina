@@ -79,7 +79,8 @@ enum ClickTarget {
     case statusItem(pid: Int32)
     /// A screen point that must be on no menu bar item at all.
     case emptyBar(point: CGPoint)
-    /// A screen point whose topmost window must belong to a pid.
+    /// A screen point whose topmost window, or the accessibility element a
+    /// click there reaches, must belong to a pid.
     case window(pid: Int32, point: CGPoint)
 }
 
