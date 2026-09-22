@@ -1,6 +1,50 @@
-# Athina
+<p align="center">
+  <img src="Resources/Mark/ReadmeIcon.png" width="224" alt="Athina's app icon: Athena in a crested helmet, drawn in dark ink over cream shapes">
+</p>
 
-Live mentor for macOS: watches what you are doing and offers timely guidance.
+<h1 align="center">Athina</h1>
+
+<p align="center"><strong>A live mentor for your Mac.</strong> It watches how you work and shows you a better way when there is one.</p>
+
+- **Help in the moment.** When you are taking the long way round, or an
+  approach that will not get you where you are headed, a small note says so,
+  can point at the spot on screen it means, and learns from your answer.
+- **It keeps your goal in mind.** Athina carries what you appear to be
+  working toward from one moment to the next, so its advice is about where you
+  are going, not only what is on screen.
+- **Talk back.** Hold a key and speak to answer it or ask a follow-up.
+- **Private by design.** Its journal stays on your Mac, it sends what it
+  needs to Claude alone, with your own API key, and it never looks inside the
+  apps you exclude, password managers included from the start (see
+  [Privacy model](#privacy-model)).
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="Resources/Mark/ReadmeOwl-dark.svg"><img src="Resources/Mark/ReadmeOwl-light.svg" height="16" alt="The owl of Athina"></picture> **Look for the owl of Athina in your menu bar.** As the story goes, Athena's
+owl sat on her shoulder and helped her see further, making things clear out of
+the dark. The owl of Athina does the same for you while you work: its eyes are
+open while it watches, closed when you step away, and half-lidded when you
+pause it.
+
+## The owl of Athena
+
+Athena was the Greek goddess of wisdom, of war and of craft, and the owl was
+hers from very early on: archaic images often show her with an owl perched on
+her hand, and it became her emblem. Homer calls her *glaukopis*, usually
+rendered "bright-eyed" or "with gleaming eyes", and the Greek word for the
+little owl, *glaux*, comes from the same root, perhaps for the bird's own
+striking eyes.
+
+Why the owl became her bird is not known for certain. One explanation often
+given lies in its eyes: a bird that sees in the dark, where others cannot,
+made a natural sign of the goddess of wisdom, and through her the owl became a
+symbol of wisdom itself. The tale that her owl sat on her shoulder, on her
+blind side, and showed her the truths she could not see is later folklore
+rather than ancient myth, but it says the same thing.
+
+Athina carries the owl for that reason. It sits at the top of your screen,
+quietly watching, so that when something in your work could go better, it can
+help you see it.
+
+## Overview
 
 The **foundation** is a menu-bar app that senses what you are doing
 (accessibility context plus low-cadence screen capture with on-device OCR),

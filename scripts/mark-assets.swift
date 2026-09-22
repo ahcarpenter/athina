@@ -15,6 +15,10 @@ import Foundation
 //   Resources/AppIcon.icns           the app icon, full Athena artwork, every size
 //   Resources/Mark/MenuBarMark-*.pdf the menu bar mark, the owl's silhouette,
 //                                    one file per variant of MenuBarMark
+//   Resources/Mark/ReadmeIcon.png    the app icon as Finder draws it, for the
+//                                    top of README.md
+//   Resources/Mark/ReadmeOwl-*.svg   the owl, watching, in GitHub's light and
+//                                    dark text colours, for README.md
 //
 // Two things about macOS 26 shape what it does. First, the system masks a
 // legacy .icns to the standard app icon shape itself and adds the shadow: a
@@ -24,7 +28,7 @@ import Foundation
 // tinted by the system when it is a template, so the menu bar files carry
 // shape and alpha only, never colour.
 
-enum Failure: Error { case iconutil, pdfLengthChanged, owlShape(String), svg(String) }
+enum Failure: Error { case iconutil, pdfLengthChanged, owlShape(String), svg(String), readmeIcon(String) }
 
 /// A small reader for the subset of SVG this project's mark uses: groups,
 /// paths, and the three primitives the cream layer is made of, all in one flat
@@ -616,11 +620,125 @@ func writeMenuBarMarks() throws {
           + "\(menuBarWidth) x \(Int(menuBarHeight)) pt, one width in every mode)")
 }
 
+// MARK: The README's pictures
+
+// The README opens with the icon and names the owl, and both are drawn here
+// from the same masters as the app's own assets, so the pictures a person
+// sees before trying Athina are the ones the app shows once they do.
+
+/// The icon as Finder and the Dock show it, rather than the full bleed square
+/// the .icns carries. A page is not masked by macOS, so the picture has to
+/// carry the mask, the shadow and the glass the system adds, and the one
+/// thing that draws those exactly as Finder does is the system: the new .icns
+/// is put in a throwaway bundle and macOS is asked for that bundle's icon.
+/// Drawing them here instead would be an imitation that drifts from the real
+/// thing with every macOS release, as the Big Sur grid already has.
+///
+/// The bundle's path is new on every run, so the icon is never one the system
+/// cached from an earlier build.
+let readmeIconSize = 1024
+
+func writeReadmeIcon() throws {
+    let bundle = FileManager.default.temporaryDirectory
+        .appendingPathComponent("AthinaReadmeIcon-\(UUID().uuidString).app", isDirectory: true)
+    let resources = bundle.appendingPathComponent("Contents/Resources", isDirectory: true)
+    try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: bundle) }
+    try FileManager.default.copyItem(at: root.appendingPathComponent("Resources/AppIcon.icns"),
+                                     to: resources.appendingPathComponent("AppIcon.icns"))
+    // An app bundle with no executable is drawn with a "cannot open" badge
+    // across it, so the bundle carries one that is never run.
+    let executable = bundle.appendingPathComponent("Contents/MacOS/stub")
+    try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(),
+                                            withIntermediateDirectories: true)
+    try Data("#!/bin/sh\n".utf8).write(to: executable)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+    let info: [String: Any] = ["CFBundlePackageType": "APPL", "CFBundleExecutable": "stub",
+                               "CFBundleIconFile": "AppIcon",
+                               "CFBundleIdentifier": "com.ahcarpenter.athina.readme-icon"]
+    try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+        .write(to: bundle.appendingPathComponent("Contents/Info.plist"))
+
+    let icon = NSWorkspace.shared.icon(forFile: bundle.path)
+    let size = readmeIconSize
+    guard let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8, samplesPerPixel: 4,
+        hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+    ) else { throw Failure.readmeIcon("cannot make a \(size) px bitmap") }
+    rep.size = NSSize(width: size, height: size)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    icon.draw(in: NSRect(x: 0, y: 0, width: size, height: size))
+    NSGraphicsContext.restoreGraphicsState()
+
+    // A system that did not take the bundle's icon hands back the generic
+    // application icon instead, and committing that would put a stranger's
+    // picture at the top of the README. The drawing's own ink at the centre
+    // of the canvas is what tells the two apart.
+    guard let centre = rep.colorAt(x: size / 2, y: size / 2)?.usingColorSpace(.sRGB),
+          abs(centre.redComponent - centre.blueComponent) > 0.1 else {
+        throw Failure.readmeIcon("macOS did not render the Athina icon for the bundle; nothing was written")
+    }
+    try rep.representation(using: .png, properties: [:])!
+        .write(to: markDirectory.appendingPathComponent("ReadmeIcon.png"))
+    print("  Resources/Mark/ReadmeIcon.png  (the icon as this Mac's Finder draws it, \(size) px)")
+}
+
+/// The owl, watching, as a vector the README can set beside a line of text,
+/// once in each of GitHub's text colours so it reads like the text around it
+/// in both themes, the way the menu bar tints its template.
+///
+/// SVG rather than a bitmap so it is sharp at any size a page draws it, and
+/// written out coordinate by coordinate so the file is a pure function of the
+/// master and this script.
+let readmeOwlInks = [("light", "#1f2328"), ("dark", "#f0f6fc")]
+
+func svgPathData(_ path: CGPath) -> String {
+    func n(_ value: CGFloat) -> String {
+        let text = String(format: "%.2f", Double(value))
+        let trimmed = text.contains(".") ? text.replacingOccurrences(of: "\\.?0+$", with: "", options: .regularExpression) : text
+        return trimmed == "-0" ? "0" : trimmed
+    }
+    func p(_ point: CGPoint) -> String { "\(n(point.x)) \(n(point.y))" }
+    var d: [String] = []
+    path.applyWithBlock { pointer in
+        let e = pointer.pointee
+        switch e.type {
+        case .moveToPoint: d.append("M\(p(e.points[0]))")
+        case .addLineToPoint: d.append("L\(p(e.points[0]))")
+        case .addQuadCurveToPoint: d.append("Q\(p(e.points[0])) \(p(e.points[1]))")
+        case .addCurveToPoint: d.append("C\(p(e.points[0])) \(p(e.points[1])) \(p(e.points[2]))")
+        case .closeSubpath: d.append("Z")
+        @unknown default: break
+        }
+    }
+    return d.joined()
+}
+
+func writeReadmeOwls() throws {
+    let box = parts.bounds
+    var toOrigin = CGAffineTransform(translationX: -box.minX, y: -box.minY)
+    let owlPath = drawEyes(.open).copy(using: &toOrigin)!
+    let width = String(format: "%.0f", box.width.rounded(.up)), height = String(format: "%.0f", box.height.rounded(.up))
+    for (theme, ink) in readmeOwlInks {
+        let svg = """
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(width) \(height)" width="\(width)" height="\(height)">
+        <path fill="\(ink)" d="\(svgPathData(owlPath))"/>
+        </svg>
+
+        """
+        try svg.write(to: markDirectory.appendingPathComponent("ReadmeOwl-\(theme).svg"),
+                      atomically: true, encoding: .utf8)
+    }
+    print("  Resources/Mark/ReadmeOwl-*.svg  (the owl, watching, in GitHub's light and dark text colours)")
+}
+
 /// Records what the committed assets were built from: both masters, and this
 /// script.
 ///
-/// Core Graphics stamps the running macOS version into every PDF it writes, so
-/// two machines cannot produce the same bytes and "rebuild and diff" is not a
+/// Core Graphics stamps the running macOS version into every PDF it writes,
+/// and the README icon is that macOS's own drawing of the icon, so two
+/// machines cannot produce the same bytes and "rebuild and diff" is not a
 /// check that can hold. What matters is not the bytes but whether the assets
 /// came from the drawing and the drawing code that are in the tree now, and
 /// that is what this records: `MarkAssetTests` fails when any of the three has
@@ -630,8 +748,10 @@ func writeMenuBarMarks() throws {
 /// than in the masters: the inset, the eye treatments, the z's and the
 /// per-size thickening are all constants in this file, and an edit to any of
 /// them leaves the committed assets stale with nothing else to catch it. The
-/// output is a pure function of these three, so rerunning after an edit
-/// rewrites one line here and leaves the seven binary files untouched.
+/// output is a pure function of these three on any one Mac, so rerunning
+/// after an edit rewrites one line here and leaves the drawn files untouched.
+/// The README pictures are recorded by name, so the set the README can show
+/// is the set that was drawn.
 func writeProvenance() throws {
     let generator = URL(fileURLWithPath: #filePath)
     let digest = try [master, owlMaster, generator].map { url -> String in
@@ -639,12 +759,13 @@ func writeProvenance() throws {
         return url.lastPathComponent + " " + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }.joined(separator: "\n")
     let text = """
-    # What Resources/AppIcon.icns and the MenuBarMark PDFs beside it were built
-    # from: both masters and the script that drew them. Written by
+    # What Resources/AppIcon.icns, the MenuBarMark PDFs and the README pictures
+    # were built from: both masters and the script that drew them. Written by
     # scripts/mark-assets.swift; run `make mark` after changing a master, the
     # script or the variant set, never edit this by hand.
     \(digest)
     variants \(set.map(\.mark).joined(separator: " "))
+    readme ReadmeIcon.png \(readmeOwlInks.map { "ReadmeOwl-\($0.0).svg" }.joined(separator: " "))
 
     """
     try text.write(to: markDirectory.appendingPathComponent("built-from.txt"), atomically: true, encoding: .utf8)
@@ -653,4 +774,6 @@ func writeProvenance() throws {
 
 try writeIcon()
 try writeMenuBarMarks()
+try writeReadmeIcon()
+try writeReadmeOwls()
 try writeProvenance()
