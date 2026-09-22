@@ -14,10 +14,12 @@ journal_rows() {
 	echo $(($(journal_count observations) + $(journal_count events)))
 }
 
-# Events of one kind, and for one app when a second argument names it.
+# Events of one kind with no detail, the rows the Timeline shows as the label
+# alone, and for one app when a second argument names it. Only the startup app
+# switch has no detail, since every later one names the app it came from.
 journal_events() {
 	sqlite3 -readonly "$JOURNAL" \
-		"select count(*) from events where kind = '$1' and ('${2:-}' = '' or app_name = '${2:-}')" 2>/dev/null || echo 0
+		"select count(*) from events where kind = '$1' and detail is null and ('${2:-}' = '' or app_name = '${2:-}')" 2>/dev/null || echo 0
 }
 
 # The count the Timeline's header shows, "7 entries", as a number.
