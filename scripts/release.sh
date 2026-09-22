@@ -15,9 +15,10 @@
 #
 # Writes to build/release: Athina.app, Athina-<version>.dmg (the app beside a
 # link to Applications), Athina-<version>.zip, Athina-<version>.dSYM.zip for
-# crash reports, and Athina-<version>-notes.md, stamped with the version and the
-# checksums, where the notes are written by hand before publishing. The version
-# is Resources/Info.plist's own, the one place it is set.
+# crash reports, and Athina-<version>-notes.md, the notes written by hand and
+# committed in docs/release-notes/<version>.md set among this build's version
+# and checksums. The version is Resources/Info.plist's own, the one place it is
+# set. Nothing under docs/ is ever written here, only read.
 #
 # Without a Developer ID identity or a notary profile it still runs every step
 # that needs no Apple credentials (the hardened runtime build, signed ad-hoc,
@@ -62,6 +63,7 @@ DMG="$OUT/Athina-$VERSION.dmg"
 ZIP="$OUT/Athina-$VERSION.zip"
 DSYM_ZIP="$OUT/Athina-$VERSION.dSYM.zip"
 NOTES="$OUT/Athina-$VERSION-notes.md"
+WRITTEN_NOTES="docs/release-notes/$VERSION.md"
 say "Athina $VERSION (build $BUILD)"
 
 # A released version is never built again from other code: a copy that says
@@ -340,8 +342,14 @@ fi
 
 # --- Release notes ------------------------------------------------------------
 
-# The facts of this build; what changed in it is written by hand in the marked
-# section before publishing.
+# What changed is written by hand and committed with the version, outside
+# build/release, which every run replaces; the facts of this build go around it.
+if [ -f "$WRITTEN_NOTES" ]; then
+	written="$(cat "$WRITTEN_NOTES")"
+else
+	written="## What's new"$'\n\n'"TODO: write this release's notes in $WRITTEN_NOTES and commit them before releasing."
+	say "no release notes for $VERSION: create $WRITTEN_NOTES and commit it before releasing"
+fi
 {
 	printf '# Athina %s (build %s)\n\n' "$VERSION" "$BUILD"
 	if [ "${#SKIPPED[@]}" -gt 0 ]; then
@@ -352,14 +360,13 @@ fi
 	printf 'Requires macOS 26 or later, on Apple silicon or Intel.\n\n'
 	printf '## Install\n\n'
 	printf 'Open %s and drag Athina onto Applications, or unzip %s into Applications.\n\n' "\`$(basename "$DMG")\`" "\`$(basename "$ZIP")\`"
-	printf "## What's new\n\n"
-	printf 'TODO: write what changed in this release by hand before publishing.\n\n'
+	printf '%s\n\n' "$written"
 	printf '## Checksums (SHA-256)\n\n```\n'
 	(cd "$OUT" && shasum -a 256 "$(basename "$DMG")" "$(basename "$ZIP")")
 	printf '```\n\nBuilt from %s%s.\n' "$(git rev-parse HEAD)" \
 		"$([ -z "$(git status --porcelain)" ] || echo ', with uncommitted changes')"
 } >"$NOTES"
-ok "release notes $(basename "$NOTES"), whose What's new is written by hand before publishing"
+ok "release notes $(basename "$NOTES")"
 
 # --- Summary ------------------------------------------------------------------
 

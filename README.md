@@ -708,9 +708,11 @@ Review. `make release` (`scripts/release.sh`) does all of it:
    `spctl` assessment of the app and the disk image as notarized Developer ID.
 6. Keeps `Athina-<version>.dSYM.zip`, the debug symbols of exactly that binary,
    for reading crash reports, and Apple's notary logs.
-7. Writes `Athina-<version>-notes.md`, stamped with the version and build,
-   with install steps, the SHA-256 of both downloads, and a marked What's new
-   section where the notes are written by hand before publishing.
+7. Writes `Athina-<version>-notes.md`: the version and build, install steps,
+   the notes written by hand in `docs/release-notes/<version>.md` as they are,
+   headings included, and the SHA-256 of both downloads. Without that file it
+   puts a marked placeholder in their place and names the file to create. It
+   only reads `docs/`, never writes there.
 
 Everything lands in `build/release`. The version is set in one place,
 `Resources/Info.plist`: `CFBundleShortVersionString` is what people see
@@ -744,7 +746,10 @@ create goes in the repository.
 ### Each release
 
 1. Raise `CFBundleShortVersionString` and `CFBundleVersion` in
-   `Resources/Info.plist` and commit that (`chore(release): 0.2.0`).
+   `Resources/Info.plist`, write what changed for the people using Athina in
+   `docs/release-notes/<version>.md` (`## What's new`, say), and commit both
+   (`chore(release): 0.2.0`). The notes live there, not in `build/release`,
+   which every `make release` replaces.
 2. From a clean checkout of that commit:
 
    ```sh
@@ -758,9 +763,9 @@ create goes in the repository.
    the last release's.
 3. Check the release build itself end to end, in replay as always:
    `ATHINA_E2E_APP=build/release/Athina.app scripts/e2e/athina-e2e run all`.
-4. Write the notes by hand into What's new in `Athina-<version>-notes.md`,
-   publish the disk image (and the zip, for anyone who prefers it), and tag the
-   commit: `git tag v0.2.0 && git push origin v0.2.0`. The tag is what the next
+4. Publish the disk image (and the zip, for anyone who prefers it) with
+   `Athina-<version>-notes.md` as its notes, and tag the commit:
+   `git tag v0.2.0 && git push origin v0.2.0`. The tag is what the next
    release's build number has to exceed and what stops a version being built
    twice.
 
