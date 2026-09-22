@@ -16,7 +16,7 @@ struct AdvancedSettings: View {
         Form {
             Section {
                 Toggle(isOn: $state.settings.showDebugPanel) {
-                    Text("Show debug panel")
+                    Text("Enable debug panel")
                     Text("A window for troubleshooting Athina: the latest capture and the text read from it, each model call and why it was made, and what Athina understands you to be working toward.")
                 }
                 HStack {
@@ -33,8 +33,8 @@ struct AdvancedSettings: View {
         }
         // Turned off, the panel goes too, so it is never left open with
         // nothing in the app that would have opened it.
-        .onChange(of: state.settings.showDebugPanel) { _, shown in
-            if !shown { dismissWindow(id: WindowID.debug) }
+        .onChange(of: state.settings.showDebugPanel) { _, enabled in
+            if !enabled { dismissWindow(id: WindowID.debug) }
         }
     }
 }
