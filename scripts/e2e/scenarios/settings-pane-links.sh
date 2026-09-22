@@ -55,13 +55,13 @@ inside_window() {
 	' "$RUN_DIR/$1"
 }
 
-# Click the link named $2 in the Settings pane titled $1, and check the window
-# changes to the pane titled $3.
-follow_link() {
-	local pane="$1" name="$2" target="$3" tag="$4" link="" id attempt
-	# The footer sits below the fold on a short screen, and a pane that has
-	# only just opened can refuse the scroll until it is laid out, so the pane
-	# is scrolled to the end until the link is inside the window.
+# The centre of the link named $2 in the Settings pane titled $1, dumping the
+# pane to $3-dump.txt: "<x> <y>", empty when the pane shows no such link. The
+# footer sits below the fold on a short screen, and a pane that has only just
+# opened can refuse the scroll until it is laid out, so the pane is scrolled
+# to the end until the link is inside the window.
+locate_link() {
+	local pane="$1" name="$2" tag="$3" link="" attempt
 	for attempt in 1 2 3 4 5; do
 		"$DRIVE" ax "$ATHINA_PID" set AXScrollBar "" 1 --scope "$pane" >>"$RUN_DIR/transcript.log" 2>&1 || true
 		sleep 0.6
@@ -71,6 +71,14 @@ follow_link() {
 		[ -n "$link" ] && inside_window "$tag-dump.txt" $link && break
 		log "the $name link is not inside the $pane window yet (attempt $attempt)"
 	done
+	echo "$link"
+}
+
+# Click the link named $2 in the Settings pane titled $1, and check the window
+# changes to the pane titled $3.
+follow_link() {
+	local pane="$1" name="$2" target="$3" tag="$4" link="" id
+	link="$(locate_link "$pane" "$name" "$tag")"
 	"$DRIVE" ax "$ATHINA_PID" texts --scope "$pane" >"$RUN_DIR/$tag-texts.txt" 2>&1 || true
 	id="$(window_id "$pane")"
 	[ -n "$id" ] && "$DRIVE" shot window "$id" "$RUN_DIR/$tag-before.png" >/dev/null 2>&1
@@ -85,6 +93,13 @@ follow_link() {
 	# window is brought forward before the pointer aims at anything inside it.
 	"$DRIVE" raise "$ATHINA_PID" "$pane" >>"$RUN_DIR/transcript.log" 2>&1 || true
 	sleep 0.5
+	# The wait for idle input can last minutes, and the pane can move under
+	# the link meanwhile: a replayed mentor call writes the understanding the
+	# Models pane shows above its footer. So the link is found again just
+	# before the pointer aims at it.
+	link="$(locate_link "$pane" "$name" "$tag-aim")"
+	# shellcheck disable=SC2086
+	[ -n "$link" ] && inside_window "$tag-aim-dump.txt" $link || { log "the $name link left the $pane window before the click"; return 1; }
 	# shellcheck disable=SC2086
 	"$DRIVE" click window "$ATHINA_PID" $link --shot "$RUN_DIR/$tag-click.png" >>"$RUN_DIR/transcript.log" 2>&1 \
 		|| { log "the click on the $name link would not land"; return 1; }

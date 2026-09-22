@@ -382,11 +382,14 @@ final class AppState {
                 settings: mentorSettings, journal: journal, client: clientSetup.client, keyStore: keyStore, events: mentorStream,
                 clock: clock
             )
+            // The timeline is read before anything this launch journals, which
+            // arrives on the streams instead, so no entry is listed twice.
+            await self?.loadInitialTimeline(from: journal)
             // Sensing starts before the loop attaches: the loop's first key
             // read can wait on the keychain prompt, and its stream buffers.
             await pipeline.start()
             await self?.attach(mentor: mentor, journal: journal)
-            await self?.loadInitialTimeline(from: journal)
+            await self?.refreshJournalStats()
             for await event in stream {
                 guard let self else { return }
                 self.handle(event)
@@ -1528,7 +1531,6 @@ final class AppState {
         if let entries = try? await journal.recentEntries(limit: AppState.timelineLimit) {
             timeline = entries
         }
-        journalStats = try? await journal.stats()
     }
 
     private func scheduleSettingsSave() {
