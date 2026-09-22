@@ -1,6 +1,6 @@
 CONFIG ?= release
 ## Fixtures `make run-replay` answers from: the committed set unless given
-REPLAY_DIR ?= Tests/MentorCoreTests/Fixtures/Replay
+REPLAY_DIR ?= Tests/AthinaCoreTests/Fixtures/Replay
 ## Where `make record` writes: the app's recordings directory unless given
 RECORD_DIR ?=
 ## Set to 1 to replay fixtures recorded with an older prompt version, only while iterating on prompts locally
@@ -11,27 +11,27 @@ TIME_SCALE ?=
 SETTINGS ?=
 ## Names the replay's pid file, build/<LANE>.pid: `make run-replay` replaces only the replay its own lane launched
 LANE ?= replay
-## The pid `make measure` samples when several Mentors are running
+## The pid `make measure` samples when several Athinas are running
 PID ?=
 ## The app's own recordings directory, where `make record` writes by default
-RECORDINGS := $(HOME)/Library/Application Support/mentor/recordings
+RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
 .PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure
 
-## Build the .app bundle into build/Mentor.app
+## Build the .app bundle into build/Athina.app
 build:
 	scripts/bundle.sh $(CONFIG)
 
-## Rebuild the app icon from Resources/Mark/MentorMark.svg and the menu bar mark
-## from Resources/Mark/MentorOwl.svg. Its outputs are committed, so a plain
+## Rebuild the app icon from Resources/Mark/AthinaMark.svg and the menu bar mark
+## from Resources/Mark/AthinaOwl.svg. Its outputs are committed, so a plain
 ## `make build` never needs this; run it after changing either master or the
 ## variant set (see scripts/mark-assets.swift).
 mark:
 	swift scripts/mark-assets.swift .
 
 ## Build and launch the app, replacing only the copy this checkout's `make run`
-## or `make record` launched before (scripts/launch.sh); every other Mentor keeps
-## running. Refuses to start while another live Mentor is running, since two of
+## or `make record` launched before (scripts/launch.sh); every other Athina keeps
+## running. Refuses to start while another live Athina is running, since two of
 ## them share the live journal, settings, and API spend.
 run: build
 	@scripts/launch.sh live --live
@@ -57,7 +57,7 @@ run-replay: build
 ## Build and launch the app live, writing every model call to a fixture file.
 ## This spends API credits: use it only to record fixtures on purpose.
 ## Replaces only the copy this checkout's `make run` or `make record` launched
-## before, and refuses to start while another live Mentor is running.
+## before, and refuses to start while another live Athina is running.
 record: build
 	@dir="$(RECORD_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
 	if [ -n "$$dir" ]; then mkdir -p -m 700 "$$dir" && dir="$$(cd "$$dir" && pwd)" || exit 1; fi; \
@@ -80,9 +80,9 @@ test:
 	swift test
 
 ## Sample the running app's CPU and memory for a while (see scripts/measure.sh);
-## PID=<pid> names the Mentor to sample when several are running
+## PID=<pid> names the Athina to sample when several are running
 measure:
-	MENTOR_PID="$(PID)" scripts/measure.sh
+	ATHINA_PID="$(PID)" scripts/measure.sh
 
 clean:
 	rm -rf .build build

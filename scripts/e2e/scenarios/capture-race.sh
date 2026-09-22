@@ -1,5 +1,5 @@
 # shellcheck shell=bash
-# SCENARIO_* below are read by scripts/e2e/mentor-e2e, which sources this file.
+# SCENARIO_* below are read by scripts/e2e/athina-e2e, which sources this file.
 # shellcheck disable=SC2034
 # Change moments that land while a capture is in flight.
 #

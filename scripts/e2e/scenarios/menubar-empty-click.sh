@@ -1,7 +1,7 @@
 # shellcheck shell=bash
-# SCENARIO_* below are read by scripts/e2e/mentor-e2e, which sources this file.
+# SCENARIO_* below are read by scripts/e2e/athina-e2e, which sources this file.
 # shellcheck disable=SC2034
-# A real click on empty menu bar space, beside Mentor's item, must dismiss the
+# A real click on empty menu bar space, beside Athina's item, must dismiss the
 # suggestion. It is the control case for the item click: the same global
 # monitor sees both, and only the location tells them apart.
 SCENARIO_SUMMARY="a real click on empty menu bar space dismisses the suggestion"

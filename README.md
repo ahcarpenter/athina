@@ -1,4 +1,4 @@
-# mentor
+# Athina
 
 Live mentor for macOS: watches what you are doing and offers timely guidance.
 
@@ -9,7 +9,7 @@ thinks you are doing. The **mentor loop** subscribes to that stream and asks
 Claude, in two tiers, whether there is a genuinely more helpful way to approach
 what you are doing; when there is, a small toast says so and learns from your
 answer. The **standing understanding** carries what you appear to be working
-toward from one call to the next, so Mentor can look out for you: it calls out
+toward from one call to the next, so Athina can look out for you: it calls out
 an approach that will not reach your goal, one that is slower than an
 alternative you have, or one that will reach it and bring a side effect you
 would not want. **Callouts and voice** let a suggestion point at the spot on
@@ -28,7 +28,7 @@ Halt-and-redirect and learned suppression are later phases.
 ## Build, run, test
 
 ```sh
-make build            # builds build/Mentor.app from the SwiftPM binary
+make build            # builds build/Athina.app from the SwiftPM binary
 make mark             # rebuilds the app icon and the menu bar mark from the two SVG masters (their outputs are committed, so a plain build never needs it)
 make run              # builds and launches the app, replacing only the copy this checkout's run or record launched
 make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
@@ -39,22 +39,23 @@ make test             # runs the unit tests (swift test), the loop included, wit
 make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 ```
 
-None of the launch targets quits a Mentor it did not start: each one stops
+None of the launch targets quits an Athina it did not start: each one stops
 only the copy its own lane launched earlier from this checkout, by the pid
 `scripts/launch.sh` wrote to `build/<lane>.pid`, so other checkouts, other
-replays, and a Mentor started any other way keep running. `make run` and
+replays, and an Athina started any other way keep running. `make run` and
 `make record` share the lane `live`; `make run-replay` uses `replay`, or
-`LANE=<name>` (see Replays side by side). Because two live Mentors would share
+`LANE=<name>` (see Replays side by side). Because two live Athinas would share
 one journal, one settings file, and one API bill, a live launch refuses to
-start while another live Mentor runs and names it. Nothing stops a person
+start while another live Athina runs and names it; a build from before the
+rename, running as Mentor, counts as one. Nothing stops a person
 launching a second copy from Finder, which was equally true before.
 
 There is no Xcode project. `Package.swift` defines the targets and
 `scripts/bundle.sh` wraps the release binary in an app bundle with
-`Resources/Info.plist` and `Resources/Mentor.entitlements`, then signs it.
+`Resources/Info.plist` and `Resources/Athina.entitlements`, then signs it.
 `swift build` and `swift test` work directly too.
 
-`Mentor --snapshot <dir>` renders every window with sample data to PNG files
+`Athina --snapshot <dir>` renders every window with sample data to PNG files
 (light and dark) without starting the pipeline or calling any model. It is how
 UI changes get checked without a person at the screen; it needs no permissions
 and never reads the keychain. Each view renders in a borderless window placed
@@ -62,12 +63,12 @@ below the desktop picture, where the window server still composites glass and
 controls and ScreenCaptureKit still captures it, so nothing appears on screen
 (the run puts no item in the menu bar either) and a tall Settings pane renders
 whole. Replay mode has renders of its own.
-`open -n build/Mentor.app --args --replay <dir> --open debug` (or `settings`,
+`open -n build/Athina.app --args --replay <dir> --open debug` (or `settings`,
 `settings:<pane>` for `general`, `contexts`, `models`, `capture`, `journal`, or
 `privacy`, `permissions`, `history`) starts a replay with that window already
 open, which is how a panel gets screenshotted from a shell. Keep the `--replay`:
 a bare `open -n` goes round `scripts/launch.sh`, so nothing stops it starting a
-second live Mentor on the live journal, the live settings and the same API bill.
+second live Athina on the live journal, the live settings and the same API bill.
 The live app's own windows open from its menu bar item, on the copy `make run`
 already started. `--record [<dir>]` chooses where model calls go, `--time-scale
 <n>` and `--advance-clock <interval>` set a replay's clock, and `--settings
@@ -81,7 +82,7 @@ The mentor loop needs an Anthropic API key. Open Settings > Models (the menu's
 Add API Key item goes there), paste the key, press Save, then Test Connection:
 it sends one tiny request on the triage model and reports the answering model
 or the API's own error message. The key
-goes into your login keychain (`com.ahcarpenter.mentor` /
+goes into your login keychain (`com.ahcarpenter.athina` /
 `anthropic-api-key`) and nowhere else; the app only ever shows its last four
 characters. Without a key the loop stays idle and the menu says so. Remove
 deletes the keychain item. A replay needs no key, and the app never reads the
@@ -89,7 +90,7 @@ keychain while replaying.
 
 ### Code signing
 
-The bundle script signs with `$MENTOR_SIGN_IDENTITY` if set, otherwise with the
+The bundle script signs with `$ATHINA_SIGN_IDENTITY` if set, otherwise with the
 first Apple Development or Developer ID Application identity in the keychain,
 otherwise ad-hoc. macOS ties Screen Recording and Accessibility grants to the
 app's designated code requirement, recorded when the grant is made. An ad-hoc
@@ -98,15 +99,15 @@ ad-hoc rebuild silently invalidates both grants: System Settings still shows
 the switches on, toggling them does not help, and the TCC daemon logs
 "Failed to match existing code requirement". The ad-hoc path therefore signs
 with an explicit requirement on the bundle identifier
-(`identifier "com.ahcarpenter.mentor"`), which every rebuild satisfies, so a
+(`identifier "com.ahcarpenter.athina"`), which every rebuild satisfies, so a
 grant made once stays valid. The trade-off is that any ad-hoc binary claiming
 that identifier would inherit the grants, which is acceptable on a development
 machine and is exactly what a development certificate fixes.
 
 The keychain is stricter than TCC: for an app that is not Apple-signed it
 trusts a keychain item's readers by the hash of the exact binary, so the
-first time a rebuilt ad-hoc Mentor reads the API key, macOS can show its
-"Mentor wants to access key" prompt. The app reads the key off the main
+first time a rebuilt ad-hoc Athina reads the API key, macOS can show its
+"Athina wants to access key" prompt. The app reads the key off the main
 thread and keeps sensing behind the prompt, but makes no live call until it
 is answered. Always Allow adds that build to the item's list; Deny leaves the
 loop without a key until the next launch. A replay never reads the key, so it
@@ -117,13 +118,13 @@ missing although System Settings shows it on), remove the stale record and
 grant again:
 
 ```sh
-tccutil reset Accessibility com.ahcarpenter.mentor
-tccutil reset ScreenCapture com.ahcarpenter.mentor
+tccutil reset Accessibility com.ahcarpenter.athina
+tccutil reset ScreenCapture com.ahcarpenter.athina
 ```
 
 ## Iterating without the network
 
-Working on Mentor needs no live call to Anthropic to build, test, or verify.
+Working on Athina needs no live call to Anthropic to build, test, or verify.
 The app, its tests, and every verification run use **replay**: each model call
 is answered from a recorded fixture, with no network, no API key, and no spend.
 Replay is the default way to exercise the app, including the end-to-end checks
@@ -135,11 +136,11 @@ change makes it stale, and the separate live check of the models' answers.
 
 ```sh
 make run-replay                                   # the committed fixtures
-make run-replay REPLAY_DIR=~/Library/Application\ Support/mentor/recordings
+make run-replay REPLAY_DIR=~/Library/Application\ Support/athina/recordings
 make run-replay ALLOW_STALE=1                     # also serve stale fixtures, see below
 make run-replay TIME_SCALE=60                     # on a clock 60 times real time, see A faster clock
 make run-replay SETTINGS=check.json LANE=a         # its own settings, in a lane of its own, see Replays side by side
-open -n build/Mentor.app --args --replay <dir> --open debug
+open -n build/Athina.app --args --replay <dir> --open debug
 ```
 
 The whole product runs as it does live. Sensing watches the real screen, the
@@ -156,7 +157,7 @@ live ones. Test Connection replays the recorded test call.
 **A replay runs against files of its own, seeded from your live settings.** A
 replay, and a replay that was refused, keeps its journal and settings in a data
 directory of its own rather than beside the live ones: a new one for each
-launch, `~/Library/Application Support/mentor/replay/launch-<pid>-<random>`,
+launch, `~/Library/Application Support/athina/replay/launch-<pid>-<random>`,
 which it names as it starts (see Replays side by side). Every replay launch
 starts from your live settings, read and never written (or from the defaults
 when there are none), unless `--settings` names another file, so the apps you
@@ -199,8 +200,8 @@ iterating on prompts.
 Replay takes away the model's cost and latency, not the clock. A refresh that
 comes due after fifteen minutes of use, a Not now that lasts an hour, the spend
 hour, and a new day all still take that long. So every time-based behavior in
-Mentor reads one time source, `MentorClock`
-(`Sources/MentorCore/System/MentorClock.swift`): the dates the journal is
+Athina reads one time source, `AthinaClock`
+(`Sources/AthinaCore/System/AthinaClock.swift`): the dates the journal is
 stamped with and the gates compare, the time awake a refresh counts, and every
 wait (a toast's countdown, the callout check, the sensing cadence and idle
 threshold, the talk-back timers, a replayed call's latency). The shipped app
@@ -210,7 +211,7 @@ can compress:
 
 ```sh
 make run-replay TIME_SCALE=60
-open -n build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1d --open debug
+open -n build/Athina.app --args --replay <dir> --time-scale 60 --advance-clock 1d --open debug
 ```
 
 - `--time-scale <n>` runs the replay's clock n times faster than real time,
@@ -231,11 +232,11 @@ open -n build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1
   ahead from a script, exactly as the Advance field below does, with no
   accessibility and no window. It posts a distributed notification addressed
   to that pid (`ClockRemote`); only a replay listens, and only for its own pid,
-  so a live or recording Mentor and every other replay ignore it. The request
+  so a live or recording Athina and every other replay ignore it. The request
   names a file for the replay to answer at, and the script waits for that
   answer: a notification reaches only the observers registered when it is
   posted and says nothing about who heard it, so a request sent to a replay
-  that is still starting, to a live Mentor, or to a pid that is not Mentor
+  that is still starting, to a live Athina, or to a pid that is not Athina
   would otherwise look exactly like success and leave a check waiting on a
   clock that never moved. Nothing authenticates the channel, so a replay
   answers only at a file that does not exist yet, inside the system temporary
@@ -243,12 +244,12 @@ open -n build/Mentor.app --args --replay <dir> --time-scale 60 --advance-clock 1
   the log: otherwise a request would be a way for any process in the login
   session to create or replace a file the user can write, the live settings
   among them. It exits 0 with what the clock now reads, 1 when no
-  answer arrives inside `MENTOR_CLOCK_TIMEOUT` (10 seconds by default), naming
+  answer arrives inside `ATHINA_CLOCK_TIMEOUT` (10 seconds by default), naming
   the pid, and 3 when the replay refused the interval.
 - The debug panel's Mentor card has an **Advance** field (accessibility label
   "Advance clock"): type an interval and press Return, and the clock moves
   ahead at once, as if that much time went by with the Mac awake in the mode
-  Mentor is in; the seconds since the last input are the system's, so moving
+  Athina is in; the seconds since the last input are the system's, so moving
   ahead never makes sensing idle by itself. Every wait due in it ends: a toast
   expires, a snooze or the spend cap releases, the next capture falls due.
   While watching it counts as active use toward the next refresh; while paused
@@ -292,11 +293,11 @@ of them disturbs another or the live app:
   path: there is no flag for it, so there is nothing to point at the live data
   folder, at a directory someone else can read, or at one another replay is
   already using. A launch says where it put its files on the line it writes as
-  it starts, `Mentor started: pid <pid> in <directory>`, and everything past
+  it starts, `Athina started: pid <pid> in <directory>`, and everything past
   the first ` in ` is the path, so a script reads it without quoting however
-  the path is spelled. `make run-replay` prints it, the debug panel's Mentor
+  the path is spelled. `make run-replay` prints it, the debug panel's Athina
   card shows it, and the log at launch records it. A replay holds its directory
-  for as long as it runs, with a lock on `mentor.pid` inside it that holds its
+  for as long as it runs, with a lock on `athina.pid` inside it that holds its
   pid, which is what keeps a later launch's sweep off a directory still in use.
   Every replay launch sweeps the finished per-launch directories as it starts,
   and removes those past the newest 10 and those unwritten for longer than your
@@ -326,7 +327,7 @@ of them disturbs another or the live app:
 - **`--settings` applies only to a replay.** On a live or recording launch it
   is refused, like the clock flags: the app uses the live files, and the menu,
   the Mentor card, and the log say why. The live app's files never move.
-- **Launching never quits another Mentor.** `make run-replay` replaces only the
+- **Launching never quits another Athina.** `make run-replay` replaces only the
   replay its lane (`LANE`, default `replay`) launched from this checkout, and
   finds that instance exactly: the launch carries a unique `--launch-token`,
   an argument the app ignores, so two launches from one checkout that overlap
@@ -355,18 +356,18 @@ cat build/a.pid                                   # lane a's pid
 scripts/advance-clock.sh "$(cat build/a.pid)" 2h  # moves only lane a's clock, and fails if it was not heard
 ```
 
-  An on-screen check drives the app through `scripts/e2e/mentor-e2e` (see
+  An on-screen check drives the app through `scripts/e2e/athina-e2e` (see
   End-to-end harness) rather than launching it itself: the harness already runs
   each check in a scratch home, excludes the owner's apps, and stops only the
   pids it started. A launch outside make uses `open -n` (a plain `open` can
-  bring an already running Mentor forward instead of starting one) and finds
-  its instance by pid: `lsof -p <pid> | grep journal.sqlite`, or `mentor.pid`
+  bring an already running Athina forward instead of starting one) and finds
+  its instance by pid: `lsof -p <pid> | grep journal.sqlite`, or `athina.pid`
   in the data directory. Stop a replay with `kill <pid>`, never by name.
 
 ### Record
 
 ```sh
-make record                          # into ~/Library/Application Support/mentor/recordings
+make record                          # into ~/Library/Application Support/athina/recordings
 make record RECORD_DIR=recordings    # into ./recordings, which git ignores
 ```
 
@@ -375,7 +376,7 @@ make record RECORD_DIR=recordings    # into ./recordings, which git ignores
 `<UTC time>-<kind>-<id>.json`. A file holds the fixture format version, the
 call's kind and prompt version, the time, the model, the request exactly as it
 was sent (system blocks, messages with the screenshot, output format, effort),
-the response as Mentor decodes it or the error, usage, latency, and the
+the response as Athina decodes it or the error, usage, latency, and the
 estimated cost. The key is never written: the recorder redacts it, and anything
 shaped like an Anthropic key, from the text before writing. Files are created
 with mode 0600, in a directory created with mode 0700. A relative
@@ -388,7 +389,7 @@ the Mentor card, and the call log, so a recording that could write nothing
 never spends anything. Those refused calls are journaled as live errors that
 cost nothing, not as replays. The menu bar shows **Recording** beside the mark
 while it runs. `make clear-recordings` deletes the app's own recordings
-directory, `~/Library/Application Support/mentor/recordings`.
+directory, `~/Library/Application Support/athina/recordings`.
 
 Any call the loop makes through its single call path (`MentorLoop.perform`) is
 recorded under its tier's raw value and replayed by that name, and neither
@@ -402,7 +403,7 @@ live one, and its cost, like every replayed call's, is zero.
 
 ### The committed fixtures
 
-`Tests/MentorCoreTests/Fixtures/Replay` is a small set recorded live from a
+`Tests/AthinaCoreTests/Fixtures/Replay` is a small set recorded live from a
 staged, synthetic scenario (see its README), never from anyone's real work, on
 the cheapest models whose answers are worth replaying for every call kind (its
 README names them). `ReplayLoopTests` runs the whole loop against it: every
@@ -425,7 +426,7 @@ is added, re-record the committed set live in the same change so the tests
 pass. It is a deliberate `make record` session of a few cents, on a staged
 scenario and an empty journal:
 
-1. Quit the live Mentor and move the journal aside (keep it to put back).
+1. Quit the live Athina and move the journal aside (keep it to put back).
    Triage and mentor requests carry recent journal events and screens, so a
    recording made on a lived-in journal carries that history too.
 2. Stage a synthetic scenario in real windows that fill the display (the
@@ -441,7 +442,7 @@ scenario and an empty journal:
    `understanding` kind, set Settings > Models > Refresh at most every to its
    lowest value before recording and leave the scenario in front for that whole
    interval after the last mentor call; setting Settings > Capture > Idle after
-   above the interval keeps the loop watching with no input. Add Mentor itself
+   above the interval keeps the loop watching with no input. Add Athina itself
    to the excluded apps, so opening Settings for Test Connection is never
    captured.
 4. Read every file, text and screenshot, and every reply for quality (a model
@@ -455,21 +456,21 @@ answer, such as a refusal, an unparseable reply, or a slow call.
 
 ## End-to-end harness
 
-Checking Mentor against the real app is what takes the time, not building it:
+Checking Athina against the real app is what takes the time, not building it:
 a scratch home has to be prepared, the app launched in replay under a sandbox,
 a toast waited for, a real click posted, and the journal read. Every one of
 those was written again by hand for each check until now.
-`scripts/e2e/mentor-e2e` is that work, once, in the repository. A change, a
+`scripts/e2e/athina-e2e` is that work, once, in the repository. A change, a
 check, or a validation run drives the app through it rather than writing its
 own driving code.
 
 ```sh
-scripts/e2e/mentor-e2e warm          # once per machine: prepare the warm home
-scripts/e2e/mentor-e2e list          # the scenarios and what each one proves
-scripts/e2e/mentor-e2e run all       # run them; one JSON line of result each
-scripts/e2e/mentor-e2e run menubar-keyboard
-scripts/e2e/mentor-e2e doctor        # what is missing before a run
-scripts/e2e/mentor-e2e journal suggestions   # a named query over the last run
+scripts/e2e/athina-e2e warm          # once per machine: prepare the warm home
+scripts/e2e/athina-e2e list          # the scenarios and what each one proves
+scripts/e2e/athina-e2e run all       # run them; one JSON line of result each
+scripts/e2e/athina-e2e run menubar-keyboard
+scripts/e2e/athina-e2e doctor        # what is missing before a run
+scripts/e2e/athina-e2e journal suggestions   # a named query over the last run
 ```
 
 Every run is replay only: no API key is read, no network is reachable inside
@@ -480,14 +481,15 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 
 | name | what it proves |
 | --- | --- |
-| `menubar-item-click` | a real pointer click on Mentor's menu bar item opens the menu and leaves the suggestion up, and Answer Suggestion > Tell Me More is recorded |
+| `menubar-item-click` | a real pointer click on Athina's menu bar item opens the menu and leaves the suggestion up, and Answer Suggestion > Tell Me More is recorded |
 | `menubar-empty-click` | a real click on empty menu bar space beside the item dismisses the suggestion, attributed to a real mouse-down by a session tap |
 | `other-app-click` | a real click inside a staged TextEdit window dismisses the suggestion |
 | `menubar-keyboard` | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one menu bar scenario that needs no idle input |
 | `menubar-width` | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
-| `menubar-mark` | Mentor's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
+| `menubar-mark` | Athina's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
 | `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
+| `settings-pane-links` | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link rather than Markdown, and a real click on it changes the Settings window's pane in place rather than handing the link to the system |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
 every check it made, and the directory holding its evidence (transcript,
@@ -498,7 +500,7 @@ screenshots, event taps, announcements, and the journal as TSV and as a copy).
 A fresh scratch home has no text-recognition model cache, so its first capture
 blocks inside OCR while the model compiles, and the journal fills with events
 and no observations: measured at **93 seconds** on the owner's Mac.
-`mentor-e2e warm` pays that once into `~/Library/Caches/mentor-e2e/warm-home`
+`athina-e2e warm` pays that once into `~/Library/Caches/athina-e2e/warm-home`
 (the `com.apple.e5rt.e5bundlecache` the compile leaves behind), keeps the
 caches, and throws the session's journal away. Every run then clones it with
 `cp -c`, an APFS copy-on-write copy that costs no measurable time and no disk,
@@ -507,7 +509,7 @@ then lands in 1 second**. Re-warm with `warm --force` after a macOS upgrade.
 
 ### Drive helpers
 
-`mentor-drive` (`Sources/MentorDrive`, built on demand) is the one
+`athina-drive` (`Sources/AthinaDrive`, built on demand) is the one
 implementation of every step a scenario takes on the screen. It works by pid
 only and never looks an app up by name.
 
@@ -515,7 +517,7 @@ only and never looks an app up by name.
 | --- | --- |
 | `ready <pid>` / `toast <pid>` / `windows <pid>` | wait for the app to come up; the toast's window id; a pid's windows with ids and frames |
 | `bar [pid]` | menu bar extras and menu titles with frames, the gaps between neighbours, and a point on the bar that is on no item |
-| `click item <pid>` / `click at <x> <y>` / `click window <pid> <x> <y>` | post a real HID click, aborting if the pointer is moved or the target is not what was asked for, and log the accessibility element and topmost window under it |
+| `click item <pid>` / `click at <x> <y>` / `click window <pid> <x> <y>` | post a real HID click, aborting if the pointer is moved or the target is not what was asked for, and log the accessibility element and topmost window under it; a window that lets clicks through, such as a window manager's full-screen overlay, does not count as covering the target |
 | `menupick <pid> <row> <item>` | hover a submenu row and click one of its items with the pointer |
 | `ax <pid> <dump\|texts\|menuitems\|pressextra\|cancelmenu\|get\|press\|pressx\|focus\|set>` | read or press through accessibility, with no pointer |
 | `announce <pid>` | log every `AXAnnouncementRequested` the app posts |
@@ -525,7 +527,7 @@ only and never looks an app up by name.
 | `shot window <id>` / `shot region <x> <y> <w> <h>` | capture a window or a screen region |
 | `permissions` | whether this shell has Accessibility and Screen Recording |
 
-The maths and parsing behind them are a plain library (`Sources/MentorE2E`)
+The maths and parsing behind them are a plain library (`Sources/AthinaE2E`)
 with unit tests: the journal queries, the menu bar geometry, the capture-race
 report, and the drive tool's argument handling. The queries are run against a
 journal `Journal` itself creates, so a column renamed in the app fails the
@@ -542,12 +544,13 @@ suite rather than every scenario.
   would otherwise land over the work of whoever is using the Mac.
 - **The preferences leak.** `CFFIXED_USER_HOME` moves Application Support but
   not UserDefaults, so a run still writes through cfprefsd into the real
-  `com.ahcarpenter.mentor` domain. Every run saves that domain and restores it,
+  `com.ahcarpenter.athina` domain. Every run saves that domain and restores it,
   even on failure.
 - **Nothing is stopped by name.** The harness launches the binary directly and
-  stops only the pids it started, never a Mentor it did not launch (the make
+  stops only the pids it started, never an Athina it did not launch (the make
   targets stop only their own lane, see Replays side by side).
-- **A sandbox** denies the real `~/Library/Application Support/mentor` and all
+- **A sandbox** denies the real `~/Library/Application Support/athina`, the
+  `mentor` folder beside it that the app kept before the rename, and all
   outbound network, so no run can reach live data or make a live call.
 - **Cleanup runs on failure**, through a trap: helpers, taps, staged apps, the
   app itself, the preferences, and the scratch home.
@@ -558,9 +561,9 @@ home.
 
 ### Evidence and the data directory
 
-Runs land in `~/Library/Caches/mentor-e2e/runs/<scenario>-<stamp>/`, or under
+Runs land in `~/Library/Caches/athina-e2e/runs/<scenario>-<stamp>/`, or under
 `--out <dir>`; `--keep-home` keeps the scratch home to look inside it.
-Each run has its own home, and `launch_mentor` in `scripts/e2e/lib/harness.sh`
+Each run has its own home, and `launch_athina` in `scripts/e2e/lib/harness.sh`
 learns where that run's journal is rather than dictating it: the replay makes a
 directory for each launch (see Replays side by side), which is what keeps two
 replays apart when they share a home, and names it on the line it writes as it
@@ -569,10 +572,10 @@ relaunch never reads the last one's, and takes the path from it.
 
 ## Permissions
 
-Mentor needs two permissions and explains each in a first-run window that
+Athina needs two permissions and explains each in a first-run window that
 opens whenever one is missing. The window explains before it asks: no system
 prompt appears when it opens. Each missing permission has one button. For the
-sensing pair it is Open System Settings, which registers Mentor in that
+sensing pair it is Open System Settings, which registers Athina in that
 permission's System Settings list (macOS may show its own note pointing
 there) and opens the matching pane; the window shows live status and re-checks
 every second while open and when the app regains focus. Two more are optional
@@ -592,10 +595,79 @@ permission. Input Monitoring is never requested. The only network connection
 the app ever opens is to `api.anthropic.com`, from the mentor loop, and only
 when a key is saved (see Privacy model).
 
+## Coming from Mentor
+
+The app was called Mentor, with the bundle identifier
+`com.ahcarpenter.mentor`. It is Athina now, `com.ahcarpenter.athina`, and
+macOS keys both Screen Recording and Accessibility to that identifier, so the
+grants made to Mentor do not carry over. The first launch of Athina therefore
+senses nothing until they are granted again, once, by hand:
+
+1. Open System Settings > Privacy & Security > Screen Recording, turn Athina
+   on, and do the same under Accessibility. Athina's own first-run window has
+   a button for each, and shows live status as they are granted.
+2. Quit and reopen Athina, so it picks up both grants. Mentor can be removed
+   from both lists at the same time; it is no longer built.
+
+Nothing of yours is left behind or overwritten. On its first launch Athina
+moves what Mentor kept, `~/Library/Application Support/mentor` (the journal
+with its understanding, `settings.json`, and any recorded calls), to
+`~/Library/Application Support/athina`. Quit Mentor first: Athina takes
+SQLite's exclusive lock on the old journal for the whole move, and has SQLite
+itself copy it rather than copying a live write-ahead-log database file by
+file. The copy is assembled beside the new folder and checked there, the
+journal by SQLite's integrity check and a row count of every table against the
+original, every other file by SHA-256 digest, and only then put in place, with
+the marker `migrated-from-mentor.json` written last. The move runs before the
+app comes up, so on a large journal that first launch can sit quietly for a
+while with nothing in the menu bar yet. The old folder is left exactly as it
+was, yours to keep or remove. Per-launch replay directories are
+not moved, since every replay makes its own, and a replay that ran under the
+new name first does not stand in the way: its `replay` folder is the app's own,
+not your data.
+
+A move that cannot be finished stops that launch rather than starting an empty
+journal in place of yours. Athina says what failed, in an alert, on stderr and
+in the log, and quits:
+
+- The old journal is still open in Mentor or another copy of the app, so the
+  lock cannot be had. Quit it and open Athina again.
+- A copy or a check failed (a full disk, a file that cannot be read).
+
+Either way what Mentor kept is untouched, the attempt takes back whatever it
+put in the new folder and nothing else, and the next launch simply tries
+again. A move cut short by a crash is started again the same way. If the
+same alert comes back launch after launch, the cause is not going away on its
+own: move `~/Library/Application Support/mentor` somewhere else, and Athina
+starts with an empty journal, leaving that copy intact where you put it.
+
+If both folders already hold real data, the move is refused rather than
+merged: Athina uses `athina`, leaves `mentor` untouched, and says so, naming
+what it found, in Settings > Journal, in the debug panel, and in the log. Keep
+the one you want and move the other away.
+
+The Settings pane you had open and the window positions move with the
+preferences domain on that same first live launch, laid over anything a replay
+wrote there beforehand; after it, what Athina has written is never
+overwritten.
+
+The Anthropic API key moves the same careful way. On the first launch Athina
+copies the keychain item saved under `com.ahcarpenter.mentor` to
+`com.ahcarpenter.athina`, reads it back from there, and leaves the old item
+exactly where it is; an item already under the new name is never overwritten,
+and a key you delete in Settings is never copied back. So expect a third thing
+on that first launch, after the two grants: the system's keychain prompt,
+"Athina wants to use your confidential information stored in
+com.ahcarpenter.mentor", since the login keychain trusts an item's readers by
+the exact binary (see Code signing). Always Allow copies the key across; Deny
+leaves it where it is, and you can paste the key into Settings > Models
+instead. The copy runs off the main thread, so the app keeps sensing while the
+prompt waits.
+
 ## Architecture
 
 ```
-Sources/MentorCore            library, fully testable
+Sources/AthinaCore            library, fully testable
   Settings/                   SensingSettings (every threshold and cadence), MentorSettings (the loop's
                               section of the same file), SettingsStore (JSON), ExcludedApps, HotKey,
                               LaunchFiles (a launch's data directory and starting settings: a replay's own
@@ -625,14 +697,16 @@ Sources/MentorCore            library, fully testable
                               ToastCountdown (a toast's countdown, held and resumed), MenuBarMark (which variant
                               of the mark the menu bar shows), MentorLoop (orchestration)
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
-                              ProcessResources (CPU, memory), MentorClock (the one time source: SystemClock,
+                              ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
                               and ClockRemote (moving a replay's clock from a script)
-Sources/Mentor                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
+Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swift cannot make (it is variadic),
+                              so `DataMigration` can read the old journal without altering it
+Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
                               (on-device speech recognition), HotKeyCenter (Carbon, press and release),
                               Snapshots
-Tests/MentorCoreTests         Swift Testing suites for the pure parts, with JSON fixtures under Fixtures/
+Tests/AthinaCoreTests         Swift Testing suites for the pure parts, with JSON fixtures under Fixtures/
 ```
 
 ### Sensing loop
@@ -654,7 +728,7 @@ or manual request that lands while one is in flight stays pending, so the next
 capture follows it under the same delays.
 
 A capture reads the fresh accessibility context, grabs the display containing
-the focused window with `SCScreenshotManager` (Mentor's own windows excluded,
+the focused window with `SCScreenshotManager` (Athina's own windows excluded,
 downscaled to `maxFrameDimension`), hashes it, and drops it if the hash is
 within `hashDistanceThreshold` of the previous kept frame **and** neither the
 window nor the focused text changed. Kept frames go through Vision OCR (text
@@ -667,7 +741,7 @@ the frame was captured for or is excluded.
 
 ### Journal
 
-`~/Library/Application Support/mentor/journal.sqlite`, WAL mode, incremental
+`~/Library/Application Support/athina/journal.sqlite`, WAL mode, incremental
 vacuum. Tables: `observations` (timestamp, app, window, accessibility summary
 and JSON, OCR text and blocks, frame hash, frame geometry, reason), `thumbnails`
 (JPEG blob per observation, separate so it can expire first), `events`
@@ -760,7 +834,7 @@ each kept observation it runs, in order:
    auto-dismisses after `toastTimeout` (60 s;
    the countdown pauses while the pointer is over it). Closing it with the x,
    or a mouse-down in any other window or on the desktop, is journaled as
-   dismissed; a click on Mentor's own menu bar item is not one, since it opens
+   dismissed; a click on Athina's own menu bar item is not one, since it opens
    the menu that answers the toast. A timeout, or quitting the app with the
    toast still up, is journaled as expired. *Tell Me More* expands the full explanation above the
    button bar (scrolling past 300 points) and becomes *Show Less*; the three
@@ -842,7 +916,7 @@ with `ignoresMouseEvents` set, so it never takes focus and never intercepts a
 click, key, or scroll. It draws a tinted rounded box with a soft glow around
 the spot and the note beside it on the same Liquid Glass as the toast, to its
 right, where the rest of a line of text is usually empty (below the box, or
-above it at the bottom of the display, only when there is no room). Mentor's own windows are excluded from
+above it at the bottom of the display, only when there is no room). Athina's own windows are excluded from
 capture, so the overlay never appears in a frame. Settings > General > "Show
 callouts on screen" (on by default) turns callouts off; the history window
 records for each suggestion whether one was drawn, and the debug panel's
@@ -914,7 +988,7 @@ only brings that toast to the front and does not end its own exchange. The
 toast it brings back stays up until closed, as it always does. Otherwise the
 held suggestion is shown normally if it is at most 30 s old (the same staleness
 bound as a queued observation); otherwise, and
-whenever Mentor is paused while one is held, it is journaled with the feedback
+whenever Athina is paused while one is held, it is journaled with the feedback
 "Expired, never shown" and never put on screen, since the screen it describes
 is gone. Such a suggestion still appears in the history window but is skipped
 by Show Last Suggestion and by a key press with no toast up, which bring back
@@ -971,13 +1045,13 @@ a held call with the `outOfContext` outcome.
 
 A mentor call used to see only the last ten minutes, so it could tell you a
 faster way to do the thing on screen but never whether that thing would get
-you where you were going. Mentor now keeps a short record of the longer arc
+you where you were going. Athina now keeps a short record of the longer arc
 and carries it from one call to the next.
 
 **What it contains.** The model writes it, in four parts: the **goals** the
 user appears to be working toward, most likely first, each with the evidence
 for it and a confidence; a condensed **timeline** of what has happened; the
-**mentor history**, what Mentor has already said and how the user answered, so
+**mentor history**, what Athina has already said and how the user answered, so
 it never repeats itself or re-raises something dismissed; and **open
 concerns** worth watching but not worth an interruption. `Understanding.swift`
 holds the type and the pure functions for bounding, rendering, and expiry.
@@ -1105,7 +1179,7 @@ counted (see Iterating without the network).
   panel, bounded by its token budget, expiring with the idle gap and at a new
   day, and removable at any time with Reset Understanding or Clear Journal.
   The menu bar menu shows its strongest goal, clipped, alongside the debug
-  panel and Settings > Models, whenever Mentor is on and has a key.
+  panel and Settings > Models, whenever Athina is on and has a key.
   Both prompts that write it, the mentor prompt and the refresh prompt, tell
   the model to leave out anything private, financial, medical, or personal,
   and anything about other people on screen.
@@ -1120,7 +1194,7 @@ counted (see Iterating without the network).
   the mentor tier, so no context information is sent for it; the placement
   itself is decided here from the model's answer, not there.
 - **Excluded apps** (Settings > Privacy) default to Keychain Access, Passwords,
-  and common password managers. While one is frontmost Mentor captures no frame,
+  and common password managers. While one is frontmost Athina captures no frame,
   reads no window title or element, runs no OCR, and journals only that the app
   was excluded, so nothing from them can reach any tier.
 - Secure text fields are never read, even in non-excluded apps, so their
@@ -1131,7 +1205,7 @@ counted (see Iterating without the network).
 - **Recordings** are the one exception, and only when the app is launched with
   `--record`: each call's whole request, screen text and screenshot included,
   and its answer are written to a file on this Mac
-  (`~/Library/Application Support/mentor/recordings` unless another directory is
+  (`~/Library/Application Support/athina/recordings` unless another directory is
   given, mode 0700, files 0600). The API key is never written, and any
   Anthropic key visible in the screen text is redacted, though not inside the
   screenshot. `make clear-recordings` deletes them; Clear Journal does not. A
@@ -1152,19 +1226,19 @@ counted (see Iterating without the network).
   replay launch removes its whole per-launch directory instead, once that
   directory has gone unwritten for longer than the thumbnail window (see
   Replays side by side).
-- **Delete `~/Library/Application Support/mentor/replay` yourself if you ran a
+- **Delete `~/Library/Application Support/athina/replay` yourself if you ran a
   replay on a build before this one.** Those builds kept one shared
   `journal.sqlite` there, holding thumbnails and recognized text from your real
   screen, and nothing ages it now: no launch opens it, so retention never runs
-  against it, and Mentor will not remove it for you. It cannot: an older build
+  against it, and Athina will not remove it for you. It cannot: an older build
   from another checkout may have that file open this minute, and a file's
   timestamps cannot tell that apart from one nobody has touched since the Mac
   went to sleep, so deleting it on a guess could pull the database out from
-  under a running instance. Quit every Mentor on the Mac and remove the
+  under a running instance. Quit every Athina on the Mac and remove the
   directory. Per-launch directories, the ones this build makes, are swept for
   you, because a launch holds a lock on its own and the sweep takes that lock
   before it removes anything.
-- The journal directory is created with mode 0700. Mentor makes every one of
+- The journal directory is created with mode 0700. Athina makes every one of
   them itself, the live one and each replay's, so there is no path someone
   else chose for a journal to land in.
 
@@ -1204,14 +1278,14 @@ Replays side by side).
 
 Every surface follows Apple's Human Interface Guidelines for macOS, audited
 against the live guidelines on 2026-09-15, so later changes keep to them
-rather than re-auditing. The sections Mentor leans on are Designing for macOS,
+rather than re-auditing. The sections Athina leans on are Designing for macOS,
 The menu bar (menu bar extras), Menus, Windows, Panels, Settings, Layout,
 Typography, Color, Dark Mode, Materials (Liquid Glass), Icons, SF Symbols,
 Buttons, Toggles, Pickers, Text fields, Lists and tables, Alerts, Feedback,
 Writing, Onboarding, Privacy, Accessibility, Keyboards, and Motion. The choices
 particular to this app:
 
-- **The menu bar extra is the app.** Mentor has no Dock icon or app menu, so
+- **The menu bar extra is the app.** Athina has no Dock icon or app menu, so
   its menu leads with dimmed status rows (a status that needs something, such
   as a missing key, is the command that fixes it), then commands, windows, and
   the app menu's About and Quit. Menu items use title case and an ellipsis only
@@ -1219,7 +1293,7 @@ particular to this app:
   The icon is the owl as a template image, one variant per mode, with a word
   beside it only in replay or recording.
 - **The mark is the artist's drawing, and every asset comes from a vector.**
-  `Resources/Mark/MentorMark.svg` is the master for the app icon: a profile in a crested
+  `Resources/Mark/AthinaMark.svg` is the master for the app icon: a profile in a crested
   Corinthian helmet over a flat cream circle, square and hexagon, in the
   reference bitmap's own coordinates, with the line art and the cream shapes in
   separate groups so either stands alone. Ink is `#332C2B` and cream `#F1DEB7`,
@@ -1240,7 +1314,7 @@ particular to this app:
   to allow: the drawing's stroke is under a pixel by 32 px and would otherwise
   grey out.
 - **The menu bar mark is the owl, at one width in every mode.**
-  `Resources/Mark/MentorOwl.svg` is a second master, for the menu bar only: a
+  `Resources/Mark/AthinaOwl.svg` is a second master, for the menu bar only: a
   solid owl silhouette, so it sits among the bar's other extras instead of
   reading lighter than all of them the way a line drawing does at 16 points.
   It ships as a template PDF per mode, so macOS tints it like every other extra
@@ -1254,7 +1328,7 @@ particular to this app:
   say asleep. Paused, the deliberate stop, takes the half-lidded eyes. Every
   state, the z's included, is made inside the owl's own box, which is what
   keeps the item one width throughout, so the other extras never shift
-  sideways when Mentor's state changes. Which variant a mode gets is
+  sideways when Athina's state changes. Which variant a mode gets is
   `MenuBarMark.resolve`, a pure function with the whole table under test.
 - **The toast is a non-activating panel, not a notification.** It floats under
   the menu bar on Liquid Glass and never takes keyboard focus, with corners
@@ -1274,7 +1348,7 @@ particular to this app:
   the range settles at the nearest allowed one as the edit ends, rather than
   being clamped out of sight afterwards.
 - **Status is never color alone.** Inline messages are `StatusLabel` and badges
-  are `StatusBadge` (`Sources/Mentor/Components.swift`): the symbol or capsule
+  are `StatusBadge` (`Sources/Athina/Components.swift`): the symbol or capsule
   carries the color, the words stay in a label color. Text uses system text
   styles and label colors, never fixed point sizes or tertiary text for
   anything that must be read.
@@ -1288,11 +1362,11 @@ particular to this app:
 - **Words.** Buttons, menu items, window titles, and column headings use title
   case; labels, section headers, and status words use sentence case. The
   interface says keyboard shortcut rather than hotkey, names panes and places
-  plainly, and speaks of Mentor in the third person, never "we".
+  plainly, and speaks of Athina in the third person, never "we".
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs `swift test`, the bundle script, and `Mentor
+`.github/workflows/ci.yml` runs `swift test`, the bundle script, and `Athina
 --snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the macOS
 26 SDK this package targets, and uploads the rendered PNGs, replay-mode renders
 on a scaled clock included, as the `ui-snapshots` artifact. No test waits on
