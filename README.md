@@ -74,10 +74,11 @@ the switch there is on (see Debug panel). Keep the `--replay`: a bare `open -n`
 goes round `scripts/launch.sh`, so nothing stops it starting a second live
 Athina on the live journal, the live settings and the same API bill. The live
 app's own windows open from its menu bar item, on the copy `make run` already
-started, the debug panel among them, or from Settings > Advanced, once it is
-turned on there. `--record [<dir>]` chooses where model calls go, `--time-scale <n>` and
-`--advance-clock <interval>` set a replay's clock, and `--settings <path>`
-chooses the settings a replay starts from; see Iterating without the network.
+started; the debug panel opens there and from Settings > Advanced only once it
+is turned on in that pane. `--record [<dir>]` chooses where model calls go,
+`--time-scale <n>` and `--advance-clock <interval>` set a replay's clock, and
+`--settings <path>` chooses the settings a replay starts from; see Iterating
+without the network.
 Where a replay keeps its own files is not an argument: it makes a directory for
 itself and says which on the line it writes as it starts.
 
