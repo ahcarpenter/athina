@@ -1228,7 +1228,9 @@ either the microphone or a file.
 | **NVIDIA Parakeet** | whisper.cpp on the GPU | TDT 0.6B v3 (25 European languages), full or compact, downloaded on request | every second or so of audio |
 
 **SpeechAnalyzer** hears the Mac's language (Language & Region) through its
-`SpeechTranscriber`, and for a language that has none, through its
+`SpeechTranscriber`, and for a language that has none, or has none in the
+script the Mac writes it in (Chinese in Taiwan or Hong Kong is never heard as
+the mainland's Simplified Chinese), through its
 `DictationTranscriber`, which covers every language the older on-device
 `SFSpeechRecognizer` did. So no language needs that recognizer any more, and
 Athina no longer uses it; nor does it ask for the Speech Recognition

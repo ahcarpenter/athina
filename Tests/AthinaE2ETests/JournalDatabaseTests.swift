@@ -47,6 +47,44 @@ import Testing
         #expect(rows[0][4] == CaptureReason.focusChange.rawValue)
     }
 
+    /// Which recognizer heard an answer or a question is what the speech
+    /// scenarios check, so it has to come back under the column they read.
+    @Test func whoHeardAnExchangeComesBackThroughTheQueries() async throws {
+        let (journal, database) = try temporaryJournal()
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let suggestion = try await journal.record(Suggestion(
+            timestamp: now, bundleID: nil, appName: "TextEdit", windowTitle: nil, category: .shortcut,
+            title: "t", body: "b", explanation: "e", confidence: 1, observationID: nil, model: "m", promptVersion: 1
+        ))
+        let whisper = TranscriptOrigin.heard(backend: .whisper, model: "whisper-base.en")
+        _ = try await journal.updateFeedback(suggestionID: suggestion.id, feedback: .tellMeMore, at: now + 90, heardBy: whisper)
+        let analyzer = TranscriptOrigin.heard(backend: .speechAnalyzer, model: "SpeechTranscriber en_US")
+        _ = try await journal.record(FollowUp(
+            suggestionID: suggestion.id, timestamp: now + 100, question: "why", answer: "Because.", model: "m", promptVersion: 1, heardBy: analyzer
+        ))
+        _ = try await journal.record(FollowUp(
+            suggestionID: suggestion.id, timestamp: now + 110, question: "and then", error: "offline", model: "m", promptVersion: 1, heardBy: .typed
+        ))
+
+        func named(_ query: JournalQuery) throws -> [[String: String]] {
+            try database.rows(query.sql).map { Dictionary(uniqueKeysWithValues: zip(query.columns, $0)) }
+        }
+        let local = DateFormatter()
+        local.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+        let suggestions = try named(JournalQueries.suggestions)
+        #expect(suggestions.count == 1)
+        #expect(suggestions.first?["feedback"] == SuggestionFeedback.tellMeMore.rawValue)
+        #expect(suggestions.first?["feedback_at"] == local.string(from: now + 90))
+        #expect(suggestions.first?["heard_by"] == SpeechBackendID.whisper.rawValue)
+
+        let followUps = try named(JournalQueries.followUps)
+        #expect(followUps.map { $0["question"] } == ["why", "and then"])
+        #expect(followUps.map { $0["heard_by"] } == [SpeechBackendID.speechAnalyzer.rawValue, "typed"])
+        #expect(followUps.map { $0["heard_by_model"] } == ["SpeechTranscriber en_US", "-"])
+        #expect(followUps.map { $0["answer"] } == ["Because.", "-"])
+        #expect(followUps.map { $0["error"] } == ["-", "offline"])
+    }
+
     @Test func captureRaceReadsSwitchesAndCapturesFromTheJournal() async throws {
         let (journal, database) = try temporaryJournal()
         let start = Date(timeIntervalSince1970: 1_700_000_000)
