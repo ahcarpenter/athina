@@ -9,7 +9,16 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
     static let storageKey = "SettingsPane"
 
+    /// The scheme of a link from one pane's text to another pane
+    /// (`link`, `settingsPaneLinks`), so the two can never name it differently.
+    static let linkScheme = "athina-settings"
+
     var id: String { rawValue }
+
+    /// The link text in another pane opens this pane by, as Markdown.
+    func link(_ title: String) -> String {
+        "[\(title)](\(SettingsPane.linkScheme):\(rawValue))"
+    }
 
     var title: String {
         switch self {
@@ -71,6 +80,21 @@ struct SettingsView: View {
     }
 }
 
+extension Text {
+    /// Text with a link to another Settings pane in it (`SettingsPane.link`),
+    /// from Markdown. A string literal is the only Markdown `Text` parses on
+    /// its own, and the link is built rather than written, so it is parsed
+    /// here; text that would not parse is shown as it is.
+    init(settingsMarkdown markdown: String) {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        if let parsed = try? AttributedString(markdown: markdown, options: options) {
+            self.init(parsed)
+        } else {
+            self.init(verbatim: markdown)
+        }
+    }
+}
+
 extension View {
     /// A Settings pane: a grouped form at the pane's size.
     func settingsPane(height: CGFloat) -> some View {
@@ -78,11 +102,12 @@ extension View {
             .frame(width: SettingsView.paneWidth, height: height)
     }
 
-    /// Opens a `athina-settings:<pane>` link in this text as that Settings
-    /// pane, so text names a place elsewhere in Settings by linking to it.
+    /// Opens a `SettingsPane.linkScheme` link in this text (`SettingsPane.link`)
+    /// as that Settings pane, so text names a place elsewhere in Settings by
+    /// linking to it.
     func settingsPaneLinks() -> some View {
         environment(\.openURL, OpenURLAction { url in
-            guard url.scheme == "mentor-settings", let pane = SettingsPane(rawValue: url.absoluteString.replacingOccurrences(of: "athina-settings:", with: "")) else {
+            guard url.scheme == SettingsPane.linkScheme, let pane = SettingsPane(rawValue: url.absoluteString.replacingOccurrences(of: "\(SettingsPane.linkScheme):", with: "")) else {
                 return .systemAction
             }
             pane.select()

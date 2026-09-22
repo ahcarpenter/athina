@@ -257,6 +257,10 @@ import Testing
             return
         }
         #expect(reason.contains(files.old.path))
+        // The system's description of the failure already ends in a period,
+        // and the sentence that follows it says the way out.
+        #expect(!reason.contains(".."))
+        #expect(reason.contains("move that folder somewhere else"))
         #expect(outcome.stopsLaunch)
         #expect(!manager.fileExists(atPath: files.new.path))
         #expect(!manager.fileExists(atPath: files.root.appendingPathComponent(DataMigration.stagingName).path))
@@ -348,6 +352,14 @@ import Testing
         try Data(#"{"floorInterval": 7}"#.utf8).write(to: copy.appendingPathComponent("settings.json"))
         let altered = try DataMigration.firstDifference(between: files.old, and: copy, manager: manager)
         #expect(altered?.hasPrefix("settings.json is not what was copied") == true)
+    }
+
+    /// A description that ends in a period is left as it is, and one that does
+    /// not is given one, so what follows never reads as a double period.
+    @Test func aFailureReadsOnAsOneSentence() {
+        #expect(DataMigration.sentence("The file could not be opened.") == "The file could not be opened.")
+        #expect(DataMigration.sentence("SQLite error 14: unable to open database file") == "SQLite error 14: unable to open database file.")
+        #expect(DataMigration.sentence("disk full \n") == "disk full.")
     }
 
     /// The journal SQLite copied is held to the original row for row: a copy

@@ -548,7 +548,8 @@ suite rather than every scenario.
 - **Nothing is stopped by name.** The harness launches the binary directly and
   stops only the pids it started, never an Athina it did not launch (the make
   targets stop only their own lane, see Replays side by side).
-- **A sandbox** denies the real `~/Library/Application Support/athina` and all
+- **A sandbox** denies the real `~/Library/Application Support/athina`, the
+  `mentor` folder beside it that the app kept before the rename, and all
   outbound network, so no run can reach live data or make a live call.
 - **Cleanup runs on failure**, through a trap: helpers, taps, staged apps, the
   app itself, the preferences, and the scratch home.
@@ -616,8 +617,10 @@ itself copy it rather than copying a live write-ahead-log database file by
 file. The copy is assembled beside the new folder and checked there, the
 journal by SQLite's integrity check and a row count of every table against the
 original, every other file by SHA-256 digest, and only then put in place, with
-the marker `migrated-from-mentor.json` written last. The old folder is left
-exactly as it was, yours to keep or remove. Per-launch replay directories are
+the marker `migrated-from-mentor.json` written last. The move runs before the
+app comes up, so on a large journal that first launch can sit quietly for a
+while with nothing in the menu bar yet. The old folder is left exactly as it
+was, yours to keep or remove. Per-launch replay directories are
 not moved, since every replay makes its own, and a replay that ran under the
 new name first does not stand in the way: its `replay` folder is the app's own,
 not your data.

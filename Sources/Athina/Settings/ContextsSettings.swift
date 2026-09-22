@@ -60,7 +60,7 @@ struct MentorshipContextsSection: View {
             Text("Mentorship contexts")
         } footer: {
             // The link opens the Privacy pane in place rather than describing where it is.
-            Text("Triage places each moment in one of your contexts as part of the judgment it already makes, so contexts cost no extra call. To keep an app from being looked at at all, exclude it in [Privacy settings](athina-settings:privacy).")
+            Text(settingsMarkdown: "Triage places each moment in one of your contexts as part of the judgment it already makes, so contexts cost no extra call. To keep an app from being looked at at all, exclude it in \(SettingsPane.privacy.link("Privacy settings")).")
                 .settingsPaneLinks()
         }
         .sheet(item: $editing) { context in

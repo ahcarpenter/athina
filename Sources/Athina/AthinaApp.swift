@@ -178,6 +178,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !AppState.shared.clientMode.isOffline {
                 let alert = NSAlert()
                 alert.alertStyle = .critical
+                alert.icon = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
                 alert.messageText = "Athina did not start"
                 alert.informativeText = refusal
                 alert.addButton(withTitle: "Quit")

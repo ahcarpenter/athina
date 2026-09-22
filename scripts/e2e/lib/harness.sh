@@ -16,8 +16,10 @@ DRIVE="$ROOT/.build/debug/athina-drive"
 FIXTURES="$ROOT/Tests/AthinaCoreTests/Fixtures/Replay"
 SETTINGS_SEED="$E2E_DIR/lib/settings.json"
 
-# The owner's real data, which every run is sandboxed away from.
+# The owner's real data, which every run is sandboxed away from: where the app
+# keeps it now, and where it kept it as Mentor (README "Coming from Mentor").
 LIVE_SUPPORT="$HOME/Library/Application Support/athina"
+LEGACY_SUPPORT="$HOME/Library/Application Support/mentor"
 PREFS_DOMAIN="com.ahcarpenter.athina"
 
 # Homes and evidence live outside the repository: a warm home holds caches that
@@ -209,7 +211,7 @@ launch_athina() {
 	local home="$1"
 	shift
 	local profile="$RUN_DIR/isolate.sb"
-	sed "s#__LIVE_SUPPORT__#$LIVE_SUPPORT#" "$E2E_DIR/lib/isolate.sb" >"$profile"
+	sed -e "s#__LIVE_SUPPORT__#$LIVE_SUPPORT#" -e "s#__LEGACY_SUPPORT__#$LEGACY_SUPPORT#" "$E2E_DIR/lib/isolate.sb" >"$profile"
 	CFFIXED_USER_HOME="$home" HOME="$home" \
 		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" "$@" \
 		>>"$RUN_DIR/app.log" 2>&1 &

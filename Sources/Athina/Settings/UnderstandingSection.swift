@@ -49,7 +49,7 @@ struct UnderstandingSection: View {
             Text("Understanding")
         } footer: {
             // The link opens the Journal pane in place rather than describing where it is.
-            Text("Athina keeps a short written record of what you appear to be working toward and what has happened so far, so it can judge what you do against that goal rather than recent screens alone. The model writes it, and once it is forgotten Athina starts a fresh one. Its revisions stay in the journal on this Mac until they are reset here, or age out or are cleared with the rest of the journal in [Journal settings](athina-settings:journal).")
+            Text(settingsMarkdown: "Athina keeps a short written record of what you appear to be working toward and what has happened so far, so it can judge what you do against that goal rather than recent screens alone. The model writes it, and once it is forgotten Athina starts a fresh one. Its revisions stay in the journal on this Mac until they are reset here, or age out or are cleared with the rest of the journal in \(SettingsPane.journal.link("Journal settings")).")
                 .settingsPaneLinks()
         }
     }

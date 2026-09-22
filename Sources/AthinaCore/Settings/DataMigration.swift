@@ -148,7 +148,9 @@ public enum DataMigration {
         guard isDirectory(old, manager), old.standardizedFileURL != new.standardizedFileURL else {
             return .nothingToMove
         }
-        let untouched = "What Mentor kept in \(old.path) is untouched, and the next launch tries the move again."
+        let untouched = "What Mentor kept in \(old.path) is untouched, and the next launch tries the move again. "
+            + "If this keeps happening, move that folder somewhere else and Athina starts with an empty journal, "
+            + "leaving that copy intact where you put it."
         if manager.fileExists(atPath: new.appendingPathComponent(markerName).path) {
             try? manager.removeItem(at: new.appendingPathComponent(pendingName))
             return .alreadyMoved
@@ -156,7 +158,7 @@ public enum DataMigration {
         do {
             try takeBackUnfinishedMove(in: new, manager: manager)
         } catch {
-            return .failed("Could not clear the unfinished move in \(new.path): \(error.localizedDescription). \(untouched)")
+            return .failed("Could not clear the unfinished move in \(new.path): \(sentence(error.localizedDescription)) \(untouched)")
         }
         let found = ownersData(in: new, manager: manager)
         guard found.isEmpty else {
@@ -178,7 +180,7 @@ public enum DataMigration {
                         + "Quit it, then open Athina again. \(untouched)"
                 )
             } catch {
-                return .failed("Could not move \(old.path) to \(new.path): \(journal.path) would not open (\(error)). \(untouched)")
+                return .failed("Could not move \(old.path) to \(new.path): \(journal.path) would not open: \(sentence(String(describing: error))) \(untouched)")
             }
         }
         // The lock goes when the connection does, so it is kept until the
@@ -195,9 +197,16 @@ public enum DataMigration {
                 return .moved(names)
             } catch {
                 let reason = (error as? SQLiteError)?.description ?? error.localizedDescription
-                return .failed("Could not move \(old.path) to \(new.path): \(reason). \(untouched)")
+                return .failed("Could not move \(old.path) to \(new.path): \(sentence(reason)) \(untouched)")
             }
         }
+    }
+
+    /// `text` as one sentence, whether or not it already ended in a period,
+    /// so an error's description reads on into the next sentence cleanly.
+    static func sentence(_ text: String) -> String {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasSuffix(".") ? trimmed : trimmed + "."
     }
 
     /// The names in `directory` that are somebody's data rather than what the

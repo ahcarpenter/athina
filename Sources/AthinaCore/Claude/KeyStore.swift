@@ -164,7 +164,7 @@ public enum KeyMigration {
             defaults.set(true, forKey: doneKey)
             return .copied
         } catch {
-            return .failed("Could not copy the API key from \(KeychainKeyStore.legacyService) to \(KeychainKeyStore.service): \(error). The old item is untouched.")
+            return .failed("Could not copy the API key from \(KeychainKeyStore.legacyService) to \(KeychainKeyStore.service): \(DataMigration.sentence(String(describing: error))) The old item is untouched.")
         }
     }
 }
