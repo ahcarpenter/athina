@@ -117,7 +117,9 @@ public actor Journal {
                 feedback TEXT,
                 feedback_at REAL,
                 region_json TEXT,
-                callout_shown INTEGER NOT NULL DEFAULT 0
+                callout_shown INTEGER NOT NULL DEFAULT 0,
+                feedback_heard_by TEXT,
+                feedback_heard_by_model TEXT
             );
             CREATE INDEX IF NOT EXISTS suggestions_timestamp ON suggestions(timestamp);
             CREATE TABLE IF NOT EXISTS follow_ups (
@@ -128,7 +130,9 @@ public actor Journal {
                 answer TEXT,
                 error TEXT,
                 model TEXT NOT NULL,
-                prompt_version INTEGER NOT NULL
+                prompt_version INTEGER NOT NULL,
+                heard_by TEXT,
+                heard_by_model TEXT
             );
             CREATE INDEX IF NOT EXISTS follow_ups_timestamp ON follow_ups(timestamp);
             CREATE INDEX IF NOT EXISTS follow_ups_suggestion ON follow_ups(suggestion_id);
@@ -177,6 +181,10 @@ public actor Journal {
         try addColumn("region_json TEXT", named: "region_json", to: "suggestions", db)
         try addColumn("callout_shown INTEGER NOT NULL DEFAULT 0", named: "callout_shown", to: "suggestions", db)
         try addColumn("judged_goal TEXT", named: "judged_goal", to: "suggestions", db)
+        try addColumn("feedback_heard_by TEXT", named: "feedback_heard_by", to: "suggestions", db)
+        try addColumn("feedback_heard_by_model TEXT", named: "feedback_heard_by_model", to: "suggestions", db)
+        try addColumn("heard_by TEXT", named: "heard_by", to: "follow_ups", db)
+        try addColumn("heard_by_model TEXT", named: "heard_by_model", to: "follow_ups", db)
         try dropColumn(named: "schema_version", from: "understanding", db)
     }
 
@@ -271,8 +279,8 @@ public actor Journal {
         try db.run("""
             INSERT INTO suggestions (timestamp, bundle_id, app_name, window_title, category, title, body, explanation,
                 confidence, judged_goal, observation_id, model, prompt_version, feedback, feedback_at, region_json,
-                callout_shown)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                callout_shown, feedback_heard_by, feedback_heard_by_model)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 .double(suggestion.timestamp.timeIntervalSince1970),
                 suggestion.bundleID.map(Value.text) ?? .null,
@@ -291,17 +299,24 @@ public actor Journal {
                 suggestion.feedbackAt.map { Value.double($0.timeIntervalSince1970) } ?? .null,
                 regionJSON.map(Value.text) ?? .null,
                 .int(suggestion.calloutShown ? 1 : 0),
+                suggestion.feedbackHeardBy.map { Value.text($0.journalSource) } ?? .null,
+                suggestion.feedbackHeardBy?.journalModel.map(Value.text) ?? .null,
             ])
         var stored = suggestion
         stored.id = db.lastInsertRowID
         return stored
     }
 
-    /// Records what the user did with a suggestion. Nil when the id is unknown.
-    public func updateFeedback(suggestionID: Int64, feedback: SuggestionFeedback, at time: Date) throws -> Suggestion? {
+    /// Records what the user did with a suggestion, and which recognizer
+    /// heard it when it was said aloud. Nil when the id is unknown.
+    public func updateFeedback(suggestionID: Int64, feedback: SuggestionFeedback, at time: Date, heardBy: TranscriptOrigin? = nil) throws -> Suggestion? {
         try db.run(
-            "UPDATE suggestions SET feedback = ?, feedback_at = ? WHERE id = ?",
-            [.text(feedback.rawValue), .double(time.timeIntervalSince1970), .int(suggestionID)]
+            "UPDATE suggestions SET feedback = ?, feedback_at = ?, feedback_heard_by = ?, feedback_heard_by_model = ? WHERE id = ?",
+            [
+                .text(feedback.rawValue), .double(time.timeIntervalSince1970),
+                heardBy.map { Value.text($0.journalSource) } ?? .null, heardBy?.journalModel.map(Value.text) ?? .null,
+                .int(suggestionID),
+            ]
         )
         return try suggestion(id: suggestionID)
     }
@@ -319,8 +334,8 @@ public actor Journal {
     @discardableResult
     public func record(_ followUp: FollowUp) throws -> FollowUp {
         try db.run("""
-            INSERT INTO follow_ups (suggestion_id, timestamp, question, answer, error, model, prompt_version)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO follow_ups (suggestion_id, timestamp, question, answer, error, model, prompt_version, heard_by, heard_by_model)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
                 .int(followUp.suggestionID),
                 .double(followUp.timestamp.timeIntervalSince1970),
@@ -329,6 +344,8 @@ public actor Journal {
                 followUp.error.map(Value.text) ?? .null,
                 .text(followUp.model),
                 .int(Int64(followUp.promptVersion)),
+                followUp.heardBy.map { Value.text($0.journalSource) } ?? .null,
+                followUp.heardBy?.journalModel.map(Value.text) ?? .null,
             ])
         var stored = followUp
         stored.id = db.lastInsertRowID
@@ -706,11 +723,12 @@ public actor Journal {
 
     private static let suggestionColumns = """
         id, timestamp, bundle_id, app_name, window_title, category, title, body, explanation, confidence,
-        judged_goal, observation_id, model, prompt_version, feedback, feedback_at, region_json, callout_shown
+        judged_goal, observation_id, model, prompt_version, feedback, feedback_at, region_json, callout_shown,
+        feedback_heard_by, feedback_heard_by_model
         """
 
     private static let followUpColumns = """
-        id, suggestion_id, timestamp, question, answer, error, model, prompt_version
+        id, suggestion_id, timestamp, question, answer, error, model, prompt_version, heard_by, heard_by_model
         """
 
     private static func followUp(from row: SQLiteConnection.Statement) -> FollowUp {
@@ -722,7 +740,8 @@ public actor Journal {
             answer: row.text(4),
             error: row.text(5),
             model: row.text(6) ?? "",
-            promptVersion: Int(row.int(7))
+            promptVersion: Int(row.int(7)),
+            heardBy: TranscriptOrigin(journalSource: row.text(8), model: row.text(9))
         )
     }
 
@@ -746,7 +765,8 @@ public actor Journal {
             feedback: row.text(14).flatMap(SuggestionFeedback.init(rawValue:)),
             feedbackAt: row.isNull(15) ? nil : Date(timeIntervalSince1970: row.double(15)),
             region: region,
-            calloutShown: row.int(17) != 0
+            calloutShown: row.int(17) != 0,
+            feedbackHeardBy: TranscriptOrigin(journalSource: row.text(18), model: row.text(19))
         )
     }
 

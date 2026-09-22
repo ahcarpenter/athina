@@ -123,6 +123,9 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
     public var region: CalloutRegion?
     /// Whether a callout was drawn on screen for it.
     public var calloutShown: Bool
+    /// Which recognizer heard the answer, when it was said aloud, or that it
+    /// was typed; nil for an answer given with a button or the menu.
+    public var feedbackHeardBy: TranscriptOrigin?
 
     public init(
         id: Int64 = 0,
@@ -142,7 +145,8 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
         feedback: SuggestionFeedback? = nil,
         feedbackAt: Date? = nil,
         region: CalloutRegion? = nil,
-        calloutShown: Bool = false
+        calloutShown: Bool = false,
+        feedbackHeardBy: TranscriptOrigin? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -162,6 +166,7 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
         self.feedbackAt = feedbackAt
         self.region = region
         self.calloutShown = calloutShown
+        self.feedbackHeardBy = feedbackHeardBy
     }
 }
 

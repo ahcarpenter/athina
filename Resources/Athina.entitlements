@@ -7,13 +7,14 @@
 
 	The release runs under the hardened runtime, which Developer ID notarization
 	requires. Nothing else Athina does needs an exception to it: screen capture,
-	Accessibility, and speech recognition are privacy permissions the person
-	grants, not entitlements; the Carbon hotkey, the login keychain, the network
-	(no App Sandbox), Vision, and the SQLite shim linked into the binary need none;
-	and the release will sign the libraries the app embeds, such as the local
-	speech models' runtime (whisper.cpp for Whisper and Parakeet), with the app's
-	own team, so library validation passes without disabling it. No JIT, no
-	unsigned executable memory, no Apple Events.
+	Accessibility, and the microphone are privacy permissions the person grants,
+	not entitlements, and every speech recognizer runs on this Mac without the
+	system's Speech Recognition permission; the Carbon hotkey, the login
+	keychain, the network (no App Sandbox), Vision, and the SQLite shim linked
+	into the binary need none; and the release signs the library the app
+	embeds, whisper.cpp, which runs the Whisper and Parakeet speech models, with
+	the app's own team, so library validation passes without disabling it. No
+	JIT, no unsigned executable memory, no Apple Events.
 
 	The App Sandbox is off. An App Store variant starts from a copy of this file
 	that adds com.apple.security.app-sandbox and the sandbox entitlements the app

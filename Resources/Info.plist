@@ -43,8 +43,6 @@
 	<key>NSScreenCaptureUsageDescription</key>
 	<string>Athina captures the display you are working on and reads its text on this Mac to understand what you are doing.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Athina listens only while you hold the talk-back shortcut, so you can answer or ask about a suggestion by voice, and never stores the audio.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Athina turns what you say while you hold the talk-back shortcut into text on this Mac and sends only your questions to the mentor model.</string>
+	<string>Athina listens only while you hold the talk-back shortcut, so you can answer or ask about a suggestion by voice. The speech recognizer turns it into text on this Mac, and the audio is never stored.</string>
 </dict>
 </plist>

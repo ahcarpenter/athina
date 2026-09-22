@@ -22,12 +22,20 @@ let package = Package(
                 .linkedFramework("Vision"),
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("AVFoundation"),
-                .linkedFramework("Speech"),
             ]
+        ),
+        // whisper.cpp, which runs both open speech models talking back can
+        // download, OpenAI's Whisper and NVIDIA's Parakeet, on this Mac's GPU
+        // (README "Talking back"). The project's own prebuilt framework for
+        // the release, pinned by its SHA-256; no model comes with it.
+        .binaryTarget(
+            name: "whisper",
+            url: "https://github.com/ggml-org/whisper.cpp/releases/download/v1.9.2/whisper-v1.9.2-xcframework.zip",
+            checksum: "af74fed13ea7f2d5ca2a39d9f58ec177713fafd7cab63aef4e27b79f3ceca80b"
         ),
         .executableTarget(
             name: "Athina",
-            dependencies: ["AthinaCore"],
+            dependencies: ["AthinaCore", "whisper"],
             linkerSettings: [
                 .linkedFramework("Carbon"),
                 .linkedFramework("AVFoundation"),

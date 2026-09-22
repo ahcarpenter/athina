@@ -218,13 +218,14 @@ public actor MentorLoop {
     public func currentStatus() -> MentorStatus { status }
 
     /// Records the user's response to a suggestion and journals it, at the
-    /// clock's date unless `now` says otherwise.
+    /// clock's date unless `now` says otherwise, with the recognizer that
+    /// heard it when it was said aloud.
     @discardableResult
-    public func recordFeedback(suggestionID: Int64, feedback: SuggestionFeedback, at now: Date? = nil) async -> Suggestion? {
+    public func recordFeedback(suggestionID: Int64, feedback: SuggestionFeedback, at now: Date? = nil, heardBy: TranscriptOrigin? = nil) async -> Suggestion? {
         let now = now ?? clock.date
         let updated: Suggestion?
         do {
-            updated = try await journal.updateFeedback(suggestionID: suggestionID, feedback: feedback, at: now)
+            updated = try await journal.updateFeedback(suggestionID: suggestionID, feedback: feedback, at: now, heardBy: heardBy)
         } catch {
             MentorLoop.log.error("feedback not journaled: \(String(describing: error), privacy: .public)")
             return nil
@@ -595,12 +596,14 @@ public actor MentorLoop {
     /// reason and never sent. A question asked while a call is in flight
     /// waits for it to return and is then asked; only one waits at a time,
     /// and a newer question, or `withdrawFollowUp`, drops it, in which case
-    /// this returns nil and nothing is journaled. `now` defaults to the clock's.
-    public func askFollowUp(about suggestion: Suggestion, question: String, at now: Date? = nil) async -> FollowUp? {
+    /// this returns nil and nothing is journaled. `now` defaults to the
+    /// clock's. `heardBy` is journaled with the exchange: which recognizer
+    /// heard the question, or that it was typed.
+    public func askFollowUp(about suggestion: Suggestion, question: String, heardBy: TranscriptOrigin? = nil, at now: Date? = nil) async -> FollowUp? {
         let now = now ?? clock.date
         var followUp = FollowUp(
             suggestionID: suggestion.id, timestamp: now, question: question,
-            model: settings.mentorModel, promptVersion: MentorPrompts.version
+            model: settings.mentorModel, promptVersion: MentorPrompts.version, heardBy: heardBy
         )
         var asking = now
         var gate = scheduler.followUpGate(conditions: conditions(now: asking))

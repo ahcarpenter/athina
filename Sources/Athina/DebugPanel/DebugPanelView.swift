@@ -839,7 +839,8 @@ private struct MentorCard: View {
             return "asking the mentor: \"\(question)\""
         case .idle:
             guard let record = state.lastTranscript else { return "none yet" }
-            return "\"\(record.text)\" \(Formatting.age(record.at, now: now)), \(record.handling)"
+            let source = record.heardBy == .typed ? "typed" : "heard by \(record.heardBy.label)"
+            return "\"\(record.text)\" \(Formatting.age(record.at, now: now)), \(record.handling), \(source)"
         }
     }
 
@@ -921,6 +922,8 @@ private struct MentorCard: View {
 /// Typed words down the push-to-talk path: a transcript that is one of the
 /// toast's answers answers it, anything else is a follow-up question. For
 /// checking talk-back, and recording a follow-up, without a microphone.
+/// Speak Audio File plays a recording through the chosen recognizer instead,
+/// as if the shortcut were held for its length.
 private struct TalkBackField: View {
     @Environment(AppState.self) private var state
     @State private var text = ""
@@ -930,21 +933,38 @@ private struct TalkBackField: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Text("Talk back")
-                .foregroundStyle(.secondary)
-                .frame(width: 78, alignment: .trailing)
-            TextField("Type a reply", text: $text)
-                .textFieldStyle(.roundedBorder)
-                .onSubmit(send)
-                .accessibilityLabel("Talk back")
-            Button("Send", action: send)
-                .disabled(!canSend)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .center, spacing: 8) {
+                Text("Talk back")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 78, alignment: .trailing)
+                TextField("Type a reply", text: $text)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit(send)
+                    .accessibilityLabel("Talk back")
+                Button("Send", action: send)
+                    .disabled(!canSend)
+            }
+            .help("Sends these words the way releasing the talk-back shortcut sends what you said, to the toast that is up or the last suggestion.")
+            Button("Speak Audio File…", action: chooseAudioFile)
+                .disabled(!state.canTalkBackTyped || !state.speechAvailability.isAvailable)
+                .padding(.leading, 86)
+                .help("Plays a recording through the chosen speech recognizer as if you held the talk-back shortcut while it played. It needs no microphone.")
         }
         .font(.callout)
         .controlSize(.small)
         .padding(.top, 2)
-        .help("Sends these words the way releasing the talk-back shortcut sends what you said, to the toast that is up or the last suggestion.")
+    }
+
+    private func chooseAudioFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.audio]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.prompt = "Speak"
+        panel.message = "Choose a recording to play through the speech recognizer."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        state.talkBack(audioFile: url)
     }
 
     private func send() {

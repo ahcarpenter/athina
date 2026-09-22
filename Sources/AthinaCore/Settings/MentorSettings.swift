@@ -77,6 +77,8 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     public var showCallouts = true
     /// Held to talk back to the current suggestion. Nil until one is recorded.
     public var pushToTalkHotKey: HotKey?
+    /// Which recognizer hears the talk-back key, and each one's model.
+    public var speech = SpeechSettings()
 
     // MARK: Spend
 
@@ -101,7 +103,7 @@ public struct MentorSettings: Codable, Equatable, Sendable {
         case mentorWindowDuration, mentorWindowTokenBudget, sendThumbnail
         case understandingRefreshInterval, understandingTokenBudget, understandingIdleGap
         case minimumConfidence, toastTimeout, notNowSnooze
-        case showCallouts, pushToTalkHotKey
+        case showCallouts, pushToTalkHotKey, speech
         case hourlySpendCap, prices
         case neverRules, snoozes
     }
@@ -132,6 +134,7 @@ public struct MentorSettings: Codable, Equatable, Sendable {
         notNowSnooze = try c.decodeIfPresent(TimeInterval.self, forKey: .notNowSnooze) ?? d.notNowSnooze
         showCallouts = try c.decodeIfPresent(Bool.self, forKey: .showCallouts) ?? d.showCallouts
         pushToTalkHotKey = try c.decodeIfPresent(HotKey.self, forKey: .pushToTalkHotKey)
+        speech = try c.decodeIfPresent(SpeechSettings.self, forKey: .speech) ?? d.speech
         hourlySpendCap = try c.decodeIfPresent(Double.self, forKey: .hourlySpendCap) ?? d.hourlySpendCap
         prices = try c.decodeIfPresent(PriceTable.self, forKey: .prices) ?? d.prices
         neverRules = try c.decodeIfPresent([NeverRule].self, forKey: .neverRules) ?? d.neverRules
@@ -158,6 +161,7 @@ public struct MentorSettings: Codable, Equatable, Sendable {
         s.toastTimeout = s.toastTimeout.clamped(to: 5...600)
         s.notNowSnooze = s.notNowSnooze.clamped(to: 60...(7 * 86400))
         if let key = s.pushToTalkHotKey, !key.isUsable { s.pushToTalkHotKey = nil }
+        s.speech = s.speech.validated()
         s.hourlySpendCap = s.hourlySpendCap.clamped(to: 0.05...1000)
         s.prices = s.prices.validated()
         var seen = Set<String>()
