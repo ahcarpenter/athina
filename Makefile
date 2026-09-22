@@ -16,11 +16,21 @@ PID ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
-.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure
+.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release
 
 ## Build the .app bundle into build/Athina.app
 build:
 	scripts/bundle.sh $(CONFIG)
+
+## Build, sign, notarize, and package a direct-download release into
+## build/release: the universal app under the hardened runtime, a disk image,
+## a zip, the debug symbols, and draft release notes (see README, "Releasing").
+## ATHINA_RELEASE_IDENTITY names the Developer ID Application identity and
+## ATHINA_NOTARY_PROFILE the notarytool keychain profile. Without them it runs
+## every step that needs no Apple credentials, names each one it skipped, and
+## fails, since that build is not one to distribute.
+release:
+	scripts/release.sh
 
 ## Rebuild the app icon from Resources/Mark/AthinaMark.svg and the menu bar mark
 ## from Resources/Mark/AthinaOwl.svg. Its outputs are committed, so a plain
