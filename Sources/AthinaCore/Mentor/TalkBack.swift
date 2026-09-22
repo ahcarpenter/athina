@@ -201,6 +201,9 @@ public struct FollowUp: Codable, Equatable, Sendable, Identifiable {
     public var error: String?
     public var model: String
     public var promptVersion: Int
+    /// Which recognizer heard the question, or that it was typed; nil for
+    /// an exchange journaled before this was kept.
+    public var heardBy: TranscriptOrigin?
 
     public init(
         id: Int64 = 0,
@@ -210,7 +213,8 @@ public struct FollowUp: Codable, Equatable, Sendable, Identifiable {
         answer: String? = nil,
         error: String? = nil,
         model: String,
-        promptVersion: Int
+        promptVersion: Int,
+        heardBy: TranscriptOrigin? = nil
     ) {
         self.id = id
         self.suggestionID = suggestionID
@@ -220,5 +224,6 @@ public struct FollowUp: Codable, Equatable, Sendable, Identifiable {
         self.error = error
         self.model = model
         self.promptVersion = promptVersion
+        self.heardBy = heardBy
     }
 }

@@ -46,8 +46,14 @@ swift build "${build_args[@]}"
 BIN="$(swift build "${build_args[@]}" --show-bin-path)/Athina"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN" "$APP/Contents/MacOS/Athina"
+# whisper.cpp, which runs Whisper and Parakeet for talking back, is a dynamic
+# framework SwiftPM leaves beside the binary, in the universal build's
+# products as in a single-architecture one; the app loads it from
+# Contents/Frameworks. ditto keeps the framework's version symlinks.
+ditto "$(dirname "$BIN")/whisper.framework" "$APP/Contents/Frameworks/whisper.framework"
+install_name_tool -add_rpath @executable_path/../Frameworks "$APP/Contents/MacOS/Athina"
 
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
@@ -80,6 +86,9 @@ else
   echo "bundle: signing with \"$identity\"" >&2
 fi
 
+# Nested code is signed first, with the same identity, so the app's
+# signature seals a framework that verifies on its own.
+codesign --force --sign "$identity" --timestamp=none "$APP/Contents/Frameworks/whisper.framework"
 codesign --force --sign "$identity" \
   --identifier com.ahcarpenter.athina \
   --entitlements "$ROOT/Resources/Athina.entitlements" \

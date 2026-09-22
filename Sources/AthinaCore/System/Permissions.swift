@@ -3,34 +3,34 @@ import ApplicationServices
 import AVFoundation
 import CoreGraphics
 import Foundation
-import Speech
 
 /// The permissions Athina asks for. The first two are what sensing needs;
-/// the last two only serve talking back, and everything else works without them.
+/// the microphone only serves talking back, and everything else works without
+/// it. Speech Recognition is not among them: every recognizer Athina offers
+/// (`SpeechBackendID`) runs on this Mac, and none of them asks for it.
 public enum Permission: String, CaseIterable, Sendable, Identifiable {
     case screenRecording
     case accessibility
     case microphone
-    case speechRecognition
 
     public var id: String { rawValue }
 
     /// Sensing needs these; without both, the pipeline degrades or waits.
     public static let required: [Permission] = [.screenRecording, .accessibility]
-    /// Talking back needs these; nothing else does.
-    public static let optional: [Permission] = [.microphone, .speechRecognition]
+    /// Talking back needs this; nothing else does.
+    public static let optional: [Permission] = [.microphone]
 
     public var isRequired: Bool {
         Permission.required.contains(self)
     }
 
     /// Screen Recording and Accessibility are switched on in System Settings;
-    /// the system's own request for them only points there. Microphone and
-    /// Speech Recognition are answered in the system's Allow alert.
+    /// the system's own request for them only points there. The microphone is
+    /// answered in the system's Allow alert.
     public var isGrantedInSystemSettings: Bool {
         switch self {
         case .screenRecording, .accessibility: true
-        case .microphone, .speechRecognition: false
+        case .microphone: false
         }
     }
 
@@ -39,7 +39,6 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
         case .screenRecording: "Screen Recording"
         case .accessibility: "Accessibility"
         case .microphone: "Microphone"
-        case .speechRecognition: "Speech Recognition"
         }
     }
 
@@ -50,9 +49,7 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
         case .accessibility:
             "Lets Athina read the app, window title, and focused element you are using, so it knows what you are working on without guessing from pixels."
         case .microphone:
-            "Lets Athina hear you while you hold the talk-back shortcut, and only then. Audio never leaves this Mac, and Athina does not store it."
-        case .speechRecognition:
-            "Lets Athina turn what you say into text on this Mac, with Apple's on-device recognizer and never its servers. When you ask a question, those words go to the mentor model."
+            "Lets Athina hear you while you hold the talk-back shortcut, and only then. The speech recognizer you choose turns it into text on this Mac: audio never leaves it, and Athina does not store it. When you ask a question, those words go to the mentor model."
         }
     }
 
@@ -65,8 +62,6 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
             URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
         case .microphone:
             URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
-        case .speechRecognition:
-            URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition")!
         }
     }
 }
@@ -75,27 +70,24 @@ public struct PermissionStatus: Equatable, Sendable {
     public var screenRecording: Bool
     public var accessibility: Bool
     public var microphone: Bool
-    public var speechRecognition: Bool
 
-    public init(screenRecording: Bool, accessibility: Bool, microphone: Bool = false, speechRecognition: Bool = false) {
+    public init(screenRecording: Bool, accessibility: Bool, microphone: Bool = false) {
         self.screenRecording = screenRecording
         self.accessibility = accessibility
         self.microphone = microphone
-        self.speechRecognition = speechRecognition
     }
 
     /// Both sensing permissions. The voice pair is optional and not counted.
     public var allGranted: Bool { screenRecording && accessibility }
     public var anyGranted: Bool { screenRecording || accessibility }
-    /// Both voice permissions, which talking back needs.
-    public var voiceGranted: Bool { microphone && speechRecognition }
+    /// The microphone, which talking back needs.
+    public var voiceGranted: Bool { microphone }
 
     public func isGranted(_ permission: Permission) -> Bool {
         switch permission {
         case .screenRecording: screenRecording
         case .accessibility: accessibility
         case .microphone: microphone
-        case .speechRecognition: speechRecognition
         }
     }
 }
@@ -128,8 +120,6 @@ public enum PermissionProbe {
             false
         case .microphone:
             AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined
-        case .speechRecognition:
-            SFSpeechRecognizer.authorizationStatus() == .notDetermined
         }
     }
 
@@ -137,18 +127,17 @@ public enum PermissionProbe {
         PermissionStatus(
             screenRecording: CGPreflightScreenCaptureAccess(),
             accessibility: AXIsProcessTrusted(),
-            microphone: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized,
-            speechRecognition: SFSpeechRecognizer.authorizationStatus() == .authorized
+            microphone: AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         )
     }
 
     /// Shows the system prompt (once per app identity) and adds the app to the pane's list.
     ///
-    /// The microphone and speech handlers are `@Sendable` on purpose: TCC
-    /// calls them on its own reply queue, and a closure written in a
-    /// main-actor function is otherwise inferred to be main-actor isolated,
-    /// which the runtime checks on entry and traps on. Nothing in them needs
-    /// the main actor; the app polls the status afterwards.
+    /// The microphone handler is `@Sendable` on purpose: TCC calls it on its
+    /// own reply queue, and a closure written in a main-actor function is
+    /// otherwise inferred to be main-actor isolated, which the runtime checks
+    /// on entry and traps on. Nothing in it needs the main actor; the app
+    /// polls the status afterwards.
     @MainActor
     public static func request(_ permission: Permission) {
         switch permission {
@@ -159,8 +148,6 @@ public enum PermissionProbe {
             _ = AXIsProcessTrustedWithOptions(options)
         case .microphone:
             AVCaptureDevice.requestAccess(for: .audio) { @Sendable _ in }
-        case .speechRecognition:
-            SFSpeechRecognizer.requestAuthorization { @Sendable _ in }
         }
     }
 
