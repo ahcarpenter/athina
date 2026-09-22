@@ -25,10 +25,6 @@ enum Snapshots {
         let noSpeech = AppState.sample(speechAvailability: .unavailable(reason: "On-device speech recognition is not available for Welsh, so talking back is off."))
         let noUnderstanding = AppState.sampleUnderstanding(.none)
         let debugPanelOn = AppState.sample(showDebugPanel: true)
-        // The menu without the Debug Panel command, as every install starts,
-        // and with it, once Settings > Advanced turns it on.
-        let menu = SampleMenuBarMenu(state: state)
-        let menuWithDebugPanel = SampleMenuBarMenu(state: debugPanelOn)
         let pane = CGSize(width: SettingsView.paneWidth, height: 640)
         // The debug panel's Now pane is this wide, so the card wraps as it does there.
         func card(_ height: CGFloat) -> CGSize { CGSize(width: 340, height: height) }
@@ -76,8 +72,6 @@ enum Snapshots {
             ("toast-note", CGSize(width: ToastController.panelWidth, height: 120), AnyView(SampleToastNote()), state),
             ("callout", CGSize(width: 900, height: 620), AnyView(SampleCallout()), state),
             ("menu-bar-marks", SampleMenuBarMarks.wholeSize, AnyView(SampleMenuBarMarks()), state),
-            ("menu", menu.wholeSize, AnyView(menu), state),
-            ("menu-debug-panel", menuWithDebugPanel.wholeSize, AnyView(menuWithDebugPanel), debugPanelOn),
             ("debug-panel-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), replay),
             ("debug-panel-calls-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
             ("settings-models-replay", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), replay),
@@ -915,108 +909,5 @@ private enum SampleFrame {
             state = state &* 6364136223846793005 &+ 1442695040888963407
             return state
         }
-    }
-}
-
-/// The menu bar extra's menu, as the items it is made of.
-///
-/// A menu opens only on screen, so this reads the real `MenuBarContent`
-/// through `NSHostingMenu`, the same SwiftUI to `NSMenu` conversion a menu
-/// style extra goes through, and draws the items it produces: their titles,
-/// shortcuts, dimming, submenus and separators are the app's own, and only the
-/// menu's glass is left out. It is how a change to the menu, such as the Debug
-/// Panel command Settings > Advanced adds, gets looked at without a person at
-/// the screen.
-struct SampleMenuBarMenu: View {
-    private static let rowHeight = 24.0
-    private static let separatorHeight = 11.0
-    private static let inset = 5.0
-    private static let padding = 16.0
-    private static let gap = 24.0
-    private static let chevronWidth = 8.0
-
-    struct Item: Hashable {
-        var title: String
-        var shortcut: String
-        var isEnabled: Bool
-        var hasSubmenu: Bool
-        var isSeparator: Bool
-    }
-
-    let items: [Item]
-
-    @MainActor init(state: AppState) {
-        let menu = NSHostingMenu(rootView: MenuBarContent().environment(state))
-        menu.update()
-        items = menu.items.map { item in
-            Item(
-                title: item.title,
-                shortcut: Self.shortcut(of: item),
-                isEnabled: item.isEnabled,
-                hasSubmenu: item.hasSubmenu,
-                isSeparator: item.isSeparatorItem
-            )
-        }
-    }
-
-    /// A window the menu fills, as wide as its widest row, as a menu sizes
-    /// itself, and as tall as the items the state gives it.
-    @MainActor var wholeSize: CGSize {
-        let font = NSFont.menuFont(ofSize: 0)
-        func width(_ text: String) -> Double {
-            text.isEmpty ? 0 : ceil(NSAttributedString(string: text, attributes: [.font: font]).size().width)
-        }
-        let widest = items.map { item in
-            width(item.title) + (item.shortcut.isEmpty ? 0 : Self.gap + width(item.shortcut))
-                + (item.hasSubmenu ? Self.gap + Self.chevronWidth : 0)
-        }.max() ?? 0
-        let height = items.reduce(Self.inset * 2) { $0 + ($1.isSeparator ? Self.separatorHeight : Self.rowHeight) }
-        return CGSize(width: widest + Self.padding * 2, height: height)
-    }
-
-    /// The shortcut as a menu shows it, modifiers in the menu's order.
-    private static func shortcut(of item: NSMenuItem) -> String {
-        guard !item.keyEquivalent.isEmpty else { return "" }
-        let flags = item.keyEquivalentModifierMask
-        var glyphs = ""
-        if flags.contains(.control) { glyphs += "⌃" }
-        if flags.contains(.option) { glyphs += "⌥" }
-        if flags.contains(.shift) { glyphs += "⇧" }
-        if flags.contains(.command) { glyphs += "⌘" }
-        return glyphs + item.keyEquivalent.uppercased()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                if item.isSeparator {
-                    Divider()
-                        .padding(.horizontal, Self.padding)
-                        .frame(height: Self.separatorHeight)
-                } else {
-                    HStack(spacing: 0) {
-                        Text(item.title)
-                        Spacer(minLength: Self.gap)
-                        if !item.shortcut.isEmpty {
-                            Text(item.shortcut).foregroundStyle(.tertiary)
-                        }
-                        if item.hasSubmenu {
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .frame(width: Self.chevronWidth)
-                        }
-                    }
-                    .font(Font(NSFont.menuFont(ofSize: 0)))
-                    .foregroundStyle(item.isEnabled ? .primary : .tertiary)
-                    .lineLimit(1)
-                    .padding(.horizontal, Self.padding)
-                    .frame(height: Self.rowHeight)
-                }
-            }
-        }
-        .padding(.vertical, Self.inset)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.background)
     }
 }
