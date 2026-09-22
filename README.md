@@ -498,7 +498,7 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 | `menubar-mark` | Athina's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
 | `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
-| `debug-panel-access` | while Settings > Advanced > Show debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed; turned on, that button opens the panel (the menu still offers none), and turned off again, the panel closes |
+| `debug-panel-access` | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed; turned on, that button opens the panel (the menu still offers none), and turned off again, the panel closes |
 | `settings-pane-links` | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link rather than Markdown, and a real click on it changes the Settings window's pane in place rather than handing the link to the system |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
@@ -1262,13 +1262,13 @@ counted (see Iterating without the network).
 ## Debug panel
 
 The debug panel is a builder's window, so it is off until the person turns it
-on: Settings > Advanced > **Show debug panel**, then **Open Debug Panel** beside
-it. Every install starts with the switch off, an install from before it existed
-included, and turning it off closes the panel. The menu bar menu has no command
-for it and no other window links to it, so while the switch is off nothing in
-the app opens it. Which launches may open it at launch is one pure rule,
-`DebugPanelAccess`, under test. The builder's paths reach it without changing
-the owner's setting:
+on: Settings > Advanced > **Enable debug panel**, then **Open Debug Panel**
+beside it. Every install starts with the switch off, an install from before it
+existed included, and turning it off closes the panel. The menu bar menu has no
+command for it and no other window links to it, so while the switch is off
+nothing in the app opens it. Which launches may open it at launch is one pure
+rule, `DebugPanelAccess`, under test. The builder's paths reach it without
+changing the owner's setting:
 
 - **A replay**: `open -n build/Athina.app --args --replay <dir> --open debug`
   opens it whatever the switch says. `make run-replay` passes no `--open`, so
@@ -1392,8 +1392,8 @@ particular to this app:
   the range settles at the nearest allowed one as the edit ends, rather than
   being clamped out of sight afterwards.
 - **Tools for looking inside Athina are opted into in the Advanced pane.** The
-  debug panel is offered only once Settings > Advanced > Show debug panel is
-  on, the pane last in the toolbar as Safari's is, whose Advanced pane holds
+  debug panel is offered only once Settings > Advanced > Enable debug panel
+  is on, the pane last in the toolbar as Safari's is, whose Advanced pane holds
   "Show features for web developers" for the same reason: the HIG (Settings)
   asks for defaults that give the best experience to the most people and for
   panes that each group related settings, and a window of model calls and

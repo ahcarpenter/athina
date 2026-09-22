@@ -59,7 +59,7 @@ run-replay: build
 ## Replaces only the copy this checkout's `make run` or `make record` launched
 ## before, and refuses to start while another live Athina is running. Opens the
 ## debug panel, whose Talk back field a recording session types into, whatever
-## Settings > Advanced says (DebugPanelAccess).
+## Settings > Advanced > Enable debug panel says (DebugPanelAccess).
 record: build
 	@dir="$(RECORD_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
 	if [ -n "$$dir" ]; then mkdir -p -m 700 "$$dir" && dir="$$(cd "$$dir" && pwd)" || exit 1; fi; \

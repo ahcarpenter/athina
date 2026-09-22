@@ -1,7 +1,7 @@
 import Foundation
 
 /// Who reaches the debug panel, and how. It is a builder's window, so the app
-/// offers it only once the person turns on Settings > Advanced > Show debug
+/// offers it only once the person turns on Settings > Advanced > Enable debug
 /// panel (`SensingSettings.showDebugPanel`), and then only from that pane.
 /// The builder's own launches, a replay or a recording, open it with
 /// `--open debug` whatever the switch says, so an end-to-end check or a

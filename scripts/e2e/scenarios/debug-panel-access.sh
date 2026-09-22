@@ -1,15 +1,15 @@
 # shellcheck shell=bash
 # SCENARIO_* below are read by scripts/e2e/athina-e2e, which sources this file.
 # shellcheck disable=SC2034
-# The debug panel is something the person turns on. While Settings > Advanced >
-# Show debug panel is off, as every install starts, the menu offers no command
+# The debug panel is something the person enables. While Settings > Advanced >
+# Enable debug panel is off, as every install starts, the menu offers no command
 # for it and the pane's Open Debug Panel button is dimmed; turned on, that
 # button opens the panel, and turned off again, the panel goes. The menu never
 # offers it, on or off.
 #
 # The switch and the button are pressed through accessibility, with no pointer,
 # so the run needs no idle input.
-SCENARIO_SUMMARY="the debug panel opens only from Settings > Advanced, only once its switch is on, and closes when it is turned off"
+SCENARIO_SUMMARY="the debug panel opens only from Settings > Advanced, only once it is enabled, and closes when it is turned off"
 SCENARIO_ARGS=(--open settings:advanced)
 
 # The id of the first window whose name starts with $1, empty when none is open.
@@ -88,7 +88,7 @@ scenario_run() {
 	check "Open Debug Panel is dimmed while the switch is off" "no" "$(button_enabled)"
 	check "no debug panel is open" "no" "$([ -n "$(window_id "Debug Panel")" ] && echo yes || echo no)"
 
-	press_switch || { log "the Show debug panel switch would not press"; return 1; }
+	press_switch || { log "the Enable debug panel switch would not press"; return 1; }
 	shoot Advanced on
 	check "the switch turns on" "yes" "$(switch_on)"
 	check "Open Debug Panel is live once the switch is on" "yes" "$(button_enabled)"
@@ -101,7 +101,7 @@ scenario_run() {
 	check "Open Debug Panel opens the debug panel" "yes" "$([ -n "$(window_id "Debug Panel")" ] && echo yes || echo no)"
 	shoot "Debug Panel" panel
 
-	press_switch || { log "the Show debug panel switch would not press"; return 1; }
+	press_switch || { log "the Enable debug panel switch would not press"; return 1; }
 	wait_no_window "Debug Panel" 10 || true
 	check "the switch turns off" "no" "$(switch_on)"
 	check "turning the switch off closes the debug panel" "no" "$([ -n "$(window_id "Debug Panel")" ] && echo yes || echo no)"

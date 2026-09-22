@@ -57,7 +57,7 @@ enum Snapshots {
             ("settings-capture", whole(920), AnyView(CaptureSettings().formStyle(.grouped)), state),
             ("settings-journal", CGSize(width: SettingsView.paneWidth, height: 500), AnyView(JournalSettings().formStyle(.grouped)), state),
             ("settings-privacy", pane, AnyView(PrivacySettings().formStyle(.grouped)), state),
-            // Off, as every install starts, and turned on, with its button live.
+            // Off, as every install starts, and enabled, with its button live.
             ("settings-advanced", CGSize(width: SettingsView.paneWidth, height: 180), AnyView(AdvancedSettings().formStyle(.grouped)), state),
             ("settings-advanced-on", CGSize(width: SettingsView.paneWidth, height: 180), AnyView(AdvancedSettings().formStyle(.grouped)), AppState.sample(showDebugPanel: true)),
             // The side-effect suggestion, so the goal it was judged against shows.
