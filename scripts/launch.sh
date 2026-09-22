@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Launch build/Mentor.app for a make target, replacing only the copy that the
-# same lane launched before from this checkout: never a Mentor from another
+# Launch build/Athina.app for a make target, replacing only the copy that the
+# same lane launched before from this checkout: never an Athina from another
 # checkout, another lane, or anything started some other way.
 #
 # Usage: scripts/launch.sh <lane> [--live] [-- app arguments...]
@@ -12,7 +12,7 @@
 # The instance is identified exactly, not guessed: the launch carries
 # `--launch-token <id>`, a unique argument the app ignores, and the pid is the
 # one running this checkout's bundle with that token in its arguments. Diffing
-# the set of Mentor processes before and after would adopt the wrong one when
+# the set of Athina processes before and after would adopt the wrong one when
 # two launches from this checkout overlap, which "any number of replays at
 # once" invites. The pid is reported, and written to the pid file, only once
 # the app itself says it started, on the line it writes past every reason it
@@ -21,10 +21,10 @@
 # still be short of that point after seconds.
 #
 # `--live` guards the live files. Before this script, every launch target began
-# with `pkill -x Mentor`, so two live instances were impossible; two of them
+# with `pkill -x Athina`, so two live instances were impossible; two of them
 # share one journal, both write the whole settings file when they quit, and
 # both bill the API. A live launch therefore refuses to start while another
-# live Mentor runs, naming it. A replay needs no such guard: its data
+# live Athina runs, naming it. A replay needs no such guard: its data
 # directory is its own.
 set -euo pipefail
 
@@ -43,8 +43,8 @@ done
 # The physical path, because that is the one `ps` reports for the running
 # process, and both pid searches below match on it.
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
-APP="$ROOT/build/Mentor.app"
-EXECUTABLE="$APP/Contents/MacOS/Mentor"
+APP="$ROOT/build/Athina.app"
+EXECUTABLE="$APP/Contents/MacOS/Athina"
 PID_FILE="$ROOT/build/$LANE.pid"
 # The token is kept beside the pid rather than in it: README shows a person
 # `cat build/<lane>.pid` and handing the result to scripts/advance-clock.sh, so
@@ -52,7 +52,7 @@ PID_FILE="$ROOT/build/$LANE.pid"
 TOKEN_FILE="$ROOT/build/$LANE.token"
 TOKEN="lane-$LANE-$$-$(date +%s)"
 
-# The pid of this checkout's Mentor whose arguments carry `$1`, or nothing.
+# The pid of this checkout's Athina whose arguments carry `$1`, or nothing.
 # Both halves matter: the token alone would match the searching awk, whose own
 # command line holds it, and the bundle alone would match a sibling lane.
 lane_pid() {
@@ -64,34 +64,37 @@ lane_pid() {
 	}' | head -n 1
 }
 
-# Every Mentor on this Mac that is not a replay or a snapshot render, whatever
-# checkout or bundle it came from, as "<pid> <command>" lines.
+# Every Athina on this Mac that is not a replay or a snapshot render, whatever
+# checkout or bundle it came from, as "<pid> <command>" lines. A build from
+# before the rename is the same app under its old name, Mentor, spending on the
+# same key and holding the journal the first live Athina moves, so it counts.
 #
-# Which process is a Mentor is decided on `comm`, the executable alone, never
+# Which process is an Athina is decided on `comm`, the executable alone, never
 # on the joined command line: a path with a space in it cannot be told from a
 # path followed by an argument once they are joined, so a checkout under, say,
-# "My Projects" would be invisible here and a second live Mentor would start on
+# "My Projects" would be invisible here and a second live Athina would start on
 # the owner's journal, settings and bill. The command line is read only to say
 # which ones are replays or snapshot renders, and to name them.
-live_mentors() {
+live_athinas() {
 	{ ps -axo pid=,comm=; echo "|"; ps -axo pid=,command=; } | awk '
 		$0 == "|" { commands = 1; next }
 		{
 			pid = $1
 			sub(/^ *[0-9]+ +/, "")
 			if (!commands) {
-				if ($0 ~ /\/Mentor\.app\/Contents\/MacOS\/Mentor$/) mentor[pid] = 1
+				if ($0 ~ /\/Athina\.app\/Contents\/MacOS\/Athina$/) athina[pid] = 1
+				if ($0 ~ /\/Mentor\.app\/Contents\/MacOS\/Mentor$/) athina[pid] = 1
 				next
 			}
-			if (!(pid in mentor)) next
+			if (!(pid in athina)) next
 			if ($0 ~ /--replay($| )/ || $0 ~ /--snapshot($| )/) next
 			print pid, $0
 		}'
 }
 
-# Stops a Mentor this script is answerable for, and waits for it to go: a
+# Stops an Athina this script is answerable for, and waits for it to go: a
 # killed app is still listed while the kernel tears it down, and the live guard
-# would read that as a live Mentor already running.
+# would read that as a live Athina already running.
 stop_pid() {
 	local victim="$1"
 	kill -TERM "$victim" 2>/dev/null || true
@@ -125,10 +128,10 @@ stop_previous() {
 stop_previous
 
 if [ "$LIVE" = 1 ]; then
-	running="$(live_mentors || true)"
+	running="$(live_athinas || true)"
 	if [ -n "$running" ]; then
 		{
-			echo "launch: a live Mentor is already running, so this one would share its journal, its settings, and its API spend:"
+			echo "launch: a live Athina, or Mentor as it was called, is already running, so this one would share its journal, its settings, and its API spend:"
 			echo "  ${running//$'\n'/$'\n'  }"
 			echo "Quit it first (kill <pid>)."
 		} >&2
@@ -140,8 +143,8 @@ fi
 # has started, and any refusal it prints, would otherwise reach nothing but the
 # unified log. Both files are this launch's alone, so only the app it started
 # ever writes to them.
-STARTED_LINE="$(mktemp "${TMPDIR:-/tmp}/mentor-started-XXXXXXXX")"
-STARTUP_ERRORS="$(mktemp "${TMPDIR:-/tmp}/mentor-launch-XXXXXXXX")"
+STARTED_LINE="$(mktemp "${TMPDIR:-/tmp}/athina-started-XXXXXXXX")"
+STARTUP_ERRORS="$(mktemp "${TMPDIR:-/tmp}/athina-launch-XXXXXXXX")"
 trap 'rm -f "$STARTED_LINE" "$STARTUP_ERRORS"' EXIT
 
 if [ "$#" -gt 0 ]; then
@@ -158,7 +161,7 @@ for _ in $(seq 100); do
 done
 if [ -z "$pid" ]; then
 	{
-		echo "launch: Mentor did not start from $APP"
+		echo "launch: Athina did not start from $APP"
 		# It can refuse itself and be gone before the poll above ever sees it,
 		# and what it said on the way out is the only explanation there is.
 		if [ -s "$STARTUP_ERRORS" ]; then sed 's/^/  /' <"$STARTUP_ERRORS"; fi
@@ -166,7 +169,7 @@ if [ -z "$pid" ]; then
 	exit 1
 fi
 
-# A pid is not yet a running Mentor: the app refuses a launch it must not make,
+# A pid is not yet a running Athina: the app refuses a launch it must not make,
 # such as one given a --settings file that is not settings, from
 # applicationDidFinishLaunching, and how long that takes to reach is a property
 # of the Mac, not of this launch.
@@ -174,10 +177,10 @@ fi
 # or goes away. The timeout is in tenths of a second, and generous: it is there
 # to end the wait, not to time the app.
 STARTED_TIMEOUT=600
-# The app's own way of saying it is not up (`LaunchReport` in MentorCore), on
+# The app's own way of saying it is not up (`LaunchReport` in AthinaCore), on
 # stderr. Nothing else counts: this script is only ever given a launch that
 # means to keep running.
-DID_NOT_START='^Mentor did not start: '
+DID_NOT_START='^Athina did not start: '
 ready=0
 for _ in $(seq "$STARTED_TIMEOUT"); do
 	if [ -s "$STARTED_LINE" ]; then ready=1; break; fi
@@ -201,16 +204,16 @@ if [ "$ready" = 0 ]; then
 		# Why the wait ended, rather than the one reason it used to have: a lane
 		# that said it did not start is not a lane that said nothing for a minute.
 		if [ "$said_no" = 1 ]; then
-			echo "launch: Mentor (lane $LANE) said it did not start:"
+			echo "launch: Athina (lane $LANE) said it did not start:"
 		elif [ "$started_ours" = 1 ]; then
-			echo "launch: Mentor (lane $LANE, pid $pid) never wrote the line it writes once it has started, after $((STARTED_TIMEOUT / 10))s:"
+			echo "launch: Athina (lane $LANE, pid $pid) never wrote the line it writes once it has started, after $((STARTED_TIMEOUT / 10))s:"
 		else
-			echo "launch: Mentor (lane $LANE) quit as it started:"
+			echo "launch: Athina (lane $LANE) quit as it started:"
 		fi
 		if [ -s "$STARTUP_ERRORS" ]; then
 			sed 's/^/  /' <"$STARTUP_ERRORS"
 		else
-			echo "  it said nothing; try: log show --last 2m --predicate 'subsystem == \"com.ahcarpenter.mentor\"'"
+			echo "  it said nothing; try: log show --last 2m --predicate 'subsystem == \"com.ahcarpenter.athina\"'"
 		fi
 		if [ "$started_ours" = 1 ]; then
 			echo "  it is still running, so this lane stops it and claims nothing"
@@ -224,4 +227,4 @@ echo "$pid" >"$PID_FILE"
 printf '%s\n' "$TOKEN" >"$TOKEN_FILE"
 # Where it put its journal and settings, which it chose for itself: nothing
 # names that directory any more, so the app is what says where it is.
-echo "Mentor running as pid $pid (lane $LANE) in $(sed -n '1s/^Mentor started: pid [0-9]* in //p' "$STARTED_LINE")"
+echo "Athina running as pid $pid (lane $LANE) in $(sed -n '1s/^Athina started: pid [0-9]* in //p' "$STARTED_LINE")"

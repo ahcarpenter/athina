@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# Sample the running Mentor app's CPU and memory with top for a while.
+# Sample the running Athina app's CPU and memory with top for a while.
 # Each line is the CPU share over the preceding interval (100 = one core),
 # not a lifetime average, so a launch burst does not colour later samples.
 # top prints all samples when it finishes, so lines are numbered, not timed.
-# Usage: [MENTOR_PID=<pid>] scripts/measure.sh [seconds] [interval]
-# With several Mentors running (another checkout's, a replay lane), name the
-# one to sample with MENTOR_PID (`make measure PID=<pid>`); the pid of a lane
+# Usage: [ATHINA_PID=<pid>] scripts/measure.sh [seconds] [interval]
+# With several Athinas running (another checkout's, a replay lane), name the
+# one to sample with ATHINA_PID (`make measure PID=<pid>`); the pid of a lane
 # launched with make is in build/<lane>.pid.
 set -euo pipefail
 duration="${1:-60}"
 interval="${2:-2}"
-pid="${MENTOR_PID:-}"
+pid="${ATHINA_PID:-}"
 if [ -z "$pid" ]; then
-  running="$(pgrep -x Mentor || true)"
+  running="$(pgrep -x Athina || true)"
   if [ -z "$running" ]; then
-    echo "Mentor is not running (make run)" >&2
+    echo "Athina is not running (make run)" >&2
     exit 1
   fi
   if [ "$(echo "$running" | wc -l)" -gt 1 ]; then
-    echo "several Mentors are running (${running//$'\n'/ }); choose one with MENTOR_PID=<pid>" >&2
+    echo "several Athinas are running (${running//$'\n'/ }); choose one with ATHINA_PID=<pid>" >&2
     exit 1
   fi
   pid="$running"

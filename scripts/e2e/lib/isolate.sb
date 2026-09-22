@@ -5,8 +5,11 @@
 ;; a live model call but the absence of a key. This denies both outright.
 ;;
 ;; __LIVE_SUPPORT__ is replaced with the owner's Application Support directory
-;; when a run writes its copy of this profile.
+;; when a run writes its copy of this profile, and __LEGACY_SUPPORT__ with the
+;; one the app kept as Mentor: the only copy of the owner's data until the
+;; first live launch moves it, and a copy that is kept after.
 (version 1)
 (allow default)
 (deny file* (subpath "__LIVE_SUPPORT__"))
+(deny file* (subpath "__LEGACY_SUPPORT__"))
 (deny network-outbound)

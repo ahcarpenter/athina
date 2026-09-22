@@ -5,8 +5,8 @@ import CryptoKit
 import Foundation
 
 // Builds every asset the app draws its mark from, out of the two committed
-// masters: Resources/Mark/MentorMark.svg, the Athena drawing, for the app
-// icon, and Resources/Mark/MentorOwl.svg, the owl, for the menu bar. Run it
+// masters: Resources/Mark/AthinaMark.svg, the Athena drawing, for the app
+// icon, and Resources/Mark/AthinaOwl.svg, the owl, for the menu bar. Run it
 // with `make mark` whenever either changes; its outputs are committed so a
 // plain `make build` needs nothing but the repository.
 //
@@ -229,7 +229,7 @@ enum SVG {
 // MARK: Where things are
 
 let root = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : ".", isDirectory: true)
-let master = root.appendingPathComponent("Resources/Mark/MentorMark.svg")
+let master = root.appendingPathComponent("Resources/Mark/AthinaMark.svg")
 let markDirectory = root.appendingPathComponent("Resources/Mark", isDirectory: true)
 let document = try SVG.parse(contentsOf: master)
 
@@ -336,7 +336,7 @@ func writeIcon() throws {
 // means, so they carry the states: the silhouette never changes, and the item
 // keeps ONE width in every mode.
 
-let owlMaster = root.appendingPathComponent("Resources/Mark/MentorOwl.svg")
+let owlMaster = root.appendingPathComponent("Resources/Mark/AthinaOwl.svg")
 let owl = try SVG.parse(contentsOf: owlMaster)
 
 /// The owl is one path made of four closed subpaths. They are told apart by
@@ -431,7 +431,7 @@ enum Eyes: String {
 /// They sit in the clear upper left of the owl's own bounding box, which is
 /// empty in the drawing, so adding them does not widen the item. The width has
 /// to be the same in every state or the menu bar's other extras move when
-/// Mentor's does.
+/// Athina's does.
 func zed(height: Double, at origin: CGPoint) -> CGPath {
     // Proportions taken from the reference: a little taller than wide, one
     // weight for all three strokes, square cut ends, and counters left open
