@@ -283,7 +283,7 @@ extension AppState {
             id: 2, timestamp: now.addingTimeInterval(-7860), kind: .understanding,
             detail: "expired after revision 12: a new day started"
         )))
-        state.timeline = timeline
+        state.timeline = JournalTimeline(limit: AppState.timelineLimit, entries: timeline)
 
         var suggestions = SampleSuggestions.make(now: now)
         // The suggestion about the capture path points at the capture line of the sample frame.

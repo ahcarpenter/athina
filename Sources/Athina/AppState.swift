@@ -86,7 +86,7 @@ final class AppState {
     var latestObservation: ActivityObservation?
     var latestImage: NSImage?
     var cadence = CadenceStatus()
-    var timeline: [JournalEntry] = []
+    var timeline = JournalTimeline(limit: AppState.timelineLimit)
     var resources: ProcessResourceUsage?
     var journalStats: JournalStats?
     private(set) var journalError: String?
@@ -1458,7 +1458,7 @@ final class AppState {
             latestImage = observation.frame.jpeg.flatMap(NSImage.init(data:))
             var slim = observation
             slim.frame.jpeg = nil
-            prepend(.observation(slim))
+            timeline.insert(.observation(slim))
             lastNearDuplicateAt = nil
             checkCalloutContent(against: observation)
         case .focusChanged(let context):
@@ -1471,7 +1471,7 @@ final class AppState {
             }
             refreshPermissions()
         case .event(let journalEvent):
-            prepend(.event(journalEvent))
+            timeline.insert(.event(journalEvent))
         case .cadence(let status):
             noteCadence(status)
             if status != cadence { cadence = status }
@@ -1503,20 +1503,13 @@ final class AppState {
                 callLog.removeLast(callLog.count - AppState.callLogLimit)
             }
         case .event(let journalEvent):
-            prepend(.event(journalEvent))
-        }
-    }
-
-    private func prepend(_ entry: JournalEntry) {
-        timeline.insert(entry, at: 0)
-        if timeline.count > AppState.timelineLimit {
-            timeline.removeLast(timeline.count - AppState.timelineLimit)
+            timeline.insert(.event(journalEvent))
         }
     }
 
     private func loadInitialTimeline(from journal: Journal) async {
         if let entries = try? await journal.recentEntries(limit: AppState.timelineLimit) {
-            timeline = entries
+            timeline.merge(entries)
         }
         journalStats = try? await journal.stats()
     }
