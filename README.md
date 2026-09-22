@@ -515,17 +515,24 @@ only and never looks an app up by name.
 
 | command | what it does |
 | --- | --- |
-| `ready <pid>` / `toast <pid>` / `windows <pid>` | wait for the app to come up; the toast's window id; a pid's windows with ids and frames |
-| `bar [pid]` | menu bar extras and menu titles with frames, the gaps between neighbours, and a point on the bar that is on no item |
-| `click item <pid>` / `click at <x> <y>` / `click window <pid> <x> <y>` | post a real HID click, aborting if the pointer is moved or the target is not what was asked for, and log the accessibility element and topmost window under it; a window that lets clicks through, such as a window manager's full-screen overlay, does not count as covering the target |
-| `menupick <pid> <row> <item>` | hover a submenu row and click one of its items with the pointer |
-| `ax <pid> <dump\|texts\|menuitems\|pressextra\|cancelmenu\|get\|press\|pressx\|focus\|set>` | read or press through accessibility, with no pointer |
-| `announce <pid>` | log every `AXAnnouncementRequested` the app posts |
-| `tap session` / `tap pid <pid>` | listen-only event taps, which is what attributes a dismissal to a real click rather than a timeout |
-| `flip <x> <y> <w> <h>` | a click-through helper window that changes text and colour on `SIGUSR1`, so sensing has something to see |
-| `journal <db> <query>` | a named read-only query (`journal - queries` lists them), including `capture-race` |
-| `shot window <id>` / `shot region <x> <y> <w> <h>` | capture a window or a screen region |
 | `permissions` | whether this shell has Accessibility and Screen Recording |
+| `ready <pid>` | print `READY` once the app's menu bar extra exists |
+| `windows <pid>` | the on-screen windows of a pid, with ids and frames |
+| `toast <pid>` | the window id of the suggestion toast, or nothing |
+| `bar [pid]` | menu bar extras and menu titles with frames, the gaps between neighbours, and a point on the bar that is on no item |
+| `front` | the frontmost app and its pid |
+| `activate <pid>` | bring a pid to the front |
+| `ax <pid> <dump\|texts\|menuitems\|pressextra\|cancelmenu\|get\|press\|pressx\|focus\|set> [role] [match] [value]` | read or press elements through accessibility, with no pointer; `--scope` narrows the search |
+| `click <item <pid> \| at <x> <y> \| window <pid> <x> <y>>` | post a real HID click, aborting if the pointer is moved or the target is not what was asked for, and log the accessibility element and topmost window under it; a window that lets clicks through, such as a window manager's full-screen overlay, does not count as covering the target; `--shot <out.png>` captures the result |
+| `raise <pid> [title]` | bring one of a pid's windows to the front, which journals a window switch |
+| `close <pid> <title>` | close one of a pid's windows through its close button |
+| `menupick <pid> <row> <item>` | hover a submenu row and click one of its items with the pointer |
+| `tap <session\|pid> [pid]` | listen-only event taps (`tap session` for every mouse-down, `tap pid <pid>` for one app), which is what attributes a dismissal to a real click rather than a timeout |
+| `announce <pid>` | log every `AXAnnouncementRequested` the app posts |
+| `flip <x> <y> <w> <h>` | a click-through helper window that changes text and colour on `SIGUSR1`, so sensing has something to see |
+| `journal <db> <query>` | a named read-only query over a journal (`journal - queries` lists them), including `capture-race` |
+| `key <keycode>` | post a key press, with `--cmd` and `--shift` as modifiers |
+| `shot <window <id> \| region <x> <y> <w> <h>> <out.png>` | capture a window by id or a screen region |
 
 The maths and parsing behind them are a plain library (`Sources/AthinaE2E`)
 with unit tests: the journal queries, the menu bar geometry, the capture-race
