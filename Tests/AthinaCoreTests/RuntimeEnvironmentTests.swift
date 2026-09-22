@@ -110,11 +110,11 @@ private func unsandboxed(in root: URL) -> RuntimeEnvironment {
         let inBundle = bundle.appendingPathComponent("Contents/Resources/ReplayFixtures", isDirectory: true)
         #expect(environment.refusal(reading: inBundle, for: "--replay") == nil)
         let sealed = try #require(environment.refusal(writing: inBundle, for: "--record"))
-        #expect(sealed == "--record names \(inBundle.path), which a sandboxed Athina cannot write: it can write only inside its container, \(container.path)")
+        #expect(sealed == "--record: a sandboxed Athina can write only inside its container, not \(inBundle.path)")
 
         let outside = root.appendingPathComponent("elsewhere/settings.json")
         let read = try #require(environment.refusal(reading: outside, for: "--settings"))
-        #expect(read == "--settings names \(outside.path), which a sandboxed Athina cannot read: it can read only inside its container, \(container.path), and its own bundle, \(bundle.path)")
+        #expect(read == "--settings: a sandboxed Athina can read only inside its container and its own bundle, not \(outside.path)")
         #expect(environment.refusal(writing: outside, for: "--snapshot") != nil)
     }
 
@@ -159,7 +159,7 @@ private func unsandboxed(in root: URL) -> RuntimeEnvironment {
             Issue.record("expected a refusal, got \(mode)")
             return
         }
-        #expect(reason.hasPrefix("--replay names \(outside.path), which a sandboxed Athina cannot read"))
+        #expect(reason == "--replay: a sandboxed Athina can read only inside its container and its own bundle, not \(outside.path)")
         #expect(mode.isOffline)
 
         let bundled = try #require(environment.bundleURL).appendingPathComponent("Contents/Resources/ReplayFixtures", isDirectory: true)
@@ -185,7 +185,7 @@ private func unsandboxed(in root: URL) -> RuntimeEnvironment {
             Issue.record("expected a refusal, got \(refused)")
             return
         }
-        #expect(reason.hasPrefix("--record names \(outside.path), which a sandboxed Athina cannot write"))
+        #expect(reason == "--record: a sandboxed Athina can write only inside its container, not \(outside.path)")
 
         // The default, and a name taken inside it, are in the container.
         #expect(ModelClientMode(arguments: ["Athina", "--record"], defaultRecordingDirectory: recordings, environment: environment) == .record(directory: recordings))
@@ -219,7 +219,7 @@ private func unsandboxed(in root: URL) -> RuntimeEnvironment {
         )
         #expect(!files.settingsGiven)
         #expect(files.settingsSource == SettingsStore.defaultURL(in: support))
-        let reason = "--settings names \(outside.path), which a sandboxed Athina cannot read: it can read only inside its container, \(container.path), and its own bundle, \(try #require(environment.bundleURL).path)"
+        let reason = "--settings: a sandboxed Athina can read only inside its container and its own bundle, not \(outside.path)"
         #expect(files.refusals == [reason])
         _ = files.loadSettings(supportDirectory: support)
         guard case .refusedToStart(let refusal) = files.claim(clientMode: replay, supportDirectory: support) else {
@@ -266,7 +266,7 @@ private func unsandboxed(in root: URL) -> RuntimeEnvironment {
         let shells = root.appendingPathComponent("T", isDirectory: true)
         try FileManager.default.createDirectory(at: shells, withIntermediateDirectories: true)
         let outside = shells.appendingPathComponent("athina-clock-abcd1234")
-        #expect(throws: ClockRemote.Refusal(reason: "the clock request names \(outside.path), which a sandboxed Athina cannot write: it can write only inside its container, \(container.path)")) {
+        #expect(throws: ClockRemote.Refusal(reason: "the clock request: a sandboxed Athina can write only inside its container, not \(outside.path)")) {
             try ClockRemote.answer(reply, at: outside, temporaryDirectory: shells, supportDirectory: support, environment: environment)
         }
         #expect(!FileManager.default.fileExists(atPath: outside.path))

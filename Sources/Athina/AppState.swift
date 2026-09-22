@@ -1375,7 +1375,7 @@ final class AppState {
             if let reason = recordingUnavailableReason { return "Recording unavailable: \(reason)" }
             return "Recording model calls to \(Formatting.path(directory))"
         case .invalid(let reason):
-            return "Replay unavailable: \(reason)"
+            return "Calls refused: \(reason)"
         case .replay:
             guard let summary = replaySummary else { return "Replay mode" }
             if let reason = summary.unavailableReason { return "Replay unavailable: \(reason)" }

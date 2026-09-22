@@ -80,11 +80,14 @@ public struct RuntimeEnvironment: Equatable, Sendable {
         refusal(url, for: flag, verb: "write", within: [containerURL.map { ("its container", $0) }])
     }
 
+    /// The reason comes first and the path last: the menu cuts a long line in
+    /// the middle and the debug panel after a few lines, so a path in front
+    /// would push the reason out of sight.
     private func refusal(_ url: URL, for flag: String, verb: String, within places: [(String, URL)?]) -> String? {
         guard isSandboxed else { return nil }
         let places = places.compactMap { $0 }
         guard !places.contains(where: { AppPaths.isAt(url, orInside: $0.1) }) else { return nil }
-        let reachable = places.isEmpty ? "its container" : places.map { "\($0.0), \($0.1.path)" }.joined(separator: ", and ")
-        return "\(flag) names \(url.path), which a sandboxed Athina cannot \(verb): it can \(verb) only inside \(reachable)"
+        let reachable = places.isEmpty ? "its container" : places.map(\.0).joined(separator: " and ")
+        return "\(flag): a sandboxed Athina can \(verb) only inside \(reachable), not \(url.path)"
     }
 }
