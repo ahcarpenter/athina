@@ -423,6 +423,17 @@ private final class Phases: @unchecked Sendable {
         #expect(!FileManager.default.fileExists(atPath: store.partialURL(for: model).path))
     }
 
+    /// A connection that fails says which host and why, in a sentence that
+    /// reads on its own.
+    @Test func aFailedConnectionNamesTheHostAndTheReason() {
+        typealias T = URLSessionModelTransport.TransportError
+        #expect(T.detail(of: NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM))) == "operation not permitted")
+        let offline = T.detail(of: URLError(.notConnectedToInternet))
+        #expect(!offline.isEmpty && !offline.hasSuffix(".") && offline.first?.isLowercase == true)
+        #expect(T.connection(host: "huggingface.co", detail: "operation not permitted").description == "This Mac could not reach huggingface.co: operation not permitted.")
+        #expect(T.status(404).description.hasPrefix("The server answered 404"))
+    }
+
     @Test func progressIsReportedAtMostOncePerPercent() {
         let throttle = ProgressThrottle()
         #expect(throttle.advances(to: 0))

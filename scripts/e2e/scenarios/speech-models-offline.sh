@@ -60,7 +60,7 @@ scenario_run() {
 	done
 	general_state "whisper-failed"
 	check "the download fails" "yes" "$(has_text whisper-failed-texts.txt 'value="Failed"')"
-	check "the row says why" "yes" "$(has_text whisper-failed-texts.txt "This Mac could not reach huggingface.co")"
+	check "the row says why" "yes" "$(has_text whisper-failed-texts.txt "This Mac could not reach huggingface.co: ")"
 	check "the row offers Try Again" "yes" "$(grep -qF 'desc="Try Again OpenAI Whisper Base, English"' "$RUN_DIR/whisper-failed-tree.txt" && echo yes || echo no)"
 	check "nothing is left on disk" "0" "$(find "$models" -type f 2>/dev/null | wc -l | tr -d ' ')"
 	menu_texts "menu-failed"
@@ -69,7 +69,7 @@ scenario_run() {
 	press_named AXButton "Try Again OpenAI Whisper Base, English" || return 1
 	sleep 2
 	general_state "whisper-failed-again"
-	check "trying again fails the same way while offline" "yes" "$(has_text whisper-failed-again-texts.txt "This Mac could not reach huggingface.co")"
+	check "trying again fails the same way while offline" "yes" "$(has_text whisper-failed-again-texts.txt "This Mac could not reach huggingface.co: ")"
 
 	pick_speech_backend "Apple SpeechAnalyzer" speechAnalyzer || return 1
 	general_state "analyzer-built-in"

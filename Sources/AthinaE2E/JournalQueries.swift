@@ -33,13 +33,14 @@ public enum JournalQueries {
 
     public static let suggestions = JournalQuery(
         name: "suggestions",
-        summary: "every suggestion with its feedback and when the feedback landed",
-        columns: ["id", "at", "app", "category", "title", "feedback", "feedback_at", "callout"],
+        summary: "every suggestion with its feedback, when the feedback landed, and who heard it when it was said aloud",
+        columns: ["id", "at", "app", "category", "title", "feedback", "feedback_at", "callout", "heard_by"],
         sql: """
         select id, \(localTime("timestamp")) as at, app_name as app, category, title,
                \(nullable("feedback", as: "feedback")),
                \(nullable(localTime("feedback_at"), as: "feedback_at")),
-               callout_shown as callout
+               callout_shown as callout,
+               \(nullable("feedback_heard_by", as: "heard_by"))
         from suggestions order by id
         """
     )
@@ -57,11 +58,12 @@ public enum JournalQueries {
 
     public static let followUps = JournalQuery(
         name: "follow-ups",
-        summary: "every spoken or typed follow-up with its answer",
-        columns: ["id", "suggestion_id", "at", "question", "answer", "error"],
+        summary: "every spoken or typed follow-up with its answer and the recognizer and model that heard it",
+        columns: ["id", "suggestion_id", "at", "question", "answer", "error", "heard_by", "heard_by_model"],
         sql: """
         select id, suggestion_id, \(localTime("timestamp")) as at, question,
-               \(nullable("answer", as: "answer")), \(nullable("error", as: "error"))
+               \(nullable("answer", as: "answer")), \(nullable("error", as: "error")),
+               \(nullable("heard_by", as: "heard_by")), \(nullable("heard_by_model", as: "heard_by_model"))
         from follow_ups order by id
         """
     )
