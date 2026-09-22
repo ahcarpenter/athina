@@ -177,7 +177,7 @@ screen_lock_acquire() {
 	exec 9>>"$SCREEN_LOCK"
 	if ! /usr/bin/lockf -t 0 "$SCREEN_LOCK_FD" 2>/dev/null; then
 		screen_lock_say "waiting for the screen lock $SCREEN_LOCK, $(screen_lock_holder_line "$(screen_lock_openers)")"
-		local status=0 waiter
+		local status=0 waiter started=$SECONDS
 		# In the background with a trap, so a run stopped while it waits takes
 		# its lockf down with it rather than leave one queued for the lock.
 		if [ -n "$timeout" ]; then
@@ -201,6 +201,7 @@ screen_lock_acquire() {
 			fi
 			return "$status"
 		fi
+		screen_lock_say "took the screen lock after $((SECONDS - started))s"
 	fi
 	SCREEN_LOCK_STATE=1
 	SCREEN_LOCK_OWNER="$$"

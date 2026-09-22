@@ -137,6 +137,7 @@ import Testing
         let waiting = try #require(waiter.output.split(separator: "\n").first { $0.contains("waiting for the screen lock") })
         #expect(waiting.contains("held by /checkouts/one running \"run menubar-keyboard\" (pid \(holder.processIdentifier)) since "))
         #expect(waiter.output.split(separator: "\n").filter { $0.contains("waiting") }.count == 1)
+        #expect(waiter.output.contains("took the screen lock after "))
     }
 
     @Test func aTimeoutGivesUpWithTheHolderNamed() throws {
