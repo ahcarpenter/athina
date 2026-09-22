@@ -188,6 +188,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             exit(2)
         }
         if let directory = Snapshots.requestedDirectory {
+            // A sandboxed build writes only inside its container.
+            if let refusal = RuntimeEnvironment.current.refusal(writing: directory, for: Snapshots.flag) {
+                FileHandle.standardError.write(Data("snapshot failed: \(refusal)\n".utf8))
+                exit(1)
+            }
             Task { @MainActor in
                 do {
                     try await Snapshots.render(to: directory)

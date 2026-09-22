@@ -238,9 +238,10 @@ public enum ClockRemote {
 
     /// Answers the request at the path it named, and only where a request may
     /// make a replay write: a file that does not exist yet, inside the system
-    /// temporary directory, never inside the live data folder. Does nothing
-    /// when the request named none, and throws rather than writing otherwise,
-    /// which the caller logs.
+    /// temporary directory, never inside the live data folder, and inside the
+    /// container when the replay is sandboxed. Does nothing when the request
+    /// named none, and throws rather than writing otherwise, which the caller
+    /// logs.
     ///
     /// Nothing authenticates this channel. The notification name is a
     /// constant and a replay's pid is in `ps`, so any process in the login
@@ -263,10 +264,16 @@ public enum ClockRemote {
         _ reply: Reply,
         at url: URL?,
         temporaryDirectory: URL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true),
-        supportDirectory: URL = AppPaths.supportDirectory()
+        supportDirectory: URL = AppPaths.supportDirectory(),
+        environment: RuntimeEnvironment = .current
     ) throws {
         guard let url else { return }
         let target = URL(fileURLWithPath: AppPaths.resolvedPath(url))
+        // A sandboxed replay's temporary directory is inside its container,
+        // so the check below would refuse this too, but without saying why.
+        if let refusal = environment.refusal(writing: target, for: "the clock request") {
+            throw Refusal(reason: refusal)
+        }
         guard AppPaths.isAt(target, orInside: temporaryDirectory),
               !AppPaths.isAt(target, orInside: supportDirectory) else {
             throw Refusal(reason: "\(target.path) is not somewhere a clock request may be answered: it must be inside \(temporaryDirectory.path) and outside \(supportDirectory.path)")

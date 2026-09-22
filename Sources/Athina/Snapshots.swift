@@ -8,9 +8,11 @@ import SwiftUI
 /// so it needs no Screen Recording permission and works in CI.
 @MainActor
 enum Snapshots {
+    static let flag = "--snapshot"
+
     static var requestedDirectory: URL? {
         let arguments = CommandLine.arguments
-        guard let index = arguments.firstIndex(of: "--snapshot"), index + 1 < arguments.count else { return nil }
+        guard let index = arguments.firstIndex(of: flag), index + 1 < arguments.count else { return nil }
         return URL(fileURLWithPath: arguments[index + 1], isDirectory: true)
     }
 

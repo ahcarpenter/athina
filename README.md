@@ -122,6 +122,25 @@ tccutil reset Accessibility com.ahcarpenter.athina
 tccutil reset ScreenCapture com.ahcarpenter.athina
 ```
 
+### A sandboxed build
+
+The same binary can run in the App Sandbox, which a Mac App Store edition
+needs; no such build is made yet. At launch `RuntimeEnvironment` reads the
+process's own `com.apple.security.app-sandbox` entitlement, which the direct
+and development builds carry set to false, so they run exactly as described
+everywhere else in this README. A sandboxed run differs in three ways:
+
+- Its files are in its container, its preferences domain and its keychain
+  service are its own bundle identifier rather than `com.ahcarpenter.athina`
+  (`AppPaths`), so it never shares preferences or a key with the direct build.
+- It moves nothing from Mentor, neither files, preferences nor the API key
+  (see Coming from Mentor), since all three are out of its reach, and says so
+  once in the log.
+- `--replay` and `--settings` may name only a path inside its container or its
+  own bundle, and `--record`, `--snapshot` and a clock request's reply
+  (`scripts/advance-clock.sh`) only one inside its container. Anything else is
+  refused with one line naming the path and where it could have been.
+
 ## Iterating without the network
 
 Working on Athina needs no live call to Anthropic to build, test, or verify.
@@ -711,7 +730,8 @@ Sources/AthinaCore            library, fully testable
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
-                              and ClockRemote (moving a replay's clock from a script)
+                              and ClockRemote (moving a replay's clock from a script), RuntimeEnvironment
+                              (whether the process is sandboxed, and which app bundle it runs from)
 Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swift cannot make (it is variadic),
                               so `DataMigration` can read the old journal without altering it
 Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
