@@ -136,7 +136,7 @@ change makes it stale, and the separate live check of the models' answers.
 
 ```sh
 make run-replay                                   # the committed fixtures
-make run-replay REPLAY_DIR=~/Library/Application\ Support/mentor/recordings
+make run-replay REPLAY_DIR=~/Library/Application\ Support/athina/recordings
 make run-replay ALLOW_STALE=1                     # also serve stale fixtures, see below
 make run-replay TIME_SCALE=60                     # on a clock 60 times real time, see A faster clock
 make run-replay SETTINGS=check.json LANE=a         # its own settings, in a lane of its own, see Replays side by side
