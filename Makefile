@@ -22,10 +22,10 @@ RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 build:
 	scripts/bundle.sh $(CONFIG)
 
-## Rebuild the app icon from Resources/Mark/AthinaMark.svg and the menu bar mark
-## from Resources/Mark/AthinaOwl.svg. Its outputs are committed, so a plain
-## `make build` never needs this; run it after changing either master or the
-## variant set (see scripts/mark-assets.swift).
+## Rebuild the app icon from Resources/Mark/AthinaMark.svg, the menu bar mark
+## from Resources/Mark/AthinaOwl.svg, and the README's pictures from both. Its
+## outputs are committed, so a plain `make build` never needs this; run it after
+## changing either master or the variant set (see scripts/mark-assets.swift).
 mark:
 	swift scripts/mark-assets.swift .
 
