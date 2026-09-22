@@ -42,9 +42,9 @@ work:
   with them; the owl's eyes in your menu bar tell you at a glance whether
   Athina is watching, resting, paused, or looking away from an app you
   excluded.
-- **Quiet and discreet.** Athena sent away the crow for carrying tales and kept
-  the owl; the owl of Athina stays silent unless something is worth saying,
-  does not repeat itself, and keeps its journal on your Mac.
+- **Quiet and discreet.** Athena barred the crow for carrying tales, while the
+  owl stayed hers; the owl of Athina stays silent unless something is worth
+  saying, does not repeat itself, and keeps its journal on your Mac.
 - **Close at hand, and it listens.** The owl was never far from Athena; hold a
   key and speak to answer the owl of Athina or ask it a follow-up, and it
   learns from your answers.
@@ -65,11 +65,12 @@ symbol of wisdom itself. The tale that her owl sat on her shoulder, on her
 blind side, and showed her the truths she could not see is later folklore
 rather than ancient myth, but it says the same thing.
 
-The owl was also the Athenians' own, stamped on their silver coins, and an
-owl in flight before a battle was taken as a sign of her favor: Plutarch tells
-of one that perched on Themistocles' ship before Salamis, and Aristophanes of
-one that flew over the Athenian army before it fought. In Ovid's retelling the crow, once the goddess's own bird, tells how it
-was sent away for carrying tales and the owl was put in its place.
+To the Athenians an owl in flight before a battle was a sign of the goddess's
+favor: Plutarch tells of one that perched on Themistocles' ship before
+Salamis, and Aristophanes of one that flew over the Athenian army before it
+fought. The crow fared otherwise: in Callimachus' *Hecale* it tells how Athena
+barred its kind from the Acropolis for bringing her bad news, while the owl
+stayed hers.
 
 Athina carries the owl for all of this. It sits at the top of your screen,
 quietly watching, so that when something in your work could go better, it can
