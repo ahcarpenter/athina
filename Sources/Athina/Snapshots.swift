@@ -63,7 +63,7 @@ enum Snapshots {
             // The side-effect suggestion, so the goal it was judged against shows.
             ("history", CGSize(width: 860, height: 520), AnyView(HistoryView(initialSelection: 5)), state),
             // A suggestion talked back to, so each question says who heard it.
-            ("history-talked-back", CGSize(width: 860, height: 620), AnyView(HistoryView(initialSelection: 3)), state),
+            ("history-talked-back", CGSize(width: 860, height: 820), AnyView(HistoryView(initialSelection: 3)), state),
             ("history-empty", CGSize(width: 860, height: 520), AnyView(HistoryView()), empty),
             ("toast", CGSize(width: ToastController.panelWidth, height: 180), AnyView(SampleToast(expanded: false)), state),
             ("toast-expanded", CGSize(width: ToastController.panelWidth, height: 460), AnyView(SampleToast(expanded: true)), state),
