@@ -16,6 +16,9 @@ public actor RecordingClaudeClient: ClaudeClient {
     private let prices: PriceTable
     /// Stamps each recording and times its call; a recording always runs on real time.
     private let clock: any AthinaClock
+    /// The last call's stamp. Each call is stamped when it starts, in a later
+    /// millisecond than this, so the files sort in the order the calls were made.
+    private var lastStamp: Date?
     /// The files written so far this run, oldest first.
     public private(set) var written: [URL] = []
 
@@ -27,7 +30,8 @@ public actor RecordingClaudeClient: ClaudeClient {
     }
 
     public func send(_ request: MessagesRequest, call: CallIdentity, apiKey: String, timeout: TimeInterval) async throws -> MessagesResponse {
-        let started = clock.date
+        let started = CallFixtureFiles.recordingStamp(at: clock.date, after: lastStamp)
+        lastStamp = started
         var thrown: (any Error)?
         var result: Result<MessagesResponse, ClaudeClientError> = .failure(.transport("the call did not run"))
         let elapsed = await clock.measure {
