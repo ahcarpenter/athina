@@ -281,8 +281,7 @@ SB
 	fi
 	local appearance=()
 	case "$APPEARANCE" in
-	dark) appearance=(-AppleInterfaceStyle Dark) ;;
-	light) appearance=(-NSRequiresAquaSystemAppearance YES) ;;
+	light | dark) appearance=(--appearance "$APPEARANCE") ;;
 	"") ;;
 	*) die "--appearance is light or dark, not $APPEARANCE" ;;
 	esac

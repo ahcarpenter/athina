@@ -62,6 +62,8 @@ enum Snapshots {
             ("settings-advanced-on", CGSize(width: SettingsView.paneWidth, height: 180), AnyView(AdvancedSettings().formStyle(.grouped)), AppState.sample(showDebugPanel: true)),
             // The side-effect suggestion, so the goal it was judged against shows.
             ("history", CGSize(width: 860, height: 520), AnyView(HistoryView(initialSelection: 5)), state),
+            // A suggestion talked back to, so each question says who heard it.
+            ("history-talked-back", CGSize(width: 860, height: 620), AnyView(HistoryView(initialSelection: 3)), state),
             ("history-empty", CGSize(width: 860, height: 520), AnyView(HistoryView()), empty),
             ("toast", CGSize(width: ToastController.panelWidth, height: 180), AnyView(SampleToast(expanded: false)), state),
             ("toast-expanded", CGSize(width: ToastController.panelWidth, height: 460), AnyView(SampleToast(expanded: true)), state),
@@ -797,7 +799,8 @@ enum SampleSuggestions {
                 body: "You have run the full test suite four times while editing CaptureSchedulerTests. swift test --filter CaptureSchedulerTests runs just that suite in a few seconds.",
                 explanation: "SwiftPM accepts a regular expression after --filter and matches it against \"Suite.test\" names, so `swift test --filter CaptureSchedulerTests` runs every test in that suite and `swift test --filter CaptureSchedulerTests/floorFires` runs one test.\n\nWith Swift Testing you can also mark one test with `.tags` and filter on the tag. The full run is still worth doing before you commit.",
                 confidence: 0.9, observationID: 104, model: "claude-fable-5-1", promptVersion: MentorPrompts.version,
-                feedback: .tellMeMore, feedbackAt: now.addingTimeInterval(-1490)
+                feedback: .tellMeMore, feedbackAt: now.addingTimeInterval(-1490),
+                feedbackHeardBy: .heard(backend: .speechAnalyzer, model: "SpeechTranscriber en_US")
             ),
             Suggestion(
                 id: 2, timestamp: now.addingTimeInterval(-5400), bundleID: "com.apple.Safari", appName: "Safari",
@@ -829,7 +832,8 @@ enum SampleSuggestions {
                     id: 7, suggestionID: 4, timestamp: now.addingTimeInterval(-20),
                     question: "does that work with tags as well",
                     answer: "Yes. Tag the tests you care about with a Tag you declare once, then run swift test --filter with the tag name in the same way; the suite name filter and the tag filter both narrow the run to seconds.",
-                    model: "claude-fable-5-1", promptVersion: MentorPrompts.version
+                    model: "claude-fable-5-1", promptVersion: MentorPrompts.version,
+                    heardBy: .heard(backend: .whisper, model: SpeechModelCatalog.whisperBaseEnglish.id)
                 ),
             ]
         case 3:
@@ -838,13 +842,15 @@ enum SampleSuggestions {
                     id: 5, suggestionID: 3, timestamp: now.addingTimeInterval(-1480),
                     question: "which file is that in",
                     answer: "The four full runs were in the terminal window titled zsh - mentor; the suite you were editing is Tests/AthinaCoreTests/CaptureSchedulerTests.swift, so swift test --filter CaptureSchedulerTests is the command.",
-                    model: "claude-fable-5-1", promptVersion: MentorPrompts.version
+                    model: "claude-fable-5-1", promptVersion: MentorPrompts.version,
+                    heardBy: .heard(backend: .speechAnalyzer, model: "SpeechTranscriber en_US")
                 ),
                 FollowUp(
                     id: 6, suggestionID: 3, timestamp: now.addingTimeInterval(-1470),
                     question: "and can I run just one test",
                     answer: nil, error: "spend cap reached until 15:00",
-                    model: "claude-fable-5-1", promptVersion: MentorPrompts.version
+                    model: "claude-fable-5-1", promptVersion: MentorPrompts.version,
+                    heardBy: .typed
                 ),
             ]
         default:

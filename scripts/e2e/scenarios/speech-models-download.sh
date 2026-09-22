@@ -28,7 +28,7 @@ file_size() { stat -f %z "$1" 2>/dev/null || echo 0; }
 
 # Presses Download on a model's row and waits for the checked file, keeping a
 # picture of the row part way through the download and while it is checked,
-# as accessibility reads them: a percentage between 20 and 80, then Checking.
+# as accessibility reads them: a percentage between 20 and 79, then Checking.
 # The row is scrolled into view first ($2 is the scroll position): a form
 # draws, and offers accessibility, only the rows on screen. Prints the
 # seconds it took.
@@ -42,7 +42,9 @@ download_model() {
 	for i in $(seq 1 2400); do
 		[ -f "$models/$path.verified" ] && break
 		"$DRIVE" ax "$ATHINA_PID" texts --scope General >"$texts" 2>/dev/null || true
-		if [ "$downloading" = 0 ] && grep -qE 'value="[2-7][0-9]%"' "$texts"; then
+		# The row's percentage, not a text field that shows one, such as
+		# Minimum confidence.
+		if [ "$downloading" = 0 ] && grep -qE '^AXStaticText .*value="[2-7][0-9]%"' "$texts"; then
 			general_state "$tag-downloading"
 			downloading=1
 		fi

@@ -145,8 +145,10 @@ enum WindowID {
 /// `--open settings:models` opens Settings on that pane (`SettingsPane`), `--snapshot <dir>`
 /// is handled by `Snapshots`, `--replay <dir>`, `--allow-stale-fixtures`, and
 /// `--record [<dir>]` choose where model calls go (`ModelClientMode`), and
-/// `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock (`ClockMode`), and
-/// `--settings <path>` chooses the settings a replay starts from (`LaunchFiles`).
+/// `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock (`ClockMode`),
+/// `--settings <path>` chooses the settings a replay starts from (`LaunchFiles`), and
+/// `--appearance light|dark` draws every window in that appearance whatever the Mac
+/// shows, for screenshots of both.
 /// Where a replay keeps its files is never an argument: it makes a directory of
 /// its own and says which on the line it writes when it starts.
 enum LaunchArguments {
@@ -165,12 +167,26 @@ enum LaunchArguments {
         guard let argument = openArgument, argument.hasPrefix("settings:") else { return nil }
         return SettingsPane(rawValue: String(argument.dropFirst("settings:".count)))
     }
+
+    /// The appearance `--appearance light|dark` asks for; nil follows the Mac.
+    static var appearance: NSAppearance? {
+        let arguments = CommandLine.arguments
+        guard let index = arguments.firstIndex(of: "--appearance"), index + 1 < arguments.count else { return nil }
+        switch arguments[index + 1] {
+        case "light": return NSAppearance(named: .aqua)
+        case "dark": return NSAppearance(named: .darkAqua)
+        default: return nil
+        }
+    }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Chosen before any scene is built, so the Settings window opens on it.
         LaunchArguments.settingsPane?.select()
+        if let appearance = LaunchArguments.appearance {
+            NSApp.appearance = appearance
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

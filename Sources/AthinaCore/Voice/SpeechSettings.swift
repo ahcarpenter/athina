@@ -150,3 +150,35 @@ public enum SpeechLanguage {
     /// The two regions macOS itself names by their short form in its language lists.
     static let shortRegionNames = ["US": "US", "GB": "UK"]
 }
+
+/// Which of a transcriber's locales should hear the Mac's language. Apple's
+/// own equivalence (`supportedLocale(equivalentTo:)`) maps a language to a
+/// region of its choosing, English in France to South Africa, so it is the
+/// last resort: first the Mac's own locale, then the language the person
+/// prefers, then the language's usual region (English to the US, French to
+/// France), then any region of the same language.
+public enum SpeechLocaleChoice {
+    /// Nil when `supported` has nothing in the language at all.
+    public static func best(for current: Locale, preferredLanguage: String?, supported: [Locale]) -> Locale? {
+        let byKey = Dictionary(supported.map { (key($0), $0) }, uniquingKeysWith: { first, _ in first })
+        var candidates = [key(current)]
+        if let preferredLanguage { candidates.append(key(Locale(identifier: preferredLanguage))) }
+        if let language = current.language.languageCode?.identifier {
+            let usual = Locale.Language(identifier: language).maximalIdentifier
+            candidates.append(key(Locale(identifier: usual)))
+        }
+        for candidate in candidates {
+            if let match = byKey[candidate] { return match }
+        }
+        guard let language = current.language.languageCode?.identifier else { return nil }
+        return supported
+            .filter { $0.language.languageCode?.identifier == language }
+            .min { $0.identifier < $1.identifier }
+    }
+
+    /// Language and region, which is what tells two locales apart here.
+    static func key(_ locale: Locale) -> String {
+        let language = locale.language.languageCode?.identifier ?? locale.identifier
+        return [language, locale.region?.identifier].compactMap { $0 }.joined(separator: "_")
+    }
+}

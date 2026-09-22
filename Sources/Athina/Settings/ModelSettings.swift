@@ -165,7 +165,7 @@ private struct APIKeySection: View {
         } header: {
             Text("Anthropic")
         } footer: {
-            Text("The key stays in your login keychain and is never written to the journal, the logs, or the debug panel. Athina connects only to api.anthropic.com, and only while a key is saved.")
+            Text("The key stays in your login keychain and is never written to the journal, the logs, or the debug panel. The mentor's model calls go only to api.anthropic.com, and only while a key is saved.")
         }
     }
 

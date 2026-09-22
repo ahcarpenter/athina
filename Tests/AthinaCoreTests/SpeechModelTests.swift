@@ -113,6 +113,33 @@ import Testing
         #expect(TranscriptOrigin.heard(backend: .parakeet, model: "").label == "NVIDIA Parakeet")
     }
 
+    /// The locales SpeechTranscriber listed on the owner's Mac on 2026-09-22.
+    static let transcriberLocales = [
+        "de_AT", "de_CH", "de_DE", "en_AU", "en_CA", "en_GB", "en_IE", "en_IN", "en_NZ", "en_SG", "en_US", "en_ZA",
+        "es_ES", "es_MX", "fr_CA", "fr_FR", "ja_JP", "pt_BR", "zh_CN",
+    ].map { Locale(identifier: $0) }
+
+    @Test func theMacsOwnLocaleWinsWhenItIsThere() {
+        let choice = SpeechLocaleChoice.best(for: Locale(identifier: "en_GB"), preferredLanguage: "en-US", supported: Self.transcriberLocales)
+        #expect(choice?.identifier == "en_GB")
+    }
+
+    /// English in a region with no English model of its own is heard as the
+    /// English the person prefers, then as the language's usual English,
+    /// never a region picked at random.
+    @Test func aLanguageWithoutItsRegionFallsBackSensibly() {
+        let france = Locale(identifier: "en_FR")
+        #expect(SpeechLocaleChoice.best(for: france, preferredLanguage: "en-GB", supported: Self.transcriberLocales)?.identifier == "en_GB")
+        #expect(SpeechLocaleChoice.best(for: france, preferredLanguage: nil, supported: Self.transcriberLocales)?.identifier == "en_US")
+        #expect(SpeechLocaleChoice.best(for: Locale(identifier: "fr_BE"), preferredLanguage: nil, supported: Self.transcriberLocales)?.identifier == "fr_FR")
+        #expect(SpeechLocaleChoice.best(for: Locale(identifier: "pt_PT"), preferredLanguage: nil, supported: Self.transcriberLocales)?.identifier == "pt_BR")
+    }
+
+    @Test func aLanguageNoneOfTheLocalesSpeaksHasNoChoice() {
+        #expect(SpeechLocaleChoice.best(for: Locale(identifier: "cy_GB"), preferredLanguage: "cy-GB", supported: Self.transcriberLocales) == nil)
+        #expect(SpeechLocaleChoice.best(for: Locale(identifier: "nl_NL"), preferredLanguage: nil, supported: []) == nil)
+    }
+
     @Test func languagesAreNamedInEnglish() {
         #expect(SpeechLanguage.name(of: "en_US") == "English (US)")
         #expect(SpeechLanguage.name(of: "en_GB") == "English (UK)")

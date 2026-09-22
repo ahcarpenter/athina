@@ -85,8 +85,10 @@ started, and the debug panel from Settings > Advanced once it is turned on
 there. `--record [<dir>]` chooses where model calls go, `--time-scale <n>` and
 `--advance-clock <interval>` set a replay's clock, and `--settings <path>`
 chooses the settings a replay starts from; see Iterating without the network.
-Where a replay keeps its own files is not an argument: it makes a directory for
-itself and says which on the line it writes as it starts.
+`--appearance light` or `--appearance dark` draws every window in that
+appearance whatever the Mac shows, for screenshots of both. Where a replay
+keeps its own files is not an argument: it makes a directory for itself and
+says which on the line it writes as it starts.
 
 ### Setup: the Anthropic API key
 

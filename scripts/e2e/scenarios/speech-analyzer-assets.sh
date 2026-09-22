@@ -10,7 +10,9 @@
 # does not stop it, and it keeps them, shared with other apps: nothing here
 # deletes them, and a later run finds them installed and says so.
 SCENARIO_SUMMARY="SpeechAnalyzer's assets for a language macOS has not installed download through Settings with the system's progress, and then read as built in"
-SCENARIO_ARGS=(--open settings:general -AppleLocale fr_FR)
+# Both the locale and the language list: a French region alone, with English
+# still the first language, is English in France.
+SCENARIO_ARGS=(--open settings:general -AppleLanguages "(fr-FR)" -AppleLocale fr_FR)
 
 has_text() {
 	grep -qF "$2" "$RUN_DIR/$1" && echo yes || echo no
