@@ -73,8 +73,8 @@ the switch there is on (see Debug panel). Keep the `--replay`: a bare `open -n`
 goes round `scripts/launch.sh`, so nothing stops it starting a second live
 Athina on the live journal, the live settings and the same API bill. The live
 app's own windows open from its menu bar item, on the copy `make run` already
-started, and the debug panel from Settings > Advanced once it is turned on
-there. `--record [<dir>]` chooses where model calls go, `--time-scale <n>` and
+started, the debug panel among them, or from Settings > Advanced, once it is
+turned on there. `--record [<dir>]` chooses where model calls go, `--time-scale <n>` and
 `--advance-clock <interval>` set a replay's clock, and `--settings <path>`
 chooses the settings a replay starts from; see Iterating without the network.
 Where a replay keeps its own files is not an argument: it makes a directory for
@@ -505,7 +505,7 @@ never wait.
 | `menubar-mark` | Athina's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
 | `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
-| `debug-panel-access` | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed; turned on, that button opens the panel (the menu still offers none), and turned off again, the panel closes |
+| `debug-panel-access` | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed; turned on, the menu gains Debug Panel in a group of its own after Settings…, and it and the button each open the panel; turned off again, the panel closes and the command leaves the menu |
 | `settings-pane-links` | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link rather than Markdown, and a real click on it changes the Settings window's pane in place rather than handing the link to the system |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
@@ -1275,17 +1275,21 @@ counted (see Iterating without the network).
 
 The debug panel is a builder's window, so it is off until the person turns it
 on: Settings > Advanced > **Enable debug panel**, then **Open Debug Panel**
-beside it. Every install starts with the switch off, an install from before it
-existed included, and turning it off closes the panel. The menu bar menu has no
-command for it and no other window links to it, so while the switch is off
-nothing in the app opens it. Which launches may open it at launch is one pure
-rule, `DebugPanelAccess`, under test. The builder's paths reach it without
-changing the owner's setting:
+beside it. While the switch is on, the menu bar menu also offers a **Debug
+Panel** command, in a group of its own after Settings…, the way Safari's
+Advanced switch adds its Develop menu; it appears and goes the moment the switch
+changes, with no relaunch. Every install starts with the switch off, an install
+from before it existed included, and turning it off closes the panel and takes
+the command out of the menu. No other window links to it, so while the switch
+is off nothing in the app opens it. Which launches may open it at launch, and
+whether the menu offers it, is one pure rule, `DebugPanelAccess`, under test.
+The builder's paths reach it without changing the owner's setting:
 
 - **A replay**: `open -n build/Athina.app --args --replay <dir> --open debug`
   opens it whatever the switch says. `make run-replay` passes no `--open`, so
-  there it opens from the replay's own Settings > Advanced: the switch starts
-  where the live one is, and turning it on there is saved only to the replay's
+  there it opens from the replay's own Settings > Advanced, or from its menu
+  while the switch is on: the switch starts where the live one is (or where
+  `--settings` puts it), and turning it on there is saved only to the replay's
   own settings file.
 - **A recording**: `make record` passes `--open debug`, which a recording
   honours whatever the switch says, for the follow-up question typed into the
@@ -1295,8 +1299,10 @@ changing the owner's setting:
   `athina-drive ax ... --scope "Debug Panel"` reaches its controls. Capture Now
   is the menu's own command, not the panel's.
 - **Snapshots**: `--snapshot` draws the panel's view directly
-  (`debug-panel*`), and the Advanced pane with the switch off and on
-  (`settings-advanced`, `settings-advanced-on`), light and dark.
+  (`debug-panel*`), the Advanced pane with the switch off and on
+  (`settings-advanced`, `settings-advanced-on`), and the menu bar menu without
+  and with the Debug Panel command (`menu`, `menu-debug-panel`), drawn from
+  the items `NSHostingMenu` makes of the real menu, light and dark.
 - **A live launch** given `--open debug` opens the panel only while the switch
   is on.
 
@@ -1411,6 +1417,14 @@ particular to this app:
   panes that each group related settings, and a window of model calls and
   captured text is neither for most people nor related to any other pane.
   Its button sits in the switch's own group and is dimmed while it is off.
+  While it is on, the menu bar menu adds a Debug Panel command, as Safari's
+  switch adds its Develop menu between its everyday menus and Window: in a
+  group of its own after the everyday windows and Settings…, before About and
+  Quit, since the HIG (Menus) asks for related items grouped between
+  separators. It has no keyboard shortcut: the HIG (Keyboards) keeps custom
+  shortcuts for commands people use often, and in this menu only Settings…
+  and Quit, whose shortcuts are standard, and Pause Watching, a hot key the
+  person chooses, have one.
 - **Status is never color alone.** Inline messages are `StatusLabel` and badges
   are `StatusBadge` (`Sources/Athina/Components.swift`): the symbol or capsule
   carries the color, the words stay in a label color. Text uses system text

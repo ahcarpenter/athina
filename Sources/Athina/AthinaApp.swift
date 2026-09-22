@@ -25,9 +25,9 @@ struct AthinaApp: App {
         }
         // Tall enough for the Now pane's cards, Understanding included.
         .defaultSize(width: 1180, height: 860)
-        // Opened from Settings > Advanced once the person turns it on, and at
-        // launch by `--open debug` as `DebugPanelAccess` allows; the menu
-        // offers no command for it.
+        // Opened, once the person turns it on in Settings > Advanced, from
+        // that pane and from the menu's Debug Panel command, and at launch by
+        // `--open debug` as `DebugPanelAccess` allows.
         .defaultLaunchBehavior(
             LaunchArguments.windowToOpen == WindowID.debug
                 && DebugPanelAccess.opensAtLaunch(clientMode: state.clientMode, settings: state.settings)
@@ -308,6 +308,13 @@ struct MenuBarContent: View {
             openSettings()
         }
         .keyboardShortcut(",")
+        // A builder's tool, in a group of its own after the everyday windows,
+        // as Safari's Develop menu follows its everyday menus, and only while
+        // Settings > Advanced turns it on (`DebugPanelAccess`).
+        if DebugPanelAccess.menuOffersCommand(settings: state.settings) {
+            Divider()
+            Button("Debug Panel") { open(WindowID.debug) }
+        }
         Divider()
         // Athina has no app menu, so its menu carries the app menu's About and Quit.
         Button("About Athina") {
