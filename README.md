@@ -632,7 +632,10 @@ in the log, and quits:
 
 Either way what Mentor kept is untouched, the attempt takes back whatever it
 put in the new folder and nothing else, and the next launch simply tries
-again. A move cut short by a crash is started again the same way.
+again. A move cut short by a crash is started again the same way. If the
+same alert comes back launch after launch, the cause is not going away on its
+own: move `~/Library/Application Support/mentor` somewhere else, and Athina
+starts with an empty journal, leaving that copy intact where you put it.
 
 If both folders already hold real data, the move is refused rather than
 merged: Athina uses `athina`, leaves `mentor` untouched, and says so, naming
