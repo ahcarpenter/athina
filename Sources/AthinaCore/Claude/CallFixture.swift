@@ -160,16 +160,37 @@ public enum CallFixtureFiles {
         return keyPattern.stringByReplacingMatches(in: redacted, range: range, withTemplate: redactionMarker)
     }
 
-    /// A name that sorts by recording time, then says what the call was:
-    /// `20260914T203102.123Z-triage-1a2b3c4d.json`.
+    /// A name that sorts by recording time, to the millisecond, then says what
+    /// the call was: `20260914T203102.123Z-triage-1a2b3c4d.json`. Recorded
+    /// calls never share a millisecond (`recordingStamp(at:after:)`), so their
+    /// names sort in the order the calls were made.
     public static func fileName(for fixture: CallFixture, suffix: String = String(UUID().uuidString.prefix(8)).lowercased()) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = TimeZone(identifier: "UTC")
-        formatter.dateFormat = "yyyyMMdd'T'HHmmss.SSS'Z'"
+        formatter.dateFormat = "yyyyMMdd'T'HHmmss"
+        let millisecond = Self.millisecond(of: fixture.recordedAt)
+        let second = (Double(millisecond) / 1000).rounded(.down)
+        let fraction = String(format: "%03ld", millisecond - Int(second) * 1000)
         let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
         let kind = String(fixture.identity.kind.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" })
-        return "\(formatter.string(from: fixture.recordedAt))-\(kind)-\(suffix).json"
+        return "\(formatter.string(from: Date(timeIntervalSince1970: second))).\(fraction)Z-\(kind)-\(suffix).json"
+    }
+
+    /// The stamp for a call made at `now` after a call stamped `previous`:
+    /// `now` when its name shows a later millisecond than `previous`'s, and
+    /// otherwise the next millisecond. A name shows only the millisecond, so
+    /// without this two calls inside one millisecond, or either side of the
+    /// wall clock stepping back, would sort by kind and id instead of in the
+    /// order they were made.
+    public static func recordingStamp(at now: Date, after previous: Date?) -> Date {
+        guard let previous, millisecond(of: now) <= millisecond(of: previous) else { return now }
+        return Date(timeIntervalSince1970: Double(millisecond(of: previous) + 1) / 1000)
+    }
+
+    /// The millisecond a name shows for `date`, the nearest one, counted from 1970.
+    static func millisecond(of date: Date) -> Int {
+        Int((date.timeIntervalSince1970 * 1000).rounded())
     }
 
     /// Creates `directory` (mode 0700 when missing) and proves a fixture can

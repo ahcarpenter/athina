@@ -391,6 +391,11 @@ cost nothing, not as replays. The menu bar shows **Recording** beside the mark
 while it runs. `make clear-recordings` deletes the app's own recordings
 directory, `~/Library/Application Support/athina/recordings`.
 
+A file's name starts with the time its call started, to the millisecond, and
+each call is stamped in a later millisecond than the one before, even when two
+start within one millisecond or the wall clock steps back, so file-name order,
+the order a replay serves each kind in, is always the order the calls were made.
+
 Any call the loop makes through its single call path (`MentorLoop.perform`) is
 recorded under its tier's raw value and replayed by that name, and neither
 client knows the list of kinds. The periodic understanding refresh (tier
