@@ -135,6 +135,21 @@ import Testing
         #expect(SpeechLocaleChoice.best(for: Locale(identifier: "pt_PT"), preferredLanguage: nil, supported: Self.transcriberLocales)?.identifier == "pt_BR")
     }
 
+    /// Chinese in Taiwan and Hong Kong is written in Traditional characters,
+    /// so SpeechTranscriber's only Chinese, the mainland's in Simplified, is
+    /// no match for it, and DictationTranscriber gets to hear it instead.
+    @Test func aLanguageIsNeverHeardInAnotherScript() {
+        for mac in ["zh_TW", "zh-Hant-TW", "zh_HK", "zh-Hant-HK"] {
+            #expect(SpeechLocaleChoice.best(for: Locale(identifier: mac), preferredLanguage: nil, supported: Self.transcriberLocales) == nil, "\(mac)")
+        }
+        #expect(SpeechLocaleChoice.best(for: Locale(identifier: "zh_TW"), preferredLanguage: "zh-Hans-CN", supported: Self.transcriberLocales)?.identifier == "zh_CN")
+        let dictation = ["zh_CN", "zh_HK", "zh_TW"].map { Locale(identifier: $0) }
+        #expect(SpeechLocaleChoice.best(for: Locale(identifier: "zh-Hant-TW"), preferredLanguage: nil, supported: dictation)?.identifier == "zh_TW")
+        #expect(SpeechLocaleChoice.best(for: Locale(identifier: "zh_MO"), preferredLanguage: nil, supported: dictation)?.identifier == "zh_TW")
+        #expect(SpeechLocaleChoice.best(for: Locale(identifier: "zh_CN"), preferredLanguage: nil, supported: Self.transcriberLocales)?.identifier == "zh_CN")
+        #expect(SpeechLocaleChoice.best(for: Locale(identifier: "zh_SG"), preferredLanguage: nil, supported: Self.transcriberLocales)?.identifier == "zh_CN")
+    }
+
     @Test func aLanguageNoneOfTheLocalesSpeaksHasNoChoice() {
         #expect(SpeechLocaleChoice.best(for: Locale(identifier: "cy_GB"), preferredLanguage: "cy-GB", supported: Self.transcriberLocales) == nil)
         #expect(SpeechLocaleChoice.best(for: Locale(identifier: "nl_NL"), preferredLanguage: nil, supported: []) == nil)

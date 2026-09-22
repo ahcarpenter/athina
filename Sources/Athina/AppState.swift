@@ -1221,9 +1221,11 @@ final class AppState {
         Task { await act(on: SpeechListener.Heard(text: text, failure: nil, origin: .typed), for: suggestion) }
     }
 
-    /// The key came up: finish the transcript and act on it.
+    /// The key came up: finish the transcript and act on it. A recording ends
+    /// once: the key coming up after the cutoff, or a played-in file running
+    /// out meanwhile, leaves the finish already under way to hear it.
     private func pushToTalkReleased() {
-        guard case .listening = talkBack else { return }
+        guard case .listening = talkBack, transcriptTask == nil else { return }
         listeningLimitTask?.cancel()
         listeningLimitTask = nil
         let suggestion = activeSuggestion
@@ -1268,8 +1270,7 @@ final class AppState {
     private func handleTranscript(_ heard: SpeechListener.Heard?, for suggestion: Suggestion?) async {
         guard case .listening = talkBack else { return }
         guard let suggestion, activeSuggestion?.id == suggestion.id, let heard else {
-            setTalkBack(.idle)
-            finishAudioFile(TalkBackRemote.Reply(heard: nil, handling: "cut short"))
+            cancelTalkBack()
             return
         }
         await act(on: heard, for: suggestion)
@@ -1435,9 +1436,6 @@ final class AppState {
         return true
     }
 
-    /// Moves a replay's clock ahead for another process (`ClockRemote`), and
-    /// answers the request where it asked, so the script that made it knows it
-    /// was heard rather than assuming so.
     /// A replay heard `scripts/talk-back.sh`: plays the recording into the
     /// listener and answers once its transcript has been handled.
     private func playAudioFile(onRequest request: Result<URL, ReplayRemote.Refusal>, answeringAt replyURL: URL?) {
@@ -1458,6 +1456,9 @@ final class AppState {
         }
     }
 
+    /// Moves a replay's clock ahead for another process (`ClockRemote`), and
+    /// answers the request where it asked, so the script that made it knows it
+    /// was heard rather than assuming so.
     private func advanceClock(onRequest request: Result<TimeInterval, ClockRemote.Refusal>, answeringAt replyURL: URL?) {
         var reply: ClockRemote.Reply
         switch request {
