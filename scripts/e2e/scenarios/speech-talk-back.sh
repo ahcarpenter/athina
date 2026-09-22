@@ -55,7 +55,7 @@ scenario_run() {
 	stage_flip_window
 	wait_toast >/dev/null || return 1
 	suggestion="$(newest_suggestion_id)"
-	wait_athina_window General || { log "Settings > General never opened"; return 1; }
+	wait_athina_window General || ensure_general_open || { log "Settings > General never opened"; return 1; }
 	scroll_general_to 0.38
 
 	for entry in "${RECOGNIZERS[@]}"; do

@@ -61,7 +61,7 @@ download_model() {
 
 scenario_run() {
 	local entry name path bytes seconds tag models got at total=0 total_seconds=0
-	wait_athina_window General || { log "Settings > General never opened"; return 1; }
+	wait_athina_window General || ensure_general_open || { log "Settings > General never opened"; return 1; }
 	models="$(replay_data_dir)/speech-models"
 	# The talk-back section, with the recognizer rows, in view.
 	scroll_general_to 0.38
