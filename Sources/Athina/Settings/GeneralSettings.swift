@@ -41,6 +41,9 @@ struct GeneralSettings: View {
             SpeechModelsSection()
             NeverRulesSection()
         }
+        // A model deleted or changed on disk since the last look, or a
+        // language macOS installed meanwhile, shows as it is now.
+        .task { state.speechModels.refresh() }
     }
 }
 
