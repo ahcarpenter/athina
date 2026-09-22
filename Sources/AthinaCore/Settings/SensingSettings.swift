@@ -76,6 +76,14 @@ public struct SensingSettings: Codable, Equatable, Sendable {
     /// The mentor loop's own section, stored under `mentor` in the same file.
     public var mentor = MentorSettings()
 
+    // MARK: Advanced
+
+    /// Whether Settings > Advanced offers the debug panel. Off until the
+    /// person turns it on, including on an install from before it existed;
+    /// a replay or recording opens the panel with `--open debug` whatever
+    /// this says (`DebugPanelAccess`).
+    public var showDebugPanel = false
+
     public init() {}
 
     // MARK: Codable with per-field defaults
@@ -87,6 +95,7 @@ public struct SensingSettings: Codable, Equatable, Sendable {
         case thumbnailRetention, textRetention, journalSizeCapBytes, retentionInterval
         case excludedBundleIDs, pauseHotKey
         case mentor
+        case showDebugPanel
     }
 
     public init(from decoder: Decoder) throws {
@@ -110,6 +119,7 @@ public struct SensingSettings: Codable, Equatable, Sendable {
         excludedBundleIDs = try c.decodeIfPresent([String].self, forKey: .excludedBundleIDs) ?? d.excludedBundleIDs
         pauseHotKey = try c.decodeIfPresent(HotKey.self, forKey: .pauseHotKey) ?? d.pauseHotKey
         mentor = try c.decodeIfPresent(MentorSettings.self, forKey: .mentor) ?? d.mentor
+        showDebugPanel = try c.decodeIfPresent(Bool.self, forKey: .showDebugPanel) ?? d.showDebugPanel
         self = validated()
     }
 

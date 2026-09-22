@@ -57,10 +57,13 @@ enum Snapshots {
             ("settings-capture", whole(920), AnyView(CaptureSettings().formStyle(.grouped)), state),
             ("settings-journal", CGSize(width: SettingsView.paneWidth, height: 500), AnyView(JournalSettings().formStyle(.grouped)), state),
             ("settings-privacy", pane, AnyView(PrivacySettings().formStyle(.grouped)), state),
+            // Off, as every install starts, and turned on, with its button live.
+            ("settings-advanced", CGSize(width: SettingsView.paneWidth, height: 180), AnyView(AdvancedSettings().formStyle(.grouped)), state),
+            ("settings-advanced-on", CGSize(width: SettingsView.paneWidth, height: 180), AnyView(AdvancedSettings().formStyle(.grouped)), AppState.sample(showDebugPanel: true)),
             // The side-effect suggestion, so the goal it was judged against shows.
             ("history", CGSize(width: 860, height: 520), AnyView(HistoryView(initialSelection: 5)), state),
             ("history-empty", CGSize(width: 860, height: 520), AnyView(HistoryView()), empty),
-            ("toast", CGSize(width: ToastController.panelWidth, height: 200), AnyView(SampleToast(expanded: false)), state),
+            ("toast", CGSize(width: ToastController.panelWidth, height: 180), AnyView(SampleToast(expanded: false)), state),
             ("toast-expanded", CGSize(width: ToastController.panelWidth, height: 460), AnyView(SampleToast(expanded: true)), state),
             ("toast-listening", CGSize(width: ToastController.panelWidth, height: 300), AnyView(SampleToast(expanded: false, talkBack: .listening(partial: "does that work with tags as"), suggestionID: 4)), state),
             ("toast-thinking", CGSize(width: ToastController.panelWidth, height: 300), AnyView(SampleToast(expanded: false, talkBack: .thinking(question: "does that work with tags as well"), suggestionID: 4)), state),
@@ -190,9 +193,11 @@ extension AppState {
     /// sample's own clock when nil). Nothing here touches the pipeline.
     static func sample(
         at now: Date? = nil,
-        speechAvailability: SpeechListener.Availability = .available(locale: "English (US)")
+        speechAvailability: SpeechListener.Availability = .available(locale: "English (US)"),
+        showDebugPanel: Bool = false
     ) -> AppState {
         var settings = SensingSettings()
+        settings.showDebugPanel = showDebugPanel
         settings.mentor.onlyMentorInsideContexts = true
         settings.mentor.contexts = SampleSuggestions.contexts
         // The oldest sample suggestion was answered Never for This.
