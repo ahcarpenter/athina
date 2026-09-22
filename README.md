@@ -482,6 +482,13 @@ Every run is replay only: no API key is read, no network is reachable inside
 the sandbox, and nothing is billed. It needs a display, so it never runs in
 CI; CI runs the harness's unit tests with the rest of the suite.
 
+Runs are serialized machine-wide: `run`, `warm`, and `clean` first take one
+exclusive lock, `~/Library/Caches/athina-e2e/screen.lock`, so only one
+session is on the screen at a time across every checkout, and a second run
+prints who holds it (checkout, scenario, pid, since when) and waits.
+`--lock-timeout <seconds>` gives up instead; `list`, `doctor`, and `journal`
+never wait.
+
 ### Scenarios
 
 | name | what it proves |
@@ -566,6 +573,11 @@ suite rather than every scenario.
   outbound network, so no run can reach live data or make a live call.
 - **Cleanup runs on failure**, through a trap: helpers, taps, staged apps, the
   app itself, the preferences, and the scratch home.
+- **One run on the screen at a time**, across every checkout on the Mac: a
+  flock on `~/Library/Caches/athina-e2e/screen.lock` (`scripts/e2e/lib/lock.sh`),
+  the file a hand-held `lockf -k` uses too, held for exactly as long as the
+  harness process lives, so a killed run leaves no stale lock, and a run
+  started under a holder (`run all`, or a hand-held `lockf`) never waits on it.
 
 A validation step that needs live evidence should call this harness. Writing
 the driving again is how a check ends up overrunning its time limit on a cold
