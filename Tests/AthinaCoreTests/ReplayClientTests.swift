@@ -31,13 +31,29 @@ import Testing
 
     // MARK: Recording
 
-    @Test func theRecorderWritesEveryCallAndPassesTheResultThrough() async throws {
+    /// The clock a recording runs on. On real time the two calls below are
+    /// often less than a millisecond apart, the precision a file name shows,
+    /// but only now and then fall in the same one; a test clock that never
+    /// moves reads the same instant for both, every time.
+    enum RecordingClock: CaseIterable, Sendable {
+        case system, standing
+
+        func make() -> any AthinaClock {
+            switch self {
+            case .system: SystemClock()
+            case .standing: AdjustableClock(startingAt: Date(timeIntervalSince1970: 1_789_000_000))
+            }
+        }
+    }
+
+    @Test(arguments: RecordingClock.allCases)
+    func theRecorderWritesEveryCallAndPassesTheResultThrough(on clock: RecordingClock) async throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let inner = ScriptedClaudeClient()
         await inner.enqueue(json: #"{"worth_a_look": true, "reason": "r"}"#, model: "claude-haiku-4-5-20251001", usage: Usage(inputTokens: 1000, outputTokens: 40))
         await inner.enqueue(.failure(.api(status: 529, type: "overloaded_error", message: "Overloaded")))
-        let recorder = RecordingClaudeClient(wrapping: inner, directory: directory, prices: .defaults)
+        let recorder = RecordingClaudeClient(wrapping: inner, directory: directory, prices: .defaults, clock: clock.make())
         #expect(!recorder.isReplay)
 
         let request = CallFixtureTests.request(text: "key on screen: \(CallFixtureTests.realisticKey)")

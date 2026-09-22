@@ -135,6 +135,38 @@ import Testing
         #expect(earlyName < lateName)
     }
 
+    /// A name shows only the millisecond, so each recording is stamped in a
+    /// later millisecond than the one before, whatever the clock read: the
+    /// same millisecond, the same instant, or earlier after the wall clock
+    /// stepped back. Otherwise these names would tie on the time and sort by
+    /// their ids, backwards.
+    @Test func eachRecordingIsStampedInALaterMillisecond() {
+        let readings = [
+            Date(timeIntervalSince1970: 1_789_000_000.2501),
+            Date(timeIntervalSince1970: 1_789_000_000.2504),
+            Date(timeIntervalSince1970: 1_789_000_000.2504),
+            Date(timeIntervalSince1970: 1_788_999_999),
+            Date(timeIntervalSince1970: 1_789_000_001.5),
+        ]
+        let stamps = readings.reduce(into: [Date]()) { stamps, now in
+            stamps.append(CallFixtureFiles.recordingStamp(at: now, after: stamps.last))
+        }
+        let names = zip(stamps, ["4", "3", "2", "1", "0"]).map { stamp, suffix in
+            CallFixtureFiles.fileName(for: Self.fixture(kind: "triage", at: stamp), suffix: suffix)
+        }
+        #expect(names == [
+            "20260910T002640.250Z-triage-4.json",
+            "20260910T002640.251Z-triage-3.json",
+            "20260910T002640.252Z-triage-2.json",
+            "20260910T002640.253Z-triage-1.json",
+            "20260910T002641.500Z-triage-0.json",
+        ])
+        #expect(names == names.sorted())
+        // A reading already in a later millisecond is kept exactly.
+        #expect(stamps.first == readings.first)
+        #expect(stamps.last == readings.last)
+    }
+
     @Test func writtenFixturesArePrivateAndLoadInNameOrder() throws {
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
