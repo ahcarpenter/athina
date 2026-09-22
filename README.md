@@ -14,16 +14,23 @@ an approach that will not reach your goal, one that is slower than an
 alternative you have, or one that will reach it and bring a side effect you
 would not want. **Callouts and voice** let a suggestion point at the spot on
 screen it is about and take a spoken reply: an answer to the toast, or a
-question the mentor tier answers. Reading suggestions aloud is deferred.
+question the mentor tier answers, heard on this Mac by the speech recognizer
+you choose, Apple's SpeechAnalyzer by default or the free open models Whisper
+and Parakeet. Reading suggestions aloud is deferred.
 Halt-and-redirect and learned suppression are later phases.
 
 ## Requirements
 
 - macOS 26 or later (developed and measured on macOS 27, Apple Silicon)
 - Xcode 26 or later with its command line tools (`swift`, `codesign`)
-- No third-party dependencies: SwiftUI, ScreenCaptureKit, Vision, the
-  accessibility API, Carbon hotkeys, AVFoundation and Speech for talking
-  back, and the system SQLite
+- One third-party dependency: [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+  (MIT), the project's own prebuilt framework for release v1.9.2, pinned in
+  `Package.swift` by its SHA-256, which runs the Whisper and Parakeet speech
+  models. SwiftPM fetches it from GitHub on the first build, like any package;
+  no model weights come with it or with the repository. Everything else is the
+  system's: SwiftUI, ScreenCaptureKit, Vision, the accessibility API, Carbon
+  hotkeys, AVFoundation and Speech (SpeechAnalyzer) for talking back, and the
+  system SQLite
 
 ## Build, run, test
 
@@ -52,8 +59,9 @@ launching a second copy from Finder, which was equally true before.
 
 There is no Xcode project. `Package.swift` defines the targets and
 `scripts/bundle.sh` wraps the release binary in an app bundle with
-`Resources/Info.plist` and `Resources/Athina.entitlements`, then signs it.
-`swift build` and `swift test` work directly too.
+`Resources/Info.plist` and `Resources/Athina.entitlements`, copies
+whisper.cpp's framework into `Contents/Frameworks`, then signs both.
+`swift build` and `swift test` work directly too; neither downloads a model.
 
 `Athina --snapshot <dir>` renders every window with sample data to PNG files
 (light and dark) without starting the pipeline or calling any model. It is how
@@ -165,8 +173,10 @@ excluded stay excluded, and your retention and sensing choices hold, exactly as
 you set them. Nothing a replay does, a suggestion and its feedback, a Not Now
 or Never for This, a changed setting, reaches the live journal, the live
 settings, another replay, or the prompts of a later live run; a setting
-changed during a replay lasts until the app quits. `--record` is a real session
-and uses the live files.
+changed during a replay lasts until the app quits. A replay also starts with
+copies of the speech models downloaded live, clones that cost nothing, and
+keeps any it downloads or deletes in its own directory (see Speech
+recognizers). `--record` is a real session and uses the live files.
 
 Nothing about a replay can be mistaken for a live call:
 
@@ -475,6 +485,7 @@ scripts/e2e/athina-e2e list          # the scenarios and what each one proves
 scripts/e2e/athina-e2e run all       # run them; one JSON line of result each
 scripts/e2e/athina-e2e run menubar-keyboard
 scripts/e2e/athina-e2e doctor        # what is missing before a run
+scripts/e2e/athina-e2e run speech-talk-back --appearance dark
 scripts/e2e/athina-e2e journal suggestions   # a named query over the last run
 ```
 
@@ -495,6 +506,9 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
 | `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
 | `settings-pane-links` | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link rather than Markdown, and a real click on it changes the Settings window's pane in place rather than handing the link to the system |
+| `speech-models-download` | every speech model in the manifest downloads through Settings > General, pressed by name, with its progress and its check shown, lands at the manifest's size with its checksum record and nothing half written, keeps its own model per recognizer, and can be deleted and downloaded again; `models.tsv` has each model's size and seconds, and the set is saved for `speech-talk-back`. The one scenario allowed out, over HTTPS only |
+| `speech-models-offline` | with the network closed, a recognizer whose model is not downloaded turns talking back off with the reason and the menu's Set Up Talk Back, a recording played in is refused and heard by nothing else, a download fails with the reason and offers Try Again, nothing is left on disk, and SpeechAnalyzer is ready again when chosen |
+| `speech-talk-back` | for SpeechAnalyzer, Whisper, and Parakeet in turn, chosen through the picker, the committed question played in with `scripts/talk-back.sh` shows as a live transcript in the toast, is asked, and is answered by the replayed follow-up, and "tell me more" is matched as that answer; the journal names the recognizer and model that heard each, and "not now" answers and closes the toast |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
 every check it made, and the directory holding its evidence (transcript,
@@ -563,7 +577,17 @@ suite rather than every scenario.
   targets stop only their own lane, see Replays side by side).
 - **A sandbox** denies the real `~/Library/Application Support/athina`, the
   `mentor` folder beside it that the app kept before the rename, and all
-  outbound network, so no run can reach live data or make a live call.
+  outbound network, so no run can reach live data or make a live call. The
+  one exception is a scenario that sets `SCENARIO_NETWORK=https`, which only
+  `speech-models-download` does: it may open HTTPS connections and use the
+  system resolver, for Settings to download speech models, and nothing else;
+  its model calls are still answered from fixtures.
+- **Speech models are downloaded once.** `speech-models-download` saves what
+  it fetched to `~/Library/Caches/athina-e2e/speech-models`, and a scenario
+  that sets `SCENARIO_SPEECH_MODELS=1` starts with those in its scratch home,
+  cloned, where the replay copies them into its own directory as it starts.
+- **Either appearance.** `--appearance light` or `--appearance dark` draws the
+  app that way whatever the Mac is showing, for screenshots of both.
 - **Cleanup runs on failure**, through a trap: helpers, taps, staged apps, the
   app itself, the preferences, and the scratch home.
 
@@ -590,22 +614,26 @@ prompt appears when it opens. Each missing permission has one button. For the
 sensing pair it is Open System Settings, which registers Athina in that
 permission's System Settings list (macOS may show its own note pointing
 there) and opens the matching pane; the window shows live status and re-checks
-every second while open and when the app regains focus. Two more are optional
-and serve only talking back; the window lists them below the required pair and
-asks for them only when you press Request Access (Open System Settings once
-the system has asked) or first hold the talk-back shortcut.
+every second while open and when the app regains focus. One more, the
+microphone, is optional and serves only talking back; the window lists it
+below the required pair and asks for it only when you press Request Access
+(Open System Settings once the system has asked) or first hold the talk-back
+shortcut. Speech Recognition is never asked for: every recognizer Athina
+offers runs on this Mac without the system's speech recognition service
+(see Talking back), so an app that asked for it would be asking for
+something it does not use.
 
 | Permission | Used for | Without it |
 | --- | --- | --- |
 | Screen Recording | ScreenCaptureKit capture of the display containing the focused window, then Vision OCR | Accessibility-only mode: app, window, and focused element are still sensed; no frames |
 | Accessibility | Focused app, window title, focused element role and text, via the AX API; the live window frame a callout is checked against | Screen-only mode: frames and OCR only; app identity comes from NSWorkspace; no callouts, since the window cannot be verified |
-| Microphone (optional) | Hearing you while the talk-back key is held | Talking back is off; a key press says so |
-| Speech Recognition (optional) | Turning that audio into text on this Mac with the system recognizer, on-device only | Talking back is off; a key press says so |
+| Microphone (optional) | Hearing you while the talk-back key is held, for the speech recognizer you chose to turn into text on this Mac | Talking back is off; a key press says so |
 
 Idle detection uses `CGEventSource.secondsSinceLastEventType`, which needs no
-permission. Input Monitoring is never requested. The only network connection
-the app ever opens is to `api.anthropic.com`, from the mentor loop, and only
-when a key is saved (see Privacy model).
+permission. Input Monitoring is never requested. The app opens only two kinds
+of network connection: to `api.anthropic.com`, from the mentor loop, and only
+when a key is saved; and to Hugging Face, only when you press Download on a
+speech model in Settings > General (see Privacy model).
 
 ## Coming from Mentor
 
@@ -708,17 +736,27 @@ Sources/AthinaCore            library, fully testable
                               refuses a callout), TalkBack (TranscriptMatcher, FollowUp, TalkBackState),
                               ToastCountdown (a toast's countdown, held and resumed), MenuBarMark (which variant
                               of the mark the menu bar shows), MentorLoop (orchestration)
-  System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
+  Voice/                      SpeechModelCatalog (the recognizers and the manifest of downloadable models),
+                              SpeechSettings and TranscriptOrigin (which recognizer heard an exchange),
+                              SpeechReadiness (SpeechModelState, the actions each state offers, and
+                              SpeechAvailability), SpeechModelStore (models on disk, their checksum records,
+                              a replay's copies), SpeechModelDownloader (fetch, check, install),
+                              PCMAudio (conversion to a recognizer's format, a file read in chunks),
+                              TranscriptCleanup, TalkBackRemote (playing a recording into a replay)
+  System/                     PermissionProbe (all three permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
-                              and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
-                              and ClockRemote (moving a replay's clock from a script)
+                              and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags),
+                              ClockRemote (moving a replay's clock from a script), and ReplayRemote (the rules
+                              every such request is answered under)
 Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swift cannot make (it is variadic),
                               so `DataMigration` can read the old journal without altering it
 Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
-                              Overlay/CalloutController (click-through overlay), Voice/SpeechListener
-                              (on-device speech recognition), HotKeyCenter (Carbon, press and release),
+                              Overlay/CalloutController (click-through overlay), Voice/ (SpeechListener, the
+                              SpeechBackend seam and its audio inputs, SpeechAnalyzerBackend, WhisperCppBackend
+                              for Whisper and Parakeet, SpeechModels), HotKeyCenter (Carbon, press and release),
                               Snapshots
-Tests/AthinaCoreTests         Swift Testing suites for the pure parts, with JSON fixtures under Fixtures/
+Tests/AthinaCoreTests         Swift Testing suites for the pure parts, with JSON fixtures under Fixtures/ and
+                              the spoken phrases under Fixtures/Speech
 ```
 
 ### Sensing loop
@@ -766,15 +804,17 @@ oldest thumbnails and finally the oldest observations and events until it fits.
 "Clear Journal" in settings deletes everything.
 
 The mentor loop adds five tables: `suggestions` (every suggestion shown, with
-the user's feedback, the inferred goal it was judged against, the region it
+the user's feedback and, for an answer said aloud, the recognizer and model
+that heard it, the inferred goal it was judged against, the region it
 pointed at if any, and whether a callout was drawn), `model_calls` (one row per
 API call: tier, model, prompt version and size, token counts, estimated cost,
 latency, outcome, the model's one-line reason, and whether it was replayed;
 never the prompt text), `understanding` (one row per revision of the standing
 understanding, see below), `refresh_period` (a single row: the active use
 counted toward the next understanding refresh), and `follow_ups` (one row per
-question talked back: the transcript, the answer or why there is none, and the
-model). A moment held at the context boundary is recorded in `model_calls` as
+question talked back: the transcript, the answer or why there is none, the
+model, and which recognizer heard the question and with which model, or that
+it was typed). A moment held at the context boundary is recorded in `model_calls` as
 the `outOfContext` outcome. All five expire with `textRetention`, the
 understanding goes with the oldest observations and events in a size-cap sweep,
 and all five are emptied by Clear Journal. A journal written by an earlier build
@@ -942,17 +982,16 @@ the same way as the pause shortcut in Settings > Privacy and unset by default,
 captures the microphone only while it is held. Carbon's hotkey registration
 delivers both `kEventHotKeyPressed` and `kEventHotKeyReleased` for a
 combination it registered, so `HotKeyCenter` hears the key go down and up
-without Input Monitoring or any other permission beyond the two optional ones.
+without Input Monitoring or any other permission beyond the optional microphone.
 The same combination cannot be both the pause and the talk-back key; the
 recorder refuses it and validation clears it. A recording is cut off after 30
 seconds in case the release is missed.
 
-Audio goes to `SFSpeechRecognizer` for the current locale with
-`requiresOnDeviceRecognition` set, so nothing is sent to Apple's servers. When
-the locale has no on-device recognizer, Settings and the menu say so plainly
-and the feature stays off rather than falling back to server recognition.
-While the key is held the toast shows a listening indicator and the live
-transcript. The toast being talked to is never hidden while voice input is
+Audio goes to the speech recognizer chosen in Settings > General (see Speech
+recognizers below), which runs on this Mac: Apple's SpeechAnalyzer by default,
+or Whisper or Parakeet. Whichever it is, it is the only thing that hears the
+audio, and nothing falls back to another when it cannot run. While the key is
+held the toast shows a listening indicator and the live transcript. The toast being talked to is never hidden while voice input is
 active: from the key going down until the transcript is handled or the answer
 is shown, it does not expire, a click elsewhere does not dismiss it, and it is
 kept in front of other windows; afterwards it stays up until it is closed,
@@ -1010,7 +1049,113 @@ The Mentor card also has a **Talk back** field. Words typed there and sent take
 exactly the path a released key does, from transcript matching to the
 follow-up call and the answer in the toast, so the whole path can be
 checked, in a replay or while recording a follow-up fixture, on a Mac where
-Microphone and Speech Recognition are not granted.
+the microphone is not granted. Its **Speak Audio File…** button goes one step
+further back: it plays a recording through the chosen recognizer as if the
+key were held for its length (below).
+
+### Speech recognizers
+
+Settings > General > Talk back picks the recognizer that hears the key, and
+every one of them runs on this Mac: audio never leaves it and is never
+stored. Everything above the recognizer is shared by all of them: the key,
+the 30 second cutoff, the release grace, one session per recording, the
+live transcript in the toast, `TranscriptMatcher`, follow-up questions, and
+the Talk back field. `SpeechListener` drives each one through the same seam
+(`SpeechBackend` in `Sources/Athina/Voice`), fed by an audio input that is
+either the microphone or a file.
+
+| Recognizer | Runs on | Model | Live transcript |
+| --- | --- | --- | --- |
+| **Apple SpeechAnalyzer** (default) | the Speech framework's SpeechAnalyzer, macOS 26 and later | language assets macOS keeps and shares between apps (`AssetInventory`) | streams as words settle |
+| **OpenAI Whisper** | whisper.cpp on the GPU | Base or Small (English), or Large v3 Turbo (99 languages), downloaded on request | every second or so of audio |
+| **NVIDIA Parakeet** | whisper.cpp on the GPU | TDT 0.6B v3 (25 European languages), full or compact, downloaded on request | every second or so of audio |
+
+**SpeechAnalyzer** hears the Mac's language (Language & Region) through its
+`SpeechTranscriber`, and for a language that has none, through its
+`DictationTranscriber`, which covers every language the older on-device
+`SFSpeechRecognizer` did. So no language needs that recognizer any more, and
+Athina no longer uses it; nor does it ask for the Speech Recognition
+permission, which SpeechAnalyzer does not need. When the Mac's language's
+assets are not installed, the row says so and offers Download, which asks
+macOS to fetch and install them and shows the system's progress; macOS keeps
+them, shared with other apps, so Settings never deletes them. A language
+neither transcriber hears is reported as not available.
+
+**Whisper and Parakeet** are free open models, and both run on whisper.cpp,
+one pinned framework with no network code of its own: one runtime keeps both
+on the same footing, each model is a single file, and both load in a fraction
+of a second (measured on an M2 Max: 0.1 s for Whisper Base, 0.25 s for
+Parakeet, after the first load of a new build compiles the GPU kernels, about
+eight seconds once). The model loads as a recording starts and is let go as
+it ends, so nothing stays in memory between presses. Neither streams, so the
+toast's live transcript comes from transcribing the audio so far about every
+second and is coarser than SpeechAnalyzer's; the whole recording is
+transcribed again when it ends, and that final transcript is what
+`TranscriptMatcher` and follow-ups use. What either returns is tidied first
+(`TranscriptCleanup`): Whisper's marks for sounds that are not speech, such
+as "[BLANK_AUDIO]", are dropped.
+
+**The models and where they come from.** `SpeechModelCatalog`
+(`Sources/AthinaCore/Voice/SpeechModelCatalog.swift`) is the manifest: every
+model's file, size, SHA-256, license, and source, each pinned to one commit of
+its Hugging Face repository, and checked on the date it names.
+
+| Model | Size | License | Source |
+| --- | --- | --- | --- |
+| Whisper Base, English | 148 MB | MIT | [ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp), OpenAI's weights converted by the whisper.cpp project |
+| Whisper Small, English | 488 MB | MIT | the same |
+| Whisper Large v3 Turbo, 99 languages | 574 MB | MIT | the same, 5-bit |
+| Parakeet TDT 0.6B v3 | 669 MB | CC BY 4.0 | [ggml-org/parakeet-GGUF](https://huggingface.co/ggml-org/parakeet-GGUF), NVIDIA's [weights](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) converted by the whisper.cpp project, 8-bit |
+| Parakeet TDT 0.6B v3, compact | 416 MB | CC BY 4.0 | the same, 4-bit |
+
+Weights are never committed and never come with a build. A model downloads
+only when you press Download on its row, from its pinned address, into
+`speech-models` in Athina's own data directory
+(`~/Library/Application Support/athina/speech-models`). The file is assembled
+beside it and hashed, and takes its place only when its size and SHA-256 match
+the manifest; a file that does not match is deleted, never kept, and a
+cancelled or failed download leaves nothing behind. A record of that check is
+kept beside the file (`SpeechModelStore`), so a later launch trusts it without
+hashing hundreds of megabytes again for as long as its size and modification
+date are the ones the check saw, and checks it again the moment either
+differs. Delete removes the file and its record. On the owner's Mac on
+2026-09-22 each downloaded in 3 to 16 seconds (about 40 MB/s): 2.3 GB for all
+five in 73 seconds.
+
+**One state model for every recognizer.** Each recognizer's model is built in,
+not downloaded, downloading (with its progress), being checked, ready, or
+failed with the reason (`SpeechModelState`), and the Status row, the Speech
+models list, the menu, and the key all read that one state. A recognizer that
+cannot run, whether its model is not downloaded, still downloading, failed,
+or its language is not supported, turns talking back off exactly as an
+unsupported language always did: the toast says why when the key is pressed,
+the menu offers Set Up Talk Back (which opens Settings > General) when a
+change there would fix it, and nothing falls back to another recognizer
+(`SpeechAvailability`).
+
+**Which recognizer heard it** is journaled with each exchange: a follow-up's
+row names the recognizer and its model, or that it was typed, and so does an
+answer said aloud (see Journal). The history window shows it under each
+question, and the debug panel's Mentor card with the last transcript.
+
+**A replay's models.** A replay keeps its speech models in its own per-launch
+directory, like its journal, so nothing it downloads or deletes reaches the
+live folder. It starts with copies of the models downloaded live, which on
+APFS are clones that cost no time and no disk; the live folder is only ever
+read.
+
+**Talking back without a microphone.** A recording on disk can be played into
+the listener as if the key were held for its length, in 100 ms chunks at the
+pace it was recorded, through the chosen recognizer and every step after it:
+from the debug panel's **Speak Audio File…**, and in a replay from a script,
+`scripts/talk-back.sh <pid> <audio file>`, which posts a request addressed to
+that replay's pid (`TalkBackRemote`) and prints the replay's answer (what was
+heard, by which recognizer, and what was done with it). Only a replay listens,
+and it answers under the same rules as a clock request (see A faster clock).
+No microphone or permission is needed. Three short phrases spoken by the
+system voice are committed for it in `Tests/AthinaCoreTests/Fixtures/Speech`:
+"Tell me more.", "Not now.", and the question the committed follow-up fixture
+was recorded with.
 
 ### Mentorship contexts
 
@@ -1152,12 +1297,25 @@ counted (see Iterating without the network).
 ## Privacy model
 
 - Sensing stays on this Mac: the journal, thumbnails, and settings never leave
-  it. The only network peer is `api.anthropic.com`, reached only by the mentor
-  loop, only when an API key is saved and the loop is enabled. No other part
-  of the app has network code.
+  it. The mentor loop's network peer is `api.anthropic.com`, reached only when
+  an API key is saved and the loop is enabled. The one other network use is a
+  speech model download (below). No other part of the app has network code.
+- **Speech model downloads** fetch one public file from Hugging Face
+  (`huggingface.co`, which hands the request to its content delivery
+  network), only when you press Download on that model in Settings > General,
+  over an ephemeral connection that keeps and sends no cookie or credential.
+  The request carries the file's address and nothing about you or your work.
+  The file lands in `~/Library/Application Support/athina/speech-models` and
+  is used only once it matches the SHA-256 the manifest pins. Apple
+  SpeechAnalyzer's language assets are downloaded by macOS itself, when you
+  press Download on that row, from Apple, as for any app that uses them.
+  A replay never writes the live `speech-models` folder: it copies the models
+  it finds there into its own directory, and downloads into that.
 - **Audio and transcripts stay on this Mac.** The microphone is open only
-  while the talk-back key is held, and only the system's on-device recognizer
-  ever hears it; audio is never stored. The one exception is deliberate: a transcript you spoke while holding
+  while the talk-back key is held, and only the speech recognizer you chose
+  ever hears it, on this Mac: Apple's SpeechAnalyzer, or Whisper or Parakeet
+  running in whisper.cpp inside Athina. Audio is never stored, never written
+  to disk, and never sent anywhere, whichever recognizer hears it. The one exception is deliberate: a transcript you spoke while holding
   the key (or typed into the debug panel's Talk back field), when it is not
   one of the toast's answers, is sent to the mentor tier as your follow-up
   question, together with the suggestion it is about,
@@ -1261,7 +1419,8 @@ Menu bar > Debug Panel. Left: frontmost app, window, the Mentor loop card
 mentorship context verdict, the last triage and mentor calls with tokens,
 cached tokens, estimated cost and latency, spend this hour, the cadence state
 with the current slowdown, the last callout decision with its region in frame
-pixels and screen points, and the last transcript with what was done with it),
+pixels and screen points, the last transcript with what was done with it and
+which recognizer heard it, and the Talk back field with Speak Audio File…),
 the Understanding card (revision, when and how it was last written, the
 inferred goals with their evidence and confidence, what has been done and
 said so far, open concerns, the refresh interval, when the next refresh is
@@ -1359,6 +1518,20 @@ particular to this app:
   lists the units the range holds a whole amount of, and an amount typed outside
   the range settles at the nearest allowed one as the edit ends, rather than
   being clamped out of sight afterwards.
+- **Choosing a recognizer is a picker; keeping models is a list.** The
+  talk-back section's Speech recognizer and Model pop-ups choose, with a
+  Status row beneath that says where the choice stands and carries the one
+  action that moves it on (Download, Cancel, Try Again), the way System
+  Settings pairs a choice with its state. The Speech models section below
+  lists every recognizer's model with its size, languages, and license, a
+  badge for its state, and its actions, including Delete, which is marked
+  destructive but does not ask first: a model is downloaded again in seconds
+  and holds nothing of yours. A download shows a determinate progress bar and
+  its percentage, and checking the file an indeterminate spinner; a failure's
+  reason is written under the model's name, where a sentence fits, not
+  squeezed beside it. The pop-ups carry their own accessibility names, and
+  every action button names its model ("Download OpenAI Whisper Base,
+  English"), so VoiceOver and the keyboard reach each one.
 - **Status is never color alone.** Inline messages are `StatusLabel` and badges
   are `StatusBadge` (`Sources/Athina/Components.swift`): the symbol or capsule
   carries the color, the words stay in a label color. Text uses system text
@@ -1395,12 +1568,22 @@ clocks, a replay's clock flags, the clock requests a script sends and where a
 replay may answer them, the toast countdown, which variant of the mark the menu
 bar shows and that every variant is committed at one size, callout mapping and
 every anchor rejection, a callout aging out, transcript matching, the follow-up
-prompt and gate, the toast rule for voice input, the whole loop against a
+prompt and gate, the toast rule for voice input, the speech model manifest's
+pins and checksums, the recognizer settings and their defaults, every model
+state's actions and how each reads in Settings and the menu, installing only
+a download that matches, checking a changed file again, deleting, a replay's
+copies of the live models, the downloader with a fake transport (progress,
+a checksum mismatch, a cancel), the committed phrases read and converted as
+a microphone's audio is, which recognizer is journaled with an exchange and
+the migration that adds those columns, the talk-back request a script sends,
+the whole loop against a
 scripted client, follow-ups included, and the whole loop against the committed
 replay fixtures, replayed strictly, a region and a follow-up answer included,
 and every time-based behavior of the loop on the test clock) and Vision OCR on a
 drawn bitmap, so they need no
-permissions, display, network, microphone, or API key. A committed fixture that
+permissions, display, network, microphone, speech model, or API key. The
+recognizers themselves run only in the end-to-end harness (speech-talk-back),
+since a runner has no model and may have no SpeechAnalyzer assets. A committed fixture that
 is stale, or a tier with no committed fixture, fails the run (see The committed
 fixtures). The snapshot run covers every window and Settings pane with sample
 data, their empty states (no suggestions, no frames, no contexts, contexts at
@@ -1409,6 +1592,10 @@ refresh call in flight, and after a failed refresh, the Understanding settings
 section with and without a record, the callout over the sample frame, the toast
 collapsed, expanded, listening, thinking, answered, and as a note, the context
 editor with a duplicate name, the transient status messages (a connection test,
-a refused or recording shortcut, on-device recognition unavailable), and every
+a refused or recording shortcut, a language SpeechAnalyzer does not hear), the
+speech recognizer rows and the Speech models list in every state the picker can
+show (SpeechAnalyzer built in, not downloaded, downloading, and not available;
+Whisper not downloaded, downloading, being checked, ready, and failed; Parakeet
+ready), and every
 variant of the menu bar mark, at the size the bar draws it, with the word a
 replay puts beside it, and enlarged.

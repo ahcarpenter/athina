@@ -26,6 +26,10 @@ PREFS_DOMAIN="com.ahcarpenter.athina"
 # must not be committed, and a run holds screenshots of the real screen.
 CACHE_ROOT="${ATHINA_E2E_CACHE:-$HOME/Library/Caches/athina-e2e}"
 WARM_HOME="$CACHE_ROOT/warm-home"
+# The speech models a download scenario fetched through Settings, kept so a
+# later run starts with them rather than fetching hundreds of megabytes again
+# (see seed_speech_models).
+SPEECH_MODELS_CACHE="$CACHE_ROOT/speech-models"
 # Read by the entry point and by scenarios that source this file.
 # shellcheck disable=SC2034
 RUNS_ROOT="$CACHE_ROOT/runs"
@@ -42,6 +46,11 @@ STAGED_PIDS=()
 STAGED_WINDOWS=()
 PREFS_BACKUP=""
 PREFS_EXISTED=0
+# Set by a scenario: "https" lets the run reach HTTPS servers, which only a
+# scenario that downloads speech models needs (see launch_athina).
+SCENARIO_NETWORK=""
+# Set by the entry point's --appearance: light or dark, whatever the Mac shows.
+APPEARANCE="${APPEARANCE:-}"
 CHECKS_FAILED=0
 CHECK_LINES=()
 
@@ -194,6 +203,37 @@ path.write_text(json.dumps(base, indent=2))
 PY
 }
 
+# The speech models an earlier download scenario saved, cloned into the
+# scratch home's own Application Support, where a replay finds them as the
+# models downloaded live and copies them into its own directory as it starts
+# (README "Talking back"). APFS clones cost no time and no disk. The copy keeps
+# each file's modification date, which is what lets the replay trust the
+# record of its checksum rather than hashing every file again.
+seed_speech_models() {
+	local home="$1"
+	[ -d "$SPEECH_MODELS_CACHE" ] || { log "no saved speech models at $SPEECH_MODELS_CACHE: run speech-models-download first"; return 1; }
+	cp -c -p -R "$SPEECH_MODELS_CACHE" "$home/Library/Application Support/athina/speech-models" \
+		|| { log "could not copy the saved speech models into $home"; return 1; }
+	log "seeded the scratch home with the saved speech models"
+}
+
+# Keeps what a run downloaded for the next one: every model this replay
+# checked, with the record of that check.
+save_speech_models() {
+	local source
+	source="$(replay_data_dir)/speech-models"
+	[ -d "$source" ] || { log "this run downloaded no speech models"; return 1; }
+	rm -rf "$SPEECH_MODELS_CACHE.saving"
+	cp -c -p -R "$source" "$SPEECH_MODELS_CACHE.saving" || { log "could not save the speech models"; return 1; }
+	rm -rf "$SPEECH_MODELS_CACHE" "$SPEECH_MODELS_CACHE.saving/.partial"
+	mv "$SPEECH_MODELS_CACHE.saving" "$SPEECH_MODELS_CACHE"
+	log "saved the speech models to $SPEECH_MODELS_CACHE"
+}
+
+# The directory the running replay keeps its files in, which it named as it
+# started.
+replay_data_dir() { dirname "$JOURNAL"; }
+
 # --- Launching and stopping ---------------------------------------------------
 
 # Replay only, sandboxed, in a scratch home, tracked by pid.
@@ -212,8 +252,26 @@ launch_athina() {
 	shift
 	local profile="$RUN_DIR/isolate.sb"
 	sed -e "s#__LIVE_SUPPORT__#$LIVE_SUPPORT#" -e "s#__LEGACY_SUPPORT__#$LEGACY_SUPPORT#" "$E2E_DIR/lib/isolate.sb" >"$profile"
+	if [ "$SCENARIO_NETWORK" = https ]; then
+		# A replay's model calls never reach the network whatever the sandbox
+		# allows, but this is the one kind of run that lifts the rule: HTTPS
+		# out, for Settings to download speech models from Hugging Face, and
+		# the system resolver that finds it. Nothing else goes out.
+		cat >>"$profile" <<'SB'
+(allow network-outbound (remote tcp "*:443"))
+(allow network-outbound (literal "/private/var/run/mDNSResponder"))
+SB
+		log "this run may reach HTTPS servers, to download speech models"
+	fi
+	local appearance=()
+	case "$APPEARANCE" in
+	dark) appearance=(-AppleInterfaceStyle Dark) ;;
+	light) appearance=(-NSRequiresAquaSystemAppearance YES) ;;
+	"") ;;
+	*) die "--appearance is light or dark, not $APPEARANCE" ;;
+	esac
 	CFFIXED_USER_HOME="$home" HOME="$home" \
-		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" "$@" \
+		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" "$@" ${appearance[@]+"${appearance[@]}"} \
 		>>"$RUN_DIR/app.log" 2>&1 &
 	ATHINA_PID=$!
 	JOURNAL=""
@@ -498,6 +556,113 @@ wait_item_title() {
 		sleep 1
 	done
 	return 1
+}
+
+# --- Settings and talking back -----------------------------------------------
+
+# The id of the first window of Athina's whose name starts with $1, empty when
+# none is open.
+athina_window_id() {
+	"$DRIVE" windows "$ATHINA_PID" \
+		| awk -v want="$1" 'index($0, "name=\"" want) {sub("id=", "", $1); print $1; exit}' || echo ""
+}
+
+wait_athina_window() {
+	local want="$1" limit="${2:-20}" i
+	for i in $(seq 1 "$limit"); do
+		[ -n "$(athina_window_id "$want")" ] && return 0
+		sleep 0.5
+	done
+	return 1
+}
+
+# A setting as the replay saved it, read from its own settings file: $1 is a
+# Python expression over `s`, the file's JSON.
+saved_setting() {
+	SETTINGS_FILE="$(replay_data_dir)/settings.json" EXPRESSION="$1" python3 -c '
+import json, os
+s = json.load(open(os.environ["SETTINGS_FILE"]))
+print(eval(os.environ["EXPRESSION"]))
+' 2>/dev/null || echo ""
+}
+
+# The recognizer the replay has chosen. Nothing is saved until a setting
+# changes, and until then it is the default, SpeechAnalyzer.
+saved_speech_backend() {
+	local saved
+	saved="$(saved_setting 's["mentor"]["speech"]["backend"]')"
+	echo "${saved:-speechAnalyzer}"
+}
+
+# Chooses a speech recognizer in Settings > General the way the keyboard or
+# VoiceOver does, through the picker's own menu, and waits for the replay to
+# save the choice.
+pick_speech_backend() {
+	local title="$1" raw="$2" i
+	press_named AXPopUpButton "Speech recognizer" || return 1
+	press_named AXMenuItem "$title" || return 1
+	for i in $(seq 1 20); do
+		[ "$(saved_speech_backend)" = "$raw" ] && return 0
+		sleep 0.5
+	done
+	log "the speech recognizer never became $raw"
+	return 1
+}
+
+# Presses a control in Settings > General by its accessibility name. A row
+# whose state just changed is rebuilt, and for a moment accessibility has no
+# element by that name, so the press is tried again for a few seconds.
+press_named() {
+	local role="$1" name="$2" i
+	for i in $(seq 1 10); do
+		"$DRIVE" ax "$ATHINA_PID" pressx "$role" "$name" --scope General >>"$RUN_DIR/transcript.log" 2>&1 && return 0
+		sleep 0.5
+	done
+	log "could not press $name"
+	return 1
+}
+
+# Scrolls Settings > General by setting the pane's scroll bar, the only
+# scroll a SwiftUI form takes from accessibility.
+scroll_general_to() {
+	"$DRIVE" ax "$ATHINA_PID" set AXScrollBar "" "$1" --scope General >>"$RUN_DIR/transcript.log" 2>&1 || true
+	sleep 0.5
+}
+
+# The General pane's text as accessibility reads it, and a picture of it.
+general_state() {
+	local tag="$1" id
+	"$DRIVE" ax "$ATHINA_PID" texts --scope General >"$RUN_DIR/$tag-texts.txt" 2>&1 || true
+	"$DRIVE" ax "$ATHINA_PID" dump --scope General >"$RUN_DIR/$tag-tree.txt" 2>&1 || true
+	{ printf '=== %s at %s\n' "$tag" "$(date '+%H:%M:%S')"; "$DRIVE" windows "$ATHINA_PID"; } >>"$RUN_DIR/windows.log" 2>&1
+	id="$(athina_window_id General)"
+	[ -n "$id" ] && "$DRIVE" shot window "$id" "$RUN_DIR/$tag.png" >/dev/null 2>&1
+	return 0
+}
+
+# Plays a recording into the replay's listener through scripts/talk-back.sh,
+# in the background; the answer lands in $RUN_DIR/<tag>-reply.json.
+play_recording() {
+	local file="$1" tag="$2"
+	"$ROOT/scripts/talk-back.sh" "$ATHINA_PID" "$file" >"$RUN_DIR/$tag-reply.json" 2>>"$RUN_DIR/transcript.log" &
+	PLAYING_PID=$!
+}
+
+# Waits for the recording played last to be heard and handled.
+wait_recording() {
+	local status=0
+	wait "$PLAYING_PID" 2>/dev/null || status=$?
+	PLAYING_PID=""
+	return $status
+}
+
+# A field of a talk-back answer.
+reply_field() {
+	REPLY_FILE="$RUN_DIR/$1-reply.json" FIELD="$2" python3 -c '
+import json, os
+value = json.load(open(os.environ["REPLY_FILE"])).get(os.environ["FIELD"])
+print("" if value is None else value)
+' 2>/dev/null || echo ""
 }
 
 # --- Watchers -----------------------------------------------------------------

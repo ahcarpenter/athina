@@ -22,7 +22,7 @@ enum Snapshots {
         let replay = AppState.sampleReplay()
         let empty = AppState.sampleEmpty()
         let atCap = AppState.sampleAtContextCap()
-        let noSpeech = AppState.sample(speechAvailability: .unavailable(reason: "On-device speech recognition is not available for Welsh, so talking back is off."))
+        let noSpeech = AppState.sample(speechModels: SampleSpeech.models(analyzer: SampleSpeech.unsupported, language: "cy_GB"))
         let noUnderstanding = AppState.sampleUnderstanding(.none)
         let pane = CGSize(width: SettingsView.paneWidth, height: 640)
         // The debug panel's Now pane is this wide, so the card wraps as it does there.
@@ -41,13 +41,13 @@ enum Snapshots {
             ("understanding-card-paused", card(900), AnyView(SampleUnderstandingCard()), AppState.sampleUnderstanding(.paused)),
             ("understanding-card-refreshing", card(900), AnyView(SampleUnderstandingCard()), AppState.sampleUnderstanding(.refreshing)),
             ("understanding-card-failed", card(900), AnyView(SampleUnderstandingCard()), AppState.sampleUnderstanding(.failed)),
-            ("settings-general", whole(860), AnyView(GeneralSettings().formStyle(.grouped)), state),
+            ("settings-general", whole(1420), AnyView(GeneralSettings().formStyle(.grouped)), state),
             ("settings-contexts", pane, AnyView(ContextsSettings().formStyle(.grouped)), state),
             ("settings-contexts-empty", CGSize(width: SettingsView.paneWidth, height: 420), AnyView(ContextsSettings().formStyle(.grouped)), empty),
             ("settings-contexts-at-cap", whole(1200), AnyView(ContextsSettings().formStyle(.grouped)), atCap),
             ("settings-context-editor", CGSize(width: 520, height: 360), AnyView(SampleContextEditor(duplicate: false)), state),
             ("settings-context-editor-duplicate", CGSize(width: 520, height: 360), AnyView(SampleContextEditor(duplicate: true)), state),
-            ("settings-status-messages", CGSize(width: SettingsView.paneWidth, height: 760), AnyView(StatusMessagesPreview()), noSpeech),
+            ("settings-status-messages", CGSize(width: SettingsView.paneWidth, height: 860), AnyView(StatusMessagesPreview()), noSpeech),
             ("settings-models", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), state),
             ("settings-models-empty", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), empty),
             // The Understanding section sits below the fold of the Models pane,
@@ -71,7 +71,11 @@ enum Snapshots {
             ("debug-panel-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), replay),
             ("debug-panel-calls-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
             ("settings-models-replay", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), replay),
-        ]
+        ] + SampleSpeech.cases.map { sample in
+            // The speech recognizer rows and the models list, in every state
+            // the picker can show.
+            ("speech-\(sample.name)", whole(SampleSpeech.height), AnyView(SampleSpeechSettings()), AppState.sample(speechModels: sample.models, speech: sample.settings))
+        }
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             for spec in specs {
                 let suffix = appearance == .aqua ? "light" : "dark"
@@ -190,7 +194,8 @@ extension AppState {
     /// sample's own clock when nil). Nothing here touches the pipeline.
     static func sample(
         at now: Date? = nil,
-        speechAvailability: SpeechListener.Availability = .available(locale: "English (US)")
+        speechModels: SpeechModels = SampleSpeech.models(),
+        speech: SpeechSettings = SpeechSettings()
     ) -> AppState {
         var settings = SensingSettings()
         settings.mentor.onlyMentorInsideContexts = true
@@ -199,7 +204,8 @@ extension AppState {
         settings.mentor.neverRules = [
             NeverRule(bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .correctness, createdAt: (now ?? Date()).addingTimeInterval(-7990)),
         ]
-        let state = AppState(sampleWithSettings: settings, speechAvailability: speechAvailability)
+        settings.mentor.speech = speech
+        let state = AppState(sampleWithSettings: settings, speechModels: speechModels)
         let now = now ?? state.clock.date
         let focus = FocusContext(
             timestamp: now,
@@ -216,7 +222,7 @@ extension AppState {
             focusedValueLength: SampleFrame.code.count
         )
         let sampleFrame = SampleFrame.render()
-        state.permissions = PermissionStatus(screenRecording: true, accessibility: false, microphone: true, speechRecognition: false)
+        state.permissions = PermissionStatus(screenRecording: true, accessibility: false, microphone: true)
         let frame = FrameInfo(
             hash: PerceptualHash(words: [0x1234_5678_9abc_def0, 0x0fed_cba9_8765_4321, 0xaaaa_5555_aaaa_5555, 0x0f0f_f0f0_0f0f_f0f0]),
             width: Int(sampleFrame.image.size.width),
@@ -301,7 +307,10 @@ extension AppState {
             placement: region.map { CalloutPlacement(displayID: 1, screenRect: CalloutAnchor.screenRect(for: $0.rect, in: frame) ?? .zero, note: $0.note) },
             status: .shown
         )
-        state.lastTranscript = TranscriptRecord(at: now.addingTimeInterval(-20), text: "does that work with tags as well", handling: "asked the mentor")
+        state.lastTranscript = TranscriptRecord(
+            at: now.addingTimeInterval(-20), text: "does that work with tags as well", handling: "asked the mentor",
+            heardBy: .heard(backend: .whisper, model: SpeechModelCatalog.whisperBaseEnglish.id)
+        )
         state.callLog = SampleSuggestions.calls(now: now)
         state.mentorStatus = MentorStatus(
             availability: .ready,
@@ -510,6 +519,57 @@ struct StatusMessagesPreview: View {
                 StatusLabel("Another app uses this combination, or it lacks Control, Option, or Command. Choose another.", kind: .warning)
             }
             VoiceSection()
+        }
+        .formStyle(.grouped)
+    }
+}
+
+/// The recognizer states the snapshot renders, one Settings picture each.
+enum SampleSpeech {
+    struct Case {
+        var name: String
+        var settings: SpeechSettings
+        var models: SpeechModels
+    }
+
+    static let height: CGFloat = 820
+    @MainActor static let unsupported = SpeechModelState.failed(reason: SpeechModels.unsupported(Locale(identifier: "cy_GB")), canRetry: false)
+
+    /// A Mac where SpeechAnalyzer's English is built in, Whisper Base is
+    /// downloaded, and Parakeet is on its way: the default picture.
+    @MainActor static func models(analyzer: SpeechModelState = .builtIn, language: String = "en_US", _ states: [String: SpeechModelState]? = nil) -> SpeechModels {
+        SpeechModels(sampleStates: states ?? [
+            SpeechModelCatalog.whisperBaseEnglish.id: .ready,
+            SpeechModelCatalog.parakeetV3.id: .downloading(fraction: 0.42),
+        ], analyzer: analyzer, language: language)
+    }
+
+    @MainActor static var cases: [Case] {
+        let whisper = SpeechSettings(backend: .whisper)
+        let parakeet = SpeechSettings(backend: .parakeet)
+        let base = SpeechModelCatalog.whisperBaseEnglish.id
+        let checksum = SpeechModelState.failed(reason: "The download does not match its published checksum, so it was not kept.", canRetry: true)
+        return [
+            Case(name: "analyzer-built-in", settings: SpeechSettings(), models: models()),
+            Case(name: "analyzer-not-downloaded", settings: SpeechSettings(), models: models(analyzer: .notDownloaded, language: "fr_FR", [:])),
+            Case(name: "analyzer-downloading", settings: SpeechSettings(), models: models(analyzer: .downloading(fraction: 0.63), language: "fr_FR", [:])),
+            Case(name: "analyzer-unsupported", settings: SpeechSettings(), models: models(analyzer: unsupported, language: "cy_GB", [:])),
+            Case(name: "whisper-not-downloaded", settings: whisper, models: models([:])),
+            Case(name: "whisper-downloading", settings: whisper, models: models([base: .downloading(fraction: 0.42)])),
+            Case(name: "whisper-checking", settings: whisper, models: models([base: .verifying])),
+            Case(name: "whisper-ready", settings: whisper, models: models()),
+            Case(name: "whisper-failed", settings: whisper, models: models([base: checksum])),
+            Case(name: "parakeet-ready", settings: parakeet, models: models([SpeechModelCatalog.parakeetV3.id: .ready, base: .ready])),
+        ]
+    }
+}
+
+/// The Talk back section and the Speech models list, as General shows them.
+struct SampleSpeechSettings: View {
+    var body: some View {
+        Form {
+            VoiceSection()
+            SpeechModelsSection()
         }
         .formStyle(.grouped)
     }

@@ -44,6 +44,8 @@ options:
   --out <dir>        where evidence goes (default: a dated directory per run)
   --keep-home        keep the scratch home after a run, to look inside it
   --time-scale <n>   run the replay clock n times faster (see README)
+  --appearance <light|dark>
+                     draw the app in that appearance, whatever the Mac shows
 TEXT
 }
 
@@ -179,6 +181,8 @@ run_scenario() (
 	SCENARIO_SUMMARY=""
 	SCENARIO_ARGS=()
 	SCENARIO_SETTINGS='{}'
+	SCENARIO_NETWORK=""
+	SCENARIO_SPEECH_MODELS=0
 	scenario_stage() { stage_text_document; }
 	# shellcheck disable=SC1090
 	source "$file"
@@ -194,6 +198,9 @@ run_scenario() (
 	HOME_DIR="$RUN_DIR/home"
 	new_home "$HOME_DIR"
 	seed_settings "$HOME_DIR" "$SCENARIO_SETTINGS"
+	if [ "$SCENARIO_SPEECH_MODELS" = 1 ]; then
+		seed_speech_models "$HOME_DIR" || exit 1
+	fi
 
 	local args=()
 	[ ${#SCENARIO_ARGS[@]} -gt 0 ] && args+=("${SCENARIO_ARGS[@]}")
@@ -263,6 +270,7 @@ main() {
 		--out) OUT_ROOT="$2"; shift 2 ;;
 		--keep-home) KEEP_HOME=1; shift ;;
 		--time-scale) TIME_SCALE="$2"; shift 2 ;;
+		--appearance) APPEARANCE="$2"; shift 2 ;;
 		--home) rest+=("$2"); shift 2 ;;
 		*) rest+=("$1"); shift ;;
 		esac

@@ -38,6 +38,7 @@ struct GeneralSettings: View {
             }
 
             VoiceSection()
+            SpeechModelsSection()
             NeverRulesSection()
         }
     }
@@ -45,7 +46,8 @@ struct GeneralSettings: View {
 
 // MARK: - Talk back
 
-/// Talking back: the hotkey and what it needs on this Mac.
+/// Talking back: the hotkey, the recognizer that hears it, and what it
+/// needs on this Mac.
 struct VoiceSection: View {
     @Environment(AppState.self) private var state
     @Environment(\.openWindow) private var openWindow
@@ -68,15 +70,7 @@ struct VoiceSection: View {
                     Text("Hold it and speak, then let go to send.")
                 }
             }
-            LabeledContent("On-device recognition") {
-                switch state.speechAvailability {
-                case .available(let locale):
-                    StatusLabel("Available for \(locale)", kind: .success)
-                case .unavailable(let reason):
-                    StatusLabel(reason, kind: .warning)
-                        .multilineTextAlignment(.trailing)
-                }
-            }
+            SpeechRecognizerRows()
             ForEach(Permission.optional) { permission in
                 LabeledContent(permission.title) {
                     PermissionBadge(granted: state.permissions.isGranted(permission))
@@ -94,7 +88,7 @@ struct VoiceSection: View {
         } header: {
             Text("Talk back")
         } footer: {
-            Text("Hold the shortcut and say \"tell me more,\" \"not now,\" or \"never for this\" to answer a suggestion, or ask a question about it and the answer appears in the suggestion. Audio and transcripts stay on this Mac. Only your question, the suggestion, and the text of the screen it was made from go to the mentor model.")
+            Text("Hold the shortcut and say \"tell me more,\" \"not now,\" or \"never for this\" to answer a suggestion, or ask a question about it and the answer appears in the suggestion. Whichever recognizer you choose runs on this Mac: audio and transcripts stay here, and nothing falls back to another recognizer when the one you chose is not ready. Only your question, the suggestion, and the text of the screen it was made from go to the mentor model.")
         }
     }
 }

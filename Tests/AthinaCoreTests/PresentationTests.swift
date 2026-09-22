@@ -33,9 +33,15 @@ import Testing
     }
 
     @Test func alertPermissionsAskOnceThenOpenTheirPane() {
-        for permission in [Permission.microphone, .speechRecognition] {
-            #expect(PermissionAction.for(permission, granted: false, undetermined: true) == .request)
-            #expect(PermissionAction.for(permission, granted: false, undetermined: false) == .openSystemSettings)
-        }
+        #expect(PermissionAction.for(.microphone, granted: false, undetermined: true) == .request)
+        #expect(PermissionAction.for(.microphone, granted: false, undetermined: false) == .openSystemSettings)
+    }
+
+    /// Every recognizer runs on this Mac without the system's speech
+    /// recognition service, so talking back asks for the microphone alone.
+    @Test func talkingBackNeedsOnlyTheMicrophone() {
+        #expect(Permission.optional == [.microphone])
+        #expect(PermissionStatus(screenRecording: false, accessibility: false, microphone: true).voiceGranted)
+        #expect(!PermissionStatus(screenRecording: true, accessibility: true, microphone: false).voiceGranted)
     }
 }
