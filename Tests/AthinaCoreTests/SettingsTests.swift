@@ -40,6 +40,20 @@ import Testing
         #expect(decoded.excludedBundleIDs == ExcludedApps.defaults)
     }
 
+    /// The debug panel is something the person turns on: a new install and a
+    /// settings file written before the switch existed both start with it off,
+    /// and turning it on is kept.
+    @Test func theDebugPanelStartsOffAndKeepsBeingTurnedOn() throws {
+        #expect(SensingSettings().showDebugPanel == false)
+        let older = Data(#"{"floorInterval": 12, "mentor": {"enabled": true}}"#.utf8)
+        #expect(try JSONDecoder().decode(SensingSettings.self, from: older).showDebugPanel == false)
+        let store = SettingsStore(url: temporaryURL())
+        var settings = SensingSettings()
+        settings.showDebugPanel = true
+        try store.save(settings)
+        #expect(store.load().showDebugPanel == true)
+    }
+
     @Test func validationClampsOutOfRangeValues() throws {
         let data = Data(#"{"floorInterval": -5, "hashDistanceThreshold": 999, "maxFrameDimension": 10}"#.utf8)
         let decoded = try JSONDecoder().decode(SensingSettings.self, from: data)

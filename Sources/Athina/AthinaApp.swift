@@ -25,7 +25,14 @@ struct AthinaApp: App {
         }
         // Tall enough for the Now pane's cards, Understanding included.
         .defaultSize(width: 1180, height: 860)
-        .defaultLaunchBehavior(LaunchArguments.windowToOpen == WindowID.debug ? .presented : .suppressed)
+        // Opened from Settings > Advanced once the person turns it on, and at
+        // launch by `--open debug` as `DebugPanelAccess` allows; the menu
+        // offers no command for it.
+        .defaultLaunchBehavior(
+            LaunchArguments.windowToOpen == WindowID.debug
+                && DebugPanelAccess.opensAtLaunch(clientMode: state.clientMode, settings: state.settings)
+                ? .presented : .suppressed
+        )
         .restorationBehavior(.disabled)
 
         Window("Permissions", id: WindowID.permissions) {
@@ -129,7 +136,8 @@ enum WindowID {
 }
 
 /// Developer aids on the command line: `Athina --open debug|settings|permissions|history`
-/// presents that window at launch (for example
+/// presents that window at launch, the debug panel on a live launch only while
+/// Settings > Advanced turns it on (`DebugPanelAccess`) (for example
 /// `open -n build/Athina.app --args --replay <dir> --open debug`; a plain `open`
 /// brings an already running Athina forward and drops the arguments, and without
 /// `--replay` the new instance is a second live Athina on the live journal, the
@@ -294,7 +302,6 @@ struct MenuBarContent: View {
         }
         Divider()
         Button("Suggestions") { open(WindowID.history) }
-        Button("Debug Panel") { open(WindowID.debug) }
         Button("Permissions…") { open(WindowID.permissions) }
         Button("Settings…") {
             NSApp.activate()
