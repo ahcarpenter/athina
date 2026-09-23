@@ -679,7 +679,7 @@ general_state() {
 # in the background; the answer lands in $RUN_DIR/<tag>-reply.json.
 play_recording() {
 	local file="$1" tag="$2"
-	"$ROOT/scripts/talk-back.sh" "$ATHINA_PID" "$file" >"$RUN_DIR/$tag-reply.json" 2>>"$RUN_DIR/transcript.log" &
+	"$ROOT/scripts/talk-back.sh" "$ATHINA_PID" "$file" >"$RUN_DIR/$tag-reply.json" 2>>"$RUN_DIR/transcript.log" 9>&- &
 	PLAYING_PID=$!
 }
 
