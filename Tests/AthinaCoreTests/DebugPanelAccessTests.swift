@@ -31,12 +31,4 @@ import Testing
             #expect(DebugPanelAccess.opensAtLaunch(clientMode: mode, settings: settings(showDebugPanel: true)) == true)
         }
     }
-
-    /// The menu offers the command exactly while the switch is on, as Safari
-    /// shows its Develop menu only while its Advanced setting is on.
-    @Test func theMenuOffersTheCommandOnlyWhileTheSwitchIsOn() {
-        #expect(DebugPanelAccess.menuOffersCommand(settings: SensingSettings()) == false)
-        #expect(DebugPanelAccess.menuOffersCommand(settings: settings(showDebugPanel: false)) == false)
-        #expect(DebugPanelAccess.menuOffersCommand(settings: settings(showDebugPanel: true)) == true)
-    }
 }

@@ -1282,8 +1282,9 @@ Advanced switch adds its Develop menu; it appears and goes the moment the switch
 changes, with no relaunch. Every install starts with the switch off, an install
 from before it existed included, and turning it off closes the panel and takes
 the command out of the menu. No other window links to it, so while the switch
-is off nothing in the app opens it. Which launches may open it at launch, and
-whether the menu offers it, is one pure rule, `DebugPanelAccess`, under test.
+is off nothing in the app opens it. The pane and the menu read the switch
+itself; which launches may open it at launch is one pure rule,
+`DebugPanelAccess`, under test.
 The builder's paths reach it without changing the owner's setting:
 
 - **A replay**: `open -n build/Athina.app --args --replay <dir> --open debug`

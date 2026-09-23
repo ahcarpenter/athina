@@ -310,8 +310,8 @@ struct MenuBarContent: View {
         .keyboardShortcut(",")
         // A builder's tool, in a group of its own after the everyday windows,
         // as Safari's Develop menu follows its everyday menus, and only while
-        // Settings > Advanced turns it on (`DebugPanelAccess`).
-        if DebugPanelAccess.menuOffersCommand(settings: state.settings) {
+        // Settings > Advanced turns it on, in every mode.
+        if state.settings.showDebugPanel {
             Divider()
             Button("Debug Panel") { open(WindowID.debug) }
         }
