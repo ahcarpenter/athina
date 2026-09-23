@@ -90,8 +90,9 @@ public enum TranscriptMatcher {
 }
 
 /// What a press of the talk-back key means for the toast it was about,
-/// once the recording has ended: by a transcript, by nothing being heard, or
-/// by being cut short (pausing, or bringing a toast back mid-recording).
+/// once the recording has ended: by a transcript, by nothing being heard, by
+/// being cut short (pausing, or bringing a toast back mid-recording), or by
+/// failing to start.
 ///
 /// A toast counts as talked to only once a transcript was matched to an
 /// answer or a question was asked; from then on it stays up, holding new

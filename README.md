@@ -239,6 +239,8 @@ open -n build/Athina.app --args --replay <dir> --time-scale 60 --advance-clock 1
   session, or keep input arriving, or sensing goes idle after a second. Timers
   paced for a person shrink too: at 60x a held talk-back key is cut off after
   half a second, so talk back to a scaled replay through the Talk back field.
+  The wait for a recognizer's final transcript stays real time, since it
+  bounds the recognizer's real work.
   A capture still takes its real time, so at a high scale one is nearly always
   in flight. A change moment that lands during one is captured after it ends,
   but several that land during the same capture share that one next capture,
@@ -1187,10 +1189,10 @@ A suggestion the mentor tier finishes while a talked-to toast is up never
 replaces it. `MentorScheduler.publishGate` holds it, leaving the toast, the
 recording, the pending answer, and the answer on screen untouched; the
 exchange ends only when that toast is closed, by the user answering or
-dismissing it. A press that hears nothing, or a recording cut short by
-pausing, is not an exchange (`TalkBackPress`): the toast gets back whatever
-countdown it had (still paused while the pointer is over it), and anything
-held in the meantime is shown at once. Show Last Suggestion during a recording
+dismissing it. A press that hears nothing, a recording cut short by
+pausing, or one that could not start is not an exchange (`TalkBackPress`):
+the toast gets back whatever countdown it had (still paused while the pointer
+is over it), and anything held in the meantime is shown at once. Show Last Suggestion during a recording
 on a different toast ends it the same way; on the toast already on screen it
 only brings that toast to the front and does not end its own exchange. The
 toast it brings back stays up until closed, as it always does. Otherwise the

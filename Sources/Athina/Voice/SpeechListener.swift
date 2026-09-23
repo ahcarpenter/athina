@@ -31,7 +31,7 @@ final class SpeechListener {
 
     private static let log = Logger(subsystem: "com.ahcarpenter.athina", category: "voice")
 
-    /// What the release grace and the wait for a final result are waited out on.
+    /// What the release grace is waited out on.
     private let clock: any AthinaClock
     private(set) var isListening = false
     private var input: (any AudioInput)?
@@ -128,9 +128,11 @@ final class SpeechListener {
         let timeout = finalResultTimeout
         return await withCheckedContinuation { continuation in
             waiters.append(continuation)
-            let clock = clock
             Task { @MainActor [weak self] in
-                try? await clock.sleep(for: .seconds(timeout))
+                // This bounds the recognizer's real work, which a replay's
+                // scaled or advanced clock does not speed up, so it waits in
+                // real time.
+                try? await ContinuousClock().sleep(for: .seconds(timeout))
                 guard let self, self.session == session, !self.finished else { return }
                 SpeechListener.log.notice("no final result within \(timeout)s, keeping the latest partial")
                 self.complete()
