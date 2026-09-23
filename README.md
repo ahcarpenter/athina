@@ -1452,11 +1452,15 @@ due, running, or why it is held, size against the budget, what refresh calls
 have cost since it began, the last refresh call, and Reset Understanding…),
 focused element (role, title, description, text), cadence settings and
 counters, journal size and path. Centre: the latest kept frame with OCR boxes
-overlaid and the recognized text below; selecting an observation in the
-timeline shows that frame instead. Right: a live timeline of observations and
-events from the journal (suggestions and feedback included), or, under Model
-Calls, a scrolling log of every API call with prompt size, tokens, cost,
-latency, outcome, and the model's reason. The status bar shows mode, permission
+overlaid and the recognized text below, or, with no frame to show, why there is
+none, such as a journal just cleared, Screen Recording missing, or an excluded
+app in front; selecting an observation in the timeline shows that frame
+instead. After Clear Journal the panel names none of what it deleted: no gate
+decision or model call about a deleted row, no transcript, and no callout
+record unless that callout is still on screen. Right: a live timeline of
+observations and events from the journal (suggestions and feedback included),
+or, under Model Calls, a scrolling log of every API call with prompt size,
+tokens, cost, latency, outcome, and the model's reason. The status bar shows mode, permission
 state, last and next capture with reason, seconds since input, spend this hour
 against the cap (for live calls), and the app's own CPU and memory. While calls
 are replayed or recorded, the status bar and the Mentor card carry a Replay or

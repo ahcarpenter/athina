@@ -534,6 +534,7 @@ final class AppState {
             callLog.removeAll()
             suggestionHistory.removeAll()
             followUps.removeAll()
+            // A callout still drawn is on screen now, so its record stays until it goes.
             if !callouts.isVisible { lastCallout = nil }
             lastTranscript = nil
             if let journal {
