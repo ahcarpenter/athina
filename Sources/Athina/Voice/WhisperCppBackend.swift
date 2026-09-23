@@ -23,9 +23,10 @@ final class WhisperCppBackend: SpeechBackend {
     }
 
     var origin: TranscriptOrigin { .heard(backend: model.backend, model: model.id) }
-    /// The first recording after a new build also compiles whisper.cpp's GPU
-    /// kernels, which took eight seconds on an M2 Max; every later one loads
-    /// the model in a fraction of a second.
+    /// The first recording in a process also compiles whisper.cpp's GPU
+    /// kernels when Metal's shader cache no longer holds them, which took
+    /// eight seconds on an M2 Max and can take ten or more; otherwise the
+    /// model loads in a fraction of a second.
     var finalResultTimeout: TimeInterval { 20 }
 
     func begin(format: AVAudioFormat, report: @escaping @Sendable (SpeechUpdate) -> Void) throws -> any SpeechRecognition {

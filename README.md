@@ -1244,8 +1244,10 @@ neither transcriber hears is reported as not available.
 one pinned framework with no network code of its own: one runtime keeps both
 on the same footing, each model is a single file, and both load in a fraction
 of a second (measured on an M2 Max: 0.1 s for Whisper Base, 0.25 s for
-Parakeet, after the first load of a new build compiles the GPU kernels, about
-eight seconds once). The model loads as a recording starts and is let go as
+Parakeet). The exception is the first load in a process when Metal's shader
+cache, which every Athina build on the Mac shares, no longer holds
+whisper.cpp's GPU kernels: compiling them took eight seconds there and can
+take ten or more. The model loads as a recording starts and is let go as
 it ends, so nothing stays in memory between presses. Neither streams, so the
 toast's live transcript comes from transcribing the audio so far about every
 second and is coarser than SpeechAnalyzer's; the whole recording is
