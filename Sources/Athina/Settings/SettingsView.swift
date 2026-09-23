@@ -5,7 +5,7 @@ import SwiftUI
 /// A pane of the Settings window. The last pane viewed is remembered, and
 /// `--open settings:<pane>` or a link inside another pane can choose it.
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, contexts, models, capture, journal, privacy
+    case general, contexts, models, capture, journal, privacy, advanced
 
     static let storageKey = "SettingsPane"
 
@@ -28,6 +28,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .capture: "Capture"
         case .journal: "Journal"
         case .privacy: "Privacy"
+        case .advanced: "Advanced"
         }
     }
 
@@ -39,6 +40,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .capture: "camera.viewfinder"
         case .journal: "book.closed"
         case .privacy: "hand.raised"
+        case .advanced: "gearshape.2"
         }
     }
 
@@ -75,6 +77,9 @@ struct SettingsView: View {
             }
             Tab(SettingsPane.privacy.title, systemImage: SettingsPane.privacy.symbol, value: .privacy) {
                 PrivacySettings().settingsPane(height: 560)
+            }
+            Tab(SettingsPane.advanced.title, systemImage: SettingsPane.advanced.symbol, value: .advanced) {
+                AdvancedSettings().settingsPane(height: 180)
             }
         }
     }

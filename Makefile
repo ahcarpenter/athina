@@ -69,12 +69,15 @@ run-replay: build
 ## Build and launch the app live, writing every model call to a fixture file.
 ## This spends API credits: use it only to record fixtures on purpose.
 ## Replaces only the copy this checkout's `make run` or `make record` launched
-## before, and refuses to start while another live Athina is running.
+## before, and refuses to start while another live Athina is running. Opens the
+## debug panel, whose Talk back field a recording session types into, whatever
+## Settings > Advanced > Enable debug panel says (DebugPanelAccess).
 record: build
 	@dir="$(RECORD_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
 	if [ -n "$$dir" ]; then mkdir -p -m 700 "$$dir" && dir="$$(cd "$$dir" && pwd)" || exit 1; fi; \
 	set -- --record; \
 	if [ -n "$$dir" ]; then set -- "$$@" "$$dir"; fi; \
+	set -- "$$@" --open debug; \
 	scripts/launch.sh live --live -- "$$@"
 
 ## Delete the app's own recordings directory and every recorded call in it
