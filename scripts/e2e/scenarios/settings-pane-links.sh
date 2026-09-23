@@ -99,7 +99,8 @@ follow_link() {
 	# before the pointer aims at it.
 	link="$(locate_link "$pane" "$name" "$tag-aim")"
 	# shellcheck disable=SC2086
-	[ -n "$link" ] && inside_window "$tag-aim-dump.txt" $link || { log "the $name link left the $pane window before the click"; return 1; }
+	{ [ -n "$link" ] && inside_window "$tag-aim-dump.txt" $link; } \
+		|| { log "the $name link left the $pane window before the click"; return 1; }
 	# shellcheck disable=SC2086
 	"$DRIVE" click window "$ATHINA_PID" $link --shot "$RUN_DIR/$tag-click.png" >>"$RUN_DIR/transcript.log" 2>&1 \
 		|| { log "the click on the $name link would not land"; return 1; }
