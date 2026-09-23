@@ -12,10 +12,14 @@
 SCENARIO_SUMMARY="SpeechAnalyzer's assets for a language macOS has not installed download through Settings with the system's progress, and then read as built in"
 
 # Another language on a Mac that already has French: ATHINA_E2E_SPEECH_LOCALE,
-# one of those named below.
+# one of those named below. fr_CA is the one to run to check that the
+# person's language wins over the app's own: Athina is localized only in
+# English, so it runs as English (Canada) there, which SpeechTranscriber also
+# hears.
 SPEECH_LOCALE="${ATHINA_E2E_SPEECH_LOCALE:-fr_FR}"
 case "$SPEECH_LOCALE" in
 fr_FR) SPEECH_LANGUAGE="French (France)" ;;
+fr_CA) SPEECH_LANGUAGE="French (Canada)" ;;
 de_DE) SPEECH_LANGUAGE="German (Germany)" ;;
 es_ES) SPEECH_LANGUAGE="Spanish (Spain)" ;;
 it_IT) SPEECH_LANGUAGE="Italian (Italy)" ;;
