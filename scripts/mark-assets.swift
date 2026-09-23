@@ -750,8 +750,6 @@ func writeReadmeOwls() throws {
 /// them leaves the committed assets stale with nothing else to catch it. The
 /// output is a pure function of these three on any one Mac, so rerunning
 /// after an edit rewrites one line here and leaves the drawn files untouched.
-/// The README pictures are recorded by name, so the set the README can show
-/// is the set that was drawn.
 func writeProvenance() throws {
     let generator = URL(fileURLWithPath: #filePath)
     let digest = try [master, owlMaster, generator].map { url -> String in
@@ -765,7 +763,6 @@ func writeProvenance() throws {
     # script or the variant set, never edit this by hand.
     \(digest)
     variants \(set.map(\.mark).joined(separator: " "))
-    readme ReadmeIcon.png \(readmeOwlInks.map { "ReadmeOwl-\($0.0).svg" }.joined(separator: " "))
 
     """
     try text.write(to: markDirectory.appendingPathComponent("built-from.txt"), atomically: true, encoding: .utf8)

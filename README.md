@@ -29,9 +29,8 @@ pause it.
 Athena was the Greek goddess of wisdom, of war and of craft, and the owl was
 hers from very early on: archaic images often show her with an owl perched on
 her hand, and it became her emblem. Homer calls her *glaukopis*, usually
-rendered "bright-eyed" or "with gleaming eyes", and the Greek word for the
-little owl, *glaux*, comes from the same root, perhaps for the bird's own
-striking eyes.
+rendered "bright-eyed" or "with gleaming eyes", and the Greek word for owl,
+*glaux*, comes from the same root, perhaps for the bird's own striking eyes.
 
 Why the owl became her bird is not known for certain. One explanation often
 given lies in its eyes: a bird that sees in the dark, where others cannot,

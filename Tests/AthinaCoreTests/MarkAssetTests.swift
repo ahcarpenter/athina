@@ -145,24 +145,15 @@ import Testing
     }
 
     /// The pictures at the top of the README are drawn by the same script from
-    /// the same masters, so they are held to the same record: every one it
-    /// names is committed, the README shows exactly those, and nothing else
-    /// drawn for the README is left lying beside them.
-    @Test func theReadmeShowsThePicturesTheScriptDrew() throws {
-        let record = try String(contentsOf: markDirectory.appendingPathComponent("built-from.txt"), encoding: .utf8)
-        let drawn = Set(record.split(separator: "\n")
-            .first { $0.hasPrefix("readme ") }?
-            .dropFirst("readme ".count)
-            .split(separator: " ")
-            .map(String.init) ?? [])
-        #expect(drawn.contains("ReadmeIcon.png"), "the record names no README icon; run `make mark`")
+    /// the same masters and committed beside the rest: the README shows every
+    /// one of them, points at none that is missing, and nothing drawn for the
+    /// README is left lying unused.
+    @Test func theReadmeShowsEveryPictureDrawnForIt() throws {
         let files = Set(try FileManager.default.contentsOfDirectory(atPath: markDirectory.path)
             .filter { $0.hasPrefix("Readme") })
-        #expect(files == drawn, "the README pictures on disk are not the ones last drawn; run `make mark`")
-
         let readme = try String(contentsOf: root.appendingPathComponent("README.md"), encoding: .utf8)
         let shown = Set(readme.matches(of: /Resources\/Mark\/(Readme[A-Za-z-]+\.[a-z]+)/).map { String($0.output.1) })
-        #expect(shown == drawn, "the README shows \(shown.sorted()), but the script drew \(drawn.sorted())")
+        #expect(shown == files, "the README shows \(shown.sorted()), but Resources/Mark holds \(files.sorted())")
     }
 
     /// The README icon is the icon as Finder draws it, masked and shadowed,

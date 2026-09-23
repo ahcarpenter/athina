@@ -4,6 +4,5 @@
 # script or the variant set, never edit this by hand.
 AthinaMark.svg 02dc7f7b960525ffe50cce980c37640aa7311ee36da5e9c025451d904706fb79
 AthinaOwl.svg e227bce988b0923c2caffc967581fd748de147d9258106d52ae7ae3808de9aa5
-mark-assets.swift 4720bca7553d734996768594ad6147fc03db1b572ab017c95ae6db0310e24027
+mark-assets.swift 1dfaeb6f63c2606917dc9bf22f4fe3aa458761c476828519bd04ddff6674425e
 variants watching idle paused excluded needsSomething held
-readme ReadmeIcon.png ReadmeOwl-light.svg ReadmeOwl-dark.svg
