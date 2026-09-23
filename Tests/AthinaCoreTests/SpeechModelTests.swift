@@ -476,6 +476,25 @@ private final class Phases: @unchecked Sendable {
         #expect(T.status(404).description.hasPrefix("The server answered 404"))
     }
 
+    /// Only a failure to get through to the host says the host could not be
+    /// reached, naming the one it was on; any other failure reads as itself.
+    @Test func onlyAConnectionThatFailedIsReportedAsOne() {
+        typealias T = URLSessionModelTransport.TransportError
+        let sandboxed = T.classify(NSError(domain: NSPOSIXErrorDomain, code: Int(EPERM)), host: "huggingface.co")
+        #expect(sandboxed as? T == T.connection(host: "huggingface.co", detail: "operation not permitted"))
+        for code in [URLError.Code.cannotConnectToHost, .networkConnectionLost, .timedOut] {
+            guard case .connection(let host, _)? = T.classify(URLError(code), host: "cas-bridge.xethub.hf.co") as? T else {
+                Issue.record("\(code.rawValue) is a connection that failed")
+                continue
+            }
+            #expect(host == "cas-bridge.xethub.hf.co")
+        }
+        let fullDisk = T.classify(URLError(.cannotWriteToFile), host: "huggingface.co")
+        #expect(fullDisk as? T == nil)
+        #expect((fullDisk as? URLError)?.code == .cannotWriteToFile)
+        #expect(T.classify(NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC)), host: "huggingface.co") as? T == nil)
+    }
+
     @Test func progressIsReportedAtMostOncePerPercent() {
         let throttle = ProgressThrottle()
         #expect(throttle.advances(to: 0))

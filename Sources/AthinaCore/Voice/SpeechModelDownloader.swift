@@ -79,7 +79,8 @@ public struct URLSessionModelTransport: ModelFileTransport {
 
     public enum TransportError: Error, Equatable, CustomStringConvertible {
         case status(Int)
-        /// No answer came from the host at all: offline, a proxy, a firewall.
+        /// The host could not be reached, or the connection to it was lost:
+        /// offline, a proxy, a firewall.
         case connection(host: String, detail: String)
 
         public var description: String {
@@ -88,6 +89,31 @@ public struct URLSessionModelTransport: ModelFileTransport {
             case .connection(let host, let detail): "This Mac could not reach \(host): \(detail)."
             }
         }
+
+        /// A failed transfer as the person reads it: one that kept this Mac
+        /// from reaching `host` says so, and any other, a file that could not
+        /// be written for one, is reported as itself.
+        static func classify(_ error: Error, host: String) -> Error {
+            let failure = error as NSError
+            let unreachable = switch failure.domain {
+            case NSURLErrorDomain: connectionFailures.contains(URLError.Code(rawValue: failure.code))
+            case NSPOSIXErrorDomain: POSIXErrorCode(rawValue: Int32(failure.code)).map(socketFailures.contains) ?? false
+            default: false
+            }
+            return unreachable ? TransportError.connection(host: host, detail: detail(of: error)) : error
+        }
+
+        static let connectionFailures: Set<URLError.Code> = [
+            .cannotFindHost, .cannotConnectToHost, .dnsLookupFailed, .notConnectedToInternet,
+            .networkConnectionLost, .timedOut, .secureConnectionFailed,
+        ]
+
+        /// What a socket reports when it cannot get through, EPERM being the
+        /// sandbox's closed network.
+        static let socketFailures: Set<POSIXErrorCode> = [
+            .EPERM, .ECONNREFUSED, .ECONNRESET, .ECONNABORTED, .EHOSTUNREACH, .EHOSTDOWN,
+            .ENETUNREACH, .ENETDOWN, .ENETRESET, .ETIMEDOUT, .ENOTCONN,
+        ]
 
         /// What went wrong with a connection, in words that fit after a colon:
         /// the system's own sentence, without "The operation couldn't be
@@ -188,10 +214,10 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
         if wasCancelled {
             resume(with: .failure(CancellationError()))
         } else if let error {
-            // A failure of the transfer itself, whatever layer reported it,
-            // is a host that could not be reached; its own words say how.
-            let detail = URLSessionModelTransport.TransportError.detail(of: error)
-            resume(with: .failure(URLSessionModelTransport.TransportError.connection(host: host, detail: detail)))
+            // The host the transfer was on when it failed, which after Hugging
+            // Face's redirect is its content delivery network.
+            let host = task.currentRequest?.url?.host() ?? host
+            resume(with: .failure(URLSessionModelTransport.TransportError.classify(error, host: host)))
         } else if let moveError {
             resume(with: .failure(moveError))
         } else {
