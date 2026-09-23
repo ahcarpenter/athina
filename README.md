@@ -4,18 +4,19 @@ Live mentor for macOS: watches what you are doing and offers timely guidance.
 
 The **foundation** is a menu-bar app that senses what you are doing
 (accessibility context plus low-cadence screen capture with on-device OCR),
-records it in a local journal, and shows a debug panel with what it currently
-thinks you are doing. The **mentor loop** subscribes to that stream and asks
-Claude, in two tiers, whether there is a genuinely more helpful way to approach
-what you are doing; when there is, a small toast says so and learns from your
-answer. The **standing understanding** carries what you appear to be working
-toward from one call to the next, so Athina can look out for you: it calls out
-an approach that will not reach your goal, one that is slower than an
-alternative you have, or one that will reach it and bring a side effect you
-would not want. **Callouts and voice** let a suggestion point at the spot on
-screen it is about and take a spoken reply: an answer to the toast, or a
-question the mentor tier answers. Reading suggestions aloud is deferred.
-Halt-and-redirect and learned suppression are later phases.
+records it in a local journal, and, once turned on in Settings > Advanced,
+shows a debug panel with what it currently thinks you are doing. The **mentor
+loop** subscribes to that stream and asks Claude, in two tiers, whether there
+is a genuinely more helpful way to approach what you are doing; when there is,
+a small toast says so and learns from your answer. The **standing
+understanding** carries what you appear to be working toward from one call to
+the next, so Athina can look out for you: it calls out an approach that will
+not reach your goal, one that is slower than an alternative you have, or one
+that will reach it and bring a side effect you would not want. **Callouts and
+voice** let a suggestion point at the spot on screen it is about and take a
+spoken reply: an answer to the toast, or a question the mentor tier answers.
+Reading suggestions aloud is deferred. Halt-and-redirect and learned
+suppression are later phases.
 
 ## Requirements
 
@@ -63,19 +64,22 @@ and never reads the keychain. Each view renders in a borderless window placed
 below the desktop picture, where the window server still composites glass and
 controls and ScreenCaptureKit still captures it, so nothing appears on screen
 (the run puts no item in the menu bar either) and a tall Settings pane renders
-whole. Replay mode has renders of its own.
-`open -n build/Athina.app --args --replay <dir> --open debug` (or `settings`,
-`settings:<pane>` for `general`, `contexts`, `models`, `capture`, `journal`, or
-`privacy`, `permissions`, `history`) starts a replay with that window already
-open, which is how a panel gets screenshotted from a shell. Keep the `--replay`:
-a bare `open -n` goes round `scripts/launch.sh`, so nothing stops it starting a
-second live Athina on the live journal, the live settings and the same API bill.
-The live app's own windows open from its menu bar item, on the copy `make run`
-already started. `--record [<dir>]` chooses where model calls go, `--time-scale
-<n>` and `--advance-clock <interval>` set a replay's clock, and `--settings
-<path>` chooses the settings a replay starts from; see Iterating without the
-network. Where a replay keeps its own files is not an argument: it makes a
-directory for itself and says which on the line it writes as it starts.
+whole. Replay mode has renders of its own. `open -n build/Athina.app --args
+--replay <dir> --open debug` (or `settings`, `settings:<pane>` for `general`,
+`contexts`, `models`, `capture`, `journal`, `privacy`, or `advanced`,
+`permissions`, `history`) starts a replay with that window already open, which
+is how a panel gets screenshotted from a shell. A replay opens the debug panel
+this way whatever Settings > Advanced says; a live launch opens it only while
+the switch there is on (see Debug panel). Keep the `--replay`: a bare `open -n`
+goes round `scripts/launch.sh`, so nothing stops it starting a second live
+Athina on the live journal, the live settings and the same API bill. The live
+app's own windows open from its menu bar item, on the copy `make run` already
+started, and the debug panel from Settings > Advanced once it is turned on
+there. `--record [<dir>]` chooses where model calls go, `--time-scale <n>` and
+`--advance-clock <interval>` set a replay's clock, and `--settings <path>`
+chooses the settings a replay starts from; see Iterating without the network.
+Where a replay keeps its own files is not an argument: it makes a directory for
+itself and says which on the line it writes as it starts.
 
 ### Setup: the Anthropic API key
 
@@ -507,6 +511,7 @@ never wait.
 | `menubar-mark` | Athina's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
 | `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
+| `debug-panel-access` | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed; turned on, that button opens the panel (the menu still offers none), and turned off again, the panel closes |
 | `settings-pane-links` | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link rather than Markdown, and a real click on it changes the Settings window's pane in place rather than handing the link to the system |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
@@ -1406,7 +1411,34 @@ counted (see Iterating without the network).
 
 ## Debug panel
 
-Menu bar > Debug Panel. Left: frontmost app, window, the Mentor loop card
+The debug panel is a builder's window, so it is off until the person turns it
+on: Settings > Advanced > **Enable debug panel**, then **Open Debug Panel**
+beside it. Every install starts with the switch off, an install from before it
+existed included, and turning it off closes the panel. The menu bar menu has no
+command for it and no other window links to it, so while the switch is off
+nothing in the app opens it. Which launches may open it at launch is one pure
+rule, `DebugPanelAccess`, under test. The builder's paths reach it without
+changing the owner's setting:
+
+- **A replay**: `open -n build/Athina.app --args --replay <dir> --open debug`
+  opens it whatever the switch says. `make run-replay` passes no `--open`, so
+  there it opens from the replay's own Settings > Advanced: the switch starts
+  where the live one is, and turning it on there is saved only to the replay's
+  own settings file.
+- **A recording**: `make record` passes `--open debug`, which a recording
+  honours whatever the switch says, for the follow-up question typed into the
+  panel's Talk back field (see The committed fixtures).
+- **The end-to-end harness**: a scenario that needs the panel puts
+  `--open debug` in its `SCENARIO_ARGS` (`understanding-surfaces` does), and
+  `athina-drive ax ... --scope "Debug Panel"` reaches its controls. Capture Now
+  is the menu's own command, not the panel's.
+- **Snapshots**: `--snapshot` draws the panel's view directly
+  (`debug-panel*`), and the Advanced pane with the switch off and on
+  (`settings-advanced`, `settings-advanced-on`), light and dark.
+- **A live launch** given `--open debug` opens the panel only while the switch
+  is on.
+
+The panel itself. Left: frontmost app, window, the Mentor loop card
 (availability, the last triage gate decision and its reason, the current
 mentorship context verdict, the last triage and mentor calls with tokens,
 cached tokens, estimated cost and latency, spend this hour, the cadence state
@@ -1509,6 +1541,14 @@ particular to this app:
   lists the units the range holds a whole amount of, and an amount typed outside
   the range settles at the nearest allowed one as the edit ends, rather than
   being clamped out of sight afterwards.
+- **Tools for looking inside Athina are opted into in the Advanced pane.** The
+  debug panel is offered only once Settings > Advanced > Enable debug panel
+  is on, the pane last in the toolbar as Safari's is, whose Advanced pane holds
+  "Show features for web developers" for the same reason: the HIG (Settings)
+  asks for defaults that give the best experience to the most people and for
+  panes that each group related settings, and a window of model calls and
+  captured text is neither for most people nor related to any other pane.
+  Its button sits in the switch's own group and is dimmed while it is off.
 - **Status is never color alone.** Inline messages are `StatusLabel` and badges
   are `StatusBadge` (`Sources/Athina/Components.swift`): the symbol or capsule
   carries the color, the words stay in a label color. Text uses system text
