@@ -5,8 +5,9 @@
 # observation, so the Latest frame pane is empty until the next capture, and
 # the pane says that is why rather than blaming a permission the header shows
 # granted. The Mentor loop card stops naming an observation or a model call that
-# no longer exists, and the callout and transcript from before the clear. The
-# next capture then fills the pane again.
+# no longer exists, and a transcript or an off-screen callout from before the
+# clear; a field that was already empty before clearing is logged as not
+# exercised rather than checked. The next capture then fills the pane again.
 #
 # Settings opens from the menu and both confirmation buttons are pressed by
 # name through accessibility, so the run needs no pointer.
@@ -116,6 +117,10 @@ scenario_run() {
 	local field
 	for field in "Last triage, none yet" "Mentor gate, not reached yet" "Last mentor, none yet" \
 		"Last refresh, none yet" "Callout, none yet" "Transcript, none yet"; do
+		if [ "$(has_text before-texts.txt "value=\"$field")" = yes ]; then
+			log "${field%%,*} was already empty before clearing, not exercised"
+			continue
+		fi
 		check "the panel reads $field" "yes" "$(has_text cleared-texts.txt "value=\"$field\"")"
 	done
 
