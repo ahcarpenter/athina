@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 # Build Athina.app from the SwiftPM binary: no Xcode project needed.
 #
-# Usage: scripts/bundle.sh [debug|release]
+# Usage: scripts/bundle.sh [debug|release] [--universal] [--out <dir>] [--no-sign]
+#
+#   --universal  build for Apple silicon and Intel in one binary, as a release does
+#   --out <dir>  put Athina.app in <dir> instead of build/
+#   --no-sign    leave the bundle unsigned, for scripts/release.sh to sign
+#
+# The version is Resources/Info.plist's own (CFBundleShortVersionString and
+# CFBundleVersion), copied as it is: the one place either number is set
+# (README "Releasing").
 #
 # Signing: uses $ATHINA_SIGN_IDENTITY when set, otherwise the first
 # "Apple Development" or "Developer ID Application" identity in the keychain,
@@ -10,23 +18,38 @@
 # signature's default requirement is the hash of the exact binary, so every
 # rebuild would invalidate the grants; the ad-hoc path therefore sets an
 # explicit requirement on the bundle identifier, which every rebuild satisfies.
+# This is the development signature: no hardened runtime and no timestamp. A
+# release is signed by scripts/release.sh instead.
 set -euo pipefail
 
-CONFIG="${1:-release}"
+CONFIG="release"
+UNIVERSAL=0
+SIGN=1
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="$ROOT/build"
-APP="$BUILD_DIR/Athina.app"
-BIN="$ROOT/.build/$CONFIG/Athina"
+OUT_DIR="$ROOT/build"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    debug|release) CONFIG="$1"; shift ;;
+    --universal) UNIVERSAL=1; shift ;;
+    --out) [ "$#" -ge 2 ] || { echo "bundle: --out needs a directory" >&2; exit 2; }; OUT_DIR="$2"; shift 2 ;;
+    --no-sign) SIGN=0; shift ;;
+    *) echo "usage: scripts/bundle.sh [debug|release] [--universal] [--out <dir>] [--no-sign]" >&2; exit 2 ;;
+  esac
+done
+APP="$OUT_DIR/Athina.app"
+
+build_args=(-c "$CONFIG" --product Athina)
+if [ "$UNIVERSAL" = 1 ]; then build_args+=(--arch arm64 --arch x86_64); fi
 
 cd "$ROOT"
-swift build -c "$CONFIG" --product Athina
+swift build "${build_args[@]}"
+BIN="$(swift build "${build_args[@]}" --show-bin-path)/Athina"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Athina"
 
-BUILD_NUMBER="$(git -C "$ROOT" rev-list --count HEAD 2>/dev/null || echo 0)"
-sed "s/__BUILD_NUMBER__/$BUILD_NUMBER/" "$ROOT/Resources/Info.plist" > "$APP/Contents/Info.plist"
+cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
   cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 fi
@@ -36,6 +59,11 @@ fi
 # repository.
 cp "$ROOT"/Resources/Mark/MenuBarMark-*.pdf "$APP/Contents/Resources/"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
+
+if [ "$SIGN" = 0 ]; then
+  echo "bundle: $APP (unsigned)"
+  exit 0
+fi
 
 identity="${ATHINA_SIGN_IDENTITY:-}"
 if [ -z "$identity" ]; then
