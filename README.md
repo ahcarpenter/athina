@@ -35,8 +35,8 @@ work:
   longer arc of your work, what you seem to be after and how it has gone, and
   rewrites it as you go.
 - **Wisdom.** The owl became the very emblem of wisdom; the owl of Athina
-  calls on a strong model only for the moments a quick first look flags, so
-  its advice is considered rather than reflexive.
+  speaks up unasked only after a quick first look flags a moment and a strong
+  model weighs it, so its advice is considered rather than reflexive.
 - **Watchful.** A night bird, the owl kept watch while others slept; the owl
   of Athina stands watch so your mind can stay on the work, taking a fresh
   look whenever you switch windows or a burst of typing settles.
