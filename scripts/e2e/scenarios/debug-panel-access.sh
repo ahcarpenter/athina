@@ -64,23 +64,16 @@ switch_on() {
 		| awk '{ if (match($0, /value="[01]"/)) { print (substr($0, RSTART + 7, 1) == "1" ? "yes" : "no"); exit } }'
 }
 
-# Every read and press here goes through Athina's accessibility window list,
-# which the Settings window leaves for a while when it is on a Space not
-# showing or another app has taken focus. An empty read is that, so the window
-# is raised again before the next one.
-raise_advanced() {
-	"$DRIVE" raise "$ATHINA_PID" Advanced >>"$RUN_DIR/transcript.log" 2>&1 || true
-}
-
 # Re-reads $1 until it says $2, or $3 tries half a second apart have passed,
-# and prints the last read, so a check sees a state that has settled and still
-# fails on one that is wrong.
+# and prints the last read. A read through accessibility can come back empty
+# for a few seconds at a time, so the polling rides out those transient empty
+# reads, lets a check see a state that has settled, and still fails on one
+# that is wrong.
 wait_value() {
 	local read="$1" want="$2" limit="${3:-20}" got="" i
 	for i in $(seq 1 "$limit"); do
 		got="$("$read" || true)"
 		[ "$got" = "$want" ] && break
-		[ -z "$got" ] && raise_advanced
 		sleep 0.5
 	done
 	printf '%s\n' "$got"
@@ -98,7 +91,6 @@ press_open_debug_panel() {
 	for i in $(seq 1 20); do
 		"$DRIVE" ax "$ATHINA_PID" pressx AXButton "Open Debug Panel" --scope Advanced >>"$RUN_DIR/transcript.log" 2>&1 \
 			&& return 0
-		raise_advanced
 		sleep 0.5
 	done
 	return 1
