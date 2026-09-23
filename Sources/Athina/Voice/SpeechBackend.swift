@@ -34,8 +34,8 @@ protocol SpeechRecognition: AnyObject, Sendable {
 protocol SpeechBackend: AnyObject {
     /// Which recognizer and model, journaled with each exchange.
     var origin: TranscriptOrigin { get }
-    /// How long the final transcript may take once the audio has ended. The
-    /// latest partial one stands after that.
+    /// How long, in real time, the final transcript may take once the audio
+    /// has ended. The latest partial one stands after that.
     var finalResultTimeout: TimeInterval { get }
     /// Starts recognizing audio that arrives in `format`. `report` may be
     /// called from any thread.
