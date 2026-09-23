@@ -741,10 +741,11 @@ Review. `make release` (`scripts/release.sh`) does all of it:
 2. Signs it under the hardened runtime, which notarization requires, with a
    secure timestamp and `Resources/Athina.entitlements`, whose comments say
    why each entitlement is there (only `device.audio-input` today, for the
-   talk-back microphone). Athina embeds no library yet; the libraries it will
-   load from `Contents/Frameworks`, such as the local speech models' runtime
-   (whisper.cpp for Whisper and Parakeet), are signed first with the same
-   identity, so library validation loads them.
+   talk-back microphone). The one library the app embeds, the local speech
+   models' runtime in `Contents/Frameworks` (whisper.cpp for Whisper and
+   Parakeet), is signed first with the same identity, so library validation
+   loads it. An ad-hoc build has no identity to share, so it turns library
+   validation off (see below).
 3. Submits the app to Apple's notary service, waits for the verdict, and
    staples the ticket to it.
 4. Packages it as `Athina-<version>.dmg`, the app beside a link to
@@ -826,9 +827,9 @@ that needs no Apple credentials: the hardened runtime build, signed ad-hoc
 with the same bundle-identifier requirement a development build has, the disk
 image and zip, and every check that needs no Apple service. (Library
 validation loads only libraries signed by the app's own team, which an ad-hoc
-signature lacks, so once the bundle embeds libraries, such as the local speech
-models' runtime, that local build alone turns library validation off; a
-Developer ID release never does.) It names each step it skipped and why (the
+signature lacks, and the bundle embeds the local speech models' runtime, so
+that local build alone always turns library validation off; a Developer ID
+release never does.) It names each step it skipped and why (the
 missing identity or profile), marks the notes "Not for distribution", and
 exits 1. A profile that is set but does not work, or an identity that is named
 but missing, fails before anything is built.

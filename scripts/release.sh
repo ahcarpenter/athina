@@ -181,9 +181,8 @@ fi
 entitlements="$ENTITLEMENTS"
 
 # Nested code first, inside out, each with the same signature as the app, so
-# library validation accepts it. Athina embeds none yet; this covers the
-# libraries it will load from Contents/Frameworks, such as the local speech
-# models' runtime (whisper.cpp for Whisper and Parakeet), with no further change.
+# library validation accepts it: the libraries in Contents/Frameworks, today
+# the local speech models' runtime (whisper.cpp for Whisper and Parakeet).
 nested=()
 if [ -d "$APP/Contents/Frameworks" ]; then
 	while IFS= read -r -d '' item; do nested+=("$item"); done < <(
