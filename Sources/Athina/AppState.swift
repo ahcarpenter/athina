@@ -204,8 +204,10 @@ final class AppState {
     private var listeningLimitTask: Task<Void, Never>?
     /// Finishes the transcript after the key comes up; cancelled with the exchange.
     private var transcriptTask: Task<Void, Never>?
-    /// Told what came of a recording played in (`talkBack(audioFile:)`).
-    private var pendingAudioCompletion: (@MainActor (TalkBackRemote.Reply) -> Void)?
+    /// Told what came of the recording in progress when it was played in
+    /// (`talkBack(audioFile:)`): handed to the exchange its transcript
+    /// becomes, or told the recording was cut short.
+    private var recordingCompletion: (@MainActor (TalkBackRemote.Reply) -> Void)?
     /// Listens for a script playing a recording into a replay (`TalkBackRemote`).
     private var talkBackRemoteObserver: (any NSObjectProtocol)?
 
@@ -1131,17 +1133,19 @@ final class AppState {
             return refuse("Nothing to reply to yet: Athina has not made a suggestion.")
         }
         if case .unavailable(let reason, _) = speechAvailability { return refuse(reason) }
-        pendingAudioCompletion = completion
-        if !beginListening(from: FileAudioInput(url: url, clock: clock)) {
-            pendingAudioCompletion = nil
+        if !beginListening(from: FileAudioInput(url: url, clock: clock), completion: completion) {
             completion?(TalkBackRemote.Reply(heard: nil, handling: "the recording could not be played"))
         }
     }
 
     /// Starts a recording from `input` with the chosen recognizer, on the
-    /// suggestion to talk to, with the 30 second cutoff. False when it did
-    /// not start, with a note saying why.
-    private func beginListening(from input: any AudioInput) -> Bool {
+    /// suggestion to talk to, with the 30 second cutoff; `completion` is told
+    /// what came of this recording. False when it did not start, with a note
+    /// saying why, and the toast's countdown given back.
+    private func beginListening(
+        from input: any AudioInput,
+        completion: (@MainActor (TalkBackRemote.Reply) -> Void)? = nil
+    ) -> Bool {
         guard mode.isActive else {
             toast.showNote("Athina is \(mode.label.lowercased()), so it is not listening.")
             return false
@@ -1166,12 +1170,14 @@ final class AppState {
         } catch {
             AppState.log.error("listening failed to start: \(String(describing: error), privacy: .public)")
             toast.showNote("Could not start listening: \(error).")
+            settlePress(nil, for: suggestion)
             return false
         }
         AppState.log.notice("listening for suggestion \(suggestion.id) with \(backend.origin.label, privacy: .public)")
         if case .waiting = talkBack {
             Task { await mentor?.withdrawFollowUp() }
         }
+        recordingCompletion = completion
         setTalkBack(.listening(partial: ""))
         let clock = clock
         listeningLimitTask = Task { [weak self] in
@@ -1259,7 +1265,9 @@ final class AppState {
             } else {
                 endHold()
             }
-            finishAudioFile(TalkBackRemote.Reply(heard: nil, handling: "cut short"))
+            let completion = recordingCompletion
+            recordingCompletion = nil
+            completion?(TalkBackRemote.Reply(heard: nil, handling: "cut short"))
         case .waiting, .thinking:
             Task { await mentor?.withdrawFollowUp() }
         case .idle:
@@ -1273,7 +1281,10 @@ final class AppState {
             cancelTalkBack()
             return
         }
-        await act(on: heard, for: suggestion)
+        let completion = recordingCompletion
+        recordingCompletion = nil
+        let reply = await act(on: heard, for: suggestion)
+        completion?(reply)
     }
 
     /// What a transcript, heard or typed, does: one of the toast's answers, or
@@ -1281,8 +1292,10 @@ final class AppState {
     /// the toast a talked-to one that stays up, and holds new suggestions,
     /// until it is closed. A press that heard nothing is not an exchange: the
     /// toast gets back whatever countdown it had, and nothing is held for it.
-    /// The recognizer that heard it is journaled with the exchange.
-    private func act(on heard: SpeechListener.Heard, for suggestion: Suggestion) async {
+    /// The recognizer that heard it is journaled with the exchange. Returns
+    /// what came of this transcript, once it has been handled.
+    @discardableResult
+    private func act(on heard: SpeechListener.Heard, for suggestion: Suggestion) async -> TalkBackRemote.Reply {
         let text = heard.text
         let match = text.flatMap(TranscriptMatcher.match)
         let origin = heard.origin
@@ -1295,8 +1308,7 @@ final class AppState {
             } else {
                 toast.showNote("Athina did not catch that.")
             }
-            finishAudioFile(reply(heard: text, handling: "nothing heard", origin: origin))
-            return
+            return reply(heard: text, handling: "nothing heard", origin: origin)
         }
         switch match {
         case .answer(let feedback):
@@ -1308,39 +1320,32 @@ final class AppState {
             if activeSuggestion?.id == suggestion.id {
                 Task { await mentor?.setTalkingBack(true) }
             }
-            finishAudioFile(reply(heard: text, handling: handling, origin: origin))
+            return reply(heard: text, handling: handling, origin: origin)
         case .question(let question):
             lastTranscript = TranscriptRecord(at: clock.date, text: text, handling: "asked the mentor", heardBy: origin)
             AppState.log.notice("transcript asked the mentor")
             setTalkBack(.thinking(question: question))
             guard let mentor else {
                 setTalkBack(.idle)
-                finishAudioFile(reply(heard: text, handling: "the mentor loop is not running", origin: origin))
-                return
+                return reply(heard: text, handling: "the mentor loop is not running", origin: origin)
             }
             let followUp = await mentor.askFollowUp(about: suggestion, question: question, heardBy: origin)
             if let followUp { upsert(followUp) }
-            finishAudioFile(reply(
+            let asked = reply(
                 heard: text, handling: "asked the mentor", origin: origin,
                 answer: followUp?.answer ?? followUp?.error ?? "withdrawn"
-            ))
+            )
             guard followUp != nil, activeSuggestion?.id == suggestion.id,
                   talkBack == .thinking(question: question) || talkBack == .waiting(question: question)
-            else { return }
+            else { return asked }
             setTalkBack(.idle)
             toast.setExchange(exchange(for: suggestion.id))
+            return asked
         }
     }
 
     private func reply(heard: String?, handling: String, origin: TranscriptOrigin, answer: String? = nil) -> TalkBackRemote.Reply {
         TalkBackRemote.Reply(heard: heard, handling: handling, backend: origin.journalSource, model: origin.journalModel, answer: answer)
-    }
-
-    /// Tells whoever played a recording in what came of it, once.
-    private func finishAudioFile(_ reply: TalkBackRemote.Reply) {
-        guard let completion = pendingAudioCompletion else { return }
-        pendingAudioCompletion = nil
-        completion(reply)
     }
 
     private func upsert(_ followUp: FollowUp) {
