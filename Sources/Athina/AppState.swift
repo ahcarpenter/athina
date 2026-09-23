@@ -534,6 +534,8 @@ final class AppState {
             callLog.removeAll()
             suggestionHistory.removeAll()
             followUps.removeAll()
+            if !callouts.isVisible { lastCallout = nil }
+            lastTranscript = nil
             if let journal {
                 await loadInitialTimeline(from: journal)
             }

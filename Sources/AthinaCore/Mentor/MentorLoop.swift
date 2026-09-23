@@ -792,10 +792,18 @@ public actor MentorLoop {
         await publishStatus()
     }
 
-    /// Clear Journal deleted every observation, so the last gate record, which
-    /// names one, is dropped rather than left pointing at a row that is gone.
+    /// Clear Journal deleted every observation and model call, so each record
+    /// that describes one is dropped rather than left pointing at a row that
+    /// is gone: the triage gate's observation, the last call of each tier, and
+    /// the mentor gate's hold on a deleted triage verdict. What holds now, the
+    /// mode, spend, cadence, and context verdict, stays, as a relaunch over
+    /// the cleared journal would find it.
     public func journalCleared() async {
         status.lastGate = nil
+        status.lastTriage = nil
+        status.lastMentorHold = nil
+        status.lastMentor = nil
+        status.lastRefresh = nil
         await publishStatus()
     }
 

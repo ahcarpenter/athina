@@ -4,12 +4,13 @@
 # What the debug panel says right after Clear Journal. Clearing deletes every
 # observation, so the Latest frame pane is empty until the next capture, and
 # the pane says that is why rather than blaming a permission the header shows
-# granted. The Mentor loop card stops naming an observation that no longer
-# exists. The next capture then fills the pane again.
+# granted. The Mentor loop card stops naming an observation or a model call that
+# no longer exists, and the callout and transcript from before the clear. The
+# next capture then fills the pane again.
 #
 # Settings opens from the menu and both confirmation buttons are pressed by
 # name through accessibility, so the run needs no pointer.
-SCENARIO_SUMMARY="after Clear Journal the debug panel says the journal was cleared and names no deleted observation"
+SCENARIO_SUMMARY="after Clear Journal the debug panel says the journal was cleared and names no deleted observation or call"
 SCENARIO_ARGS=(--open debug)
 
 # The id of the first window whose name starts with $1, empty when none is open.
@@ -40,12 +41,13 @@ has_text() {
 	grep -qF "$2" "$RUN_DIR/$1" && echo yes || echo no
 }
 
-# Re-reads the panel until its text holds $1, or $2 tries a second apart pass.
+# Re-reads the panel until its text matches the extended regular expression
+# $1, or $3 tries a second apart pass.
 wait_panel_text() {
 	local want="$1" tag="$2" limit="${3:-20}" i
 	for i in $(seq 1 "$limit"); do
 		window_texts "Debug Panel" "$tag"
-		[ "$(has_text "$tag-texts.txt" "$want")" = yes ] && return 0
+		grep -qE "$want" "$RUN_DIR/$tag-texts.txt" && return 0
 		[ $((i % 3)) = 0 ] && wake_input
 		sleep 1
 	done
@@ -78,6 +80,8 @@ scenario_run() {
 	wait_first_observation || { log "nothing was captured"; return 1; }
 	wait_panel_text "on observation #" before \
 		|| { log "the triage gate never ran on an observation"; return 1; }
+	wait_panel_text 'value="Last triage, [^"]+ ago, ' before \
+		|| { log "the card never listed the triage call"; return 1; }
 	check "the panel shows a frame before clearing" "yes" "$(has_text before-texts.txt "Latest frame")"
 
 	# Settings opens on the pane it last showed, so the Journal pane is chosen
@@ -90,24 +94,30 @@ scenario_run() {
 	"$DRIVE" ax "$ATHINA_PID" cancelmenu >>"$RUN_DIR/transcript.log" 2>&1 || true
 	wait_window "Journal" 20 || { log "Settings never opened on the Journal pane"; return 1; }
 	# Clearing moves focus, and a focus change brings a capture that fills the
-	# pane again within a second or so. A reading counts only when the journal
-	# still holds no observation after it, so the pane was read before any new
-	# capture reached it; otherwise the journal is cleared again.
+	# pane again within a second or so, and a call in flight can land after the
+	# clear. A reading counts only when the journal still holds no observation
+	# and no model call after it, so the panel was read before any new row
+	# reached it; otherwise the journal is cleared again.
 	local attempt read=no
 	for attempt in 1 2 3 4 5; do
 		clear_journal || return 1
 		window_texts "Debug Panel" cleared
-		if [ "$(journal_count observations)" = 0 ]; then
+		if [ "$(journal_count observations)" = 0 ] && [ "$(journal_count model_calls)" = 0 ]; then
 			read=yes
 			break
 		fi
-		log "a capture landed before the pane was read (attempt $attempt), clearing again"
+		log "a capture or a call landed before the panel was read (attempt $attempt), clearing again"
 	done
-	check "the pane was read before the next capture" "yes" "$read"
+	check "the panel was read before any new row" "yes" "$read"
 	"$DRIVE" close "$ATHINA_PID" Journal >>"$RUN_DIR/transcript.log" 2>&1 || true
 	check "the frame pane says the journal was cleared" "yes" "$(has_text cleared-texts.txt "Journal Cleared")"
 	check "the frame pane does not blame Screen Recording" "no" "$(has_text cleared-texts.txt "once Screen Recording is granted")"
 	check "the card names no deleted observation" "no" "$(names_deleted_observation cleared-texts.txt)"
+	local field
+	for field in "Last triage, none yet" "Mentor gate, not reached yet" "Last mentor, none yet" \
+		"Last refresh, none yet" "Callout, none yet" "Transcript, none yet"; do
+		check "the panel reads $field" "yes" "$(has_text cleared-texts.txt "value=\"$field\"")"
+	done
 
 	# The next capture fills the pane again, and the gate runs on the new row.
 	wait_first_observation || { log "nothing was captured after clearing"; return 1; }
