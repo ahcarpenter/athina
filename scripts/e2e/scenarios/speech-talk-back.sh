@@ -5,11 +5,19 @@
 # the committed phrases (Tests/AthinaCoreTests/Fixtures/Speech) is played into
 # the replay's listener with scripts/talk-back.sh, which takes exactly the
 # path a held talk-back key does. For each recognizer, chosen in Settings >
-# General through the picker, the question reaches the toast as a live
-# transcript, is asked, and is answered by the replayed follow-up; then "tell
-# me more" is matched as that answer. The journal records which recognizer
-# heard each one. Finally "not now", heard by the last recognizer, answers the
-# toast and closes it.
+# General through the picker, "tell me more" is matched as the toast's
+# answer; then the question reaches the toast as a live transcript, is asked,
+# and is answered by the replayed follow-up. The journal records which
+# recognizer heard each one. Finally "not now", heard by the last recognizer,
+# answers the toast and closes it.
+#
+# "tell me more" goes first because the first model whisper.cpp loads in a
+# process can take ten seconds or more to compile its GPU kernels. That
+# happens whenever Metal's shader cache, which every Athina build on the Mac
+# shares, no longer holds them, and it is longer than the question lasts, so
+# no partial transcript could reach the toast. An answer needs only the final
+# transcript, so it absorbs that wait, and the question after it gets a model
+# that loads in a fraction of a second.
 #
 # The models come from the set speech-models-download saved.
 SCENARIO_SUMMARY="each recognizer hears the committed phrases: the transcript reaches the toast, matches an answer, and drives a replayed follow-up, journaled with who heard it"
@@ -65,6 +73,13 @@ scenario_run() {
 		general_state "$raw-chosen"
 		check "$title is ready to listen" "yes" "$(grep -qE 'value="(Built into macOS|Downloaded and checked)"' "$RUN_DIR/$raw-chosen-texts.txt" && echo yes || echo no)"
 
+		# An answer: "tell me more" is matched, whatever recognizer heard it.
+		# Heard first, so it absorbs a GPU kernel compile (see above).
+		play_recording "$PHRASES/tell-me-more.wav" "$raw-answer"
+		wait_recording || log "talk-back.sh reported a failure for tell me more through $title"
+		check "$title: tell me more was heard" "yes" "$(reply_field "$raw-answer" heard | grep -qi "tell me more" && echo yes || echo no)"
+		check "$title: tell me more answered the toast" "answered: Tell me more" "$(reply_field "$raw-answer" handling)"
+
 		# A question: the live transcript in the toast, then the replayed answer.
 		play_recording "$PHRASES/which-line.wav" "$raw-question"
 		seen="$(watch_toast_transcript "$raw-question" "which line")"
@@ -83,12 +98,6 @@ scenario_run() {
 		check "$title: the journal says who heard the question" "$raw" "${row%%|*}"
 		check "$title: the journal names the model" "yes" "$(printf '%s' "$row" | grep -qF "|$model" && echo yes || echo no)"
 		check "$title: the answer is journaled" "1" "${row##*|}"
-
-		# An answer: "tell me more" is matched, whatever recognizer heard it.
-		play_recording "$PHRASES/tell-me-more.wav" "$raw-answer"
-		wait_recording || log "talk-back.sh reported a failure for tell me more through $title"
-		check "$title: tell me more was heard" "yes" "$(reply_field "$raw-answer" heard | grep -qi "tell me more" && echo yes || echo no)"
-		check "$title: tell me more answered the toast" "answered: Tell me more" "$(reply_field "$raw-answer" handling)"
 	done
 
 	check "the first spoken answer is journaled with its recognizer" "tellMeMore|speechAnalyzer" \
