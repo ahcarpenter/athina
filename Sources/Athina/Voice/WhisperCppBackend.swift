@@ -16,10 +16,13 @@ import whisper
 final class WhisperCppBackend: SpeechBackend {
     let model: SpeechModel
     let file: URL
+    /// The Mac's language, which a multilingual Whisper is told to expect.
+    let language: Locale
 
-    init(model: SpeechModel, file: URL) {
+    init(model: SpeechModel, file: URL, language: Locale) {
         self.model = model
         self.file = file
+        self.language = language
     }
 
     var origin: TranscriptOrigin { .heard(backend: model.backend, model: model.id) }
@@ -35,7 +38,7 @@ final class WhisperCppBackend: SpeechBackend {
         }
         WhisperCpp.quietLogs()
         return GGMLRecognition(
-            model: model, file: file, language: WhisperCpp.language(for: model), converter: converter, report: report
+            model: model, file: file, language: WhisperCpp.language(for: model, speaking: language), converter: converter, report: report
         )
     }
 }
@@ -45,10 +48,10 @@ private enum WhisperCpp {
     /// The language Whisper is told to expect: English for an English-only
     /// model, the Mac's language for a multilingual one when Whisper knows it,
     /// and detection otherwise. Parakeet detects the language itself.
-    static func language(for model: SpeechModel) -> String? {
+    static func language(for model: SpeechModel, speaking language: Locale) -> String? {
         guard model.backend == .whisper else { return nil }
         guard model.multilingual else { return "en" }
-        guard let code = Locale.current.language.languageCode?.identifier, whisper_lang_id(code) >= 0 else { return "auto" }
+        guard let code = language.language.languageCode?.identifier, whisper_lang_id(code) >= 0 else { return "auto" }
         return code
     }
 

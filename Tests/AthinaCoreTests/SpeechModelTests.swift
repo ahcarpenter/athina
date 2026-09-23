@@ -150,6 +150,30 @@ import Testing
         #expect(SpeechLocaleChoice.best(for: Locale(identifier: "zh_SG"), preferredLanguage: nil, supported: Self.transcriberLocales)?.identifier == "zh_CN")
     }
 
+    /// Athina is localized only in English, so the app's own locale is
+    /// English in the Mac's region whatever the Mac's language; the language
+    /// heard is the one the person prefers, in the Mac's region.
+    @Test func theLanguageHeardIsTheOnePreferredNotTheApps() {
+        let canada = SpeechLocaleChoice.spoken(preferredLanguage: "fr-CA", current: Locale(identifier: "en_CA"))
+        #expect(canada.language.maximalIdentifier == "fr-Latn-CA")
+        #expect(SpeechLanguage.name(of: canada.identifier) == "French (Canada)")
+        #expect(SpeechLocaleChoice.best(for: canada, preferredLanguage: "fr-CA", supported: Self.transcriberLocales)?.identifier == "fr_CA")
+
+        let taiwan = SpeechLocaleChoice.spoken(preferredLanguage: "zh-Hant-TW", current: Locale(identifier: "en_TW"))
+        #expect(taiwan.language.maximalIdentifier == "zh-Hant-TW")
+        #expect(SpeechLocaleChoice.best(for: taiwan, preferredLanguage: "zh-Hant-TW", supported: Self.transcriberLocales) == nil)
+        let dictation = ["en_US", "zh_CN", "zh_TW"].map { Locale(identifier: $0) }
+        #expect(SpeechLocaleChoice.best(for: taiwan, preferredLanguage: "zh-Hant-TW", supported: dictation)?.identifier == "zh_TW")
+
+        let germanInBritain = SpeechLocaleChoice.spoken(preferredLanguage: "de-DE", current: Locale(identifier: "en_GB"))
+        #expect(germanInBritain.language.maximalIdentifier == "de-Latn-GB")
+        #expect(SpeechLocaleChoice.best(for: germanInBritain, preferredLanguage: "de-DE", supported: Self.transcriberLocales)?.identifier == "de_DE")
+
+        let english = SpeechLocaleChoice.spoken(preferredLanguage: "en-US", current: Locale(identifier: "en_GB"))
+        #expect(SpeechLocaleChoice.best(for: english, preferredLanguage: "en-US", supported: Self.transcriberLocales)?.identifier == "en_GB")
+        #expect(SpeechLocaleChoice.spoken(preferredLanguage: nil, current: Locale(identifier: "en_GB")) == Locale(identifier: "en_GB"))
+    }
+
     @Test func aLanguageNoneOfTheLocalesSpeaksHasNoChoice() {
         #expect(SpeechLocaleChoice.best(for: Locale(identifier: "cy_GB"), preferredLanguage: "cy-GB", supported: Self.transcriberLocales) == nil)
         #expect(SpeechLocaleChoice.best(for: Locale(identifier: "nl_NL"), preferredLanguage: nil, supported: []) == nil)

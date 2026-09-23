@@ -33,7 +33,8 @@ final class SpeechModels {
     @ObservationIgnored private let downloader: SpeechModelDownloader
     @ObservationIgnored private var work: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private let isSample: Bool
-    /// The Mac's language, which SpeechAnalyzer is asked to hear.
+    /// The Mac's language, which SpeechAnalyzer and a multilingual Whisper
+    /// are asked to hear.
     @ObservationIgnored private let macLanguage: Locale
     private static let analyzerKey = "speechAnalyzer"
 
@@ -41,7 +42,7 @@ final class SpeechModels {
         self.store = store
         downloader = SpeechModelDownloader(store: store)
         isSample = false
-        macLanguage = .current
+        macLanguage = SpeechLocaleChoice.spoken(preferredLanguage: Locale.preferredLanguages.first, current: .current)
         for model in SpeechModelCatalog.all {
             states[model.id] = .notDownloaded
         }
@@ -116,7 +117,7 @@ final class SpeechModels {
                 refresh(model)
                 return nil
             }
-            return WhisperCppBackend(model: model, file: file)
+            return WhisperCppBackend(model: model, file: file, language: macLanguage)
         }
         guard analyzerState == .builtIn, let analyzerLanguage else { return nil }
         return SpeechAnalyzerBackend(language: analyzerLanguage)

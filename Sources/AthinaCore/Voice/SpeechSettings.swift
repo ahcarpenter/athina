@@ -154,12 +154,25 @@ public enum SpeechLanguage {
 /// Which of a transcriber's locales should hear the Mac's language. Apple's
 /// own equivalence (`supportedLocale(equivalentTo:)`) maps a language to a
 /// region of its choosing, English in France to South Africa, so it is the
-/// last resort: first the Mac's own locale, then the language the person
-/// prefers, then the language's usual region (English to the US, French to
-/// France), then any region of the same language. A language is always
-/// matched in the script it is written in, so Chinese in Taiwan or Hong
-/// Kong is never heard as mainland Chinese in Simplified characters.
+/// last resort: first the language in the Mac's region (`spoken`), then in
+/// the region the person gave it in their preferred languages, then in its
+/// usual region (English to the US, French to France), then any region of the
+/// same language. A language is always matched in the script it is written
+/// in, so Chinese in Taiwan or Hong Kong is never heard as mainland Chinese
+/// in Simplified characters.
 public enum SpeechLocaleChoice {
+    /// The language the person speaks, in the Mac's region. An app runs in a
+    /// language it is localized in, only English for Athina, so
+    /// `Locale.current` reads English in the Mac's region whatever the Mac's
+    /// language; the language is the first the person prefers, in its script.
+    /// `current` itself when they prefer none.
+    public static func spoken(preferredLanguage: String?, current: Locale) -> Locale {
+        guard let preferredLanguage else { return current }
+        let preferred = Locale.Language(identifier: Locale.Language(identifier: preferredLanguage).maximalIdentifier)
+        let language = Locale.Language(languageCode: preferred.languageCode, script: preferred.script, region: current.region)
+        return Locale(identifier: language.maximalIdentifier)
+    }
+
     /// Nil when `supported` has nothing in the language and script at all.
     public static func best(for current: Locale, preferredLanguage: String?, supported: [Locale]) -> Locale? {
         let byKey = Dictionary(supported.map { (key($0), $0) }, uniquingKeysWith: { first, _ in first })
