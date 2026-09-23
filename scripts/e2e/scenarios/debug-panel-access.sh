@@ -120,6 +120,7 @@ scenario_run() {
 	check "Open Debug Panel is live once the switch is on" "yes" "$(wait_value button_enabled yes)"
 	shoot Advanced on
 	menu_items on || { log "the menu bar extra would not open"; return 1; }
+	check "the menu was read with the switch on" "yes" "$(has_menu_item on "Settings…")"
 	check "the menu still offers no Debug Panel with the switch on" "no" "$(has_menu_item on "Debug Panel")"
 
 	press_open_debug_panel || { log "Open Debug Panel would not press"; return 1; }
