@@ -64,9 +64,44 @@ switch_on() {
 		| awk '{ if (match($0, /value="[01]"/)) { print (substr($0, RSTART + 7, 1) == "1" ? "yes" : "no"); exit } }'
 }
 
+# Every read and press here goes through Athina's accessibility window list,
+# which the Settings window leaves for a while when it is on a Space not
+# showing or another app has taken focus. An empty read is that, so the window
+# is raised again before the next one.
+raise_advanced() {
+	"$DRIVE" raise "$ATHINA_PID" Advanced >>"$RUN_DIR/transcript.log" 2>&1 || true
+}
+
+# Re-reads $1 until it says $2, or $3 tries half a second apart have passed,
+# and prints the last read, so a check sees a state that has settled and still
+# fails on one that is wrong.
+wait_value() {
+	local read="$1" want="$2" limit="${3:-20}" got="" i
+	for i in $(seq 1 "$limit"); do
+		got="$("$read" || true)"
+		[ "$got" = "$want" ] && break
+		[ -z "$got" ] && raise_advanced
+		sleep 0.5
+	done
+	printf '%s\n' "$got"
+}
+
+# Presses the switch once it reads $1, the state it is about to leave, so the
+# press never lands while the window is out of reach and is made only once.
 press_switch() {
+	[ "$(wait_value switch_on "$1")" = "$1" ] || return 1
 	"$DRIVE" ax "$ATHINA_PID" press AXCheckBox "" --scope Advanced >>"$RUN_DIR/transcript.log" 2>&1
-	sleep 0.8
+}
+
+press_open_debug_panel() {
+	local i
+	for i in $(seq 1 20); do
+		"$DRIVE" ax "$ATHINA_PID" pressx AXButton "Open Debug Panel" --scope Advanced >>"$RUN_DIR/transcript.log" 2>&1 \
+			&& return 0
+		raise_advanced
+		sleep 0.5
+	done
+	return 1
 }
 
 shoot() {
@@ -84,27 +119,26 @@ scenario_run() {
 	menu_items off || { log "the menu bar extra would not open"; return 1; }
 	check "the menu was read" "yes" "$(has_menu_item off "Settings…")"
 	check "the menu offers no Debug Panel while the switch is off" "no" "$(has_menu_item off "Debug Panel")"
-	check "the switch starts off" "no" "$(switch_on)"
-	check "Open Debug Panel is dimmed while the switch is off" "no" "$(button_enabled)"
+	check "the switch starts off" "no" "$(wait_value switch_on no)"
+	check "Open Debug Panel is dimmed while the switch is off" "no" "$(wait_value button_enabled no)"
 	check "no debug panel is open" "no" "$([ -n "$(window_id "Debug Panel")" ] && echo yes || echo no)"
 
-	press_switch || { log "the Enable debug panel switch would not press"; return 1; }
+	press_switch no || { log "the Enable debug panel switch would not press"; return 1; }
+	check "the switch turns on" "yes" "$(wait_value switch_on yes)"
+	check "Open Debug Panel is live once the switch is on" "yes" "$(wait_value button_enabled yes)"
 	shoot Advanced on
-	check "the switch turns on" "yes" "$(switch_on)"
-	check "Open Debug Panel is live once the switch is on" "yes" "$(button_enabled)"
 	menu_items on || { log "the menu bar extra would not open"; return 1; }
 	check "the menu still offers no Debug Panel with the switch on" "no" "$(has_menu_item on "Debug Panel")"
 
-	"$DRIVE" ax "$ATHINA_PID" pressx AXButton "Open Debug Panel" --scope Advanced >>"$RUN_DIR/transcript.log" 2>&1 \
-		|| { log "Open Debug Panel would not press"; return 1; }
+	press_open_debug_panel || { log "Open Debug Panel would not press"; return 1; }
 	wait_window "Debug Panel" 10 || true
 	check "Open Debug Panel opens the debug panel" "yes" "$([ -n "$(window_id "Debug Panel")" ] && echo yes || echo no)"
 	shoot "Debug Panel" panel
 
-	press_switch || { log "the Enable debug panel switch would not press"; return 1; }
+	press_switch yes || { log "the Enable debug panel switch would not press"; return 1; }
+	check "the switch turns off" "no" "$(wait_value switch_on no)"
 	wait_no_window "Debug Panel" 10 || true
-	check "the switch turns off" "no" "$(switch_on)"
 	check "turning the switch off closes the debug panel" "no" "$([ -n "$(window_id "Debug Panel")" ] && echo yes || echo no)"
-	check "Open Debug Panel is dimmed again" "no" "$(button_enabled)"
+	check "Open Debug Panel is dimmed again" "no" "$(wait_value button_enabled no)"
 	return 0
 }
