@@ -1193,12 +1193,12 @@ exchange ends only when that toast is closed, by the user answering or
 dismissing it. A press that hears nothing, a recording cut short by
 pausing, or one that could not start is not an exchange (`TalkBackPress`):
 the toast gets back whatever countdown it had (still paused while the pointer
-is over it), and anything held in the meantime is shown at once. Show Last Suggestion during a recording
-on a different toast ends it the same way; on the toast already on screen it
-only brings that toast to the front and does not end its own exchange. The
-toast it brings back stays up until closed, as it always does. Otherwise the
-held suggestion is shown normally if it is at most 30 s old (the same staleness
-bound as a queued observation); otherwise, and
+is over it), and anything held in the meantime is shown at once. Show Last
+Suggestion during a recording on a different toast ends it the same way; on
+the toast already on screen it only brings that toast to the front and does
+not end its own exchange. The toast it brings back stays up until closed, as
+it always does. Otherwise the held suggestion is shown normally if it is at
+most 30 s old (the same staleness bound as a queued observation); otherwise, and
 whenever Athina is paused while one is held, it is journaled with the feedback
 "Expired, never shown" and never put on screen, since the screen it describes
 is gone. Such a suggestion still appears in the history window but is skipped
