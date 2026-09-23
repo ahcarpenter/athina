@@ -659,7 +659,23 @@ func writeReadmeIcon() throws {
     try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
         .write(to: bundle.appendingPathComponent("Contents/Info.plist"))
 
-    let icon = NSWorkspace.shared.icon(forFile: bundle.path)
+    let rep = try readmeBitmap(of: NSWorkspace.shared.icon(forFile: bundle.path))
+
+    // A system that did not take the bundle's icon hands back the generic
+    // application icon instead, and committing that would put a stranger's
+    // picture at the top of the README. So the generic icon is drawn the same
+    // way and the render is refused when it is that picture.
+    let generic = try readmeBitmap(of: NSWorkspace.shared.icon(for: .applicationBundle))
+    guard !samePicture(rep, generic) else {
+        throw Failure.readmeIcon("macOS did not render the Athina icon for the bundle; nothing was written")
+    }
+    try rep.representation(using: .png, properties: [:])!
+        .write(to: markDirectory.appendingPathComponent("ReadmeIcon.png"))
+    print("  Resources/Mark/ReadmeIcon.png  (the icon as this Mac's Finder draws it, \(readmeIconSize) px)")
+}
+
+/// An icon drawn into a new bitmap the size of the README icon.
+func readmeBitmap(of icon: NSImage) throws -> NSBitmapImageRep {
     let size = readmeIconSize
     guard let rep = NSBitmapImageRep(
         bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8, samplesPerPixel: 4,
@@ -670,18 +686,23 @@ func writeReadmeIcon() throws {
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
     icon.draw(in: NSRect(x: 0, y: 0, width: size, height: size))
     NSGraphicsContext.restoreGraphicsState()
+    return rep
+}
 
-    // A system that did not take the bundle's icon hands back the generic
-    // application icon instead, and committing that would put a stranger's
-    // picture at the top of the README. The drawing's own ink at the centre
-    // of the canvas is what tells the two apart.
-    guard let centre = rep.colorAt(x: size / 2, y: size / 2)?.usingColorSpace(.sRGB),
-          abs(centre.redComponent - centre.blueComponent) > 0.1 else {
-        throw Failure.readmeIcon("macOS did not render the Athina icon for the bundle; nothing was written")
+/// Whether two bitmaps from `readmeBitmap` show the same picture: nine in ten
+/// pixels or more within 2 of 255 of each other in every channel. The generic
+/// icon matches itself in every pixel, and the Athina icon matches it in about
+/// a third, the clear margin both share.
+func samePicture(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep) -> Bool {
+    let pa = a.bitmapData!, pb = b.bitmapData!
+    var matching = 0
+    for y in 0..<a.pixelsHigh {
+        for x in 0..<a.pixelsWide {
+            let i = y * a.bytesPerRow + x * 4
+            if (0..<4).allSatisfy({ abs(Int(pa[i + $0]) - Int(pb[i + $0])) <= 2 }) { matching += 1 }
+        }
     }
-    try rep.representation(using: .png, properties: [:])!
-        .write(to: markDirectory.appendingPathComponent("ReadmeIcon.png"))
-    print("  Resources/Mark/ReadmeIcon.png  (the icon as this Mac's Finder draws it, \(size) px)")
+    return matching * 10 >= a.pixelsWide * a.pixelsHigh * 9
 }
 
 /// The owl, watching, as a vector the README can set beside a line of text,
