@@ -792,6 +792,13 @@ public actor MentorLoop {
         await publishStatus()
     }
 
+    /// Clear Journal deleted every observation, so the last gate record, which
+    /// names one, is dropped rather than left pointing at a row that is gone.
+    public func journalCleared() async {
+        status.lastGate = nil
+        await publishStatus()
+    }
+
     public func currentUnderstanding() -> UnderstandingRecord? { understanding }
 
     /// Replaces the refresh period and keeps it in the journal.

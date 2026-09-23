@@ -1320,6 +1320,19 @@ import Testing
         #expect(events.contains { $0.kind == .understanding && ($0.detail ?? "").contains("reset") })
     }
 
+    /// Clear Journal deletes the observation the triage gate last looked at,
+    /// so the status no longer names it.
+    @Test func clearingTheJournalForgetsTheGatesObservation() async throws {
+        let h = try await Harness()
+        await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
+        let observation = try await h.journal.record(Fixtures.observation(at: h.clock.date))
+        await h.observe(observation, expectCalls: 1)
+        #expect(await h.loop.currentStatus().lastGate?.observationID == observation.id)
+
+        await h.loop.journalCleared()
+        #expect(await h.loop.currentStatus().lastGate == nil)
+    }
+
     /// After a reset the next stretch gets a whole interval for a mentor call
     /// to write the record for free, rather than buying a refresh at once.
     @Test func resetStartsAFreshRefreshPeriodInsteadOfSpendingImmediately() async throws {
