@@ -33,7 +33,7 @@ rows_named() {
 }
 
 scenario_run() {
-	local id before after shown="" i
+	local id before after shown="" startup i
 	wait_first_observation || return 1
 	# Sensing keeps journaling, so the header is compared with a journal that
 	# held still across the read; a row can reach the panel a moment after the
@@ -49,11 +49,16 @@ scenario_run() {
 	id="$(window_id "Debug Panel")"
 	[ -n "$id" ] && "$DRIVE" shot window "$id" "$RUN_DIR/timeline.png" >/dev/null 2>&1
 	[ -n "$shown" ] || { log "the Debug Panel showed no Timeline header to read"; return 1; }
+	# No startup switch to TextEdit would match no row of it, so a launch with
+	# something else in front is a scenario failure rather than a check that
+	# passes by saying nothing.
+	startup="$(journal_events appSwitch TextEdit)"
+	[ "$startup" -ge 1 ] || { log "TextEdit was not in front at launch, so there is no startup app switch to count"; return 1; }
 
 	check "the Timeline lists each journaled row once" "$after" "$shown"
 	check "Started is listed once for each launch journaled" "$(journal_events started)" \
 		"$(rows_named timeline-dump.txt Started)"
-	check "the startup app switch is listed once" "$(journal_events appSwitch TextEdit)" \
+	check "the startup app switch is listed once" "$startup" \
 		"$(rows_named timeline-dump.txt "App switch · TextEdit")"
 	return 0
 }
