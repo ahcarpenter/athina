@@ -251,7 +251,8 @@ private func unsandboxed(in root: URL) -> RuntimeEnvironment {
     // MARK: The clock remote
 
     /// A sandboxed replay answers a clock request only inside its container,
-    /// and says why when the request named somewhere else.
+    /// and says why when the request named somewhere else, without moving the
+    /// clock for a request it cannot answer.
     @Test func aSandboxedReplayAnswersTheClockOnlyInsideItsContainer() throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -267,17 +268,20 @@ private func unsandboxed(in root: URL) -> RuntimeEnvironment {
         try FileManager.default.createDirectory(at: shells, withIntermediateDirectories: true)
         let outside = shells.appendingPathComponent("athina-clock-abcd1234")
         #expect(throws: ClockRemote.Refusal(reason: "the clock request: a sandboxed Athina can write only inside its container, not \(outside.path)")) {
-            try ClockRemote.answer(reply, at: outside, temporaryDirectory: shells, supportDirectory: support, environment: environment)
+            try ClockRemote.answer(.success(900), at: outside, temporaryDirectory: shells, supportDirectory: support, environment: environment) { _ in
+                Issue.record("moved the clock for a request it cannot answer")
+                return reply
+            }
         }
         #expect(!FileManager.default.fileExists(atPath: outside.path))
 
         // Unsandboxed, the same request is answered there, as it always was.
-        try ClockRemote.answer(reply, at: outside, temporaryDirectory: shells, supportDirectory: support, environment: unsandboxed(in: root))
+        try ClockRemote.answer(.success(900), at: outside, temporaryDirectory: shells, supportDirectory: support, environment: unsandboxed(in: root)) { _ in reply }
         #expect(try ClockRemote.Reply.decode(Data(contentsOf: outside)) == reply)
 
         // Inside the container's own temporary directory it is answered.
         let inside = temporary.appendingPathComponent("athina-clock-efgh5678")
-        try ClockRemote.answer(reply, at: inside, temporaryDirectory: temporary, supportDirectory: support, environment: environment)
+        try ClockRemote.answer(.success(900), at: inside, temporaryDirectory: temporary, supportDirectory: support, environment: environment) { _ in reply }
         #expect(try ClockRemote.Reply.decode(Data(contentsOf: inside)) == reply)
     }
 

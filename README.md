@@ -262,9 +262,10 @@ open -n build/Athina.app --args --replay <dir> --time-scale 60 --advance-clock 1
   directory and outside the live data folder, and refuses anything else into
   the log: otherwise a request would be a way for any process in the login
   session to create or replace a file the user can write, the live settings
-  among them. It exits 0 with what the clock now reads, 1 when no
-  answer arrives inside `ATHINA_CLOCK_TIMEOUT` (10 seconds by default), naming
-  the pid, and 3 when the replay refused the interval.
+  among them. A request it cannot answer moves nothing, so a retry after no
+  answer never moves the clock twice. It exits 0 with what the clock now
+  reads, 1 when no answer arrives inside `ATHINA_CLOCK_TIMEOUT` (10 seconds by
+  default), naming the pid, and 3 when the replay refused the interval.
 - The debug panel's Mentor card has an **Advance** field (accessibility label
   "Advance clock"): type an interval and press Return, and the clock moves
   ahead at once, as if that much time went by with the Mac awake in the mode

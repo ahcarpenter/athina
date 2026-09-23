@@ -1332,24 +1332,26 @@ final class AppState {
 
     /// Moves a replay's clock ahead for another process (`ClockRemote`), and
     /// answers the request where it asked, so the script that made it knows it
-    /// was heard rather than assuming so.
+    /// was heard rather than assuming so. A request that cannot be answered
+    /// there moves nothing.
     private func advanceClock(onRequest request: Result<TimeInterval, ClockRemote.Refusal>, answeringAt replyURL: URL?) {
-        var reply: ClockRemote.Reply
-        switch request {
-        case .success(let seconds):
-            if advanceClock(by: seconds) {
-                reply = ClockRemote.Reply(moved: true, movedAhead: clockMovedAhead, now: clock.date)
-            } else {
-                let reason = "this launch has no replay clock"
-                AppState.log.error("clock advance request refused: \(reason, privacy: .public)")
-                reply = ClockRemote.Reply(moved: false, reason: reason, movedAhead: clockMovedAhead, now: clock.date)
-            }
-        case .failure(let refusal):
-            AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
-            reply = ClockRemote.Reply(moved: false, reason: refusal.reason, movedAhead: clockMovedAhead, now: clock.date)
-        }
         do {
-            try ClockRemote.answer(reply, at: replyURL)
+            try ClockRemote.answer(request, at: replyURL) { request in
+                switch request {
+                case .success(let seconds):
+                    if advanceClock(by: seconds) {
+                        return ClockRemote.Reply(moved: true, movedAhead: clockMovedAhead, now: clock.date)
+                    }
+                    let reason = "this launch has no replay clock"
+                    AppState.log.error("clock advance request refused: \(reason, privacy: .public)")
+                    return ClockRemote.Reply(moved: false, reason: reason, movedAhead: clockMovedAhead, now: clock.date)
+                case .failure(let refusal):
+                    AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
+                    return ClockRemote.Reply(moved: false, reason: refusal.reason, movedAhead: clockMovedAhead, now: clock.date)
+                }
+            }
+        } catch let refusal as ClockRemote.Refusal {
+            AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
         } catch {
             AppState.log.error("could not answer the clock request at \(replyURL?.path ?? "", privacy: .public): \(String(describing: error), privacy: .public)")
         }
