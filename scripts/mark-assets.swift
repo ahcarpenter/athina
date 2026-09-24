@@ -17,8 +17,6 @@ import Foundation
 //                                    one file per variant of MenuBarMark
 //   Resources/Mark/ReadmeIcon.png    the app icon as Finder draws it, for the
 //                                    top of README.md
-//   Resources/Mark/ReadmeOwl-*.svg   the owl, watching, in GitHub's light and
-//                                    dark text colours, for README.md
 //
 // Two things about macOS 26 shape what it does. First, the system masks a
 // legacy .icns to the standard app icon shape itself and adds the shadow: a
@@ -620,11 +618,11 @@ func writeMenuBarMarks() throws {
           + "\(menuBarWidth) x \(Int(menuBarHeight)) pt, one width in every mode)")
 }
 
-// MARK: The README's pictures
+// MARK: The README's icon
 
-// The README opens with the icon and names the owl, and both are drawn here
-// from the same masters as the app's own assets, so the pictures a person
-// sees before trying Athina are the ones the app shows once they do.
+// The README opens with the icon, drawn here from the same master as the
+// app's own assets, so the picture a person sees before trying Athina is the
+// one the app shows once they do.
 
 /// The icon as Finder and the Dock show it, rather than the full bleed square
 /// the .icns carries. A page is not masked by macOS, so the picture has to
@@ -705,55 +703,6 @@ func samePicture(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep) -> Bool {
     return matching * 10 >= a.pixelsWide * a.pixelsHigh * 9
 }
 
-/// The owl, watching, as a vector the README can set beside a line of text,
-/// once in each of GitHub's text colours so it reads like the text around it
-/// in both themes, the way the menu bar tints its template.
-///
-/// SVG rather than a bitmap so it is sharp at any size a page draws it, and
-/// written out coordinate by coordinate so the file is a pure function of the
-/// master and this script.
-let readmeOwlInks = [("light", "#1f2328"), ("dark", "#f0f6fc")]
-
-func svgPathData(_ path: CGPath) -> String {
-    func n(_ value: CGFloat) -> String {
-        let text = String(format: "%.2f", Double(value))
-        let trimmed = text.contains(".") ? text.replacingOccurrences(of: "\\.?0+$", with: "", options: .regularExpression) : text
-        return trimmed == "-0" ? "0" : trimmed
-    }
-    func p(_ point: CGPoint) -> String { "\(n(point.x)) \(n(point.y))" }
-    var d: [String] = []
-    path.applyWithBlock { pointer in
-        let e = pointer.pointee
-        switch e.type {
-        case .moveToPoint: d.append("M\(p(e.points[0]))")
-        case .addLineToPoint: d.append("L\(p(e.points[0]))")
-        case .addQuadCurveToPoint: d.append("Q\(p(e.points[0])) \(p(e.points[1]))")
-        case .addCurveToPoint: d.append("C\(p(e.points[0])) \(p(e.points[1])) \(p(e.points[2]))")
-        case .closeSubpath: d.append("Z")
-        @unknown default: break
-        }
-    }
-    return d.joined()
-}
-
-func writeReadmeOwls() throws {
-    let box = parts.bounds
-    var toOrigin = CGAffineTransform(translationX: -box.minX, y: -box.minY)
-    let owlPath = drawEyes(.open).copy(using: &toOrigin)!
-    let width = String(format: "%.0f", box.width.rounded(.up)), height = String(format: "%.0f", box.height.rounded(.up))
-    for (theme, ink) in readmeOwlInks {
-        let svg = """
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 \(width) \(height)" width="\(width)" height="\(height)">
-        <path fill="\(ink)" d="\(svgPathData(owlPath))"/>
-        </svg>
-
-        """
-        try svg.write(to: markDirectory.appendingPathComponent("ReadmeOwl-\(theme).svg"),
-                      atomically: true, encoding: .utf8)
-    }
-    print("  Resources/Mark/ReadmeOwl-*.svg  (the owl, watching, in GitHub's light and dark text colours)")
-}
-
 /// Records what the committed assets were built from: both masters, and this
 /// script.
 ///
@@ -778,7 +727,7 @@ func writeProvenance() throws {
         return url.lastPathComponent + " " + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }.joined(separator: "\n")
     let text = """
-    # What Resources/AppIcon.icns, the MenuBarMark PDFs and the README pictures
+    # What Resources/AppIcon.icns, the MenuBarMark PDFs and the README icon
     # were built from: both masters and the script that drew them. Written by
     # scripts/mark-assets.swift; run `make mark` after changing a master, the
     # script or the variant set, never edit this by hand.
@@ -793,5 +742,4 @@ func writeProvenance() throws {
 try writeIcon()
 try writeMenuBarMarks()
 try writeReadmeIcon()
-try writeReadmeOwls()
 try writeProvenance()

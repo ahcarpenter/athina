@@ -172,18 +172,6 @@ import Testing
         #expect(alpha[5] == 255, "the body should be opaque, found \(alpha[5])")
     }
 
-    /// The owl beside the README's line about it is one file per GitHub theme,
-    /// each in that theme's text colour, so it reads as part of the line in
-    /// both, the way the menu bar tints its template.
-    @Test func theReadmeOwlHasOneInkPerTheme() throws {
-        for (theme, ink) in [("light", "#1f2328"), ("dark", "#f0f6fc")] {
-            let url = markDirectory.appendingPathComponent("ReadmeOwl-\(theme).svg")
-            let document = try XMLDocument(contentsOf: url)
-            let fills = try document.nodes(forXPath: "//*[local-name()='path']/@fill").compactMap(\.stringValue)
-            #expect(fills == [ink], "ReadmeOwl-\(theme).svg is filled \(fills), not \(ink)")
-        }
-    }
-
     private func alphaSamples(of image: CGImage, at points: [(Int, Int)]) throws -> [UInt8] {
         let width = image.width, height = image.height
         var pixels = [UInt8](repeating: 0, count: width * height * 4)

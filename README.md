@@ -1,10 +1,9 @@
 <h1 align="center">Athina</h1>
 <p align="center">
-  <a
-    href="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue?style=flat-square"
+  <a href="#requirements"
     ><img
-      alt="Platform"
-      src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue?style=flat-square"
+      alt="Platform: macOS"
+      src="https://img.shields.io/badge/platform-macOS-blue?style=flat-square"
   /></a>
 </p>
 

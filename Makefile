@@ -34,8 +34,8 @@ build:
 release:
 	scripts/release.sh
 
-## Rebuild the app icon from Resources/Mark/AthinaMark.svg, the menu bar mark
-## from Resources/Mark/AthinaOwl.svg, and the README's pictures from both. Its
+## Rebuild the app icon and the README's copy of it from Resources/Mark/AthinaMark.svg,
+## and the menu bar mark from Resources/Mark/AthinaOwl.svg. Its
 ## outputs are committed, so a plain `make build` never needs this; run it after
 ## changing either master or the variant set (see scripts/mark-assets.swift).
 mark:
