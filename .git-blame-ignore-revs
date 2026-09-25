@@ -1,0 +1,6 @@
+# Commits that only reformat, which git blame skips: GitHub reads this file
+# itself, and locally `git config blame.ignoreRevsFile .git-blame-ignore-revs`
+# turns it on (README "Code style").
+
+# style(athina): format all Swift to Google's Swift style
+1a0bf5d11fd90a9d7e93c8005be81eacc3be2225
