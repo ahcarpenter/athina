@@ -804,11 +804,13 @@ The harness launches every API-tier scenario with `--hermetic` beside
 `--control`, which makes it a hermetic run (`ControlMode.isHermetic`): it
 takes nothing from the real world and leaves nothing in it, so API-tier runs
 need no lock and any number of them run at once, beside a real-screen run and
-beside whoever is using the Mac. `--control` alone serves the API to a launch
-that is otherwise a replay like any other, on the screen, in the menu bar and
-sensing, which a real-screen scenario can drive through the API too;
-`--hermetic` is read only with a `--control` the app serves. Measured on the owner's Mac, four copies of
-`debug-panel-access` pass together in about the 5 seconds one takes.
+beside whoever is using the Mac. Measured on the owner's Mac, four copies of
+`debug-panel-access` pass together in 5 to 6 seconds each, where one alone
+takes 4, beside a real-screen scenario holding the lock. `--control` alone
+serves the API to a launch that is otherwise a replay like any other, on the
+screen, in the menu bar and sensing, which a real-screen scenario can drive
+through the API too; `--hermetic` is read only with a `--control` the app
+serves.
 
 - **It shows nothing.** Every window goes below the desktop picture as it is
   ordered onto the screen (`WindowParking`, in the control API's target), the
