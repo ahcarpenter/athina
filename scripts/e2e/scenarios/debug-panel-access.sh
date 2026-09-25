@@ -44,7 +44,6 @@ own_group_after_settings() {
 
 checkpoint() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no checkpoint of $1"; }
 
-
 scenario_run() {
 	api wait-window window=Advanced timeout=20 >/dev/null || { log "Settings never opened on the Advanced pane"; return 1; }
 	checkpoint Advanced off
