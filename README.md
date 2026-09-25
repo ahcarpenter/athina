@@ -739,8 +739,12 @@ The waits take `timeout=<seconds>`, 10 unless given, and poll the app's own
 state at a fixed real-time pace; the replay's clock is not involved.
 
 The controls a scenario reaches carry accessibility identifiers
-(`advanced.enableDebugPanel`, `debugPanel.timelineRow`), which no one sees or
-hears and which survive a change of wording. What a click cannot drive: a link
+(`advanced.enableDebugPanel`, `debugPanel.timelineRow`; a link in Settings text
+carries its URL, `athina-settings:journal`), which no one sees or hears and
+which survive a change of wording. The one exception is the Settings window's
+toolbar tabs: AppKit draws them, and SwiftUI does not carry a `Tab`'s
+identifier through to them, so a scenario finds a tab by its label
+(`label=Models`). What a click cannot drive: a link
 inside a SwiftUI Text follows neither a click the app simulates nor
 accessibility's press, so following one stays a real-screen check
 (`settings-pane-links`).

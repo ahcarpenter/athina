@@ -22,8 +22,9 @@ pane_texts() {
 
 has_text() { grep -qF "$2" "$RUN_DIR/$1-texts.txt" && echo yes || echo no; }
 
-# The link named $2 in the pane titled $1, as one field of it.
-link_field() { api find window="$1" role=AXLink label="$2" --field "elements.0.$3"; }
+# The link to $2 in the pane titled $1, as one field of it: a link carries its
+# URL as its identifier.
+link_field() { api find window="$1" identifier="$2" --field "elements.0.$3"; }
 
 checkpoint() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no checkpoint of $1"; }
 
@@ -33,20 +34,22 @@ scenario_run() {
 	checkpoint Contexts contexts
 	# Markdown that did not parse would show its brackets and the scheme.
 	check "the Contexts footer shows no raw link Markdown" "no" "$(has_text contexts "](athina-settings:")"
-	check "the Contexts footer shows Privacy settings as a link" "athina-settings:privacy" "$(link_field Contexts "Privacy settings" identifier)"
+	check "the Contexts footer shows its link to Privacy as a link" "AXLink" "$(link_field Contexts athina-settings:privacy role)"
 
-	# Settings opens on the pane it last showed; the toolbar changes it.
+	# Settings opens on the pane it last showed; the toolbar changes it. The
+	# toolbar's tabs carry no identifier (README "The control API"), so the
+	# tab is found by its label.
 	check "a click on the Models toolbar item lands" "true" "$(api click window=Contexts label=Models --field ok)"
 	api wait-window window=Models timeout=5 >/dev/null || { log "the Models pane never showed"; return 1; }
 	pane_texts Models models
 	check "the Models footer shows no raw link Markdown" "no" "$(has_text models "](athina-settings:")"
-	check "the Models footer shows Journal settings as a link" "athina-settings:journal" "$(link_field Models "Journal settings" identifier)"
+	check "the Models footer shows its link to Journal as a link" "AXLink" "$(link_field Models athina-settings:journal role)"
 
 	check "a click on the link below the fold is refused" "offscreen" \
-		"$(api click window=Models role=AXLink label="Journal settings" dry=true --field refused)"
-	check "the pane scrolls to the link" "true" "$(api scroll window=Models role=AXLink label="Journal settings" --field ok)"
+		"$(api click window=Models identifier=athina-settings:journal dry=true --field refused)"
+	check "the pane scrolls to the link" "true" "$(api scroll window=Models identifier=athina-settings:journal --field ok)"
 	check "scrolled into view, a click on the link would land" "true" \
-		"$(api click window=Models role=AXLink label="Journal settings" dry=true --field ok)"
+		"$(api click window=Models identifier=athina-settings:journal dry=true --field ok)"
 	checkpoint Models models-footer
 	return 0
 }
