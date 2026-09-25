@@ -35,9 +35,9 @@ jobs:
 
   xcode-project:
     # The Xcode project for the Mac App Store route (README "The Xcode
-    # project"), generated from project.yml with the pinned XcodeGen and built
-    # and archived as the sandboxed App Store target, signed to run locally
-    # since CI holds no Apple credentials. The package jobs above never read it.
+    # project"), generated from project.yml with the pinned XcodeGen and
+    # archived as the sandboxed App Store target, signed to run locally since
+    # CI holds no Apple credentials. The package jobs above never read it.
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -47,10 +47,7 @@ jobs:
           echo "Using $latest"
           sudo xcode-select -s "$latest"
           xcodebuild -version
-      - name: Generate and build the App Store target
-        timeout-minutes: 30
-        run: make xcode-build
-      - name: Archive the App Store target
+      - name: Generate the project and archive the App Store target
         timeout-minutes: 30
         run: make xcode-archive
       - name: Check the archived app's bundle id and sandbox

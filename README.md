@@ -201,11 +201,15 @@ in one place. That id is set only in `project.yml`, and is the development id
 `com.ahcarpenter.athina.appstore.dev` until the permanent App Store id is
 chosen, which can never change once a build is uploaded. Signing is automatic
 and `DEVELOPMENT_TEAM` is left empty: until a team id is filled in there, the
-target signs to run locally, which is how `make xcode-build`, `make
-xcode-archive` and CI build it; with one, Xcode signs with that team's Apple
-Development certificate and Product > Archive feeds the Organizer's App Store
-Connect upload. The built app is sandboxed, so it keeps its files in its own
-container and runs as A sandboxed build describes.
+target signs to run locally, which is how `make xcode-build` and `make
+xcode-archive` build it and CI archives it; with one, Xcode signs with that
+team's Apple Development certificate and Product > Archive feeds the
+Organizer's App Store Connect upload. The built app is sandboxed, so it keeps
+its files in its own container and runs as A sandboxed build describes. The
+App Store build is archived and uploaded through this project, while the
+direct Developer ID release keeps `scripts/release.sh` (see Releasing); the
+earlier plan to package the App Store build from the package build with
+`productbuild` and `altool` is superseded.
 
 ## Iterating without the network
 
@@ -1670,7 +1674,7 @@ particular to this app:
 --snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the macOS
 26 SDK this package targets, and uploads the rendered PNGs, replay-mode renders
 on a scaled clock included, as the `ui-snapshots` artifact. A second job
-generates the Xcode project, builds and archives its App Store target, and
+generates the Xcode project, archives its App Store target, and
 checks that the archived app carries the target's bundle id and the App
 Sandbox (see The Xcode project). No test waits on
 real time (see A faster clock). The tests exercise the pure parts
