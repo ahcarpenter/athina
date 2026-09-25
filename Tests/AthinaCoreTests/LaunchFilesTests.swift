@@ -435,8 +435,8 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
         #expect(ClockRemote.replyURL(from: nil) == nil)
     }
 
-    /// The answer is written whole or not at all, and says what the clock did,
-    /// so the waiting script never reads half a file and never has to guess.
+    /// The answer says what the clock did, so the waiting script never has to
+    /// guess, and a request with nowhere to answer moves nothing.
     @Test func anAnswerRoundTripsThroughTheFileItNames() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("athina-clock-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -446,21 +446,36 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
         let now = Date(timeIntervalSince1970: 1_789_473_600)
 
         let moved = ClockRemote.Reply(moved: true, movedAhead: 9000, now: now, pid: 4242)
-        try ClockRemote.answer(moved, at: url, temporaryDirectory: directory, supportDirectory: support)
+        try ClockRemote.answer(.success(9000), at: url, temporaryDirectory: directory, supportDirectory: support) { request in
+            #expect(request == .success(9000))
+            return moved
+        }
         #expect(try ClockRemote.Reply.decode(Data(contentsOf: url)) == moved)
 
-        let refused = ClockRemote.Reply(moved: false, reason: "this launch has no replay clock", movedAhead: 0, now: now, pid: 7)
+        let interval = ClockRemote.Refusal(reason: "\"soon\" is not an interval such as 15m, 2h, or 1d, up to 30d")
+        let refused = ClockRemote.Reply(moved: false, reason: interval.reason, movedAhead: 0, now: now, pid: 7)
         let second = directory.appendingPathComponent("second.json")
-        try ClockRemote.answer(refused, at: second, temporaryDirectory: directory, supportDirectory: support)
+        try ClockRemote.answer(.failure(interval), at: second, temporaryDirectory: directory, supportDirectory: support) { request in
+            #expect(request == .failure(interval))
+            return refused
+        }
         #expect(try ClockRemote.Reply.decode(Data(contentsOf: second)) == refused)
 
-        // A request that named no file is answered nowhere, and says so by not throwing.
-        try ClockRemote.answer(moved, at: nil, temporaryDirectory: directory, supportDirectory: support)
+        // A request that named no file cannot be answered, so it is refused
+        // before the clock moves.
+        #expect(throws: ClockRemote.Refusal(reason: "no absolute replyTo path in the request")) {
+            try ClockRemote.answer(.success(9000), at: nil, temporaryDirectory: directory, supportDirectory: support) { _ in
+                Issue.record("moved the clock for a request that named nowhere to answer")
+                return moved
+            }
+        }
     }
 
     /// Nothing authenticates the channel, so a request must never be able to
     /// make the replay create or replace a file of the sender's choosing: the
-    /// answer goes to a new file in the temporary directory or nowhere.
+    /// answer goes to a new file in the temporary directory or nowhere. A
+    /// request refused that way moves nothing, so a script that retries after
+    /// getting no answer never moves the clock twice.
     @Test func aRequestIsNotAnsweredWhereItCouldClobberAFile() throws {
         let root = scratch()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -471,15 +486,23 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
         let reply = ClockRemote.Reply(moved: true, movedAhead: 900, now: Date(timeIntervalSince1970: 1_789_473_600), pid: 11)
 
         func answer(at url: URL) throws {
-            try ClockRemote.answer(reply, at: url, temporaryDirectory: temporary, supportDirectory: support)
+            try ClockRemote.answer(.success(900), at: url, temporaryDirectory: temporary, supportDirectory: support) { _ in reply }
+        }
+        func refused(at url: URL) {
+            #expect(throws: ClockRemote.Refusal.self) {
+                try ClockRemote.answer(.success(900), at: url, temporaryDirectory: temporary, supportDirectory: support) { _ in
+                    Issue.record("moved the clock for a request it cannot answer at \(url.path)")
+                    return reply
+                }
+            }
         }
 
         // The live settings, named outright and by a path that only resolves there.
         let settings = SettingsStore.defaultURL(in: support)
         try Data("{\"idleThreshold\":900}".utf8).write(to: settings)
-        #expect(throws: ClockRemote.Refusal.self) { try answer(at: settings) }
+        refused(at: settings)
         try FileManager.default.createSymbolicLink(at: temporary.appendingPathComponent("aimed"), withDestinationURL: settings)
-        #expect(throws: ClockRemote.Refusal.self) { try answer(at: temporary.appendingPathComponent("aimed")) }
+        refused(at: temporary.appendingPathComponent("aimed"))
         #expect(try String(contentsOf: settings, encoding: .utf8) == "{\"idleThreshold\":900}")
 
         // A link out of the temporary directory, stepped back through with `..`:
@@ -494,10 +517,10 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
         #expect(FileManager.default.fileExists(atPath: temporary.appendingPathComponent("walked.json").path))
 
         // Anywhere else outside the temporary directory, and a file that is already there.
-        #expect(throws: ClockRemote.Refusal.self) { try answer(at: root.appendingPathComponent("elsewhere.json")) }
+        refused(at: root.appendingPathComponent("elsewhere.json"))
         let taken = temporary.appendingPathComponent("taken.json")
         try Data("mine".utf8).write(to: taken)
-        #expect(throws: ClockRemote.Refusal.self) { try answer(at: taken) }
+        refused(at: taken)
         #expect(try String(contentsOf: taken, encoding: .utf8) == "mine")
 
         // The fresh path under the temporary directory that advance-clock.sh names.

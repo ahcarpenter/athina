@@ -37,7 +37,7 @@ public struct KeyStoreError: Error, CustomStringConvertible, Equatable, Sendable
 /// rebuild shows the system's keychain prompt once; Always Allow adds that
 /// build to the item's list (README, "Code signing").
 public struct KeychainKeyStore: KeyStore {
-    public static let service = AppPaths.bundleIdentifier
+    public static let service = AppPaths.keychainService
     /// The service the item was saved under while the app was called Mentor.
     /// `KeyMigration` copies that item to the one above on the first launch.
     public static let legacyService = AppPaths.legacyBundleIdentifier

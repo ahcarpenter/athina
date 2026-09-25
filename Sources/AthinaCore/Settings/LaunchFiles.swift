@@ -18,7 +18,8 @@ import Foundation
 /// - `--settings <path>`: starts from that settings file instead of the live
 ///   one; the file is read and never written, and one that is there but is
 ///   not settings stops the launch rather than quietly standing the live
-///   settings in its place
+///   settings in its place. So does one a sandboxed process cannot read,
+///   outside its container and its own bundle (`RuntimeEnvironment`).
 ///
 /// Every replay starts from settings it reads and never writes, and saves what
 /// it changes to its own `settings.json` in its data directory. `--settings`
@@ -52,7 +53,8 @@ public struct LaunchFiles: Equatable, Sendable {
         arguments: [String],
         clientMode: ModelClientMode,
         supportDirectory: URL = AppPaths.supportDirectory(),
-        launchName: String = LaunchFiles.launchName()
+        launchName: String = LaunchFiles.launchName(),
+        environment: RuntimeEnvironment = .current
     ) {
         func value(after flag: String) -> String?? {
             guard let index = arguments.firstIndex(of: flag) else { return nil }
@@ -78,8 +80,16 @@ public struct LaunchFiles: Equatable, Sendable {
         dataDirectory = AppPaths.replayRoot(in: supportDirectory).appendingPathComponent(launchName, isDirectory: true)
         if let settingsValue {
             if let path = settingsValue {
-                settingsSource = ModelClientMode.url(forPath: path).standardizedFileURL
-                settingsGiven = true
+                let source = ModelClientMode.url(forPath: path).standardizedFileURL
+                if let refusal = environment.refusal(reading: source, for: LaunchFiles.settingsFlag) {
+                    // Refused whether or not the file is there: the replay
+                    // must not run on settings other than the ones named.
+                    refusals.append(refusal)
+                    unusableSettings = refusal
+                } else {
+                    settingsSource = source
+                    settingsGiven = true
+                }
             } else {
                 refusals.append("\(LaunchFiles.settingsFlag) needs a settings file")
             }

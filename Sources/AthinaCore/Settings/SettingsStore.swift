@@ -50,11 +50,28 @@ public enum AppPaths {
     public static let directoryName = "athina"
     /// The name the app kept its files under before it was renamed.
     public static let legacyDirectoryName = "mentor"
-    /// The bundle identifier, which is also the preferences domain and the
-    /// keychain service.
-    public static let bundleIdentifier = "com.ahcarpenter.athina"
+    /// The bundle identifier of the direct and development builds, and the one
+    /// a process running from no app bundle (`swift run`, tests) goes by.
+    public static let defaultBundleIdentifier = "com.ahcarpenter.athina"
     /// The identifier the app had before it was renamed.
     public static let legacyBundleIdentifier = "com.ahcarpenter.mentor"
+
+    /// The running app's bundle identifier, so a build signed under another
+    /// one (the App Store build) keeps its preferences and its API key apart.
+    public static var bundleIdentifier: String { bundleIdentifier(in: .current) }
+
+    /// The bundle identifier in `environment`: its app bundle's, or
+    /// `defaultBundleIdentifier` when it runs from none.
+    public static func bundleIdentifier(in environment: RuntimeEnvironment) -> String {
+        environment.bundleIdentifier ?? defaultBundleIdentifier
+    }
+
+    /// Where the preferences live: the bundle identifier, which is the domain
+    /// `UserDefaults.standard` uses in an app bundle.
+    public static var preferencesDomain: String { bundleIdentifier }
+
+    /// The service the API key's keychain item is saved under.
+    public static var keychainService: String { bundleIdentifier }
 
     public static func supportDirectory() -> URL {
         applicationSupport().appendingPathComponent(directoryName, isDirectory: true)
