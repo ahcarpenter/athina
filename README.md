@@ -1997,7 +1997,7 @@ git rebase "${reformat:?}~1"
 # 2. Format every commit of the branch where it stands.
 git rebase --exec 'make format && git commit -a --amend --no-edit --allow-empty' "${reformat:?}~1"
 # 3. Cross the reformat. Both sides are formatted now, so every conflict is
-#    formatting the branch already has right: -X theirs keeps the branch's side.
+#    formatting the branch already has right: -X theirs keeps the branch side.
 git rebase -X theirs "${reformat:?}"
 # 4. Carry on to the tip of main, resolving real conflicts as usual.
 : "${reformat:?}" && git rebase origin/main
@@ -2013,10 +2013,10 @@ the next begins.
 Step 0 also stops a branch that forked from `main` after the commit before the
 reformat: steps 1 and 2 would carry `main`'s own later commits back onto an
 older base, and step 4 would replay them onto a `main` that already has them.
-Such a branch takes the short way instead:
+Such a branch takes the short way instead, resolving conflicts as usual:
 
 ```sh
-git rebase origin/main   # resolving conflicts as usual
+git rebase origin/main
 make format
 git commit -a -m "style(athina): format the branch to Google's Swift style"
 make lint
