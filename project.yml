@@ -1,0 +1,87 @@
+# The Xcode project for the Mac App Store route (README "The Xcode project").
+#
+# `make xcodeproj` generates Athina.xcodeproj from this file with the XcodeGen
+# pinned in Tools/XcodeGenTool. The generated project is not committed, so no
+# project.pbxproj is ever merged by hand: change this file and regenerate.
+#
+# The project wraps the Swift package, it does not replace it. Package.swift
+# still defines every target, and `make build`, `make test`, scripts/bundle.sh
+# and `make release` never read this file. The App Store app target compiles
+# the package's app sources, Sources/Athina, against the package's AthinaCore
+# library, and is signed with the App Sandbox entitlements, which is what App
+# Store provisioning, archiving and uploading need and the package build does
+# not give.
+name: Athina
+options:
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+
+packages:
+  Athina:
+    path: .
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+
+targets:
+  Athina App Store:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/Athina
+      - path: Resources/AppIcon.icns
+        buildPhase: resources
+      # The menu bar mark, one template PDF per variant, as scripts/bundle.sh copies them.
+      - path: Resources/Mark
+        includes:
+          - "MenuBarMark-*.pdf"
+        buildPhase: resources
+    preBuildScripts:
+      # Resources/Info.plist names the direct build's id, which scripts/bundle.sh
+      # copies as it is. This target builds from a copy that names
+      # PRODUCT_BUNDLE_IDENTIFIER instead, rewritten whenever the original changes,
+      # so the version and every other key are still set in one place.
+      - name: Info.plist with the App Store bundle id
+        inputFiles:
+          - Resources/Info.plist
+        outputFiles:
+          - $(DERIVED_FILE_DIR)/Info.plist
+        script: |
+          /usr/bin/plutil -replace CFBundleIdentifier -string "$PRODUCT_BUNDLE_IDENTIFIER" \
+            -o "$SCRIPT_OUTPUT_FILE_0" "$SCRIPT_INPUT_FILE_0"
+        basedOnDependencyAnalysis: true
+    # The Athina target's dependencies and frameworks in Package.swift: keep the two in step.
+    dependencies:
+      - package: Athina
+        product: AthinaCore
+      - sdk: Carbon.framework
+      - sdk: AVFoundation.framework
+      - sdk: Speech.framework
+    settings:
+      base:
+        PRODUCT_NAME: Athina
+        # The development id of the App Store build, the only place it is set.
+        # The permanent App Store id is the owner's open call and can never
+        # change once a build is uploaded: it replaces this value then.
+        PRODUCT_BUNDLE_IDENTIFIER: com.ahcarpenter.athina.appstore.dev
+        # Resources/Info.plist with this target's bundle id, written by the
+        # preBuildScripts step above, so both builds share one Info.plist.
+        INFOPLIST_FILE: $(DERIVED_FILE_DIR)/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Resources/Athina.app-store.entitlements
+        CODE_SIGN_STYLE: Automatic
+        # Left empty for the owner to fill with their Apple Developer team id.
+        DEVELOPMENT_TEAM: ""
+        ENABLE_HARDENED_RUNTIME: YES
+
+schemes:
+  Athina App Store:
+    build:
+      targets:
+        Athina App Store: all
+    run:
+      config: Debug
+    archive:
+      config: Release

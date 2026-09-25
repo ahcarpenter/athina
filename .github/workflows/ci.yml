@@ -32,3 +32,35 @@ jobs:
           name: ui-snapshots
           path: snapshots
           if-no-files-found: error
+
+  xcode-project:
+    # The Xcode project for the Mac App Store route (README "The Xcode
+    # project"), generated from project.yml with the pinned XcodeGen and built
+    # and archived as the sandboxed App Store target, signed to run locally
+    # since CI holds no Apple credentials. The package jobs above never read it.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode on the runner
+        run: |
+          latest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n1)"
+          echo "Using $latest"
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+      - name: Generate and build the App Store target
+        timeout-minutes: 30
+        run: make xcode-build
+      - name: Archive the App Store target
+        timeout-minutes: 30
+        run: make xcode-archive
+      - name: Check the archived app's bundle id and sandbox
+        # The id must be the target's PRODUCT_BUNDLE_IDENTIFIER, not the direct
+        # build's that Resources/Info.plist names, and the app must be sandboxed.
+        run: |
+          app=build/xcode/Athina.xcarchive/Products/Applications/Athina.app
+          want="$(xcodebuild -project Athina.xcodeproj -target "Athina App Store" -configuration Release -showBuildSettings \
+            | sed -n 's/^ *PRODUCT_BUNDLE_IDENTIFIER = //p')"
+          got="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")"
+          echo "CFBundleIdentifier $got, PRODUCT_BUNDLE_IDENTIFIER $want"
+          [ -n "$want" ] && [ "$got" = "$want" ] && [ "$got" != com.ahcarpenter.athina ]
+          codesign -d --entitlements - --xml "$app" | plutil -extract 'com\.apple\.security\.app-sandbox' raw -o - - | grep -qx true
