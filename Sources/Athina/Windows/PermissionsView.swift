@@ -8,8 +8,11 @@ import SwiftUI
 /// appears until the person chooses a permission's button, which then asks or
 /// opens its System Settings pane.
 struct PermissionsView: View {
-  @Environment(AppState.self) private var state
-  @Environment(\.dismiss) private var dismiss
+  @Environment(AppState.self)
+  private var state
+
+  @Environment(\.dismiss)
+  private var dismiss
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -89,7 +92,9 @@ struct PermissionsView: View {
 
 /// Permissions listed one per row, with a separator between rows.
 private struct PermissionRows: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   let permissions: [Permission]
 
   var body: some View {
@@ -105,7 +110,9 @@ private struct PermissionRows: View {
 }
 
 private struct PermissionRow: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   let permission: Permission
   let granted: Bool
 

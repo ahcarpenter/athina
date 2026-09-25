@@ -5,7 +5,8 @@ import SwiftUI
 /// The General pane: whether Athina offers suggestions and how they are
 /// shown, talking back, and the categories turned off with Never for This.
 struct GeneralSettings: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
 
   var body: some View {
     @Bindable var state = state
@@ -55,8 +56,11 @@ struct GeneralSettings: View {
 
 /// Talking back: the hotkey and what it needs on this Mac.
 struct VoiceSection: View {
-  @Environment(AppState.self) private var state
-  @Environment(\.openWindow) private var openWindow
+  @Environment(AppState.self)
+  private var state
+
+  @Environment(\.openWindow)
+  private var openWindow
 
   var body: some View {
     @Bindable var state = state
@@ -115,7 +119,8 @@ struct VoiceSection: View {
 
 /// The categories turned off for an app with Never for This, each removable.
 struct NeverRulesSection: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
 
   var body: some View {
     @Bindable var state = state
