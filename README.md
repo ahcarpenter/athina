@@ -595,7 +595,7 @@ scripts/e2e/athina-e2e warm          # once per machine: prepare the warm home
 scripts/e2e/athina-e2e list          # the scenarios and what each one proves
 scripts/e2e/athina-e2e run all       # run them; one JSON line of result each
 scripts/e2e/athina-e2e run --jobs 4 all   # up to 4 API-tier scenarios at once
-scripts/e2e/athina-e2e run menubar-keyboard
+scripts/e2e/athina-e2e run toast-menu-answers
 scripts/e2e/athina-e2e doctor        # what is missing before a run
 scripts/e2e/athina-e2e journal suggestions   # a named query over the last run
 ```
@@ -651,8 +651,8 @@ Scenarios come in two tiers, which each scenario names in `SCENARIO_TIER`:
   clicks or types into it through its own event path, so the check still
   proves the control can be hit and is wired, with no real pointer and no wait
   for the keyboard and mouse to go quiet. The run is hermetic (see Hermetic
-  runs): it stages nothing, posts no input, shows nothing, senses nothing, and
-  takes no lock.
+  runs): it stages nothing, posts no input, shows nothing, senses only what
+  the scenario scripts (see Scripted sensing), and takes no lock.
 - **Real screen** (`screen`, the default): real HID clicks and presses through
   accessibility from outside, for what only macOS's own routing can prove: the
   menu bar item and the menu the system runs for it, clicks in other apps that
@@ -666,11 +666,12 @@ Scenarios come in two tiers, which each scenario names in `SCENARIO_TIER`:
 | `menubar-item-click` | screen | a real pointer click on Athina's menu bar item opens the menu and leaves the suggestion up, and Answer Suggestion > Tell Me More is recorded |
 | `menubar-empty-click` | screen | a real click on empty menu bar space beside the item dismisses the suggestion, attributed to a real mouse-down by a session tap |
 | `other-app-click` | screen | a real click inside a staged TextEdit window dismisses the suggestion |
-| `menubar-keyboard` | screen | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one menu bar scenario that needs no idle input |
+| `toast-menu-answers` | api | with a suggestion up from scripted sensing, the menu's Answer Suggestion offers every answer; Tell Me More from it opens the explanation and keeps the toast up, Not Now is recorded and takes the toast down, and the answers are dimmed, and refused, once no suggestion is up |
+| `toast-buttons` | api | clicks on the toast's own buttons: Tell Me More opens the explanation and is recorded once however often Show Less folds it; Close takes it down without writing over the answer; Not Now and Never for This are recorded and add a snooze and a never rule for that kind of suggestion in that app; and a click outside Athina's windows takes a toast brought back by Show Last Suggestion down |
 | `menubar-width` | screen | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
 | `menubar-mark` | screen | Athina's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 | `capture-race` | screen | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
-| `understanding-surfaces` | screen | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
+| `understanding-surfaces` | api | the understanding the mentor call behind a scripted suggestion writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link's target opens the Journal pane in place (`open-link`); and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
 | `debug-panel-access` | api | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed, a click on it is refused, and one forced onto it opens nothing; turned on, the menu gains Debug Panel in a group of its own after Settings…, and it and the button each open the panel; turned off again, the panel closes and the command leaves the menu |
 | `settings-pane-text` | api | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link to that pane rather than Markdown, and a click on the one below the fold is refused until the pane is scrolled to it |
 | `settings-pane-links` | screen | a real click on each of those links changes the Settings window's pane in place rather than handing the link to the system |
@@ -749,6 +750,7 @@ it.
 | `windows` | Athina's open windows: title, number, frame, level, key and main |
 | `find` | controls in `window=<title>` (every window when it is left out) by `identifier=`, or by `role=`, `subrole=` and `label=` (a control's description or title, whole, ignoring case), read from Athina's own accessibility tree: role, label, identifier, value, enabled, frame |
 | `click` | a left click on the first such control, posted to the app's own event queue and dispatched by AppKit as a real click is after the window server; the answer comes once it has been handled. Refused as `disabled` when the control is dimmed, `offscreen` when a scroll area has it out of sight or it is outside its part of the window (the content, or the whole window for the toolbar and title bar), and `covered` when a sheet is up over its window or the window's own hit test at its centre lands on something else. A control inside a sheet is found under the title of the window the sheet covers, and judged against and clicked in the sheet. `force=true` clicks anyway, for proving a refusal |
+| `press` | an accessibility press on the first such control, as VoiceOver or Full Keyboard Access presses it: its own action, with no pointer. For the one kind of control a simulated click cannot drive: AppKit lets a destructive button (Reset Understanding…) act on no click into a window that is not in front, and a hermetic run's never are. Refused as `disabled` when the control is dimmed and `unsupported` when it offers no press |
 | `type` | `text=` as key presses to the first responder of `window=`, or of the sheet up over it, such as the field a click just focused |
 | `scroll` | the scroll view holding a control scrolls it into view |
 | `menu` | the menu bar extra's menu as the app builds it (`MenuModel`), without showing it, and with no menu bar extra at all in a hermetic run; `press="<title>"`, or `press="<submenu> > <title>"`, runs that item's command through the handler choosing it from the menu runs, refused as `missing` or `disabled`, naming the step, when an item or submenu on the way is not there or is dimmed |
@@ -757,10 +759,18 @@ it.
 | `wait-window` | waits until a window titled `window=` is open, or with `present=false` gone |
 | `snapshot` | a checkpoint PNG of one of Athina's windows at `path=`, taken as `--snapshot` takes one once macOS has finished animating the window open (up to two seconds); never over an existing file |
 | `outside-click` | a click outside Athina's windows at `x=`, `y=` (points from the top left of the main display, as frames are given), handed to the suggestion toast as its system-wide listener would hand it one, which a hermetic run does not have; `heard` says whether a toast was up |
+| `observe` | what a hermetic run senses next (see Scripted sensing): `app=` and `bundle=` in front, in `window=`, showing `text=`, captured at once; or `idle=true` or `idle=false` alone, input going idle or coming back. `kept` says whether the capture was journaled, `why` why not, and `after` is the newest event's sequence before it, for a `wait-event` on what it brings. Refused as `unscripted` in a run that senses the real Mac |
+| `wait-event` | waits for the first event named `name=` after the sequence `after=` (every event since launch when left out) whose fields hold every other argument: `wait-event name=feedback feedback=notNow`. The names are what the sensing pipeline and the mentor loop publish, each logged once the app has acted on it: `observation`, `focus`, `mode`, `event` (a journaled event, by `kind`), `status` (with the understanding's `revision` as `understanding`), `suggestion` (logged once its toast is up), `feedback`, `followUp` and `call` (by `tier` and `outcome`); the answer carries the event's `sequence` and fields |
+| `journal` | one of the harness's named journal queries (`journal - queries` in the drive helpers lists them), `query=<name>`, answered from the app's own journal connection, which refuses any statement that writes: the `columns`, and the `rows` as objects keyed by column |
+| `advance` | moves the replay's clock `seconds=` ahead, as the debug panel's Advance field does, and answers with the clock's time and how far it has been moved ahead in all |
+| `open-link` | follows a link in the app's own text, found as `click` finds a control, through the handler a click on it runs, with the URL SwiftUI carries as its identifier (`open-link window=Models identifier=athina-settings:journal`). It proves where the link goes and that the app handles it; that a click reaches it stays a real-screen check. Refused as `missing` when the control is not a link and `unhandled` when the app has no handler for its URL |
 | `hotkey` | `key=pause` or `key=talk-back` through the handler Carbon calls, pressed and let go, or only `phase=down` or `phase=up`; `heard=<words>` is what talking back hears while its key is down, since a hermetic run opens no microphone; refused as `disabled` when the key is not registered (unset, unusable, or taken), as Carbon then never reports it |
 
 The waits take `timeout=<seconds>`, 10 unless given, and poll the app's own
 state at a fixed real-time pace; the replay's clock is not involved.
+`wait-event` reads a log of the newest 2,000 events the app has handled
+(`ControlEventLog`), kept only while the API is served; the cadence
+bookkeeping the pipeline publishes several times a second is left out of it.
 
 The controls a scenario reaches carry accessibility identifiers
 (`advanced.enableDebugPanel`, `debugPanel.timelineRow`; a link in Settings text
@@ -772,7 +782,10 @@ found by label (`label=Models`), and a window's title-bar buttons by subrole
 (`subrole=AXCloseButton`). What a click cannot drive: a link
 inside a SwiftUI Text follows neither a click the app simulates nor
 accessibility's press, so following one stays a real-screen check
-(`settings-pane-links`).
+(`settings-pane-links`), and `open-link` checks where it goes; and a
+destructive button takes no click into a window that is not in front, as
+AppKit keeps the click that only brings a window forward from destroying
+anything, so `press` presses it.
 
 **Who can use it.** The API lets a program click Athina's controls, type into
 it, and read its state, so it must never reach anyone's own copy of the app.
@@ -829,10 +842,11 @@ serves.
   each command. The app never makes itself the active app: every request to
   come forward goes through `AppActivation.request()`, which does nothing
   here. So its windows draw as an inactive app's do, in checkpoints too.
-- **It senses nothing.** The pipeline runs with `SensingSource.hermetic`: no
-  focus tracking, no read of input or permissions, and no capture, so a run
-  never journals the screen of whoever is at the Mac, and never asks macOS
-  about a permission; it has them all, and watches with nothing to capture
+- **It senses only what it is told.** The pipeline runs with
+  `SensingSource.hermetic`: no focus tracking, no read of input or
+  permissions, and no capture, so a run never journals the screen of whoever
+  is at the Mac, and never asks macOS about a permission; it has them all,
+  and watches, sensing only what a scenario scripts (see Scripted sensing),
   until it is paused. Talking back hears only the words the API's `hotkey`
   gives it and opens no microphone.
 - **It listens to nothing outside itself.** The toast has no system-wide
@@ -872,19 +886,52 @@ where they open, to
 watch what a scenario does or to compare its checkpoints with a parked run's;
 such a run is on the screen, so it takes the screen lock.
 
+### Scripted sensing
+
+A hermetic run senses only what its scenario scripts, through the API's
+`observe` (`SensingPipeline.observe`, `ScriptedObservation`). Each call is
+one moment of a person's screen: an app's window in front, filling a display,
+with a text area holding the text given focused, as a document in an editor
+is. The pipeline senses it the way it senses a real window, with the same
+code from the journal on: a change of app or window is journaled as an app
+or window switch, an app the settings exclude is read no further than its
+name and puts sensing in the excluded mode, and otherwise a capture is taken
+at once, a focus-change capture after a switch and an input-settled one after
+the text changed, and kept or dropped by the same rule as a capture of the
+screen (`FrameKeepPolicy`), so the same window showing the same text again is
+a near duplicate. The frame is the text drawn a line at a time, and its
+recognised text is those lines, each where it was drawn, so no screen is read
+and no text recognition runs. `observe idle=true` and `idle=false` stand in
+for the keyboard and mouse going quiet past the idle threshold and coming
+back. The debug panel's Latest frame shows each scripted frame as it shows a
+real one. A suggestion's callout needs a real window to point at, so a
+hermetic run draws none and says so in the debug panel.
+
+The harness scripts the moments the committed fixtures were recorded at, from
+the documents in their `scenario/` folder (`scripted_toast` in
+`scripts/e2e/lib/harness.sh`): `reading-notes.txt` in front, whose replayed
+triage finds nothing worth a look, then, once `advance` has moved the replay
+clock past the triage gate's 5 second floor rather than waiting it out, a
+switch to `cleanup-script.txt`, whose triage and mentor call make the
+suggestion. The toast is up within 2 seconds of that second `observe`,
+measured at about 0.1 second, which the run checks, and every step waits on
+the event it needs (`wait-event`) rather than on a fixed time or the journal.
+
 ### What the harness already handles, so a scenario need not
 
 - **The warm home**, above: no run pays the cold OCR stall again.
 - **Fast toasts.** Every launch replays with `--replay-latency immediate`
   (see Replay), and the seeded settings put the triage gate at its 5 second
   floor, so a toast comes seconds after the first capture rather than after
-  the recorded 41 second mentor call and a 20 second gate. `wait_toast` looks
-  for it every quarter second and nudges sensing every 2 seconds (the helper
-  window flips and TextEdit switches windows), pressing Capture Now only after
-  30 seconds with no toast; it logs how long it waited and how long since
-  launch. While it waits for the first capture, the harness brings the staged
-  TextEdit forward with each Shift press, since sensing captures nothing while
-  an excluded app, such as the terminal of whoever is at the Mac, is in front.
+  the recorded 41 second mentor call and a 20 second gate. An API-tier
+  scenario scripts its toast (see Scripted sensing). On the real screen,
+  `wait_toast` looks for it every quarter second and nudges sensing every 2
+  seconds (the helper window flips and TextEdit switches windows), pressing
+  Capture Now only after 30 seconds with no toast; it logs how long it waited
+  and how long since launch. While it waits for the first capture, the
+  harness brings the staged TextEdit forward with each Shift press, since
+  sensing captures nothing while an excluded app, such as the terminal of
+  whoever is at the Mac, is in front.
 - **Idle input.** Every pointer step of a real-screen scenario waits for a
   quiet keyboard and mouse first, and a click aborts if the pointer moves off
   the target, because the Mac may have someone at it. A click by that person

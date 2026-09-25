@@ -45,7 +45,8 @@ struct UnderstandingSection: View {
             Every mentor call also rewrites the understanding, at no extra cost. After at \
             least this much active use with no mentor call, Athina makes a refresh call of its \
             own.
-            """
+            """,
+          identifier: "understanding.refreshInterval"
         )
         IntRow(
           "Size limit",
@@ -63,7 +64,8 @@ struct UnderstandingSection: View {
           "Forget after no activity for",
           value: $state.settings.mentor.understandingIdleGap,
           range: MentorSettings.idleGapRange,
-          help: "It is also forgotten when a new day starts."
+          help: "It is also forgotten when a new day starts.",
+          identifier: "understanding.idleGap"
         )
         HStack {
           Spacer()
@@ -107,6 +109,7 @@ struct ResetUnderstandingButton: View {
     Button("Reset Understanding…", role: .destructive) {
       confirming = true
     }
+    .accessibilityIdentifier("understanding.reset")
     .disabled(state.mentorStatus.understanding == nil || resetting)
     // Resetting is what the person just chose, so the confirming button
     // is the plain default and Cancel stays available, as for Clear Journal.

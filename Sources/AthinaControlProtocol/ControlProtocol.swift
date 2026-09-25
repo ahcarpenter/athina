@@ -38,6 +38,7 @@ public enum ControlProtocol {
     "equals": .json,
     "x": .number,
     "y": .number,
+    "after": .number, "seconds": .number, "idle": .bool,
   ]
 }
 

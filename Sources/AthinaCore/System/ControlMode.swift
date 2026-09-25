@@ -29,7 +29,8 @@ import Foundation
 /// too. With `--hermetic` as well it is a hermetic run (README "Hermetic
 /// runs"): it takes nothing from the real world and leaves nothing in it, so
 /// any number can run beside each other and beside whoever is at the Mac. It
-/// senses nothing, listens to no global input, never activates itself, keeps
+/// senses only what the API's `observe` scripts (README "Scripted sensing"),
+/// listens to no global input, never activates itself, keeps
 /// its item out of the menu bar, and parks every window it opens below the
 /// desktop picture, or, with `--show-windows` too, leaves them where a person
 /// can watch.

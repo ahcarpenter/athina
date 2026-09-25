@@ -31,6 +31,39 @@ import Testing
     }
   }
 
+  /// The control API's `journal` answers the same queries from the app's
+  /// own connection (`Journal.readOnlyRows`), which refuses a write.
+  @Test func everyQueryRunsThroughTheAppsOwnConnection() async throws {
+    let (journal, _) = try temporaryJournal()
+    for query in JournalQueries.all {
+      let rows = try await journal.readOnlyRows(query.sql)
+      #expect(rows.allSatisfy { $0.count == query.columns.count }, "\(query.name) columns")
+    }
+    #expect(try await journal.readOnlyRows(JournalQueries.counts.sql).count == 1)
+  }
+
+  @Test func theUnderstandingQueryReadsTheGoalPutFirst() async throws {
+    let (journal, database) = try temporaryJournal()
+    try await journal.record(
+      UnderstandingRecord.first(
+        content: Understanding(goals: [
+          Understanding.Goal(goal: "clean up the build machine", evidence: "e", confidence: 0.9),
+          Understanding.Goal(goal: "read chapter two", evidence: "e", confidence: 0.4),
+        ]),
+        at: Date(timeIntervalSince1970: 1_700_000_000),
+        model: "claude-haiku-4-5",
+        source: .periodic,
+        cost: 0.01,
+        promptVersion: 1
+      )
+    )
+    let rows = try database.rows(JournalQueries.understanding.sql)
+    #expect(rows.count == 1)
+    #expect(rows[0][2] == "1")
+    #expect(rows[0][4] == "clean up the build machine")
+    #expect(try await journal.readOnlyRows(JournalQueries.understanding.sql) == rows)
+  }
+
   @Test func aRecordedObservationComesBackThroughTheQuery() async throws {
     let (journal, database) = try temporaryJournal()
     let now = Date(timeIntervalSince1970: 1_700_000_000)
