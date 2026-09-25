@@ -1947,10 +1947,12 @@ A newer swift-format can format the same code differently, so the one CI runs
 is pinned: `.swift-format-xcode-version` names the Xcode it ships with, as
 `xcodebuild -version` prints it (26.6 today: Swift 6.3.3, swift-format 6.3.0).
 The `lint` job selects that Xcode by its exact path on the runner,
-`/Applications/Xcode_<version>.app`, never the newest there, fails with the
-Xcodes the runner has when it lacks it, and prints the Swift and swift-format
-versions that ran. `make format` and `make lint` read the same file and warn
-when the selected Xcode is another; `DEVELOPER_DIR=<path to that Xcode.app>`
+`/Applications/Xcode_<version>.app` or the image's other name for it,
+`/Applications/Xcode_<version>.0.app`, never the newest there; it fails,
+naming the Xcodes the runner has, when neither exists, fails when that Xcode
+reports another version, and prints the Swift and swift-format versions that
+ran. `make format` and `make lint` read the same file and warn when the
+selected Xcode is another; `DEVELOPER_DIR=<path to that Xcode.app>`
 runs either with the pinned one. Xcode 27.0's swift-format, which reports its
 version as `main`, formats this code identically today.
 
