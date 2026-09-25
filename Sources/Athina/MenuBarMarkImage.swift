@@ -10,16 +10,17 @@ import AthinaCore
 /// `scripts/mark-assets.swift` (`make mark`).
 @MainActor
 enum MenuBarMarkImage {
-    private static var loaded: [MenuBarMark: NSImage] = [:]
+  private static var loaded: [MenuBarMark: NSImage] = [:]
 
-    static func image(for mark: MenuBarMark) -> NSImage? {
-        if let found = loaded[mark] { return found }
-        guard let url = Bundle.main.url(forResource: "MenuBarMark-\(mark.rawValue)", withExtension: "pdf"),
-              let image = NSImage(contentsOf: url)
-        else { return nil }
-        image.isTemplate = true
-        image.accessibilityDescription = nil
-        loaded[mark] = image
-        return image
-    }
+  static func image(for mark: MenuBarMark) -> NSImage? {
+    if let found = loaded[mark] { return found }
+    guard
+      let url = Bundle.main.url(forResource: "MenuBarMark-\(mark.rawValue)", withExtension: "pdf"),
+      let image = NSImage(contentsOf: url)
+    else { return nil }
+    image.isTemplate = true
+    image.accessibilityDescription = nil
+    loaded[mark] = image
+    return image
+  }
 }
