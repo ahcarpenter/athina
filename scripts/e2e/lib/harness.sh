@@ -245,21 +245,28 @@ have_warm_home() { [ -s "$WARM_HOME/.athina-e2e-warm" ]; }
 # the warm home and writes its evidence under the runs, so it says it is in
 # progress for as long as it lasts, and clean and warm, which remove or replace
 # both, refuse while it does.
+# The file holds the process's start time, which tells it from a later process
+# given the same pid, then the line naming the run.
 live_run_register() {
 	mkdir -p "$LIVE_RUNS"
-	printf '%s running "%s" (pid %s) since %s\n' "$ROOT" "$1" "$$" "$(date '+%Y-%m-%d %H:%M:%S')" >"$LIVE_RUNS/$$"
+	{
+		ps -o lstart= -p "$$"
+		printf '%s running "%s" (pid %s) since %s\n' "$ROOT" "$1" "$$" "$(date '+%Y-%m-%d %H:%M:%S')"
+	} >"$LIVE_RUNS/.$$" && mv -f "$LIVE_RUNS/.$$" "$LIVE_RUNS/$$"
 }
 
 live_run_unregister() { rm -f "$LIVE_RUNS/$$"; }
 
 # The runs in progress, one line each. The file of a run that is gone, one
-# killed before it could take its own down, is dropped.
+# killed before it could take its own down, is dropped, even once its pid has
+# gone to another process.
 live_runs() {
-	local marker
+	local marker started
 	for marker in "$LIVE_RUNS"/*; do
 		[ -f "$marker" ] || continue
-		if kill -0 "$(basename "$marker")" 2>/dev/null; then
-			cat "$marker" 2>/dev/null || true
+		started="$(head -1 "$marker" 2>/dev/null || true)"
+		if [ -n "$started" ] && [ "$(ps -o lstart= -p "$(basename "$marker")" 2>/dev/null || true)" = "$started" ]; then
+			sed -n '2p' "$marker" 2>/dev/null || true
 		else
 			rm -f "$marker"
 		fi

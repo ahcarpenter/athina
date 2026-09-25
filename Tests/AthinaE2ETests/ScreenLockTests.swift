@@ -322,9 +322,13 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: runs.path))
         #expect(FileManager.default.fileExists(atPath: warm.path))
 
-        // Killed before it could take its registration down, it no longer counts.
+        // Killed before it could take its registration down, it no longer counts,
+        // nor does one whose pid has gone to another process since.
         kill(run.processIdentifier, SIGKILL)
         run.waitUntilExit()
+        let reused = cache.appendingPathComponent("live-runs/\(ProcessInfo.processInfo.processIdentifier)")
+        try "Thu Jan  1 00:00:00 1970\n/checkouts/gone running \"run all\"\n".write(
+            to: reused, atomically: true, encoding: .utf8)
         let (cleaned, _) = try harnessProcess("clean_cache --warm", cache: cache)
         cleaned.waitUntilExit()
         #expect(cleaned.terminationStatus == 0)
