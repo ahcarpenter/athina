@@ -455,19 +455,33 @@ import Testing
         old.waitUntilExit()
 
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        // Both the hand-held lockf and the harness queued behind it stay until
+        // the test is done with them, however slow the Mac is: either one
+        // leaving early changes who the waiter names.
         let ready = directory.appendingPathComponent("hand-ready").path
+        let stop = directory.appendingPathComponent("hand-stop").path
         let hand = Process()
         hand.executableURL = URL(fileURLWithPath: "/usr/bin/lockf")
-        hand.arguments = ["-k", lock, "/bin/sh", "-c", "touch '\(ready)'; sleep 10"]
+        hand.arguments = [
+            "-k", lock, "/bin/sh", "-c",
+            "touch '\(ready)'; for _ in $(seq 1 600); do [ -e '\(stop)' ] && exit 0; sleep 0.1; done",
+        ]
         try hand.run()
-        defer { hand.terminate() }
+        defer {
+            FileManager.default.createFile(atPath: stop, contents: nil)
+            hand.waitUntilExit()
+        }
         try waitFor("the hand-held lockf") { FileManager.default.fileExists(atPath: ready) }
 
         // A harness already queued behind it is not named as a holder.
-        let (queued, queuedOutput) = try process("lock_acquire SCREEN_LOCK 'run queued' 5", checkout: "/checkouts/three")
+        let (queued, queuedOutput) = try process("lock_acquire SCREEN_LOCK 'run queued' 60", checkout: "/checkouts/three")
         defer { queued.terminate() }
         try waitFor("the first waiter to queue") {
             (try? String(contentsOf: queuedOutput, encoding: .utf8))?.contains("waiting for the screen lock") ?? false
+        }
+        // It says so before it starts the lockf it queues on.
+        try waitFor("the first waiter's lockf") {
+            (try? run("pgrep -P \(queued.processIdentifier) -x lockf").status) == 0
         }
 
         let waiter = try run("lock_acquire SCREEN_LOCK 'run all' 1")
