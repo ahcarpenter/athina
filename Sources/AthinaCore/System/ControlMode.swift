@@ -41,6 +41,8 @@ public enum ControlMode: Equatable, Sendable {
   /// `--control` was given and is not served, and why.
   case refused(String)
 
+  /// The flag that asks for the control API, followed by the directory the
+  /// harness made for the run.
   public static let flag = "--control"
   /// Makes a served launch a hermetic run.
   ///
@@ -62,6 +64,19 @@ public enum ControlMode: Equatable, Sendable {
   /// 104, the last of them its terminating zero).
   public static let socketPathLimit = 103
 
+  /// Decides from the command line whether this launch serves the API,
+  /// refused with the first of the conditions above that fails.
+  ///
+  /// A served launch is a hermetic run with `--hermetic`, and then parks its
+  /// windows unless `--show-windows` is given too.
+  ///
+  /// - Parameters:
+  ///   - arguments: The launch's command line.
+  ///   - clientMode: How the launch makes model calls, which must be a replay.
+  ///   - environment: The process's runtime, which must not be sandboxed.
+  ///   - compiledIn: Whether this build carries the server, which only the
+  ///     `ControlAPI` package trait compiles in.
+  ///   - inspect: Reads what is at the directory's path; tests pass their own.
   public init(
     arguments: [String],
     clientMode: ModelClientMode,
@@ -153,13 +168,19 @@ public enum ControlMode: Equatable, Sendable {
 
 /// Where the control API listens and the secret every request must carry.
 public struct ControlChannel: Equatable, Sendable {
+  /// The directory the harness made for this run, standardized.
   public var directory: URL
+  /// The secret every request must carry, read trimmed from the directory's
+  /// `secret` file.
   public var secret: String
   /// Whether the launch is a hermetic run (`--hermetic`).
   public var isHermetic: Bool
   /// Whether a hermetic run parks its windows: not under `--show-windows`.
   public var parksWindows: Bool
 
+  /// Creates a channel in `directory` that answers only requests carrying
+  /// `secret`, for a hermetic run when `isHermetic`, parking its windows when
+  /// `parksWindows`.
   public init(directory: URL, secret: String, isHermetic: Bool = false, parksWindows: Bool = false)
   {
     self.directory = directory
@@ -168,6 +189,8 @@ public struct ControlChannel: Equatable, Sendable {
     self.parksWindows = parksWindows
   }
 
+  /// The path of the socket the app listens on, `control.sock` inside the
+  /// directory.
   public var socketPath: String {
     directory.appendingPathComponent(ControlMode.socketName).path
   }
@@ -176,6 +199,7 @@ public struct ControlChannel: Equatable, Sendable {
 /// What `ControlMode` needs to know about a control directory, read from the
 /// file system by `inspect` and written by hand in tests.
 public struct ControlDirectory: Equatable, Sendable {
+  /// What is at the directory's path, read without following a symbolic link.
   public enum Kind: Equatable, Sendable {
     case missing
     /// Something other than a real directory: a file, or a symbolic link.
@@ -183,7 +207,9 @@ public struct ControlDirectory: Equatable, Sendable {
     case directory
   }
 
+  /// What is at the directory's path.
   public var kind: Kind
+  /// Whether the directory is owned by the user running Athina.
   public var ownedByUser: Bool
   /// The permission bits, such as 0o700.
   public var permissions: UInt16
@@ -193,6 +219,8 @@ public struct ControlDirectory: Equatable, Sendable {
   /// The secret, trimmed, or nil when there is no secret file to read.
   public var secret: String?
 
+  /// Creates the facts about a directory; left out, they are those of a
+  /// private directory of this user's, mode 0700, with no secret file.
   public init(
     kind: Kind,
     ownedByUser: Bool = true,
@@ -207,8 +235,9 @@ public struct ControlDirectory: Equatable, Sendable {
     self.secret = secret
   }
 
-  /// Why this directory will not do, or nil when it will; the secret's
-  /// length is `ControlMode`'s to judge.
+  /// Why this directory will not do, or nil when it will.
+  ///
+  /// The secret's length is `ControlMode`'s to judge.
   var refusal: String? {
     switch kind {
     case .missing: return "there is no such directory"
