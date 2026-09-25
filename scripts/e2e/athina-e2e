@@ -60,8 +60,9 @@ options:
 run and warm first take this checkout's lock, so only one of them runs from a
 checkout at a time, then build. An API-tier scenario is hermetic and takes no
 other lock. A real-screen scenario takes one machine-wide lock for as long as
-it runs, as warm and clean do for theirs, so only one run is on the screen at a
-time across every checkout (README "End-to-end harness").
+it runs, as warm and clean do for theirs, and only once the keyboard and mouse
+have been quiet for 15 seconds, so only one run is on the screen at a time
+across every checkout (README "End-to-end harness").
 TEXT
 }
 
@@ -84,6 +85,11 @@ scenario_tier_of() {
 	tier="$(sed -n 's/^SCENARIO_TIER=\([a-z]*\)$/\1/p' "$SCENARIO_DIR/$1.sh" 2>/dev/null | head -1)"
 	printf '%s\n' "${tier:-screen}"
 }
+
+# How long the keyboard and mouse must be quiet before a real-screen scenario
+# takes the screen: its steps start soon after and each moves the pointer or
+# the front app, which whoever is at the Mac would feel.
+IDLE_BEFORE_SCREEN=15
 
 cmd_list() {
 	local name
@@ -281,6 +287,10 @@ run_scenario() (
 	# screen: driven from outside, with the real pointer and accessibility;
 	# api: driven through the app's control API (README "The control API").
 	SCENARIO_TIER=screen
+	# A real-screen scenario that also reads Athina through its control API,
+	# to set what macOS shows beside what the app built, says yes. It gets one
+	# only from a bundle that carries it, and reads CONTROL_API to know.
+	SCENARIO_CONTROL=no
 	# A screen-tier run watches a staged TextEdit window; an API-tier one
 	# stages nothing unless its scenario says so.
 	scenario_stage() { [ "$SCENARIO_TIER" = api ] || stage_text_document; }
@@ -302,10 +312,16 @@ run_scenario() (
 	[ "$JOBS" -gt 1 ] && LOG_TAG="[$name] "
 	# A real-screen run is on the screen, and so is an API-tier one whose
 	# windows are left there to watch: each takes the machine-wide lock for as
-	# long as it runs, so other checkouts' runs interleave with this one's.
+	# long as it runs, so other checkouts' runs interleave with this one's. A
+	# real-screen scenario waits for a quiet keyboard and mouse before it takes
+	# it, rather than inside it.
 	if [ "$SCENARIO_TIER" = screen ] || [ "$SHOW_WINDOWS" = 1 ]; then
 		local status=0
-		lock_acquire SCREEN_LOCK "run $name" "$LOCK_TIMEOUT" || status=$?
+		if [ "$SCENARIO_TIER" = screen ]; then
+			lock_acquire_when_idle SCREEN_LOCK "run $name" "$LOCK_TIMEOUT" "$IDLE_BEFORE_SCREEN" hid_idle_seconds || status=$?
+		else
+			lock_acquire SCREEN_LOCK "run $name" "$LOCK_TIMEOUT" || status=$?
+		fi
 		if [ "$status" != 0 ]; then
 			result_line "$name" fail 0 "could not take the screen lock"
 			exit "$status"
@@ -342,7 +358,12 @@ run_scenario() (
 		launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
 		control_wait
 	else
+		if [ "$SCENARIO_CONTROL" = yes ] && [ "$CONTROL_API" = yes ]; then
+			control_prepare
+			args+=(--control "$CONTROL_DIR")
+		fi
 		launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
+		[ -n "$CONTROL_DIR" ] && control_wait
 		watch_announcements
 		watch_clicks
 		wait_first_observation 90 || log "WARNING: no capture yet; the home may not be warm"
@@ -362,6 +383,7 @@ run_scenario() (
 	else
 		result=fail
 		detail="the scenario could not run to the end"
+		[ -n "$STEP" ] && detail="$detail: it stopped at step $STEP"
 	fi
 	write_evidence
 	log "=== $name: $result"

@@ -232,6 +232,89 @@ import Testing
     try waitFor("its lockf to go") { kill(lockf, 0) != 0 }
   }
 
+  // MARK: Waiting for idle input first
+
+  /// A file the test writes the seconds of idle input into, and the shell
+  /// function `idle` that reads it back the way `hid_idle_seconds` reads
+  /// the real ones.
+  private func idleReader(_ seconds: Int) throws -> (file: String, function: String) {
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let file = directory.appendingPathComponent("idle-\(UUID().uuidString)").path
+    try setIdle(seconds, in: file)
+    return (file, "idle() { cat '\(file)'; }")
+  }
+
+  private func setIdle(_ seconds: Int, in file: String) throws {
+    try "\(seconds)\n".write(toFile: file, atomically: true, encoding: .utf8)
+  }
+
+  /// A real-screen run's lock request, needing 15 seconds of quiet, then
+  /// any further arguments, printing `acquired` once it holds the lock.
+  private func whenIdle(_ reader: (file: String, function: String), _ extra: String = "") -> String
+  {
+    """
+    \(reader.function)
+    lock_acquire_when_idle SCREEN_LOCK 'run real-screen' '' 15 idle \(extra) && echo acquired
+    """
+  }
+
+  private func says(_ output: URL, _ text: String) -> Bool {
+    (try? String(contentsOf: output, encoding: .utf8))?.contains(text) ?? false
+  }
+
+  @Test func aQuietMacTakesTheLockAtOnce() throws {
+    let finished = try run(whenIdle(try idleReader(20)))
+    #expect(finished.status == 0)
+    #expect(finished.output.contains("acquired"))
+    #expect(finished.output.contains("input idle for 20s"))
+    #expect(!finished.output.contains("waiting for 15s of idle input"))
+  }
+
+  @Test func theLockWaitsForQuietBeforeItIsTaken() throws {
+    let reader = try idleReader(0)
+    let (waiter, output) = try process(whenIdle(reader), checkout: "/checkouts/two")
+    try waitFor("the run to wait for quiet") {
+      says(output, "waiting for 15s of idle input before taking the screen lock")
+    }
+    // Nothing is held while it waits for quiet: another run takes the lock at once.
+    let other = try run("lock_acquire SCREEN_LOCK 'run other' 0 && echo other-acquired")
+    #expect(other.output.contains("other-acquired"))
+    try setIdle(16, in: reader.file)
+    waiter.waitUntilExit()
+    #expect(waiter.terminationStatus == 0)
+    #expect(says(output, "input idle for 16s"))
+    #expect(says(output, "acquired"))
+  }
+
+  @Test func aMacThatNeverGoesQuietGivesUpWithoutTheLock() throws {
+    let finished = try run(whenIdle(try idleReader(2), "1"))
+    #expect(finished.status == 75)
+    #expect(
+      finished.output.contains(
+        "input never went idle for 15s in 1s, so the screen lock was not taken"
+      )
+    )
+    #expect(try run("lock_acquire SCREEN_LOCK 'run next' 0").status == 0)
+  }
+
+  @Test func inputThatComesBackDuringTheLockWaitGivesTheLockBack() throws {
+    let reader = try idleReader(20)
+    let holder = try startHolder("run menubar-keyboard", seconds: 1.5)
+    let (waiter, output) = try process(whenIdle(reader), checkout: "/checkouts/two")
+    try waitFor("the run to queue for the lock") { says(output, "waiting for the screen lock") }
+    try setIdle(0, in: reader.file)
+    holder.waitUntilExit()
+    try waitFor("the run to give the lock back") {
+      says(output, "giving it back until the Mac is quiet again")
+    }
+    // Given back: another run takes it while this one waits for quiet.
+    #expect(try run("lock_acquire SCREEN_LOCK 'run other' 0").status == 0)
+    try setIdle(20, in: reader.file)
+    waiter.waitUntilExit()
+    #expect(waiter.terminationStatus == 0)
+    #expect(says(output, "acquired"))
+  }
+
   // MARK: The checkout lock
 
   @Test func aSecondRunFromTheSameCheckoutWaitsForTheFirstAndNamesIt() throws {
