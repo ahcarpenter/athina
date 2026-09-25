@@ -205,65 +205,85 @@ enum Clicker {
       fail("menupick: row \"\(rowTitle)\" is not on screen", code: ClickExit.wrongTarget.rawValue)
     }
     say("row \"\(rowTitle)\" frame \(row)")
-    Pointer.glide(to: CGPoint(x: row.midX, y: row.midY), steps: 10, stepMicroseconds: 25_000)
 
-    // A submenu opens after a hover delay macOS decides, not after a fixed
-    // wait, so poll for it while keeping the pointer moving inside the row:
-    // a still pointer can leave the hover unrenewed.
-    var opened: CGRect?
-    for attempt in 0..<20 {
-      usleep(200_000)
-      Pointer.move(to: CGPoint(x: row.midX + (attempt.isMultiple(of: 2) ? 1 : -1), y: row.midY))
-      if let frame = menuItemFrame(itemTitle) {
-        opened = frame
-        say("submenu opened after \(Double(attempt + 1) * 0.2)s")
-        break
+    // Accessibility can report the submenu's frame before macOS draws it
+    // there, or after it has closed again, so the click waits until the
+    // hit test at the target names the item. When it never does, the
+    // pointer goes back into the row to open the submenu afresh.
+    let attempts = 3
+    var target = CGPoint.zero
+    var miss = ""
+    for attempt in 1...attempts {
+      Pointer.glide(to: CGPoint(x: row.midX, y: row.midY), steps: 10, stepMicroseconds: 25_000)
+
+      // A submenu opens after a hover delay macOS decides, not after a
+      // fixed wait, so poll for it while keeping the pointer moving
+      // inside the row: a still pointer can leave the hover unrenewed.
+      var opened: CGRect?
+      for poll in 0..<20 {
+        usleep(200_000)
+        Pointer.move(to: CGPoint(x: row.midX + (poll.isMultiple(of: 2) ? 1 : -1), y: row.midY))
+        if let frame = menuItemFrame(itemTitle) {
+          opened = frame
+          say("submenu opened after \(Double(poll + 1) * 0.2)s")
+          break
+        }
       }
-    }
-    guard let item = opened else {
-      fail(
-        "menupick: item \"\(itemTitle)\" did not open under \"\(rowTitle)\" within 4s",
-        code: ClickExit.wrongTarget.rawValue
-      )
-    }
-    say("item \"\(itemTitle)\" frame \(item)")
-    // Cross into the submenu along the row before dropping onto the item,
-    // or the submenu closes as the pointer leaves the parent.
-    Pointer.glide(to: CGPoint(x: item.minX + 12, y: row.midY), steps: 8, stepMicroseconds: 25_000)
-    let target = CGPoint(x: (item.minX + 40).rounded(), y: item.midY.rounded())
-    Pointer.glide(to: target, steps: 8, stepMicroseconds: 25_000)
-    usleep(250_000)
+      guard let item = opened else {
+        fail(
+          "menupick: item \"\(itemTitle)\" did not open under \"\(rowTitle)\" within 4s",
+          code: ClickExit.wrongTarget.rawValue
+        )
+      }
+      say("item \"\(itemTitle)\" frame \(item)")
+      // Cross into the submenu along the row before dropping onto the
+      // item, or the submenu closes as the pointer leaves the parent.
+      Pointer.glide(to: CGPoint(x: item.minX + 12, y: row.midY), steps: 8, stepMicroseconds: 25_000)
+      target = CGPoint(x: (item.minX + 40).rounded(), y: item.midY.rounded())
+      Pointer.glide(to: target, steps: 8, stepMicroseconds: 25_000)
 
-    guard Pointer.isAt(target) else {
-      fail(
-        "ABORT: pointer is at \(Pointer.location()), not \(target)",
-        code: ClickExit.pointerMoved.rawValue
-      )
+      // What is under the point decides, and for a menu that is the
+      // accessibility tree, not the window list: macOS draws menus and
+      // the menu bar into Window Server's own surfaces, so the topmost
+      // window there is often not the app's at all. It is still worth
+      // logging.
+      for _ in 0..<5 {
+        usleep(200_000)
+        guard Pointer.isAt(target) else {
+          fail(
+            "ABORT: pointer is at \(Pointer.location()), not \(target)",
+            code: ClickExit.pointerMoved.rawValue
+          )
+        }
+        var hit: AXUIElement?
+        AXUIElementCopyElementAtPosition(
+          AXUIElementCreateSystemWide(),
+          Float(target.x),
+          Float(target.y),
+          &hit
+        )
+        guard let hit else {
+          miss = "nothing"
+          continue
+        }
+        var hitPid: pid_t = 0
+        AXUIElementGetPid(hit, &hitPid)
+        if hitPid == pid, role(hit) == "AXMenuItem", title(hit) == itemTitle {
+          say("AX under point: role=\(role(hit)) title=\"\(title(hit))\" pid=\(hitPid)")
+          miss = ""
+          break
+        }
+        miss = "\(role(hit)) \"\(title(hit))\" of pid \(hitPid)"
+      }
+      if miss.isEmpty { break }
+      say("topmost window at \(target): \(topmostWindow(at: target)?.description ?? "none")")
+      say("attempt \(attempt) of \(attempts): \(target) is \(miss), not \(pid)'s \"\(itemTitle)\"")
     }
-
-    // What is under the point decides, and for a menu that is the
-    // accessibility tree, not the window list: macOS draws menus and the
-    // menu bar into Window Server's own surfaces, so the topmost window
-    // there is often not the app's at all. It is still worth logging.
-    say("topmost window at \(target): \(topmostWindow(at: target)?.description ?? "none")")
-    var hit: AXUIElement?
-    AXUIElementCopyElementAtPosition(
-      AXUIElementCreateSystemWide(),
-      Float(target.x),
-      Float(target.y),
-      &hit
-    )
-    guard let hit else {
-      fail("NOT CLICKING: nothing is under \(target)", code: ClickExit.wrongTarget.rawValue)
-    }
-    var hitPid: pid_t = 0
-    AXUIElementGetPid(hit, &hitPid)
-    say("AX under point: role=\(role(hit)) title=\"\(title(hit))\" pid=\(hitPid)")
-    guard hitPid == pid, role(hit) == "AXMenuItem", title(hit) == itemTitle else {
+    guard miss.isEmpty else {
       fail(
         """
-        NOT CLICKING: \(target) is \(role(hit)) \"\(title(hit))\" of pid \(hitPid), not \
-        \(pid)'s \"\(itemTitle)\"
+        NOT CLICKING: \(target) is \(miss), not \(pid)'s \"\(itemTitle)\", after \
+        \(attempts) attempts
         """,
         code: ClickExit.wrongTarget.rawValue
       )

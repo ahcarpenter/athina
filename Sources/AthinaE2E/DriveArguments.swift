@@ -114,8 +114,8 @@ public enum DriveArguments {
       name: "ax",
       arguments:
         """
-        <pid> <dump|texts|menuitems|pressextra|cancelmenu|get|press|pressx|focus|set> [role] \
-        [match] [value]
+        <pid> <dump|texts|menuitems|menu|pressextra|cancelmenu|get|press|pressx|focus|set> \
+        [role] [match] [value]
         """,
       summary: "read or press elements through accessibility",
       minimum: 2,

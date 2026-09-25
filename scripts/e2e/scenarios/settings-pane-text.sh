@@ -9,7 +9,7 @@
 #
 # On the API tier, reading each pane through Athina's own accessibility tree
 # and changing panes with a click the app simulates on its own toolbar. Whether
-# a click on a link opens its pane is settings-pane-links', on the real screen.
+# a click on a link opens its pane is real-screen's, on the real screen.
 SCENARIO_SUMMARY="every link from one Settings pane's text to another shows as a link rather than Markdown, and one below the fold is out of reach until scrolled to"
 SCENARIO_ARGS=(--open settings:contexts)
 SCENARIO_TIER=api
