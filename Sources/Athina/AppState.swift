@@ -271,8 +271,9 @@ final class AppState {
         self.clientMode = clientMode
         self.clockMode = clockMode
         replayLatency = ReplayLatencyMode()
-        // A sample's time stands still, so a render reads the same however long it takes.
-        (clock, clockControl) = clockMode.makeClock(base: AdjustableClock(startingAt: Date()))
+        // A sample's time stands still at one fixed moment, so a render reads
+        // the same however long it takes and whenever it runs.
+        (clock, clockControl) = clockMode.makeClock(base: AdjustableClock(startingAt: Snapshots.referenceDate))
         toast = ToastController(clock: clock)
         listener = SpeechListener(clock: clock)
         // A fixed per-launch name, so a replay render reads the same every time.
