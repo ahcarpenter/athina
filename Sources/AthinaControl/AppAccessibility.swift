@@ -54,13 +54,13 @@ struct AppAccessibility {
         var label: String?
         var index: Int
 
-        init(_ request: ControlRequest) {
-            window = request.string("window")
-            identifier = request.string("identifier")
-            role = request.string("role")
-            subrole = request.string("subrole")
-            label = request.string("label")
-            index = Int(request.number("index") ?? 0)
+        init(_ request: ControlRequest) throws {
+            window = try request.string("window")
+            identifier = try request.string("identifier")
+            role = try request.string("role")
+            subrole = try request.string("subrole")
+            label = try request.string("label")
+            index = Int(try request.number("index") ?? 0)
         }
 
         var namesAControl: Bool { identifier != nil || role != nil || subrole != nil || label != nil }

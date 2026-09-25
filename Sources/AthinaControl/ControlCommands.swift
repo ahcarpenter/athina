@@ -25,20 +25,26 @@ final class ControlCommands {
         "ping", "windows", "find", "click", "type", "scroll", "menu", "settings", "wait-setting", "wait-window", "snapshot",
     ]
 
+    /// Answers a request; a parameter of the wrong type is answered with an
+    /// error naming it (`ControlArgumentError`).
     func handle(_ request: ControlRequest) async -> ControlReply {
-        switch request.command {
-        case "ping": ping()
-        case "windows": windows()
-        case "find": find(request)
-        case "click": await click(request)
-        case "type": type(request)
-        case "scroll": scroll(request)
-        case "menu": await menu(request)
-        case "settings": settings(request)
-        case "wait-setting": await waitSetting(request)
-        case "wait-window": await waitWindow(request)
-        case "snapshot": await snapshot(request)
-        default: .error("no command \"\(request.command)\"; the commands are \(Self.commands.joined(separator: ", "))")
+        do {
+            switch request.command {
+            case "ping": return ping()
+            case "windows": return windows()
+            case "find": return try find(request)
+            case "click": return try await click(request)
+            case "type": return try type(request)
+            case "scroll": return try scroll(request)
+            case "menu": return try await menu(request)
+            case "settings": return try settings(request)
+            case "wait-setting": return try await waitSetting(request)
+            case "wait-window": return try await waitWindow(request)
+            case "snapshot": return try await snapshot(request)
+            default: return .error("no command \"\(request.command)\"; the commands are \(Self.commands.joined(separator: ", "))")
+            }
+        } catch {
+            return .error(String(describing: error))
         }
     }
 
@@ -64,17 +70,17 @@ final class ControlCommands {
         })])
     }
 
-    private func waitWindow(_ request: ControlRequest) async -> ControlReply {
-        guard let title = request.string("window") else { return .error("wait-window needs window=<title>") }
-        let present = request.bool("present") ?? true
-        let reached = await poll(request) { !AppAccessibility.windows(titled: title).isEmpty == present }
+    private func waitWindow(_ request: ControlRequest) async throws -> ControlReply {
+        guard let title = try request.string("window") else { return .error("wait-window needs window=<title>") }
+        let present = try request.bool("present") ?? true
+        let reached = try await poll(request) { !AppAccessibility.windows(titled: title).isEmpty == present }
         return reached ? .ok() : .error("no window titled \"\(title)\" \(present ? "appeared" : "went away") in time")
     }
 
     // MARK: - Controls
 
-    private func find(_ request: ControlRequest) -> ControlReply {
-        let nodes = AppAccessibility.nodes(AppAccessibility.Query(request))
+    private func find(_ request: ControlRequest) throws -> ControlReply {
+        let nodes = AppAccessibility.nodes(try AppAccessibility.Query(request))
         return .ok(["elements": .array(nodes.map { $0.summary })])
     }
 
@@ -84,8 +90,8 @@ final class ControlCommands {
     }
 
     /// The control a request names, or the answer saying why there is none.
-    private func control(_ request: ControlRequest) -> Lookup {
-        let query = AppAccessibility.Query(request)
+    private func control(_ request: ControlRequest) throws -> Lookup {
+        let query = try AppAccessibility.Query(request)
         guard query.namesAControl else {
             return .answer(.error("\(request.command) needs identifier=, role=, subrole=, or label= naming a control"))
         }
@@ -97,9 +103,9 @@ final class ControlCommands {
         return .found(nodes[query.index])
     }
 
-    private func click(_ request: ControlRequest) async -> ControlReply {
+    private func click(_ request: ControlRequest) async throws -> ControlReply {
         let node: AppAccessibility.Node
-        switch control(request) {
+        switch try control(request) {
         case .found(let found): node = found
         case .answer(let answer): return answer
         }
@@ -126,11 +132,11 @@ final class ControlCommands {
             "target": node.summary,
             "hitView": .string(hitView.map { String(describing: Swift.type(of: $0)) } ?? "none"),
         ]
-        if request.bool("force") != true, let refusal = rule.refusal {
+        if try request.bool("force") != true, let refusal = rule.refusal {
             return .refused(refusal.rawValue, message(for: refusal), details)
         }
         // `dry=true` answers whether the click would land, and posts nothing.
-        if request.bool("dry") == true { return .ok(details) }
+        if try request.bool("dry") == true { return .ok(details) }
         post(clickAt: centre, in: window)
         let dispatched = await EventFlush.flush()
         return .ok(details.merging(["dispatched": .bool(dispatched)]) { _, new in new })
@@ -160,16 +166,12 @@ final class ControlCommands {
     }
 
     /// Keys for the window's first responder, such as a text field a click
-    /// just focused. `replace=true` selects what it holds first, through the
-    /// responder chain's Select All, so the typing replaces it.
-    private func type(_ request: ControlRequest) -> ControlReply {
-        guard let title = request.string("window"), let window = AppAccessibility.windows(titled: title).first else {
+    /// just focused.
+    private func type(_ request: ControlRequest) throws -> ControlReply {
+        guard let title = try request.string("window"), let window = AppAccessibility.windows(titled: title).first else {
             return .error("type needs window=<title> of an open window")
         }
-        guard let text = request.string("text") else { return .error("type needs text=<what to type>") }
-        if request.bool("replace") == true {
-            _ = window.firstResponder?.tryToPerform(#selector(NSText.selectAll(_:)), with: nil)
-        }
+        guard let text = try request.string("text") else { return .error("type needs text=<what to type>") }
         let codes: [Character: UInt16] = ["\r": 36, "\n": 36, "\t": 48, "\u{7f}": 51, "\u{1b}": 53]
         let now = ProcessInfo.processInfo.systemUptime
         for character in text {
@@ -188,40 +190,24 @@ final class ControlCommands {
     }
 
     /// Scrolls a control into view in the scroll view that holds it, as a
-    /// person scrolling to it would, or a window's scroll view to `to=top` or
-    /// `to=end`.
-    private func scroll(_ request: ControlRequest) -> ControlReply {
-        if AppAccessibility.Query(request).namesAControl {
-            let node: AppAccessibility.Node
-            switch control(request) {
-            case .found(let found): node = found
-            case .answer(let answer): return answer
-            }
-            let rect = AppAccessibility.windowRect(of: node.frame, in: node.window)
-            let holders = scrollViews(in: node.window).filter { scrollView in
-                guard let document = scrollView.documentView else { return false }
-                return document.convert(document.bounds, to: nil).contains(CGPoint(x: rect.midX, y: rect.midY))
-            }
-            // The innermost one, the smallest that holds it.
-            guard let scrollView = holders.min(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }),
-                  let document = scrollView.documentView else {
-                return .error("no scroll view holds that control")
-            }
-            document.scrollToVisible(document.convert(rect, from: nil).insetBy(dx: 0, dy: -16))
-            scrollView.reflectScrolledClipView(scrollView.contentView)
-            return .ok()
+    /// person scrolling to it would.
+    private func scroll(_ request: ControlRequest) throws -> ControlReply {
+        let node: AppAccessibility.Node
+        switch try control(request) {
+        case .found(let found): node = found
+        case .answer(let answer): return answer
         }
-        guard let title = request.string("window"), let window = AppAccessibility.windows(titled: title).first else {
-            return .error("scroll needs window=<title> and a control, or to=top or to=end")
+        let rect = AppAccessibility.windowRect(of: node.frame, in: node.window)
+        let holders = scrollViews(in: node.window).filter { scrollView in
+            guard let document = scrollView.documentView else { return false }
+            return document.convert(document.bounds, to: nil).contains(CGPoint(x: rect.midX, y: rect.midY))
         }
-        guard let scrollView = scrollViews(in: window).max(by: { ($0.documentView?.frame.height ?? 0) < ($1.documentView?.frame.height ?? 0) }),
+        // The innermost one, the smallest that holds it.
+        guard let scrollView = holders.min(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }),
               let document = scrollView.documentView else {
-            return .error("the window has no scroll view")
+            return .error("no scroll view holds that control")
         }
-        let toEnd = request.string("to") != "top"
-        let height = max(0, document.frame.height - scrollView.contentView.bounds.height)
-        let y = toEnd == document.isFlipped ? height : 0
-        scrollView.contentView.scroll(to: CGPoint(x: scrollView.contentView.bounds.minX, y: y))
+        document.scrollToVisible(document.convert(rect, from: nil).insetBy(dx: 0, dy: -16))
         scrollView.reflectScrolledClipView(scrollView.contentView)
         return .ok()
     }
@@ -240,34 +226,62 @@ final class ControlCommands {
 
     /// The status item's menu as the app builds it, read without showing it;
     /// `press=<title>`, or `press="<submenu> > <title>"`, runs an item's own
-    /// action, as choosing it from the open menu does. Refused when the item
-    /// is dimmed or not there. Only the real menu bar can show that macOS
-    /// draws and opens the menu; that stays a real-screen check.
-    private func menu(_ request: ControlRequest) async -> ControlReply {
+    /// action, as choosing it from the open menu does (`target(_:in:)`). Only
+    /// the real menu bar can show that macOS draws and opens the menu; that
+    /// stays a real-screen check.
+    private func menu(_ request: ControlRequest) async throws -> ControlReply {
         guard let menu = statusMenu() else {
             return .error("the status item's menu is out of reach")
         }
-        refresh(menu)
+        Self.refresh(menu)
         var fields: [String: ControlValue] = ["items": items(of: menu)]
-        guard let press = request.string("press") else { return .ok(fields) }
-        let path = press.components(separatedBy: " > ")
+        guard let press = try request.string("press") else { return .ok(fields) }
+        switch Self.target(press, in: menu) {
+        case .refused(let reason, let message):
+            return .refused(reason, message, fields)
+        case .item(let holder, let index):
+            holder.performActionForItem(at: index)
+            fields["dispatched"] = .bool(await EventFlush.flush())
+            return .ok(fields)
+        }
+    }
+
+    enum MenuTarget: Equatable {
+        /// The item, as its menu and its place there.
+        case item(NSMenu, Int)
+        case refused(reason: String, message: String)
+    }
+
+    /// The item a `press=` path names: titles from the top of the menu,
+    /// joined by " > ", each submenu brought up to date on the way as opening
+    /// it does. Refused by the step's name when it is not there or is dimmed,
+    /// since a person could neither choose it nor open the submenu it heads.
+    static func target(_ path: String, in menu: NSMenu) -> MenuTarget {
+        var steps = path.components(separatedBy: " > ")
+        let last = steps.removeLast()
         var current = menu
-        for step in path.dropLast() {
-            guard let submenu = current.items.first(where: { $0.title == step })?.submenu else {
-                return .refused("missing", "the menu has no submenu \"\(step)\"", fields)
+        var place = "the menu"
+        for step in steps {
+            let found = item(step, in: current, place)
+            guard case .item(_, let index) = found else { return found }
+            guard let submenu = current.items[index].submenu else {
+                return .refused(reason: "missing", message: "\"\(step)\" has no submenu")
             }
             refresh(submenu)
             current = submenu
+            place = "\"\(step)\""
         }
-        guard let index = current.items.firstIndex(where: { $0.title == path.last }) else {
-            return .refused("missing", "the menu has no item \"\(press)\"", fields)
+        return item(last, in: current, place)
+    }
+
+    private static func item(_ title: String, in menu: NSMenu, _ place: String) -> MenuTarget {
+        guard let index = menu.items.firstIndex(where: { $0.title == title }) else {
+            return .refused(reason: "missing", message: "\(place) has no item \"\(title)\"")
         }
-        guard current.items[index].isEnabled else {
-            return .refused("disabled", "\"\(press)\" is dimmed", fields)
+        guard menu.items[index].isEnabled else {
+            return .refused(reason: "disabled", message: "\"\(title)\" is dimmed")
         }
-        current.performActionForItem(at: index)
-        fields["dispatched"] = .bool(await EventFlush.flush())
-        return .ok(fields)
+        return .item(menu, index)
     }
 
     /// The menu SwiftUI's MenuBarExtra gave its status item. Nothing public
@@ -280,7 +294,7 @@ final class ControlCommands {
         return nil
     }
 
-    private func refresh(_ menu: NSMenu) {
+    static func refresh(_ menu: NSMenu) {
         menu.delegate?.menuNeedsUpdate?(menu)
         menu.update()
     }
@@ -291,7 +305,7 @@ final class ControlCommands {
                 "title": .string(item.title), "enabled": .bool(item.isEnabled), "separator": .bool(item.isSeparatorItem),
             ]
             if let submenu = item.submenu {
-                refresh(submenu)
+                Self.refresh(submenu)
                 fields["items"] = items(of: submenu)
             }
             return .object(fields)
@@ -300,26 +314,26 @@ final class ControlCommands {
 
     // MARK: - Settings
 
-    private func settings(_ request: ControlRequest) -> ControlReply {
+    private func settings(_ request: ControlRequest) throws -> ControlReply {
         let settings = host.controlSettings
-        guard let key = request.string("key") else { return .ok(["settings": settings]) }
+        guard let key = try request.string("key") else { return .ok(["settings": settings]) }
         return .ok(["value": settings[path: key] ?? .null])
     }
 
-    private func waitSetting(_ request: ControlRequest) async -> ControlReply {
-        guard let key = request.string("key"), let expected = request.argument("equals") else {
+    private func waitSetting(_ request: ControlRequest) async throws -> ControlReply {
+        guard let key = try request.string("key"), let expected = request.argument("equals") else {
             return .error("wait-setting needs key=<path> and equals=<value>")
         }
-        let reached = await poll(request) { self.host.controlSettings[path: key] == expected }
+        let reached = try await poll(request) { self.host.controlSettings[path: key] == expected }
         let value = host.controlSettings[path: key] ?? .null
         return reached ? .ok(["value": value]) : .error("\(key) is \(value.text), not \(expected.text)", ["value": value])
     }
 
     /// Checks `condition` every 20 ms until it holds or `timeout` seconds
     /// (10 unless the request says) have passed.
-    private func poll(_ request: ControlRequest, until condition: () -> Bool) async -> Bool {
+    private func poll(_ request: ControlRequest, until condition: () -> Bool) async throws -> Bool {
         let clock = ContinuousClock()
-        let deadline = clock.now + .milliseconds(Int((request.number("timeout") ?? 10) * 1000))
+        let deadline = clock.now + .milliseconds(Int((try request.number("timeout") ?? 10) * 1000))
         while true {
             if condition() { return true }
             if clock.now >= deadline { return false }
@@ -331,11 +345,11 @@ final class ControlCommands {
 
     /// A PNG of one of the app's windows at `path`: absolute, ending in .png,
     /// and new, since a checkpoint never replaces a file.
-    private func snapshot(_ request: ControlRequest) async -> ControlReply {
-        guard let title = request.string("window"), let window = AppAccessibility.windows(titled: title).first else {
+    private func snapshot(_ request: ControlRequest) async throws -> ControlReply {
+        guard let title = try request.string("window"), let window = AppAccessibility.windows(titled: title).first else {
             return .error("snapshot needs window=<title> of an open window")
         }
-        guard let path = request.string("path"), path.hasPrefix("/"), path.hasSuffix(".png") else {
+        guard let path = try request.string("path"), path.hasPrefix("/"), path.hasSuffix(".png") else {
             return .error("snapshot needs path=<an absolute path ending in .png>")
         }
         do {

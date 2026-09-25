@@ -168,8 +168,11 @@ cmd_warm() {
 	printf '{"warm_home": "%s", "cold_first_capture_seconds": %d}\n' "$WARM_HOME" "$elapsed"
 }
 
+# How run_scenario says a scenario was skipped, neither passed nor failed.
+SCENARIO_SKIPPED=77
+
 cmd_run() {
-	local names=("$@") name status=0
+	local names=("$@") name status=0 outcome passed=0 failed=0 skipped=0
 	[ ${#names[@]} -gt 0 ] || { usage; exit 64; }
 	if [ "${names[0]}" = "all" ]; then
 		mapfile -t names < <(scenario_names)
@@ -177,9 +180,18 @@ cmd_run() {
 	ensure_app
 	ensure_drive
 	have_warm_home || die "no warm home yet: run scripts/e2e/athina-e2e warm first"
+	CONTROL_API=yes
+	bundle_has_control_api || CONTROL_API=no
 	for name in "${names[@]}"; do
-		run_scenario "$name" || status=1
+		outcome=0
+		run_scenario "$name" || outcome=$?
+		case "$outcome" in
+		0) passed=$((passed + 1)) ;;
+		"$SCENARIO_SKIPPED") skipped=$((skipped + 1)) ;;
+		*) failed=$((failed + 1)); status=1 ;;
+		esac
 	done
+	log "$passed passed, $failed failed, $skipped skipped"
 	return $status
 }
 
@@ -205,6 +217,14 @@ run_scenario() (
 	screen | api) ;;
 	*) die "$name: SCENARIO_TIER is screen or api, not $SCENARIO_TIER" ;;
 	esac
+	# A release build carries no control API, so it can run only the real-screen
+	# tier; the API tier runs on the development build of the same commit.
+	if [ "$SCENARIO_TIER" = api ] && [ "$CONTROL_API" = no ]; then
+		local reason="$APP carries no control API, which the API tier drives; run it on the development build of the same commit"
+		log "=== $name: skipped, $reason"
+		result_line "$name" skip 0 "$reason"
+		exit "$SCENARIO_SKIPPED"
+	fi
 
 	RUN_DIR="${OUT_ROOT:-$RUNS_ROOT}/$name-$(date '+%Y%m%d-%H%M%S')"
 	mkdir -p "$RUN_DIR"

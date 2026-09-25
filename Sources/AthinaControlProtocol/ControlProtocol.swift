@@ -17,6 +17,22 @@ public enum ControlProtocol {
     /// release build links AthinaCore but never this module.
     public static let socketName = "control.sock"
     public static let secretName = "secret"
+
+    /// What a parameter takes, for those that take something other than text.
+    public enum Kind: Sendable {
+        case bool
+        case number
+        /// Any JSON value, such as the setting `wait-setting` waits for.
+        case json
+    }
+
+    /// The parameters that take something other than text, and what each
+    /// takes; every other one is text.
+    public static let kinds: [String: Kind] = [
+        "force": .bool, "dry": .bool, "present": .bool,
+        "index": .number, "timeout": .number,
+        "equals": .json,
+    ]
 }
 
 /// A JSON value, for requests and answers whose fields vary by command.
@@ -101,16 +117,23 @@ public enum ControlValue: Equatable, Sendable, Codable {
         }
     }
 
-    /// `key=value` from a command line: the value as JSON when it is JSON
-    /// (`true`, `3`, `"a b"`), and as a string otherwise.
+    /// `key=value` from a command line, typed as the parameter takes it
+    /// (`ControlProtocol.kinds`): `true` or `false`, a number, or JSON for
+    /// the parameters that take one, and the text as written for every other.
+    /// A value that does not read as what its parameter takes goes as text,
+    /// which the app refuses by the parameter's name.
     public static func argument(_ text: String) -> (key: String, value: ControlValue)? {
         guard let equals = text.firstIndex(of: "="), equals != text.startIndex else { return nil }
         let key = String(text[..<equals])
         let raw = String(text[text.index(after: equals)...])
-        if let data = raw.data(using: .utf8), let value = try? JSONDecoder().decode(ControlValue.self, from: data) {
-            return (key, value)
+        guard let kind = ControlProtocol.kinds[key],
+              let data = raw.data(using: .utf8), let value = try? JSONDecoder().decode(ControlValue.self, from: data) else {
+            return (key, .string(raw))
         }
-        return (key, .string(raw))
+        switch (kind, value) {
+        case (.json, _), (.bool, .bool), (.number, .number): return (key, value)
+        default: return (key, .string(raw))
+        }
     }
 
     static let encoder: JSONEncoder = {
@@ -145,9 +168,28 @@ public struct ControlRequest: Equatable, Sendable, Codable {
     }
 
     public func argument(_ key: String) -> ControlValue? { arguments[key] }
-    public func string(_ key: String) -> String? { arguments[key]?.string }
-    public func bool(_ key: String) -> Bool? { arguments[key]?.bool }
-    public func number(_ key: String) -> Double? { arguments[key]?.number }
+
+    /// A parameter as the type its command takes: nil when the request leaves
+    /// it out, and thrown, by name, when it holds another type, so a command
+    /// never carries on as if it had not been given.
+    public func string(_ key: String) throws -> String? { try read(key, "text") { $0.string } }
+    public func bool(_ key: String) throws -> Bool? { try read(key, "true or false") { $0.bool } }
+    public func number(_ key: String) throws -> Double? { try read(key, "a number") { $0.number } }
+
+    private func read<T>(_ key: String, _ expected: String, _ typed: (ControlValue) -> T?) throws -> T? {
+        guard let given = arguments[key] else { return nil }
+        guard let value = typed(given) else { throw ControlArgumentError(key: key, expected: expected, given: given) }
+        return value
+    }
+}
+
+/// A parameter holding another type than the one its command takes.
+public struct ControlArgumentError: Error, Equatable, CustomStringConvertible {
+    public let key: String
+    public let expected: String
+    public let given: ControlValue
+
+    public var description: String { "\(key)= takes \(expected), not \(given.text)" }
 }
 
 /// One answer: `ok`, and when it is not, `refused` (the app would not do it,

@@ -5,7 +5,8 @@
 # which scripts/bundle.sh turns on for the development bundle, compiles it in,
 # and a release or App Store build must never carry it (README "The control
 # API"). Every build that has it carries the protocol's name, which is what
-# this looks for; a test holds the two equal.
+# this looks for; ReleaseCheckTests runs this on a binary holding
+# ControlProtocol.name and on one without it.
 #
 # Usage: scripts/check-no-control-api.sh <binary>
 # Exit: 0 it carries none, 1 it carries the control API, 2 bad usage.

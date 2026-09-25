@@ -6,15 +6,15 @@ import Foundation
 /// `athina-drive api`: one request to a replay's control API, and its answer.
 ///
 /// The harness makes the run's control directory, writes the secret into it,
-/// and names it in `ATHINA_CONTROL_DIR`; `--control` names another. The answer
+/// and names it in `ATHINA_CONTROL_DIR`. Each `key=value` is sent as its
+/// parameter takes it (`ControlValue.argument`), text as written. The answer
 /// is printed as the app wrote it, one JSON line, or with `--field <path>` as
 /// just that field (`elements.0.enabled`, `refused`), empty when it has none.
 /// Exit 0 when the answer is ok, 1 when it is not, 2 when no app answered.
 enum ControlClient {
     static func run(_ invocation: DriveInvocation) throws {
-        guard let directory = invocation.option("--control") ?? ProcessInfo.processInfo.environment["ATHINA_CONTROL_DIR"],
-              !directory.isEmpty else {
-            throw DriveUsageError("athina-drive api: no control directory; the harness sets ATHINA_CONTROL_DIR, or pass --control <dir>")
+        guard let directory = ProcessInfo.processInfo.environment["ATHINA_CONTROL_DIR"], !directory.isEmpty else {
+            throw DriveUsageError("athina-drive api: no control directory; the harness sets ATHINA_CONTROL_DIR")
         }
         let command = try invocation.positional(0)
         var arguments: [String: ControlValue] = [:]

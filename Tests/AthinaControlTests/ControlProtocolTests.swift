@@ -12,9 +12,21 @@ import AthinaCore
         #expect(line.last == 0x0A)
         #expect(line.dropLast().contains(0x0A) == false)
         #expect(try ControlRequest.decode(line: line.dropLast()) == request)
-        #expect(request.string("window") == "Advanced")
-        #expect(request.bool("force") == true)
-        #expect(request.number("index") == 2)
+        #expect(try request.string("window") == "Advanced")
+        #expect(try request.bool("force") == true)
+        #expect(try request.number("index") == 2)
+        #expect(try request.string("label") == nil)
+    }
+
+    @Test func aParameterOfTheWrongTypeIsRefusedByName() {
+        let request = ControlRequest(id: 1, secret: "s", command: "type", arguments: [
+            "text": .number(30), "force": .string("yes"), "timeout": .string("soon"),
+        ])
+        #expect(throws: ControlArgumentError(key: "text", expected: "text", given: .number(30))) { try request.string("text") }
+        #expect(throws: ControlArgumentError(key: "force", expected: "true or false", given: .string("yes"))) { try request.bool("force") }
+        #expect(throws: ControlArgumentError(key: "timeout", expected: "a number", given: .string("soon"))) { try request.number("timeout") }
+        #expect(ControlArgumentError(key: "force", expected: "true or false", given: .string("yes")).description
+            == "force= takes true or false, not yes")
     }
 
     @Test func aRequestMissingAFieldIsNotARequest() {
@@ -52,15 +64,43 @@ import AthinaCore
         #expect(ControlValue.array([.number(1), .string("x")]).text == #"[1,"x"]"#)
     }
 
-    @Test func aCommandLineArgumentIsJSONWhenItCanBe() {
+    @Test func aCommandLineArgumentIsTypedAsItsParameterTakesIt() {
         #expect(ControlValue.argument("force=true")! == ("force", .bool(true)))
+        #expect(ControlValue.argument("present=false")! == ("present", .bool(false)))
         #expect(ControlValue.argument("index=2")! == ("index", .number(2)))
-        #expect(ControlValue.argument(#"label="Open Debug Panel""#)! == ("label", .string("Open Debug Panel")))
+        #expect(ControlValue.argument("timeout=0.5")! == ("timeout", .number(0.5)))
+        #expect(ControlValue.argument("equals=true")! == ("equals", .bool(true)))
+        #expect(ControlValue.argument("equals=3")! == ("equals", .number(3)))
+        #expect(ControlValue.argument(#"equals="30""#)! == ("equals", .string("30")))
+        #expect(ControlValue.argument("equals=advanced")! == ("equals", .string("advanced")))
         #expect(ControlValue.argument("window=Debug Panel")! == ("window", .string("Debug Panel")))
         #expect(ControlValue.argument("path=/tmp/a=b.png")! == ("path", .string("/tmp/a=b.png")))
         #expect(ControlValue.argument("text=")! == ("text", .string("")))
         #expect(ControlValue.argument("=x") == nil)
         #expect(ControlValue.argument("novalue") == nil)
+    }
+
+    @Test func textGoesAsWrittenEvenWhenItReadsAsJSON() throws {
+        #expect(ControlValue.argument("text=30")! == ("text", .string("30")))
+        #expect(ControlValue.argument("text=1.50")! == ("text", .string("1.50")))
+        #expect(ControlValue.argument("text=true")! == ("text", .string("true")))
+        #expect(ControlValue.argument("label=2")! == ("label", .string("2")))
+        #expect(ControlValue.argument(#"label="Open Debug Panel""#)! == ("label", .string(#""Open Debug Panel""#)))
+        #expect(ControlValue.argument("press=null")! == ("press", .string("null")))
+        // Through the codec to the app, the command reads what was typed.
+        let (key, value) = ControlValue.argument("text=30")!
+        let line = try ControlRequest(id: 1, secret: "s", command: "type", arguments: [key: value]).line()
+        #expect(try ControlRequest.decode(line: line.dropLast()).string("text") == "30")
+    }
+
+    @Test func aValueNotOfItsParametersTypeGoesAsTextForTheAppToRefuse() throws {
+        #expect(ControlValue.argument("force=yes")! == ("force", .string("yes")))
+        #expect(ControlValue.argument("index=two")! == ("index", .string("two")))
+        #expect(ControlValue.argument("timeout=true")! == ("timeout", .string("true")))
+        #expect(ControlValue.argument("dry=1")! == ("dry", .string("1")))
+        let (key, value) = ControlValue.argument("force=yes")!
+        let request = ControlRequest(id: 1, secret: "s", command: "click", arguments: [key: value])
+        #expect(throws: ControlArgumentError(key: "force", expected: "true or false", given: .string("yes"))) { try request.bool("force") }
     }
 
     @Test func theSecretMustMatchWhole() {
