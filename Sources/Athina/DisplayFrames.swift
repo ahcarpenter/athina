@@ -48,25 +48,53 @@ final class DisplayFrames: NSObject {
 
   /// Waits until the window has had three frames in a row in which nothing changed.
   ///
-  /// Nothing changed means no view waiting for layout or to be drawn, and no
-  /// Core Animation animation running in it. Whatever a view does on its own
-  /// once it appears, such as a task that loads what it shows or an image
-  /// fading in, keeps a frame from counting, so the wait lasts as long as
-  /// that and no longer. It gives up after 90 frames, about a second and a
-  /// half, since something that repeats, such as a spinner, never stops.
+  /// Nothing changed means no view waiting for layout or to be drawn, no
+  /// Core Animation animation running in it, and no layer moved, resized,
+  /// faded or recoloured since the last frame, as a switch's knob and track
+  /// are frame by frame when it is turned, with no animation to see.
+  /// Whatever a view does on its own once it appears, such as a task that
+  /// loads what it shows or an image fading in, keeps a frame from counting,
+  /// so the wait lasts as long as that and no longer. It gives up after 90
+  /// frames, about a second and a half, since something that repeats, such
+  /// as a spinner, never stops.
   func settle(_ window: NSWindow) async {
     var quiet = 0
+    var previous: [LayerState] = []
     for _ in 0..<90 {
       await next()
       let root = window.contentView?.superview ?? window.contentView
+      let layers = root?.layer.map(Self.states) ?? []
       let busy =
         window.viewsNeedDisplay || root.map(Self.needsLayout) == true
-        || root?.layer.map(Self.isAnimating) == true
+        || root?.layer.map(Self.isAnimating) == true || layers != previous
+      previous = layers
       root?.layoutSubtreeIfNeeded()
       window.displayIfNeeded()
       quiet = busy ? 0 : quiet + 1
       if quiet == 3 { return }
     }
+  }
+
+  /// What a layer shows that can change from one frame to the next without
+  /// an animation or a pending display.
+  private struct LayerState: Equatable {
+    let position: CGPoint
+    let bounds: CGRect
+    let opacity: Float
+    let isHidden: Bool
+    let backgroundColor: CGColor?
+
+    init(_ layer: CALayer) {
+      position = layer.position
+      bounds = layer.bounds
+      opacity = layer.opacity
+      isHidden = layer.isHidden
+      backgroundColor = layer.backgroundColor
+    }
+  }
+
+  private static func states(_ layer: CALayer) -> [LayerState] {
+    [LayerState(layer)] + (layer.sublayers ?? []).flatMap(states)
   }
 
   private static func needsLayout(_ view: NSView) -> Bool {
