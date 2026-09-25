@@ -76,6 +76,9 @@ PREFS_BACKUP=""
 PREFS_EXISTED=0
 CHECKS_FAILED=0
 CHECK_LINES=()
+# The step of a scenario that names its steps (step), which every check and a
+# scenario that stops early carry.
+STEP=""
 
 # --- Output -------------------------------------------------------------------
 
@@ -93,9 +96,11 @@ die() {
 }
 
 # One check inside a scenario. A scenario fails when any of its checks does,
-# and every check reaches the result line, so a failure names itself.
+# and every check reaches the result line, so a failure names itself, and the
+# step it was made in when the scenario names its steps.
 check() {
 	local name="$1" expected="$2" actual="$3"
+	[ -n "$STEP" ] && name="step $STEP: $name"
 	if [ "$expected" = "$actual" ]; then
 		log "  ok   $name = $actual"
 		CHECK_LINES+=("ok $name=$actual")
@@ -104,6 +109,14 @@ check() {
 		CHECK_LINES+=("FAIL $name: expected=$expected actual=$actual")
 		CHECKS_FAILED=$((CHECKS_FAILED + 1))
 	fi
+}
+
+# Start the next step of a scenario that runs several in one launch, named
+# "<number> <what it proves>", so a failed check, or a scenario that stops at
+# it, says which step it was.
+step() {
+	STEP="$1"
+	log "--- step $STEP"
 }
 
 # --- Building -----------------------------------------------------------------
@@ -423,6 +436,8 @@ relaunch_athina() {
 	log "relaunching Athina (pid $ATHINA_PID's journal and watcher logs kept as journal-launch$RELAUNCHES.sqlite and *-launch$RELAUNCHES.log)"
 	stop_pid "$ATHINA_PID"
 	launch_athina "$HOME_DIR" ${LAUNCH_ARGS[@]+"${LAUNCH_ARGS[@]}"}
+	# The same control directory, where the new launch makes its socket again.
+	if [ -n "$CONTROL_DIR" ]; then control_wait; fi
 	watch_announcements
 	watch_clicks
 	wait_first_observation 90 || log "WARNING: no capture yet after the relaunch"

@@ -619,7 +619,11 @@ real-screen scenario first takes one exclusive lock,
 session is on the screen at a time across every checkout, and runs from
 other checkouts take their turns between this run's scenarios; `warm` and
 `clean` take it for all they do. A second run prints who holds it (checkout,
-scenario, pid, since when) and waits. `--lock-timeout <seconds>` gives up
+scenario, pid, since when) and waits. A real-screen scenario first waits for
+15 seconds of quiet keyboard and mouse, before it takes the lock rather than
+inside it, so no other checkout waits behind it while someone is at the Mac;
+input that comes back while it waits for the lock gives the lock back until
+the Mac is quiet again. `--lock-timeout <seconds>` gives up
 instead; `list`, `doctor`, and `journal` never wait. An API-tier scenario is
 hermetic (see Hermetic runs) and takes no lock at all, so any number run at
 once, beside each other, beside a real-screen run, and beside whoever is using
@@ -663,17 +667,13 @@ Scenarios come in two tiers, which each scenario names in `SCENARIO_TIER`:
 
 | name | tier | what it proves |
 | --- | --- | --- |
-| `menubar-item-click` | screen | a real pointer click on Athina's menu bar item opens the menu and leaves the suggestion up, and Answer Suggestion > Tell Me More is recorded |
-| `menubar-empty-click` | screen | a real click on empty menu bar space beside the item dismisses the suggestion, attributed to a real mouse-down by a session tap |
-| `other-app-click` | screen | a real click inside a staged TextEdit window dismisses the suggestion |
+| `real-screen` | screen | everything only macOS's own routing proves, in one launch and one toast, each step named in its checks: (1) a toast comes up; (2) an accessibility press on the menu bar item keeps it; (3) a real click on the item keeps it, and the menu macOS draws matches the one the app built as the control API reads it; (4) Answer Suggestion > Tell Me More by hovering the submenu is recorded; (5) Show Last Suggestion, then a real click on empty menu bar space dismisses the toast, attributed to a real mouse-down by a session tap; (6) Show Last Suggestion again, then a real click in a staged TextEdit window dismisses it; (7) the item keeps one width watching, in the excluded mode and paused, read from the real bar, with strips of the bar kept as evidence of what is drawn; (8) a real click on each Settings footer link (Contexts to Privacy, Models to Journal) changes the pane in place rather than handing the link to the system. On a quiet Mac it holds the screen for about a minute and a half |
 | `menubar-keyboard` | screen | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one menu bar scenario that needs no idle input |
-| `menubar-width` | screen | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
-| `menubar-mark` | screen | Athina's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
-| `capture-race` | screen | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
+| `about-panel` | api | About Athina, from the menu, opens the About panel, which shows the app's name |
+| `capture-race` | screen | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock"); a sensing scenario, kept apart from `real-screen`, for a change to sensing or its scheduling |
 | `understanding-surfaces` | screen | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
 | `debug-panel-access` | api | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed, a click on it is refused, and one forced onto it opens nothing; turned on, the menu gains Debug Panel in a group of its own after Settings…, and it and the button each open the panel; turned off again, the panel closes and the command leaves the menu |
 | `settings-pane-text` | api | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link to that pane rather than Markdown, and a click on the one below the fold is refused until the pane is scrolled to it |
-| `settings-pane-links` | screen | a real click on each of those links changes the Settings window's pane in place rather than handing the link to the system |
 | `settings-sheet` | api | Settings > Contexts' Add Context… brings up the New Context sheet; while it is up, a click on Add Context… under it is refused as covered, a name typed into the sheet's Name field lands there, and the sheet's own Cancel lands in the sheet and takes it down, adding no context |
 | `debug-timeline` | api | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started row appears once rather than once from the journal load and again from the live stream |
 
@@ -683,6 +683,10 @@ screenshots, event taps, announcements, and the journal as TSV and as a copy;
 for an API-tier run, every request and answer in `api.log`, the checkpoint
 PNGs it took of Athina's windows, and what the harness saw of the screen in
 `hermetic-windows.log` and `hermetic-bar.log`).
+A scenario that runs several steps in one launch, as `real-screen` does, names
+each (`step`), so each check carries its step (`step 5 a real click on empty
+menu bar space dismisses the toast: the toast is gone after the click`), and a
+run that stops early says at which step.
 
 ### The warm fixture home
 
@@ -713,7 +717,7 @@ only and never looks an app up by name.
 | `bar [pid]` | menu bar extras and menu titles with frames, the gaps between neighbours, and a point on the bar that is on no item |
 | `front` | the frontmost app and its pid |
 | `activate <pid>` | bring a pid to the front |
-| `ax <pid> <dump\|texts\|menuitems\|pressextra\|cancelmenu\|get\|press\|pressx\|focus\|set> [role] [match] [value]` | read or press elements through accessibility, with no pointer; `--scope` narrows the search |
+| `ax <pid> <dump\|texts\|menuitems\|menu\|pressextra\|cancelmenu\|get\|press\|pressx\|focus\|set> [role] [match] [value]` | read or press elements through accessibility, with no pointer; `--scope` narrows the search; `menu` prints the open menu's rows as macOS shows them, a title and `enabled` or `dimmed` or `-` for a separator, the shape the control API's `menu` is compared in |
 | `click <item <pid> \| at <x> <y> \| window <pid> <x> <y>>` | post a real HID click, aborting if the pointer is moved or the target is not what was asked for, and log the accessibility element and topmost window under it; a window that lets clicks through, such as a window manager's full-screen overlay, does not count as covering the target; `--shot <out.png>` captures the result |
 | `raise <pid> [title]` | bring one of a pid's windows to the front, which journals a window switch |
 | `close <pid> <title>` | close one of a pid's windows through its close button |
@@ -772,7 +776,7 @@ found by label (`label=Models`), and a window's title-bar buttons by subrole
 (`subrole=AXCloseButton`). What a click cannot drive: a link
 inside a SwiftUI Text follows neither a click the app simulates nor
 accessibility's press, so following one stays a real-screen check
-(`settings-pane-links`).
+(`real-screen`, step 8).
 
 **Who can use it.** The API lets a program click Athina's controls, type into
 it, and read its state, so it must never reach anyone's own copy of the app.
@@ -885,10 +889,12 @@ such a run is on the screen, so it takes the screen lock.
   launch. While it waits for the first capture, the harness brings the staged
   TextEdit forward with each Shift press, since sensing captures nothing while
   an excluded app, such as the terminal of whoever is at the Mac, is in front.
-- **Idle input.** Every pointer step of a real-screen scenario waits for a
-  quiet keyboard and mouse first, and a click aborts if the pointer moves off
-  the target, because the Mac may have someone at it. A click by that person
-  during the wait dismisses the toast through its global listener, which is
+- **Idle input.** A real-screen scenario takes the screen only once the
+  keyboard and mouse have been quiet for 15 seconds (above), each of its
+  pointer steps waits for a quiet moment after the run's own input, and a
+  click aborts if the pointer moves off the target, because the Mac may have
+  someone at it. A click by that person
+  during a wait dismisses the toast through its global listener, which is
   them using their Mac rather than a failure, so `keep_toast_up` relaunches
   Athina for a new toast (the earlier launch's journal and watcher logs are
   kept as `journal-launch<n>.sqlite` and `<log>-launch<n>.log`, and the
