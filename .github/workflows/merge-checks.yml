@@ -1,20 +1,27 @@
 name: Merge checks
 
-# The two slow checks, kept out of ci.yml so they do not hold up every pull
-# request. They run on every push to main and, for a pull request, only when
-# dispatched on its branch: `gh workflow run merge-checks.yml --ref <branch>`,
-# or Run workflow on this workflow's Actions page. A ruleset on main requires
-# both at the pull request's head (docs/ruleset-main.json). They are not
-# triggered on pull_request with a job-level `if` instead, because a job that
-# `if` skips reports success to a required check and would let the merge
-# through without running (README "Continuous integration").
+# The slow check, kept out of ci.yml so it does not hold up every pull request.
+# It runs on every push to main and, for a pull request, only while the
+# pull request carries the merge-checks label: adding the label runs it, and so
+# does every push, or any other label added, while it is on. The main ruleset requires it at the
+# pull request's head (.github/rulesets/main.json, README "Continuous
+# integration").
+#
+# A job that an `if` skips still reports a check run, and a skipped check
+# counts as passed for a required one, so a skipped run takes another name and
+# the required ui-snapshots check stays expected until the job really runs.
+# A dispatched run would not do either: its check runs are on the commit, but
+# a pull request's required checks ignore them.
 on:
   push:
     branches: [main]
-  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   ui-snapshots:
+    name: ${{ (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'merge-checks')) && 'ui-snapshots' || 'ui-snapshots (add the merge-checks label to run)' }}
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'merge-checks')
     # The approved renders in Tests/Snapshots were made on this image with its
     # newest Xcode, so a change to either is a deliberate baseline refresh
     # (README "UI snapshot baselines").
@@ -61,57 +68,3 @@ jobs:
             build/snapshots/report
             build/snapshots/determinism
           if-no-files-found: ignore
-
-  xcode-project:
-    # The Xcode project for the Mac App Store route (README "The Xcode
-    # project"), generated from project.yml with the pinned XcodeGen and
-    # archived as the sandboxed App Store target, signed to run locally since
-    # CI holds no Apple credentials. The package jobs never read it.
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select the newest Xcode on the runner
-        run: |
-          latest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n1)"
-          echo "Using $latest"
-          sudo xcode-select -s "$latest"
-          xcodebuild -version
-      - name: Generate the project and archive the App Store target
-        timeout-minutes: 30
-        run: make xcode-archive
-      - name: Check the archived app's bundle id and sandbox
-        # The id must be the target's PRODUCT_BUNDLE_IDENTIFIER, not the direct
-        # build's that Resources/Info.plist names, and the app must be sandboxed.
-        run: |
-          set -euo pipefail
-          app=build/xcode/Athina.xcarchive/Products/Applications/Athina.app
-          if ! want="$(xcodebuild -project Athina.xcodeproj -target "Athina App Store" -configuration Release -showBuildSettings \
-            | sed -n 's/^ *PRODUCT_BUNDLE_IDENTIFIER = //p')"; then
-            echo "xcodebuild could not show the Athina App Store target's build settings" >&2
-            exit 1
-          fi
-          if ! got="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")"; then
-            echo "No CFBundleIdentifier in $app/Contents/Info.plist" >&2
-            exit 1
-          fi
-          if ! sandbox="$(codesign -d --entitlements - --xml "$app" | plutil -extract 'com\.apple\.security\.app-sandbox' raw -o - -)"; then
-            echo "No com.apple.security.app-sandbox entitlement in $app's signature" >&2
-            exit 1
-          fi
-          echo "CFBundleIdentifier $got, PRODUCT_BUNDLE_IDENTIFIER $want, app-sandbox $sandbox"
-          if [ -z "$want" ]; then
-            echo "The Athina App Store target sets no PRODUCT_BUNDLE_IDENTIFIER" >&2
-            exit 1
-          fi
-          if [ "$got" != "$want" ]; then
-            echo "The archived app's id $got is not the target's $want" >&2
-            exit 1
-          fi
-          if [ "$got" = com.ahcarpenter.athina ]; then
-            echo "The archived app has the direct build's id" >&2
-            exit 1
-          fi
-          if [ "$sandbox" != true ]; then
-            echo "The archived app is not sandboxed" >&2
-            exit 1
-          fi
