@@ -40,12 +40,24 @@ import Testing
   @Test func theMenuReadsStatusThenCommandsThenWindowsThenQuit() {
     #expect(
       titles(MenuModel(state())) == [
-        "Watching", "Replaying 7 recorded calls", "Mentor: replay mode, nothing billed",
-        "Goal: not worked out yet", "Talk back: no shortcut set", "-",
-        "Pause Watching", "Capture Now", "-",
-        "Show Last Suggestion", "Answer Suggestion", "-",
-        "Suggestions", "Permissions…", "Settings…", "-",
-        "About Athina", "Quit Athina",
+        "Watching",
+        "Replaying 7 recorded calls",
+        "Mentor: replay mode, nothing billed",
+        "Goal: not worked out yet",
+        "Talk back: no shortcut set",
+        "-",
+        "Pause Watching",
+        "Capture Now",
+        "-",
+        "Show Last Suggestion",
+        "Answer Suggestion",
+        "-",
+        "Suggestions",
+        "Permissions…",
+        "Settings…",
+        "-",
+        "About Athina",
+        "Quit Athina",
       ]
     )
   }
