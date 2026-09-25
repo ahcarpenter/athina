@@ -13,6 +13,7 @@ public struct PixelDiff: Equatable, Sendable {
   /// top left, or nil when none changed.
   public let changedBounds: PixelRect?
 
+  /// Whether no pixel changed by more than the tolerance.
   public var matches: Bool { changedPixels == 0 }
 
   /// Compares two bitmaps of the same size.
@@ -86,12 +87,18 @@ public struct PixelDiff: Equatable, Sendable {
   }
 }
 
+/// A rectangle of pixels, measured from the top left of a bitmap.
 public struct PixelRect: Equatable, Sendable, CustomStringConvertible {
+  /// The left edge, in pixels from the left.
   public let x: Int
+  /// The top edge, in pixels from the top.
   public let y: Int
+  /// The width in pixels.
   public let width: Int
+  /// The height in pixels.
   public let height: Int
 
+  /// Creates a rectangle `width` by `height` pixels whose top left is at `x`, `y`.
   public init(x: Int, y: Int, width: Int, height: Int) {
     self.x = x
     self.y = y
@@ -99,5 +106,6 @@ public struct PixelRect: Equatable, Sendable, CustomStringConvertible {
     self.height = height
   }
 
+  /// The rectangle as a report writes it, `40x12 at 300,96`.
   public var description: String { "\(width)x\(height) at \(x),\(y)" }
 }

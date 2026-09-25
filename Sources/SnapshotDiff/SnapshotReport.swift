@@ -52,6 +52,8 @@ public enum SnapshotReport {
     )
   }
 
+  /// The job summary in Markdown: a sentence on the whole set and, when any
+  /// snapshot differs, a table of what changed in each.
   public static func markdown(_ comparison: SnapshotComparison) -> String {
     let kind = comparison.kind
     var lines = ["### \(kind.heading)", ""]
@@ -81,6 +83,8 @@ public enum SnapshotReport {
     return lines.joined(separator: "\n") + "\n"
   }
 
+  /// The report page: the same sentence, then each differing snapshot's two
+  /// images and their difference side by side at real size.
   public static func html(_ comparison: SnapshotComparison) -> String {
     let kind = comparison.kind
     let drift = comparison.drift
