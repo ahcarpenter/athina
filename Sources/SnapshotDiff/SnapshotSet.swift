@@ -13,6 +13,8 @@ public enum SnapshotStatus: Equatable, Sendable {
   /// An approved baseline the renderer no longer produces.
   case removed
 
+  /// Whether the snapshot differs from its other side in any way beyond the
+  /// tolerance, a size change, or being on one side only.
   public var isDrift: Bool {
     if case .unchanged = self { return false }
     return true
@@ -42,11 +44,14 @@ public enum SnapshotStatus: Equatable, Sendable {
   }
 }
 
+/// One snapshot's file and what became of it.
 public struct SnapshotResult: Equatable, Sendable {
   /// The file name, `settings-general-light.png`.
   public let file: String
+  /// What became of it between the two directories.
   public let status: SnapshotStatus
 
+  /// Creates the result for one file.
   public init(file: String, status: SnapshotStatus) {
     self.file = file
     self.status = status
@@ -67,6 +72,7 @@ public struct SnapshotComparison: Sendable {
     /// Two renders of one build, which must be the same picture.
     case renders
 
+    /// The title of the report page and of the job summary's section.
     public var heading: String {
       self == .baselines
         ? "UI snapshots against the approved baselines" : "Two renders of one build"
@@ -89,6 +95,8 @@ public struct SnapshotComparison: Sendable {
       self == .baselines ? "drifted" : "differ between the two renders"
     }
 
+    /// What a sentence says of a set where every snapshot is the same on both
+    /// sides.
     public var agree: String {
       self == .baselines ? "match their baselines" : "are the same picture in both renders"
     }
@@ -103,13 +111,29 @@ public struct SnapshotComparison: Sendable {
   /// edge, a new colour, a moved line, moves some channel much further.
   public static let defaultTolerance = 6
 
+  /// What the two directories hold.
   public let kind: Kind
+  /// Every PNG in either directory, by file name.
   public let results: [SnapshotResult]
+  /// The largest channel difference, of 255, that is not change.
   public let tolerance: Int
 
+  /// The results that differ, in file name order.
   public var drift: [SnapshotResult] { results.filter(\.status.isDrift) }
+  /// Whether no snapshot differs.
   public var matches: Bool { drift.isEmpty }
 
+  /// Compares every PNG in `baseline` with the one of the same name in `actual`.
+  ///
+  /// - Parameters:
+  ///   - baseline: The approved baselines, or the first render; a directory that
+  ///     does not exist counts as empty.
+  ///   - actual: The new render, or the second render.
+  ///   - kind: What the two directories hold.
+  ///   - tolerance: The largest channel difference that is not change.
+  /// - Returns: The comparison of every file in either directory.
+  /// - Throws: When a directory cannot be listed or a PNG on both sides cannot
+  ///   be read.
   public static func compare(
     baseline: URL,
     actual: URL,
@@ -134,6 +158,8 @@ public struct SnapshotComparison: Sendable {
     return SnapshotComparison(kind: kind, results: results, tolerance: tolerance)
   }
 
+  /// Compares two bitmaps of one snapshot: resized when their sizes differ,
+  /// otherwise changed or unchanged at `tolerance`.
   public static func status(_ before: Bitmap, _ after: Bitmap, tolerance: Int) -> SnapshotStatus {
     guard before.size == after.size else { return .resized(from: before.size, to: after.size) }
     let diff = PixelDiff.compare(before, after, tolerance: tolerance)
