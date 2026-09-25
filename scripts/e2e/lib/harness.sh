@@ -40,6 +40,8 @@ WARM_HOME="$CACHE_ROOT/warm-home"
 # Read by the entry point and by scenarios that source this file.
 # shellcheck disable=SC2034
 RUNS_ROOT="$CACHE_ROOT/runs"
+# One file per run in progress, named by its pid (live_run_register).
+LIVE_RUNS="$CACHE_ROOT/live-runs"
 
 # --- Run state ----------------------------------------------------------------
 
@@ -236,6 +238,55 @@ prefs_restore() {
 warm_home_stamp() { cat "$WARM_HOME/.athina-e2e-warm" 2>/dev/null || echo "none"; }
 
 have_warm_home() { [ -s "$WARM_HOME/.athina-e2e-warm" ]; }
+
+# --- Runs in progress ---------------------------------------------------------
+
+# A run gives the screen lock back between its scenarios, while it still reads
+# the warm home and writes its evidence under the runs, so it says it is in
+# progress for as long as it lasts, and clean and warm, which remove or replace
+# both, refuse while it does.
+live_run_register() {
+	mkdir -p "$LIVE_RUNS"
+	printf '%s running "%s" (pid %s) since %s\n' "$ROOT" "$1" "$$" "$(date '+%Y-%m-%d %H:%M:%S')" >"$LIVE_RUNS/$$"
+}
+
+live_run_unregister() { rm -f "$LIVE_RUNS/$$"; }
+
+# The runs in progress, one line each. The file of a run that is gone, one
+# killed before it could take its own down, is dropped.
+live_runs() {
+	local marker
+	for marker in "$LIVE_RUNS"/*; do
+		[ -f "$marker" ] || continue
+		if kill -0 "$(basename "$marker")" 2>/dev/null; then
+			cat "$marker" 2>/dev/null || true
+		else
+			rm -f "$marker"
+		fi
+	done
+	return 0
+}
+
+# Stop, naming them, when runs are in progress.
+refuse_while_runs_live() {
+	local live line
+	live="$(live_runs)"
+	[ -n "$live" ] || return 0
+	log "ERROR: not running $1 while these runs use $CACHE_ROOT; try again once they finish:"
+	while IFS= read -r line; do log "  $line"; done <<<"$live"
+	exit 1
+}
+
+# The clean command: past runs, and the warm home with --warm.
+clean_cache() {
+	refuse_while_runs_live clean
+	rm -rf "$RUNS_ROOT"
+	log "removed $RUNS_ROOT"
+	if [ "${1:-}" = "--warm" ]; then
+		rm -rf "$WARM_HOME" "$CACHE_ROOT/warm-home.building" "$CACHE_ROOT/warm-home.old"
+		log "removed $WARM_HOME"
+	fi
+}
 
 # A fresh home per run, cloned from the warm one.
 #
@@ -724,32 +775,6 @@ api() {
 	printf '%s %s\n    %s\n' "$(date '+%H:%M:%S')" "$*" "$answer" >>"$RUN_DIR/api.log"
 	printf '%s\n' "$answer"
 	return "$status"
-}
-
-# --- The menu bar -------------------------------------------------------------
-
-# Athina's own status item, as one `extra` line of the bar report.
-athina_extra() { "$DRIVE" bar | grep "^extra .*pid=$ATHINA_PID " || true; }
-
-athina_item_width() { athina_extra | sed -n 's/.* w=\([0-9.]*\) .*/\1/p'; }
-
-# The item's accessibility name, which is also how a scenario reads the mode.
-athina_item_title() { athina_extra | sed -n 's/.*title="\([^"]*\)".*/\1/p'; }
-
-# The mode out of that name, without the app's own name or the replay badge.
-# The badge carries the clock's speed under --time-scale ("Replay 4.0x"), so a
-# check on the mode has to read past it.
-athina_item_mode() { athina_item_title | sed -E 's/^Athina, (Recording, |Replay[^,]*, )?//'; }
-
-# The item's name lags an app switch by a few seconds, so a measurement taken
-# right after one can still be of the mode before it.
-wait_item_title() {
-	local want="$1" limit="${2:-30}" i
-	for i in $(seq 1 "$limit"); do
-		case "$(athina_item_title)" in *"$want"*) return 0 ;; esac
-		sleep 1
-	done
-	return 1
 }
 
 # --- Watchers -----------------------------------------------------------------
