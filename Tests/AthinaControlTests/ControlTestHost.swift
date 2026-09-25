@@ -22,9 +22,10 @@ final class ControlTestHost: ControlHost {
   var controlClock: (now: Date, movedAhead: TimeInterval) = (Date(timeIntervalSince1970: 0), 0)
 
   var controlSettings: ControlValue { .null }
-  func controlCapture(_ window: NSWindow) async throws -> CGImage {
+  func controlCapture(_ window: NSWindow) async throws -> ControlCapture {
     throw CancellationError()
   }
+  var controlCaptureMethod: String { "none" }
   var controlMenu: MenuModel { MenuModel(items: []) }
   func controlPerform(_ command: MenuModel.Command) {}
   func controlOutsideClick(at location: CGPoint) -> Bool { false }

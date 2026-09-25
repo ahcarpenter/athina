@@ -42,7 +42,9 @@ own_group_after_settings() {
 	}' "$RUN_DIR/$1-menu-items.txt"
 }
 
-checkpoint() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no checkpoint of $1"; }
+# The debug panel shows the run's times, pid and journal path, which change
+# from run to run, so its pictures are evidence rather than checkpoints.
+panel_picture() { api snapshot window="Debug Panel" path="$RUN_DIR/$1.png" >/dev/null || log "no picture of the debug panel"; }
 
 scenario_run() {
 	api wait-window window=Advanced timeout=20 >/dev/null || { log "Settings never opened on the Advanced pane"; return 1; }
@@ -74,13 +76,13 @@ scenario_run() {
 
 	api menu press="Debug Panel" >/dev/null
 	check "the menu's Debug Panel command opens the debug panel" "yes" "$(panel_open)"
-	checkpoint "Debug Panel" panel-from-menu
+	panel_picture panel-from-menu
 	check "the panel's close button closes it" "true" "$(api click window="Debug Panel" subrole=AXCloseButton --field ok)"
 	[ "$(panel_gone)" = yes ] || { log "the debug panel would not close"; return 1; }
 
 	check "the click on Open Debug Panel lands" "true" "$(api click window=Advanced identifier=advanced.openDebugPanel --field ok)"
 	check "Open Debug Panel opens the debug panel" "yes" "$(panel_open)"
-	checkpoint "Debug Panel" panel
+	panel_picture panel
 
 	api click window=Advanced identifier=advanced.enableDebugPanel >/dev/null
 	check "the setting follows the switch off" "true" "$(api wait-setting key=showDebugPanel equals=false --field ok)"

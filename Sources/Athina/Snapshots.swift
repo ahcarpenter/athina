@@ -39,7 +39,7 @@ enum Snapshots {
   ///
   /// The two ways draw glass differently, so a run never mixes them, and says
   /// which it used; renders are compared only with renders made the same way.
-  private static let capturesWithScreenCaptureKit = CGPreflightScreenCaptureAccess()
+  static let capturesWithScreenCaptureKit = CGPreflightScreenCaptureAccess()
 
   /// One snapshot: a view, the sample state it shows, and the size of the
   /// window it is drawn in.
@@ -302,28 +302,60 @@ enum Snapshots {
     if let shard {
       print("snapshot: shard \(shard), \(rendered.count) of \(specs.count) snapshots")
     }
-    for appearance in appearances {
-      for spec in rendered {
-        let file = "\(spec.fileName(in: appearance)).png"
-        let bitmap = try await settledPicture(
-          of: spec,
-          in: appearance,
-          capture: fromWindowServer
-        )
-        try bitmap.writePNG(to: directory.appendingPathComponent(file))
+    // A few at a time, each in windows of its own: most of a render is
+    // waiting on the display and on ScreenCaptureKit, which the others use.
+    let queue = RenderQueue(
+      appearances.flatMap { appearance in rendered.map { (spec: $0, appearance: appearance) } }
+    )
+    try await withThrowingTaskGroup(of: Void.self) { group in
+      for _ in 0..<renderLanes {
+        group.addTask { try await renderLane(taking: queue, into: directory) }
       }
+      try await group.waitForAll()
+    }
+  }
+
+  /// Renders snapshots from the queue until it is empty.
+  private static func renderLane(taking queue: RenderQueue, into directory: URL) async throws {
+    while let job = queue.next() {
+      let bitmap = try await settledPicture(
+        of: job.spec,
+        in: job.appearance,
+        capture: fromWindowServer
+      )
+      try bitmap.writePNG(
+        to: directory.appendingPathComponent("\(job.spec.fileName(in: job.appearance)).png")
+      )
+    }
+  }
+
+  /// How many snapshots render at once.
+  private static let renderLanes = 4
+
+  /// The snapshots still to render, taken in order by each lane.
+  @MainActor
+  private final class RenderQueue {
+    private var jobs: ArraySlice<(spec: Spec, appearance: NSAppearance.Name)>
+
+    init(_ jobs: [(spec: Spec, appearance: NSAppearance.Name)]) {
+      self.jobs = jobs[...]
+    }
+
+    func next() -> (spec: Spec, appearance: NSAppearance.Name)? {
+      jobs.popFirst()
     }
   }
 
   /// How a snapshot's window becomes a picture. `--snapshot` takes it from
   /// the window server; the UI smoke test draws the window in its own process.
   struct Capture {
-    /// How long a new window is left before its first capture.
+    /// Whether the picture waits on the display.
     ///
-    /// The window server shows a fade, such as an app icon's, part of the way
-    /// through until it ends; a window drawn in process is drawn as its layers
-    /// stand, which the settled captures that follow already wait for.
-    let firstCaptureDelay: Duration
+    /// The window server composites a window on the display's refresh, so a
+    /// capture from it waits for frames: first for the window to settle, then
+    /// for a new frame between captures. A window drawn in process is drawn as
+    /// its layers stand, so it is captured at once and again after a pause.
+    let waitsForDisplay: Bool
     /// The scale the window draws at whatever display it is on, or nil for the
     /// display's own.
     ///
@@ -336,7 +368,7 @@ enum Snapshots {
   }
 
   /// The window as the window server composites it, as the run decided.
-  static let fromWindowServer = Capture(firstCaptureDelay: .milliseconds(700), take: capture)
+  static let fromWindowServer = Capture(waitsForDisplay: true, take: capture)
 
   /// Renders the snapshot in fresh windows until two in a row give the same
   /// picture, and returns the second.
@@ -360,7 +392,8 @@ enum Snapshots {
           view,
           size: spec.size,
           appearance: appearance,
-          capture: capture
+          capture: capture,
+          agreeingWith: previous
         )
       else {
         previous = nil
@@ -381,11 +414,15 @@ enum Snapshots {
   }
 
   /// The view's settled picture in a new window, or nil when it never settled there.
+  ///
+  /// A first capture that is already `earlier`, the picture the last window
+  /// settled on, is settled and agrees with it, so it is kept at once.
   private static func renderInWindow(
     _ view: some View,
     size: CGSize,
     appearance: NSAppearance.Name,
-    capture: Capture
+    capture: Capture,
+    agreeingWith earlier: Bitmap?
   ) async throws -> Bitmap? {
     // No SwiftUI animation runs and nothing pulses, so a view shows its
     // final state at once and the same state on every run.
@@ -426,19 +463,49 @@ enum Snapshots {
     window.contentView = hosting
     window.isReleasedWhenClosed = false
     defer { window.close() }
+    // No opening animation, so the window server shows the window whole
+    // from its first frame.
+    window.animationBehavior = .none
     window.orderFrontRegardless()
     hosting.frame = CGRect(origin: .zero, size: size)
     hosting.layoutSubtreeIfNeeded()
-    // Let SwiftUI finish its layout passes and async tasks, and, for a
-    // capture from the window server, let a fade such as an app icon's
-    // arrive at its end.
-    try await Task.sleep(for: capture.firstCaptureDelay)
+    let frames = capture.waitsForDisplay ? DisplayFrames(window) : nil
+    defer { frames?.stop() }
+    // Let SwiftUI finish its layout passes and async tasks, and a fade such
+    // as an app icon's arrive at its end.
+    await frames?.settle(window)
     // Then stop Core Animation's clock in this window at a time before any
     // animation began, so one that repeats, such as a spinner, draws its
     // resting state on every run rather than wherever it was at capture.
     hosting.layer?.speed = 0
     hosting.layer?.timeOffset = 0
-    return try await settledCapture(window: window, hosting: hosting, capture: capture)
+    return try await settledCapture(
+      window: window,
+      hosting: hosting,
+      capture: capture,
+      frames: frames,
+      agreeingWith: earlier
+    )
+  }
+
+  /// A settled picture of one of the app's own open windows, or nil when the
+  /// window never held still.
+  ///
+  /// It is taken as `--snapshot` takes one: once a frame on the display
+  /// changed nothing, captured until two captures in a row are the same
+  /// picture. The control API's `snapshot` takes its checkpoints this way
+  /// (`ControlHosting.swift`).
+  static func settledCapture(of window: NSWindow) async throws -> Bitmap? {
+    let frames = DisplayFrames(window)
+    defer { frames.stop() }
+    await frames.settle(window)
+    return try await settledCapture(
+      window: window,
+      hosting: window.contentView ?? NSView(),
+      capture: fromWindowServer,
+      frames: frames,
+      agreeingWith: nil
+    )
   }
 
   /// A window that reports a fixed backing scale when one is set, so AppKit
@@ -458,9 +525,11 @@ enum Snapshots {
   private static func settledCapture(
     window: NSWindow,
     hosting: NSView,
-    capture: Capture
+    capture: Capture,
+    frames: DisplayFrames?,
+    agreeingWith earlier: Bitmap?
   ) async throws -> Bitmap? {
-    var previous: Bitmap?
+    var previous = earlier
     for _ in 0..<8 {
       hosting.layoutSubtreeIfNeeded()
       window.displayIfNeeded()
@@ -469,7 +538,12 @@ enum Snapshots {
         if let previous, samePicture(previous, bitmap) { return bitmap }
         previous = bitmap
       }
-      try await Task.sleep(for: .milliseconds(150))
+      if let frames {
+        // A new frame on the display, so the next capture is of it.
+        await frames.next()
+      } else {
+        try await Task.sleep(for: .milliseconds(150))
+      }
     }
     return nil
   }
@@ -500,26 +574,36 @@ enum Snapshots {
   }
 
   /// ScreenCaptureKit for the app's own window; nil when it is not among the shareable windows.
+  ///
+  /// Finding the window is most of a capture's time, so the windows found are
+  /// kept for the captures that follow.
   private static func captureOwnWindow(_ window: NSWindow) async throws -> CGImage? {
-    let content = try await SCShareableContent.excludingDesktopWindows(
-      false,
-      onScreenWindowsOnly: false
-    )
-    guard
-      let scWindow = content.windows.first(where: { $0.windowID == CGWindowID(window.windowNumber) }
+    let id = CGWindowID(window.windowNumber)
+    if shareableWindows[id] == nil {
+      let content = try await SCShareableContent.excludingDesktopWindows(
+        false,
+        onScreenWindowsOnly: false
       )
-    else { return nil }
+      shareableWindows = Dictionary(content.windows.map { ($0.windowID, $0) }) { first, _ in first }
+    }
+    guard let scWindow = shareableWindows[id] else { return nil }
     let filter = SCContentFilter(desktopIndependentWindow: scWindow)
     let configuration = SCStreamConfiguration()
     let scale = window.backingScaleFactor
-    configuration.width = Int(scWindow.frame.width * scale)
-    configuration.height = Int(scWindow.frame.height * scale)
+    // The window's size now, which a live window may have changed since it
+    // was found.
+    configuration.width = Int(window.frame.width * scale)
+    configuration.height = Int(window.frame.height * scale)
     configuration.showsCursor = false
     return try await SCScreenshotManager.captureImage(
       contentFilter: filter,
       configuration: configuration
     )
   }
+
+  /// The shareable windows as `captureOwnWindow` last found them, looked up
+  /// again whenever a window is not among them.
+  private static var shareableWindows: [CGWindowID: SCWindow] = [:]
 
   /// Renders the backing layer tree at the window's scale factor.
   private static func renderLayerTree(of view: NSView) throws -> CGImage {
