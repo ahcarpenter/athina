@@ -74,6 +74,27 @@ jobs:
             build/snapshots/determinism
           if-no-files-found: ignore
 
+  lint:
+    # Google's Swift style (README "Code style"): swift-format from the
+    # selected Xcode checks every Swift file against the committed
+    # .swift-format and fails on any finding.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode on the runner
+        # Xcode's swift-format reports its version as "main", so the Swift
+        # version beside it is what names the swift-format that ran.
+        run: |
+          latest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n1)"
+          echo "Using $latest"
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+          swift --version
+          echo "swift-format $(xcrun swift-format --version)"
+      - name: Lint
+        timeout-minutes: 10
+        run: make lint
+
   xcode-project:
     # The Xcode project for the Mac App Store route (README "The Xcode
     # project"), generated from project.yml with the pinned XcodeGen and

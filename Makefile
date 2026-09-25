@@ -18,7 +18,7 @@ RUN ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
-.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release xcodeproj xcode-build xcode-archive snapshots-approve
+.PHONY: build mark run run-replay record clear-recordings fixture-status test format lint clean measure release xcodeproj xcode-build xcode-archive snapshots-approve
 
 ## Build the .app bundle into build/Athina.app
 build:
@@ -123,6 +123,19 @@ test:
 ## that caused them.
 snapshots-approve:
 	scripts/snapshots.sh approve $(RUN)
+
+## Every Swift file in the checkout, tracked or new, that git does not ignore
+SWIFT_FILES = git ls-files -z --cached --others --exclude-standard '*.swift'
+
+## Format every Swift file in place to Google's Swift style with the toolchain's
+## swift-format and the committed .swift-format (see README, "Code style")
+format:
+	$(SWIFT_FILES) | xargs -0 xcrun swift-format format --in-place --parallel
+
+## Check every Swift file against .swift-format without changing it, failing on
+## any finding, as CI does; `make format` fixes all but the documentation ones
+lint:
+	$(SWIFT_FILES) | xargs -0 xcrun swift-format lint --strict --parallel
 
 ## Sample the running app's CPU and memory for a while (see scripts/measure.sh);
 ## PID=<pid> names the Athina to sample when several are running
