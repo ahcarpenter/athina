@@ -4,7 +4,9 @@ import SwiftUI
 
 @main
 struct AthinaApp: App {
-  @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+  @NSApplicationDelegateAdaptor(AppDelegate.self)
+  private var delegate
+
   private let state = AppState.shared
 
   var body: some Scene {
@@ -274,9 +276,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// Status rows are dimmed text; a status that needs something from the person
 /// is a command that goes there.
 struct MenuBarContent: View {
-  @Environment(AppState.self) private var state
-  @Environment(\.openWindow) private var openWindow
-  @Environment(\.openSettings) private var openSettings
+  @Environment(AppState.self)
+  private var state
+
+  @Environment(\.openWindow)
+  private var openWindow
+
+  @Environment(\.openSettings)
+  private var openSettings
 
   var body: some View {
     Text(state.statusLine)

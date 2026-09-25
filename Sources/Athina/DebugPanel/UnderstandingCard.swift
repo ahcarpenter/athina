@@ -15,7 +15,8 @@ struct UnderstandingCard: View {
   /// and item starts at the same edge whatever the symbol's width.
   private static let markWidth: CGFloat = 16
 
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
 
   private var record: UnderstandingRecord? { state.mentorStatus.understanding }
 

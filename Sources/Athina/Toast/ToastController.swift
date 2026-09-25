@@ -605,7 +605,9 @@ private struct ExchangeLine: View {
 /// The key is held: a pulsing microphone and the transcript so far.
 struct ListeningRow: View {
   let partial: String
-  @Environment(\.drawsStill) private var drawsStill
+
+  @Environment(\.drawsStill)
+  private var drawsStill
 
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 8) {

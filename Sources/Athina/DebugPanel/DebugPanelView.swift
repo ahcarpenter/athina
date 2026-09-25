@@ -7,7 +7,9 @@ struct DebugPanelView: View {
     case timeline, calls
   }
 
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   @State private var showOCRBoxes = true
   @State private var selectedEntryID: String?
   @State private var selected: (observation: ActivityObservation, image: NSImage?)?
@@ -62,7 +64,8 @@ struct DebugPanelView: View {
 // MARK: - Status bar
 
 private struct DebugStatusBar: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
 
   var body: some View {
     HStack(spacing: 14) {
@@ -222,7 +225,8 @@ private struct LabeledValue: View {
 // MARK: - Now pane
 
 private struct NowPane: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
 
   var body: some View {
     ScrollView {
@@ -599,7 +603,9 @@ private struct OCRTextList: View {
 private struct TimelinePane: View {
   typealias Page = DebugPanelView.SidePage
 
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   @Binding var selectedID: String?
   @Binding var page: Page
 
@@ -744,7 +750,8 @@ private struct TimelineRow: View {
 ///
 /// The call log lives under the timeline.
 private struct MentorCard: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
 
   var body: some View {
     Card(title: "Mentor loop") {
@@ -1019,7 +1026,9 @@ private struct MentorCard: View {
 ///
 /// For checking talk-back, and recording a follow-up, without a microphone.
 private struct TalkBackField: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   @State private var text = ""
 
   private var canSend: Bool {
@@ -1059,7 +1068,9 @@ private struct TalkBackField: View {
 ///
 /// Only a replay has one.
 private struct ClockAdvanceField: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   @State private var text = ""
   @State private var refusal: String?
 

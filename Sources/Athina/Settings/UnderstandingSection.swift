@@ -4,7 +4,8 @@ import SwiftUI
 /// Settings for the standing understanding: how often it is rewritten by a call
 /// of its own, how large it may grow, how long it survives, and how to forget it.
 struct UnderstandingSection: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
 
   var body: some View {
     @Bindable var state = state
@@ -72,7 +73,9 @@ struct UnderstandingSection: View {
 /// It forgets every revision at once and nothing brings them back, so it asks
 /// first.
 struct ResetUnderstandingButton: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   @State private var confirming = false
   @State private var resetting = false
 

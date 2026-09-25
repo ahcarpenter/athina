@@ -5,7 +5,8 @@ import Testing
 
 /// The mentor loop's part in callouts and talking back: a region on a
 /// suggestion, and a follow-up question as a journaled, priced model call.
-@Suite(.timeLimit(.minutes(1))) struct InterventionLoopTests {
+@Suite(.timeLimit(.minutes(1)))
+struct InterventionLoopTests {
   private static let yes = #"{"worth_a_look": true, "reason": "Repeated manual runs"}"#
   private static let no = #"{"worth_a_look": false, "reason": "Reading docs"}"#
 
@@ -447,7 +448,8 @@ import Testing
 ///
 /// Both run through the loop the app runs, from recordings, with no network and
 /// no spend.
-@Suite(.timeLimit(.minutes(1))) struct ReplayInterventionTests {
+@Suite(.timeLimit(.minutes(1)))
+struct ReplayInterventionTests {
   /// The frame size the recorded mentor request told the model about.
   static func recordedFrameSize(of request: MessagesRequest) -> (width: Int, height: Int)? {
     for message in request.messages {

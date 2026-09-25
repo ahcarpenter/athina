@@ -10,9 +10,14 @@ import SwiftUI
 /// Debug Panel command, as Safari's switch adds its Develop menu
 /// (`DebugPanelAccess`).
 struct AdvancedSettings: View {
-  @Environment(AppState.self) private var state
-  @Environment(\.openWindow) private var openWindow
-  @Environment(\.dismissWindow) private var dismissWindow
+  @Environment(AppState.self)
+  private var state
+
+  @Environment(\.openWindow)
+  private var openWindow
+
+  @Environment(\.dismissWindow)
+  private var dismissWindow
 
   var body: some View {
     @Bindable var state = state

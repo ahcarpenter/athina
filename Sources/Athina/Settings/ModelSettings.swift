@@ -5,7 +5,8 @@ import SwiftUI
 /// The Models pane: the Anthropic connection, each model and its effort,
 /// how often they are called, what the mentor model sees, and spend.
 struct ModelSettings: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
 
   var body: some View {
     @Bindable var state = state
@@ -144,7 +145,9 @@ private struct TierRows: View {
 // MARK: - Anthropic
 
 private struct APIKeySection: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   @State private var draft = ""
   @State private var testing = false
   @State private var testResult: Result<String, ClaudeClientError>?
@@ -220,7 +223,9 @@ private struct APIKeySection: View {
 /// Stands in for the key section while calls are replayed: there is no key to
 /// save, and Test Connection replays a recorded test call.
 private struct ReplayConnectionSection: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   @State private var testing = false
   @State private var testResult: Result<String, ClaudeClientError>?
 
@@ -289,7 +294,8 @@ struct ConnectionResult: View {
 // MARK: - Spend
 
 private struct SpendSection: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
 
   var body: some View {
     @Bindable var state = state
