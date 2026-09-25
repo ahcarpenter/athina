@@ -928,9 +928,10 @@ the event it needs (`wait-event`) rather than on a fixed time or the journal.
   `wait_toast` looks for it every quarter second and nudges sensing every 2
   seconds (the helper window flips and TextEdit switches windows), pressing
   Capture Now only after 30 seconds with no toast; it logs how long it waited
-  and how long since launch. While it waits for the first capture, the harness brings the staged
-  TextEdit forward with each Shift press, since sensing captures nothing while
-  an excluded app, such as the terminal of whoever is at the Mac, is in front.
+  and how long since launch. While it waits for the first capture, the
+  harness brings the staged TextEdit forward with each Shift press, since
+  sensing captures nothing while an excluded app, such as the terminal of
+  whoever is at the Mac, is in front.
 - **Idle input.** Every pointer step of a real-screen scenario waits for a
   quiet keyboard and mouse first, and a click aborts if the pointer moves off
   the target, because the Mac may have someone at it. A click by that person

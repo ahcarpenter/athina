@@ -284,8 +284,9 @@ have_warm_home() { [ -s "$WARM_HOME/.athina-e2e-warm" ]; }
 # journal shows events with no observations.
 new_home() {
 	local dest="$1"
-	# A hermetic run captures nothing, so it needs no text-recognition cache,
-	# and it never reads the warm home that `warm` may be rebuilding.
+	# A hermetic run reads no screen and runs no text recognition, so it needs
+	# no text-recognition cache, and it never reads the warm home that `warm`
+	# may be rebuilding.
 	if [ "${SCENARIO_TIER:-screen}" = api ]; then
 		rm -rf "$dest"
 		mkdir -p "$dest/Library/Application Support/athina"

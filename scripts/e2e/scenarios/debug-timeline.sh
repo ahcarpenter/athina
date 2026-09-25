@@ -11,8 +11,9 @@
 # which is where a person saw it.
 #
 # On the API tier, reading the Timeline through Athina's own accessibility
-# tree. The run is hermetic, so it senses nothing: Started is the startup row
-# counted, and the rows of a real app switch or capture are not there to be.
+# tree. The run is hermetic and scripts no sensing, so it senses nothing:
+# Started is the startup row counted, and the rows of an app switch or capture
+# are not there to be.
 SCENARIO_SUMMARY="the debug panel's Timeline shows each startup row once"
 SCENARIO_ARGS=(--open debug)
 SCENARIO_TIER=api
