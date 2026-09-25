@@ -25,10 +25,51 @@ jobs:
         run: swift test
       - name: Build app bundle
         run: scripts/bundle.sh release
-      - name: Render UI snapshots
-        run: build/Athina.app/Contents/MacOS/Athina --snapshot snapshots
-      - uses: actions/upload-artifact@v4
+
+  ui-snapshots:
+    # The approved renders in Tests/Snapshots were made on this image with its
+    # newest Xcode, so a change to either is a deliberate baseline refresh
+    # (README "UI snapshot baselines").
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode on the runner
+        run: |
+          latest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n1)"
+          echo "Using $latest"
+          sudo xcode-select -s "$latest"
+          sw_vers
+          swift --version
+      - name: Build app bundle
+        run: scripts/bundle.sh release
+      - name: Render twice and compare with the approved baselines
+        # Renders every snapshot twice and fails unless the two are the same
+        # picture, then fails on any drift from Tests/Snapshots beyond the
+        # tolerance for anti-aliasing and glass (README "UI snapshot baselines").
+        timeout-minutes: 20
+        run: scripts/snapshots.sh gate
+      - name: Summarize
+        if: always()
+        run: |
+          for summary in build/snapshots/determinism/summary.md build/snapshots/report/summary.md; do
+            if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
+          done
+      - name: Upload the renders
+        # What `scripts/snapshots.sh approve` fetches to approve a drift.
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: ui-snapshots
-          path: snapshots
-          if-no-files-found: error
+          path: build/snapshots/render
+          if-no-files-found: ignore
+      - name: Upload the drift report
+        # Before, after and difference images of each drifted snapshot, with
+        # index.html showing them side by side at real size.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-snapshot-report
+          path: |
+            build/snapshots/report
+            build/snapshots/determinism
+          if-no-files-found: ignore

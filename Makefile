@@ -13,10 +13,12 @@ SETTINGS ?=
 LANE ?= replay
 ## The pid `make measure` samples when several Athinas are running
 PID ?=
+## The CI run whose renders `make snapshots-approve` approves; the newest CI run of HEAD when empty
+RUN ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
-.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release
+.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release snapshots snapshots-approve
 
 ## Build the .app bundle into build/Athina.app
 build:
@@ -93,6 +95,19 @@ fixture-status:
 ## Run the unit tests
 test:
 	swift test
+
+## Render every UI snapshot on this Mac and compare it with the approved
+## baselines in Tests/Snapshots, writing build/snapshots/report/index.html.
+## Advisory: the baselines come from the CI runner, and another macOS renders
+## differently, so only CI's comparison gates (see README, "UI snapshot baselines").
+snapshots: build
+	scripts/snapshots.sh check
+
+## Approve a UI change: make Tests/Snapshots match the renders the CI runner
+## made for HEAD (or for CI run RUN=<id>), never renders from this Mac, then
+## commit the changed images with the change that caused them.
+snapshots-approve:
+	scripts/snapshots.sh approve $(RUN)
 
 ## Sample the running app's CPU and memory for a while (see scripts/measure.sh);
 ## PID=<pid> names the Athina to sample when several are running

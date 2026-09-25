@@ -50,6 +50,8 @@ make record           # the same, live, writing every model call to a fixture fi
 make clear-recordings # deletes the app's own recordings directory
 make fixture-status   # checks that the committed fixtures are current (fails when not), with no network
 make test             # runs the unit tests (swift test), the loop included, with no network
+make snapshots        # renders every UI snapshot here and compares it with the approved baselines (advisory; CI gates)
+make snapshots-approve # makes the baselines match the renders CI made of HEAD, after an intended UI change
 make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 make release          # builds, signs, notarizes, and packages a direct-download release into build/release (see Releasing)
 ```
@@ -1621,10 +1623,12 @@ particular to this app:
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs `swift test`, the bundle script, and `Athina
---snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the macOS
-26 SDK this package targets, and uploads the rendered PNGs, replay-mode renders
-on a scaled clock included, as the `ui-snapshots` artifact. No test waits on
+`.github/workflows/ci.yml` runs two jobs on GitHub's `macos-26` runner, which
+ships Xcode 26 and the macOS 26 SDK this package targets: `build-and-test` runs
+`swift test` and the bundle script, and `ui-snapshots` renders every snapshot
+with `Athina --snapshot`, replay-mode renders on a scaled clock included,
+compares the renders with the approved baselines, and uploads them as the
+`ui-snapshots` artifact (see UI snapshot baselines). No test waits on
 real time (see A faster clock). The tests exercise the pure parts
 (hashing, cadence, journal, retention and its in-place migration, settings, the
 mentor scheduler and every gate, mentorship context rules and placement, spend
@@ -1655,3 +1659,70 @@ editor with a duplicate name, the transient status messages (a connection test,
 a refused or recording shortcut, on-device recognition unavailable), and every
 variant of the menu bar mark, at the size the bar draws it, with the word a
 replay puts beside it, and enlarged.
+
+### UI snapshot baselines
+
+`Tests/Snapshots` holds the approved render of every snapshot, light and dark,
+rendered on the CI runner, which is the one reference environment. The
+`ui-snapshots` job (`scripts/snapshots.sh gate`) builds the app, renders every
+snapshot twice and fails unless the two renders are the same picture, then
+compares each render with its baseline and fails on any drift. A pixel counts
+as changed when any of its channels moves by more than 6 of 255: that covers
+the shading an anti-aliased edge can pick up and the window server's glass,
+which on the runner draws a dark switch's knob one of two ways from one window
+to the next (a few dozen pixels, up to 5 of 255 apart), and nothing a person
+would see, since a shifted edge, a new colour or a moved line moves some
+channel much further. A new snapshot fails until its baseline is approved, and
+a baseline the renderer no longer produces fails until it is deleted. For
+every drifted snapshot the job lists what changed in its summary and uploads
+the `ui-snapshot-report` artifact: the approved image, the new render and the
+difference (changed pixels in red over a faded copy), one folder each, with an
+`index.html` that shows them side by side at real size. The comparison is
+`snapshot-diff` (`Sources/SnapshotDiff`, with unit tests), and the renderer
+uses the same rule.
+
+A render is the same on every run because nothing in it depends on when or
+where it was made:
+
+- **A fixed clock.** Every sample stands still at one moment,
+  `Snapshots.referenceDate`, so every age, clock time and date reads the same,
+  and `scripts/snapshots.sh` renders in UTC and US English with scroll bars
+  always shown, whatever the Mac is set to.
+- **Animations off.** No SwiftUI animation runs; a pulsing symbol draws at rest
+  and a readout that ticks every second draws once (`drawsStill`); and once the
+  view has settled, Core Animation's clock in the window stops at a time before
+  any animation began, so a spinner draws its resting state.
+- **A fixed backdrop.** The render window is opaque and paints the window
+  background of its appearance, so glass and materials sample that and never
+  what is behind the window. Dark mode's wallpaper tinting still reads the
+  desktop picture, which the runner never changes.
+- **Settled, and agreed.** A window is captured until two captures in a row
+  are the same picture, and each snapshot is rendered in fresh windows until
+  two in a row agree, because AppKit now and then lays a text field out a
+  point off in one window. Captures are kept in sRGB whatever the display's
+  profile.
+
+**Approving an intended change.** Push the change and let CI fail on the
+drift, look at the report, then run `make snapshots-approve` (or
+`scripts/snapshots.sh approve`), which downloads the renders CI made of HEAD
+and makes `Tests/Snapshots` match them: a changed or new snapshot's render
+replaces its baseline, a removed snapshot's baseline is deleted, and every
+other file is left alone. `RUN=<id>` names another CI run of HEAD. Commit the
+images with the change that caused them; the pull request then shows each one
+before and after, and CI passes. Baselines never come from a developer's Mac:
+a Mac on another macOS, at another display scale, renders differently. `make
+snapshots` renders on this Mac and runs the same comparison as an advisory
+check, writing the report to `build/snapshots/report/index.html`; a Retina
+render is scaled down to the runner's 1x first, and text edges and glass still
+differ everywhere, so read it for layout and content, not as a verdict.
+
+**A runner change is a deliberate refresh.** The baselines depend on the
+runner's macOS image and the newest Xcode on it, which `ci.yml` selects. When
+GitHub updates either, the renders change with no change to the app; approve
+them from a CI run of an unchanged commit, in a commit of their own that names
+the new image or Xcode, so a real UI change is never approved under it.
+
+**Size.** The set is 76 PNGs, about 7 MB, rendered at the
+runner's 1x scale, and an approval adds only the images that changed to the
+history, so the repository keeps them as ordinary files rather than in Git LFS,
+which would add a download quota and an extra step to every checkout.

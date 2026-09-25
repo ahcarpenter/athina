@@ -9,6 +9,8 @@ let package = Package(
         .library(name: "AthinaCore", targets: ["AthinaCore"]),
         // The end-to-end harness's drive tool (scripts/e2e, see README "End-to-end harness").
         .executable(name: "athina-drive", targets: ["AthinaDrive"]),
+        // Compares UI snapshot renders with the approved baselines (scripts/snapshots.sh, see README "UI snapshot baselines").
+        .executable(name: "snapshot-diff", targets: ["SnapshotDiffTool"]),
     ],
     targets: [
         // The one SQLite call Swift cannot make for itself (see the header).
@@ -27,7 +29,9 @@ let package = Package(
         ),
         .executableTarget(
             name: "Athina",
-            dependencies: ["AthinaCore"],
+            // SnapshotDiff so `--snapshot` judges two captures the same picture
+            // by the rule the baseline comparison uses.
+            dependencies: ["AthinaCore", "SnapshotDiff"],
             linkerSettings: [
                 .linkedFramework("Carbon"),
                 .linkedFramework("AVFoundation"),
@@ -40,6 +44,9 @@ let package = Package(
             dependencies: ["AthinaE2E"],
             linkerSettings: [.linkedFramework("ApplicationServices")]
         ),
+        .target(name: "SnapshotDiff"),
+        .executableTarget(name: "SnapshotDiffTool", dependencies: ["SnapshotDiff"]),
+        .testTarget(name: "SnapshotDiffTests", dependencies: ["SnapshotDiff"]),
         .testTarget(
             // AthinaCore so the harness's journal queries are checked against a
             // journal the app itself just created, not a hand-written schema.

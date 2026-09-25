@@ -70,7 +70,7 @@ private struct DebugStatusBar: View {
             Divider().frame(height: 16)
             // One tick a second: finer clocks kept the whole window redrawing at ~10% CPU while idle.
             // Ages read the app's clock, which a replay may run faster or move ahead.
-            TimelineView(.periodic(from: .now, by: 1)) { _ in
+            EverySecond {
                 let now = state.clock.date
                 HStack(spacing: 14) {
                     LabeledValue(label: "Last", value: lastCapture(now: now))
@@ -704,7 +704,7 @@ private struct MentorCard: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            TimelineView(.periodic(from: .now, by: 1)) { _ in
+            EverySecond {
                 let now = state.clock.date
                 // Model reasons can run long; four lines keeps spend and cadence in view.
                 VStack(alignment: .leading, spacing: 4) {
