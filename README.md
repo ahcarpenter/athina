@@ -624,8 +624,10 @@ scenario, pid, since when) and waits. A scenario that sets
 of quiet keyboard and mouse, before it takes the lock rather than
 inside it, so no other checkout waits behind it while someone is at the Mac;
 input that comes back while it waits for the lock gives the lock back until
-the Mac is quiet again. `--lock-timeout <seconds>` gives up
-instead; `list`, `doctor`, and `journal` never wait. An API-tier scenario is
+the Mac is quiet again. After 15 minutes of waiting for quiet in all (the
+lock waits between do not count), the scenario fails with "could not take the
+screen lock". `--lock-timeout <seconds>` gives up instead; `list`, `doctor`,
+and `journal` never wait. An API-tier scenario is
 hermetic (see Hermetic runs) and takes no lock at all, so any number run at
 once, beside each other, beside a real-screen run, and beside whoever is using
 the Mac: `run --jobs <n>` runs up to `n` of them at a time, with the

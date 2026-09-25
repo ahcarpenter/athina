@@ -283,8 +283,8 @@ lock_acquire() {
 # screen, so no other checkout waits behind it while someone is at the Mac.
 # When input came back while the lock was being waited for, the lock is given
 # back and the wait for quiet starts again, on what is left of `limit`; a lock
-# a parent holds cannot be given back, so it is kept. Returns 75, as a lock wait that gave up
-# does, when the Mac never went quiet.
+# a parent holds cannot be given back, so it is kept. Returns 75, as a lock
+# wait that gave up does, when the Mac never went quiet.
 lock_acquire_when_idle() {
 	local lock="$1" what="$2" timeout="$3" need="$4" idle="$5" limit="${6:-900}" label status said seconds waited=0
 	label="$(lock_var "$lock" _LABEL)"
