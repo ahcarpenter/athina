@@ -16,10 +16,6 @@ public protocol ControlHost: AnyObject {
   /// A picture of one of the app's windows, settled and taken the way
   /// `--snapshot` takes one.
   func controlCapture(_ window: NSWindow) async throws -> ControlCapture
-  /// How `controlCapture` takes its pictures: `ScreenCaptureKit`, or `layer
-  /// tree` when the app may not record the screen, which draws glass and
-  /// materials otherwise and leaves out the title bar and toolbar.
-  var controlCaptureMethod: String { get }
   /// The menu bar item's menu as the app builds it.
   var controlMenu: MenuModel { get }
   /// Runs one of the menu's commands, as choosing it does.

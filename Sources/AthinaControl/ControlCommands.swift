@@ -500,7 +500,6 @@ final class ControlCommands {
         "path": .string(path),
         "width": .number(Double(image.width)),
         "height": .number(Double(image.height)),
-        "capturedWith": .string(host.controlCaptureMethod),
         "settled": .bool(capture.settled),
       ])
     } catch {

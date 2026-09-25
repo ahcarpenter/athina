@@ -25,7 +25,6 @@ final class ControlTestHost: ControlHost {
   func controlCapture(_ window: NSWindow) async throws -> ControlCapture {
     throw CancellationError()
   }
-  var controlCaptureMethod: String { "none" }
   var controlMenu: MenuModel { MenuModel(items: []) }
   func controlPerform(_ command: MenuModel.Command) {}
   func controlOutsideClick(at location: CGPoint) -> Bool { false }
