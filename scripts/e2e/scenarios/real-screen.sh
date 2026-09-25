@@ -1,8 +1,8 @@
 # shellcheck shell=bash
 # SCENARIO_* below are read by scripts/e2e/athina-e2e, which sources this file.
 # shellcheck disable=SC2034
-# What only macOS's own routing can prove, in one launch and one toast, so the
-# screen is held once for all of it rather than once a check:
+# What only macOS's own routing can prove, in one scenario, so the screen is
+# held once for all of it rather than once a check:
 #
 #   1 One toast comes up.
 #   2 An accessibility press on the menu bar item, the keyboard and VoiceOver
@@ -13,8 +13,10 @@
 #     the app built, as the control API reads it.
 #   4 Answer Suggestion > Tell Me More, by hovering the submenu open after the
 #     system's delay and clicking with the pointer, is recorded.
-#   5 Show Last Suggestion brings the toast forward, and a real click on empty
-#     menu bar space dismisses it.
+#   5 On a new suggestion, since the journal keeps only a suggestion's first
+#     answer and step 4 gave one, Show Last Suggestion brings the toast
+#     forward, and a real click on empty menu bar space dismisses it, which is
+#     recorded.
 #   6 Show Last Suggestion brings it back, and a real click in a staged TextEdit
 #     window, another app's, dismisses it.
 #   7 The item keeps one width watching, in the excluded mode, and paused, so no
@@ -33,7 +35,7 @@
 # and mouse have been quiet for 15 seconds, so the steps run straight on: each pointer step or change of
 # the front app waits only for a short quiet moment after the run's own input,
 # and every click aborts if the pointer is moved off its target.
-SCENARIO_SUMMARY="what only macOS routing proves, in one launch: the item keeps the toast on an accessibility press and a real click and draws the menu the app built, Tell Me More by hover, real clicks on empty bar space and in another app dismiss it, the item keeps one width across modes, and Settings footer links change the pane in place"
+SCENARIO_SUMMARY="what only macOS routing proves, in one scenario: the item keeps the toast on an accessibility press and a real click and draws the menu the app built, Tell Me More by hover, real clicks on empty bar space and in another app dismiss it, the item keeps one width across modes, and Settings footer links change the pane in place"
 SCENARIO_CONTROL=yes
 SCENARIO_IDLE_FIRST=yes
 
@@ -101,9 +103,10 @@ built_menu() {
 # --- Steps 5 and 6: Show Last Suggestion, then a real click elsewhere ---------
 
 # Brings the last suggestion forward from the menu, then clicks where $1 says
-# (empty-bar, or other-app) and checks the toast went with a real mouse-down.
+# (empty-bar, or other-app) and checks the toast went with a real mouse-down,
+# leaving suggestion $2 answered $3.
 dismiss_by_click() {
-	local where="$1" suggestion="$2" before target x y frame
+	local where="$1" suggestion="$2" answer="$3" before target x y frame
 	menu_press "Show Last Suggestion" || { log "the menu offered no Show Last Suggestion to press"; return 1; }
 	sleep 0.6
 	check "Show Last Suggestion brings the toast up" "up" "$(toast_state)"
@@ -131,7 +134,7 @@ dismiss_by_click() {
 	check "the toast is gone after the click" "gone" "$(toast_gone)"
 	# The session tap ties the dismissal to a real click rather than a timeout.
 	check "a real mouse-down was seen" "yes" "$([ "$(mouse_downs)" -gt "$before" ] && echo yes || echo no)"
-	check "the answer already given stays" "tellMeMore" "$(suggestion_feedback "$suggestion")"
+	check "feedback recorded" "$answer" "$(suggestion_feedback "$suggestion")"
 	snapshot_state "$where-after"
 	return 0
 }
@@ -339,11 +342,16 @@ scenario_run() {
 	check "feedback recorded" "tellMeMore" "$(suggestion_feedback "$suggestion")"
 	check "the toast was announced" "yes" "$(grep -q 'Athina suggestion' "$RUN_DIR/announcements.log" 2>/dev/null && echo yes || echo no)"
 
-	step "5 a real click on empty menu bar space dismisses the toast"
-	dismiss_by_click empty-bar "$suggestion" || return 1
+	step "5 a real click on empty menu bar space dismisses a new toast, and that is recorded"
+	relaunch_athina
+	wait_toast >/dev/null || return 1
+	keep_toast_up || return 1
+	suggestion="$(newest_suggestion_id)"
+	check "a new toast is up for an unanswered suggestion" "none" "$(suggestion_feedback "$suggestion")"
+	dismiss_by_click empty-bar "$suggestion" dismissed || return 1
 
 	step "6 a real click in another app's window dismisses the toast"
-	dismiss_by_click other-app "$suggestion" || return 1
+	dismiss_by_click other-app "$suggestion" dismissed || return 1
 
 	step "7 the item keeps one width watching, excluded and paused"
 	watching="$(measure_bar watching "Watching TextEdit" "$TEXTEDIT_PID")" || return 1
