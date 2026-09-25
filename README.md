@@ -1735,11 +1735,11 @@ Xcode, so nothing needs installing: two-space indents, a 100-column limit,
 line wrapping in one direction, and the guide's naming, documentation and
 programming-practice rules that swift-format checks. `make format` rewrites
 every Swift file to it, `make lint` fails on anything it would change and on
-every rule it can only report, and CI runs `make lint` on every push. The
-configuration was checked against the swift-format in Xcode 27.0 (Swift 6.4)
-and in Xcode 26.6 (Swift 6.3.3), the `macos-26` runner's, which format this
-code identically; Xcode's swift-format reports its version as `main`, so CI
-prints the Swift version beside it.
+every rule it can only report, and CI runs `make lint` on every pull request
+and every push to `main`. The configuration was checked against the
+swift-format in Xcode 27.0 (Swift 6.4) and in Xcode 26.6 (Swift 6.3.3), the
+`macos-26` runner's, which format this code identically; Xcode's swift-format
+reports its version as `main`, so CI prints the Swift version beside it.
 
 `make lint` cannot see every rule. By hand, and in review:
 
