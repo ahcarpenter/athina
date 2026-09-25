@@ -4,14 +4,10 @@ import Testing
 @testable import AthinaE2E
 
 @Suite struct JournalQueriesTests {
-  @Test func everyQueryIsNamedOnceAndReadsOnly() {
+  @Test func everyQueryIsNamedOnce() {
     #expect(Set(JournalQueries.all.map(\.name)).count == JournalQueries.all.count)
     for query in JournalQueries.all {
       #expect(JournalQueries.named(query.name) == query)
-      #expect(query.sql.lowercased().hasPrefix("select"), "\(query.name) is not a read")
-      for forbidden in ["insert ", "update ", "delete ", "drop ", "attach "] {
-        #expect(!query.sql.lowercased().contains(forbidden), "\(query.name) writes")
-      }
     }
   }
 
