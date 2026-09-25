@@ -108,7 +108,8 @@ is turned on in that pane. `--record [<dir>]` chooses where model calls go,
 `--replay-latency immediate` answers a replay's calls at once,
 `--settings <path>` chooses the settings a replay starts from (see Iterating
 without the network), and `--control <dir>` serves the end-to-end harness's
-control API (see The control API).
+control API (see The control API), with `--hermetic` and `--show-windows`
+shaping such a launch (see Hermetic runs).
 Where a replay keeps its own files is not an argument: it makes a directory for
 itself and says which on the line it writes as it starts.
 
@@ -590,6 +591,7 @@ own driving code.
 scripts/e2e/athina-e2e warm          # once per machine: prepare the warm home
 scripts/e2e/athina-e2e list          # the scenarios and what each one proves
 scripts/e2e/athina-e2e run all       # run them; one JSON line of result each
+scripts/e2e/athina-e2e run --jobs 4 all   # up to 4 API-tier scenarios at once
 scripts/e2e/athina-e2e run menubar-keyboard
 scripts/e2e/athina-e2e doctor        # what is missing before a run
 scripts/e2e/athina-e2e journal suggestions   # a named query over the last run
@@ -608,17 +610,25 @@ apart. Only such a bundle skips: `build/Athina.app` is the development bundle,
 so when it carries no control API, as after `scripts/bundle.sh --no-control`,
 the harness rebuilds it with the trait, or stops when something runs from it.
 
-Runs are serialized machine-wide: `run`, `warm`, and `clean` first take one
-exclusive lock, `~/Library/Caches/athina-e2e/screen.lock`, so only one
-session is on the screen at a time across every checkout, and a second run
-prints who holds it (checkout, scenario, pid, since when) and waits.
-`--lock-timeout <seconds>` gives up instead; `list`, `doctor`, and `journal`
-never wait. `run` and `warm` build `build/Athina.app` and `athina-drive` when a
-source file was saved after the last build of each started (for athina-drive,
-the harness's own; for the app, any `scripts/bundle.sh` build, `make build`
-included), before they take the screen lock, so no other checkout waits on
-this one's build: the log says "building ... before taking the screen lock",
-then "took the screen lock". They build again inside the lock only when a
+What is on the screen is serialized machine-wide, and nothing else is. Each
+real-screen scenario first takes one exclusive lock,
+`~/Library/Caches/athina-e2e/screen.lock`, for as long as it runs, so only one
+session is on the screen at a time across every checkout, and runs from
+other checkouts take their turns between this run's scenarios; `warm` and
+`clean` take it for all they do. A second run prints who holds it (checkout,
+scenario, pid, since when) and waits. `--lock-timeout <seconds>` gives up
+instead; `list`, `doctor`, and `journal` never wait. An API-tier scenario is
+hermetic (see Hermetic runs) and takes no lock at all, so any number run at
+once, beside each other, beside a real-screen run, and beside whoever is using
+the Mac: `run --jobs <n>` runs up to `n` of them at a time, with the
+real-screen scenarios one at a time beside them, and each scenario's log lines
+carry its name. `run` and `warm` build `build/Athina.app` and `athina-drive`
+when a source file was saved after the last build of each started (for
+athina-drive, the harness's own; for the app, any `scripts/bundle.sh` build,
+`make build` included), and the API tier's copy of the app when the app is not
+the one it was made from, before any scenario starts, so no other checkout
+waits on this one's build: the log says "building ... before taking the screen
+lock", then "took the screen lock". They build again inside the lock only when a
 source file was saved after that build started, and say so; a touch-only edit
 builds each once. So call the
 harness bare: a hand-held `lockf` around it holds the lock through the build
@@ -637,17 +647,14 @@ Scenarios come in two tiers, which each scenario names in `SCENARIO_TIER`:
   control API). The app finds a control in its own accessibility tree and
   clicks or types into it through its own event path, so the check still
   proves the control can be hit and is wired, with no real pointer and no wait
-  for the keyboard and mouse to go quiet, and it presses no Shift to keep
-  sensing awake unless the scenario needs a capture, as `debug-timeline` does.
-  It stages nothing unless the scenario asks.
+  for the keyboard and mouse to go quiet. The run is hermetic (see Hermetic
+  runs): it stages nothing, posts no input, shows nothing, senses nothing, and
+  takes no lock.
 - **Real screen** (`screen`, the default): real HID clicks and presses through
   accessibility from outside, for what only macOS's own routing can prove: the
   menu bar item and the menu the system runs for it, clicks in other apps that
   reach Athina only through a system-wide listener, and the item's width in
   the real menu bar.
-
-Both tiers still take the screen lock for now, since an API-tier run's windows
-are on screen too.
 
 ### Scenarios
 
@@ -665,13 +672,14 @@ are on screen too.
 | `settings-pane-text` | api | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link to that pane rather than Markdown, and a click on the one below the fold is refused until the pane is scrolled to it |
 | `settings-pane-links` | screen | a real click on each of those links changes the Settings window's pane in place rather than handing the link to the system |
 | `settings-sheet` | api | Settings > Contexts' Add Context… brings up the New Context sheet; while it is up, a click on Add Context… under it is refused as covered, a name typed into the sheet's Name field lands there, and the sheet's own Cancel lands in the sheet and takes it down, adding no context |
-| `debug-timeline` | api | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started and App switch rows appear once each rather than once from the journal load and again from the live stream |
+| `debug-timeline` | api | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started row appears once rather than once from the journal load and again from the live stream |
 
 A scenario prints one JSON line: its name, `pass`, `fail` or `skip`, how long
 it took, every check it made, and the directory holding its evidence (transcript,
 screenshots, event taps, announcements, and the journal as TSV and as a copy;
-for an API-tier run, every request and answer in `api.log` and the checkpoint
-PNGs it took of Athina's windows).
+for an API-tier run, every request and answer in `api.log`, the checkpoint
+PNGs it took of Athina's windows, and what the harness saw of the screen in
+`hermetic-windows.log` and `hermetic-bar.log`).
 
 ### The warm fixture home
 
@@ -680,9 +688,11 @@ blocks inside OCR while the model compiles, and the journal fills with events
 and no observations: measured at **93 seconds** on the owner's Mac.
 `athina-e2e warm` pays that once into `~/Library/Caches/athina-e2e/warm-home`
 (the `com.apple.e5rt.e5bundlecache` the compile leaves behind), keeps the
-caches, and throws the session's journal away. Every run then clones it with
-`cp -c`, an APFS copy-on-write copy that costs no measurable time and no disk,
-and starts from an empty journal in a home of its own. A run's **first capture
+caches, and throws the session's journal away. Every real-screen run then
+clones it with `cp -c`, an APFS copy-on-write copy that costs no measurable
+time and no disk, and starts from an empty journal in a home of its own. An
+API-tier run captures nothing, so it starts from an empty home and needs no
+warm one. A run's **first capture
 then lands in 1 second**. Re-warm with `warm --force` after a macOS upgrade.
 
 ### Drive helpers
@@ -738,11 +748,13 @@ it.
 | `click` | a left click on the first such control, posted to the app's own event queue and dispatched by AppKit as a real click is after the window server; the answer comes once it has been handled. Refused as `disabled` when the control is dimmed, `offscreen` when a scroll area has it out of sight or it is outside its part of the window (the content, or the whole window for the toolbar and title bar), and `covered` when a sheet is up over its window or the window's own hit test at its centre lands on something else. A control inside a sheet is found under the title of the window the sheet covers, and judged against and clicked in the sheet. `force=true` clicks anyway, for proving a refusal |
 | `type` | `text=` as key presses to the first responder of `window=`, or of the sheet up over it, such as the field a click just focused |
 | `scroll` | the scroll view holding a control scrolls it into view |
-| `menu` | the menu bar extra's menu as the app builds it, without showing it; `press="<title>"`, or `press="<submenu> > <title>"`, runs that item's own action, refused as `missing` or `disabled`, naming the step, when an item or submenu on the way is not there or is dimmed |
+| `menu` | the menu bar extra's menu as the app builds it (`MenuModel`), without showing it, and with no menu bar extra at all in a hermetic run; `press="<title>"`, or `press="<submenu> > <title>"`, runs that item's command through the handler choosing it from the menu runs, refused as `missing` or `disabled`, naming the step, when an item or submenu on the way is not there or is dimmed |
 | `settings` | the live settings, or one of them with `key=<path>` |
 | `wait-setting` | waits until `key=<path>` reads `equals=<value>` |
 | `wait-window` | waits until a window titled `window=` is open, or with `present=false` gone |
 | `snapshot` | a checkpoint PNG of one of Athina's windows at `path=`, taken as `--snapshot` takes one once macOS has finished animating the window open (up to two seconds); never over an existing file |
+| `outside-click` | a click outside Athina's windows at `x=`, `y=` (points from the top left of the main display, as frames are given), handed to the suggestion toast as its system-wide listener would hand it one, which a hermetic run does not have; `heard` says whether a toast was up |
+| `hotkey` | `key=pause` or `key=talk-back` through the handler Carbon calls, pressed and let go, or only `phase=down` or `phase=up`; `heard=<words>` is what talking back hears while its key is down, since a hermetic run opens no microphone; refused as `disabled` when the key is not registered (unset, unusable, or taken), as Carbon then never reports it |
 
 The waits take `timeout=<seconds>`, 10 unless given, and poll the app's own
 state at a fixed real-time pace; the replay's clock is not involved.
@@ -787,6 +799,76 @@ alone. It answers a connection only from your own user (`getpeereid`), and a
 request only when it carries the run's secret, compared in constant time; no
 answer ever repeats a request, so the secret never comes back out.
 
+### Hermetic runs
+
+The harness launches every API-tier scenario with `--hermetic` beside
+`--control`, which makes it a hermetic run (`ControlMode.isHermetic`): it
+takes nothing from the real world and leaves nothing in it, so API-tier runs
+need no lock and any number of them run at once, beside a real-screen run and
+beside whoever is using the Mac. Measured on the owner's Mac, four copies of
+`debug-panel-access` pass together in 5 to 6 seconds each, where one alone
+takes 4, beside a real-screen scenario holding the lock. `--control` alone
+serves the API to a launch that is otherwise a replay like any other, on the
+screen, in the menu bar and sensing, which a real-screen scenario can drive
+through the API too; `--hermetic` is read only with a `--control` the app
+serves.
+
+- **It shows nothing.** Every window goes below the desktop picture as it is
+  ordered onto the screen (`WindowParking`, in the control API's target), the
+  level `--snapshot` renders at: the window server still composites it, so it
+  takes every click the API simulates and its checkpoints are the pictures a
+  visible window gives, and nobody sees it. Moved any later, even at the end
+  of the event loop pass that opened it, a window showed for a frame, and for
+  the length of its opening animation. The item stays
+  out of the menu bar (`MenuBarExtra(isInserted:)` is false), and the menu's
+  content comes from `MenuModel`, which the menu bar extra draws everywhere
+  else and the API's `menu` reads and presses here, with the same handler for
+  each command. The app never makes itself the active app: every request to
+  come forward goes through `AppActivation.request()`, which does nothing
+  here. So its windows draw as an inactive app's do, in checkpoints too.
+- **It senses nothing.** The pipeline runs with `SensingSource.hermetic`: no
+  focus tracking, no read of input or permissions, and no capture, so a run
+  never journals the screen of whoever is at the Mac, and never asks macOS
+  about a permission; it has them all, and watches with nothing to capture
+  until it is paused. Talking back hears only the words the API's `hotkey`
+  gives it and opens no microphone.
+- **It listens to nothing outside itself.** The toast has no system-wide
+  click listener, so the owner's clicks cannot dismiss a toast they cannot
+  see, and no hot key is registered with Carbon, where it would take the
+  combination from every other app. The API's `outside-click` and `hotkey`
+  run the same handlers instead.
+- **It writes nothing to the owner's preferences.** The API tier runs
+  `build/e2e/Athina.app`, a copy of the development bundle the harness makes
+  under the identifier `com.ahcarpenter.athina.e2e`, signed ad hoc with a
+  requirement on that identifier as the development bundle is, so its
+  preferences are a domain of their own and the real `com.ahcarpenter.athina`
+  stays byte for byte as it was. Every hermetic run shares that one domain,
+  so a hermetic run keeps its choice of Settings pane to itself rather than in
+  the preferences, where it would reach every other run's open Settings
+  window. The copy needs no Accessibility grant: an app reads its own
+  accessibility tree, and the API's clicks land, without one, and nothing asks
+  anyone to click anything. A hermetic run never asks macOS whether it is
+  trusted either, since the first time an app macOS has not seen asks, macOS
+  writes a row for it, denied, and lists it under Privacy & Security >
+  Accessibility, switched off. Should the copy be listed there all the same,
+  as after a launch of it that was not hermetic, `scripts/e2e/athina-e2e
+  clean` removes the row with `tccutil reset Accessibility
+  com.ahcarpenter.athina.e2e`, and the copy's preferences with `defaults
+  delete com.ahcarpenter.athina.e2e`, once no run is going.
+- **It is checked, every run.** From launch to stop, the harness counts the
+  run's windows above the desktop picture five times a second and its items
+  in the menu bar every couple of seconds (`athina-drive windows` and `bar`,
+  into `hermetic-windows.log` and `hermetic-bar.log`); every API-tier run ends
+  with checks that both counts stayed at 0, that no look failed, and that the
+  bar was really read: some look saw another app's items in it, which a drive
+  macOS does not trust for Accessibility never does.
+
+`--show-windows`, given to the harness (`run --show-windows <scenario>`) and
+passed on to the app beside `--hermetic`, leaves a hermetic run's windows
+where they open, to
+watch what a scenario does or to compare its checkpoints with a parked run's;
+such a run is on the screen, so it takes the screen lock.
+
 ### What the harness already handles, so a scenario need not
 
 - **The warm home**, above: no run pays the cold OCR stall again.
@@ -811,17 +893,16 @@ answer ever repeats a request, so the secret never comes back out.
   launch saw) and waits again, up to three times. It relaunches rather than
   use Show Last Suggestion, which brings the toast back with the dismissal
   already in the journal, so the checks after it could not tell their answer
-  from the one before. An API-tier scenario makes no pointer step, so it waits
-  for none; unless it needs a capture, as `debug-timeline` does, it posts no
-  input at all, and then only the Shift presses that keep sensing awake, which
-  type nothing.
+  from the one before. An API-tier scenario makes no pointer step and posts no
+  input at all, so it waits for none.
 - **The owner's apps are excluded** in the scratch settings from the start.
   Replay serves fixtures in order whatever is on screen, so a replayed callout
   would otherwise land over the work of whoever is using the Mac.
 - **The preferences leak.** `CFFIXED_USER_HOME` moves Application Support but
   not UserDefaults, so a run still writes through cfprefsd into the real
-  `com.ahcarpenter.athina` domain. Every run saves that domain and restores it,
-  even on failure.
+  `com.ahcarpenter.athina` domain. Every real-screen run saves that domain and
+  restores it, even on failure. An API-tier run never touches it: it runs a
+  copy of the app with a domain of its own (see Hermetic runs).
 - **Nothing is stopped by name.** The harness launches the binary directly and
   stops only the pids it started, never an Athina it did not launch (the make
   targets stop only their own lane, see Replays side by side).
@@ -829,14 +910,16 @@ answer ever repeats a request, so the secret never comes back out.
   `mentor` folder beside it that the app kept before the rename, and all
   outbound network, so no run can reach live data or make a live call.
 - **Cleanup runs on failure**, through a trap: helpers, taps, staged apps, the
-  app itself, the preferences, and the scratch home.
+  app itself, the preferences, and the scratch home. `clean` leaves a run that
+  is still going alone, since an API-tier run of another checkout's waits on
+  no lock that `clean` holds.
 - **One run on the screen at a time**, across every checkout on the Mac: a
   flock on `~/Library/Caches/athina-e2e/screen.lock` (`scripts/e2e/lib/lock.sh`),
-  the file a hand-held `lockf -k` uses too, held for exactly as long as the
-  harness process lives, so a killed run leaves no stale lock, and a run
-  started under a holder (`run all`, or a hand-held `lockf`) never waits on it.
-  The checkout lock, `build/athina-e2e.lock`, works the same way for one
-  checkout.
+  the file a hand-held `lockf -k` uses too, held by each real-screen scenario
+  for exactly as long as it runs, so a killed run leaves no stale lock, and a
+  run started under a holder (a hand-held `lockf`) never waits on it. The
+  checkout lock, `build/athina-e2e.lock`, works the same way for one checkout,
+  held by `run` and `warm` for all they do.
 
 A validation step that needs live evidence should call this harness. Writing
 the driving again is how a check ends up overrunning its time limit on a cold

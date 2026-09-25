@@ -224,8 +224,10 @@ final class AppState {
             arguments: CommandLine.arguments, clientMode: clientMode, environment: .current, compiledIn: ControlAvailability.compiledIn
         )
         (clock, clockControl) = clockMode.makeClock()
-        toast = ToastController(clock: clock)
-        listener = SpeechListener(clock: clock)
+        // A hermetic run listens to no click outside its own windows and to
+        // no microphone; the control API stands in for both.
+        toast = ToastController(clock: clock, watchesOtherApps: !controlMode.isHermetic)
+        listener = SpeechListener(clock: clock, hears: controlMode.isHermetic ? .script : .microphone)
         // Before anything reads the live files: the journal, settings,
         // recordings and understanding the app kept while it was called
         // Mentor move to the folder it keeps them in now. A replay's files
@@ -265,9 +267,13 @@ final class AppState {
         copyKeyFromMentor = copiesFromMentor
         isSample = false
         settings = launchSettings
-        let status = PermissionProbe.current()
+        // A hermetic run asks macOS about no permission, since even asking
+        // leaves a record for an app it has not seen; it has them all, as a
+        // person's copy normally does, and senses nothing with them.
+        let status = controlMode.isHermetic ? AppState.hermeticPermissions : PermissionProbe.current()
         permissions = status
-        undeterminedPermissions = Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
+        undeterminedPermissions = controlMode.isHermetic
+            ? [] : Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
         needsPermissionsOnboarding = !status.allGranted
         speechAvailability = SpeechListener.availability()
     }
@@ -330,15 +336,8 @@ final class AppState {
         // The keychain may put up its prompt on the first read after a
         // rebuild; off the main thread it never freezes the app behind it.
         reloadKeyHint()
-        hotKeys.onPress = { [weak self] slot in
-            switch slot {
-            case .pause: self?.togglePause()
-            case .pushToTalk: self?.pushToTalkPressed()
-            }
-        }
-        hotKeys.onRelease = { [weak self] slot in
-            if slot == .pushToTalk { self?.pushToTalkReleased() }
-        }
+        hotKeys.onPress = { [weak self] slot in self?.hotKeyPressed(slot) }
+        hotKeys.onRelease = { [weak self] slot in self?.hotKeyReleased(slot) }
         registerPauseHotKey()
         registerPushToTalkHotKey()
 
@@ -368,7 +367,10 @@ final class AppState {
         let clock = clock
         let tracker = FocusTracker(clock: clock)
         self.tracker = tracker
-        let pipeline = SensingPipeline(settings: settings, journal: journal, tracker: tracker, clock: clock)
+        let pipeline = SensingPipeline(
+            settings: settings, journal: journal, tracker: tracker, clock: clock,
+            source: controlMode.isHermetic ? .hermetic : .system
+        )
         self.pipeline = pipeline
         let mentorSettings = settings.mentor
         let keyStore = keyStore
@@ -475,18 +477,56 @@ final class AppState {
         isRunning = false
     }
 
+    /// A hermetic run registers no hot key with the system, where it would
+    /// take the combination from every other app; the control API's `hotkey`
+    /// presses it instead (`hotKeyPressed`), so it counts as registered.
     private func registerPauseHotKey() {
-        hotKeyRegistered = hotKeys.register(settings.pauseHotKey, for: .pause)
+        hotKeyRegistered = controlMode.isHermetic
+            ? settings.pauseHotKey.isUsable : hotKeys.register(settings.pauseHotKey, for: .pause)
         AppState.log.notice("pause hotkey \(self.settings.pauseHotKey.displayString, privacy: .public) registered: \(self.hotKeyRegistered)")
     }
 
     private func registerPushToTalkHotKey() {
         let key = settings.mentor.pushToTalkHotKey
-        pushToTalkRegistered = hotKeys.register(key, for: .pushToTalk)
+        pushToTalkRegistered = controlMode.isHermetic
+            ? key?.isUsable == true : hotKeys.register(key, for: .pushToTalk)
         AppState.log.notice("talk-back hotkey \(key?.displayString ?? "unset", privacy: .public) registered: \(self.pushToTalkRegistered)")
     }
 
+    /// What a hermetic run has instead of asking macOS: every permission.
+    static let hermeticPermissions = PermissionStatus(
+        screenRecording: true, accessibility: true, microphone: true, speechRecognition: true
+    )
+
     // MARK: Actions
+
+    /// A hot key went down: from Carbon, or in a hermetic run from the control
+    /// API's `hotkey`, which takes the same path.
+    func hotKeyPressed(_ slot: HotKeyCenter.Slot) {
+        switch slot {
+        case .pause: togglePause()
+        case .pushToTalk: pushToTalkPressed()
+        }
+    }
+
+    /// A hot key came up, as `hotKeyPressed` has it.
+    func hotKeyReleased(_ slot: HotKeyCenter.Slot) {
+        if slot == .pushToTalk { pushToTalkReleased() }
+    }
+
+    /// A click outside Athina's windows, at a point on screen, handed to the
+    /// suggestion toast as its global monitor would hand it one; false when
+    /// no toast was up. How a hermetic run, which has no such monitor, is
+    /// clicked outside of (the control API's `outside-click`).
+    func clickOutside(at location: CGPoint) -> Bool {
+        toast.outsideClick(at: location)
+    }
+
+    /// What talking back hears while its key is down in a hermetic run,
+    /// which opens no microphone; false when it is not listening.
+    func hear(_ words: String) -> Bool {
+        listener.hear(words)
+    }
 
     func togglePause() {
         isPaused.toggle()
@@ -501,7 +541,7 @@ final class AppState {
     }
 
     func refreshPermissions() {
-        guard !isSample else { return }
+        guard !isSample, !controlMode.isHermetic else { return }
         let undetermined = Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
         if undetermined != undeterminedPermissions { undeterminedPermissions = undetermined }
         let fresh = PermissionProbe.current()
@@ -512,7 +552,7 @@ final class AppState {
     }
 
     func requestPermission(_ permission: Permission) {
-        guard !isSample else { return }
+        guard !isSample, !controlMode.isHermetic else { return }
         AppState.log.notice("requesting permission \(permission.rawValue, privacy: .public)")
         PermissionProbe.request(permission)
         Task {
@@ -535,7 +575,7 @@ final class AppState {
     /// first, so it is there to switch on; the system may also show its own
     /// note pointing at the same pane.
     func perform(_ action: PermissionAction, for permission: Permission) {
-        guard !isSample else { return }
+        guard !isSample, !controlMode.isHermetic else { return }
         switch action {
         case .none:
             return
@@ -1016,21 +1056,65 @@ final class AppState {
 
     /// The menu command that sets talking back up, when it is not yet usable
     /// for a reason the person can fix.
-    var talkBackAction: MenuStatusAction? {
+    var talkBackAction: MenuModel.StatusAction? {
         guard speechAvailability.isAvailable else { return nil }
         if settings.mentor.pushToTalkHotKey == nil {
-            return MenuStatusAction(title: "Set Up Talk Back…", destination: .settings(.general))
+            return MenuModel.StatusAction(title: "Set Up Talk Back…", command: .openSettings(pane: SettingsPane.general.rawValue))
         }
         if !permissions.voiceGranted {
-            return MenuStatusAction(title: "Set Up Talk Back…", destination: .permissions)
+            return MenuModel.StatusAction(title: "Set Up Talk Back…", command: .openPermissions)
         }
         return nil
     }
 
     /// The menu command that lets the mentor loop run, when a missing key holds it.
-    var menuStatusAction: MenuStatusAction? {
+    var menuStatusAction: MenuModel.StatusAction? {
         guard !clientMode.isOffline, mentorStatus.availability == .noAPIKey else { return nil }
-        return MenuStatusAction(title: "Add API Key…", destination: .settings(.models))
+        return MenuModel.StatusAction(title: "Add API Key…", command: .openSettings(pane: SettingsPane.models.rawValue))
+    }
+
+    /// The menu bar item's menu, which the menu bar extra draws and the
+    /// control API reads.
+    var menuModel: MenuModel {
+        MenuModel(MenuModel.State(
+            statusLines: [statusLine, clientModeLine, clockLine, launchRefusalsLine, controlLine].compactMap { $0 },
+            mentor: menuStatusAction.map { .action($0) } ?? .line(mentorLine),
+            mentorContextLine: mentorContextLine,
+            understandingLine: understandingLine,
+            talkBack: talkBackAction.map { .action($0) } ?? .line(talkBackLine),
+            isPaused: isPaused,
+            pauseShortcut: settings.pauseHotKey,
+            capturesFrames: mode.capturesFrames,
+            hasLastSuggestion: lastShownSuggestion != nil,
+            hasActiveSuggestion: activeSuggestion != nil,
+            showsDebugPanel: settings.showDebugPanel
+        ))
+    }
+
+    /// Opens Athina's windows for code outside any view: the menu's commands,
+    /// which a hermetic run's control API runs with no menu bar extra up.
+    /// `AthinaApp` hands it the app's own actions as it builds its scenes.
+    let windows = WindowOpener()
+
+    /// Runs one of the menu's commands: chosen from the menu bar extra's menu,
+    /// or through the control API.
+    func perform(_ command: MenuModel.Command) {
+        switch command {
+        case .togglePause: togglePause()
+        case .captureNow: captureNow()
+        case .showLastSuggestion: showLastSuggestion()
+        case .answer(let feedback): answerActiveSuggestion(feedback)
+        case .openSuggestions: windows.open(WindowID.history)
+        case .openPermissions: windows.open(WindowID.permissions)
+        case .openSettings(let pane):
+            pane.flatMap(SettingsPane.init(rawValue:))?.select()
+            windows.openSettings()
+        case .openDebugPanel: windows.open(WindowID.debug)
+        case .about:
+            AppActivation.request()
+            NSApp.orderFrontStandardAboutPanel(nil)
+        case .quit: NSApp.terminate(nil)
+        }
     }
 
     /// One line for the menu on talking back: how to do it, or what it needs.

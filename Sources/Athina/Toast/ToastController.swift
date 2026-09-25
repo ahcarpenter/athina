@@ -28,9 +28,14 @@ final class ToastController {
     private var noteTask: Task<Void, Never>?
     /// What a note's time on screen is waited out on.
     private let clock: any AthinaClock
+    /// Whether clicks outside Athina's own windows reach the toast. A
+    /// hermetic run's never do, so whoever is using the Mac cannot dismiss a
+    /// toast they cannot see; the control API's `outside-click` stands in.
+    private let watchesOtherApps: Bool
 
-    init(clock: any AthinaClock) {
+    init(clock: any AthinaClock, watchesOtherApps: Bool = true) {
         self.clock = clock
+        self.watchesOtherApps = watchesOtherApps
     }
 
     var isShowingSuggestion: Bool { model.suggestion != nil && (panel?.isVisible ?? false) }
@@ -124,8 +129,10 @@ final class ToastController {
         let panel = panel ?? makePanel()
         // A window that zooms in is motion; with Reduce Motion it just appears.
         panel.animationBehavior = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? .none : .utilityWindow
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main ?? NSScreen.screens.first
+        // The screen the pointer is on, but in a hermetic run, which reads
+        // nothing of the person's input, always the main one.
+        let mouse = watchesOtherApps ? NSEvent.mouseLocation : nil
+        let screen = NSScreen.screens.first { mouse.map($0.frame.contains) ?? false } ?? NSScreen.main ?? NSScreen.screens.first
         place(panel, on: screen)
         panel.orderFrontRegardless()
     }
@@ -152,7 +159,7 @@ final class ToastController {
     private func startWatchingForOutsideClicks() {
         guard outsideClickMonitors.isEmpty else { return }
         let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { [weak self] event in
+        if watchesOtherApps, let global = NSEvent.addGlobalMonitorForEvents(matching: clicks, handler: { [weak self] event in
             MainActor.assumeIsolated { self?.handleClick(event) }
         }) {
             outsideClickMonitors.append(global)
@@ -171,10 +178,25 @@ final class ToastController {
     }
 
     private func handleClick(_ event: NSEvent) {
-        guard let panel, panel.isVisible, let suggestion = model.suggestion else { return }
         let location = event.window.map { $0.convertPoint(toScreen: event.locationInWindow) } ?? event.locationInWindow
+        handleClick(at: location, onToast: event.window != nil && event.window === panel)
+    }
+
+    /// A mouse-down outside Athina's windows at `location`, in screen
+    /// coordinates, as the global monitor reports one: how the control API's
+    /// `outside-click` reaches a hermetic run's toast, which watches no other
+    /// app. True when the toast was up to hear it, whatever it made of it.
+    @discardableResult
+    func outsideClick(at location: CGPoint) -> Bool {
+        guard panel?.isVisible == true, model.suggestion != nil else { return false }
+        handleClick(at: location, onToast: false)
+        return true
+    }
+
+    private func handleClick(at location: CGPoint, onToast: Bool) {
+        guard let panel, panel.isVisible, let suggestion = model.suggestion else { return }
         let click = ToastClick(
-            onToast: event.window === panel,
+            onToast: onToast,
             location: location,
             menuBarItems: NSApp.windows.filter(\.holdsStatusBarButton).map(\.frame)
         )
