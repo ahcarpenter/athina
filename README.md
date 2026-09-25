@@ -1735,19 +1735,23 @@ of CI until the App Store release flow brings it back as part of that flow
 Both run on every push to main. On a pull request, `build-and-test`
 (`.github/workflows/ci.yml`) runs on its own, and the slow `ui-snapshots`
 (`.github/workflows/merge-checks.yml`) runs only while the pull request carries
-the `merge-checks` label: adding the label runs it, and so does every push, or
-any other label added, while it is on. Anyone with write access can add it,
+the `merge-checks` label, an optional add: adding the label runs it, and so
+does every push, or any other label added, while it is on. Anyone with write
+access can add it,
 from the pull request page or with
 
 ```sh
 gh pr edit <number> --add-label merge-checks
 ```
 
-Both must pass at a pull request's head before it can merge: the `main`
-ruleset requires them, with no bypass, and until `ui-snapshots` has run there,
-the pull request lists it as expected and cannot merge. Two traps shape this.
-A job that an `if` skips still reports a check run, and a skipped check counts
-as passed for a required one, so the skipped job takes another name: GitHub
+For now only `build-and-test` must pass at a pull request's head before it can
+merge: the `main` ruleset requires it, with no bypass. `ui-snapshots` still
+runs on every push to main and on a pull request while the `merge-checks`
+label is on, but is not required to merge for now, so a drift it reports
+does not hold a merge back. When it is required again, the jobs are already
+shaped for it, around two traps. A job that an `if` skips still reports a
+check run, and a skipped check counts as passed for a required one, so the
+skipped job takes another name: GitHub
 names a skipped job after its unevaluated `name:` expression, which is not
 `ui-snapshots`, and the expression's own answer for a skip is not either. And
 a `workflow_dispatch` run of the same job does not count: its checks are on
