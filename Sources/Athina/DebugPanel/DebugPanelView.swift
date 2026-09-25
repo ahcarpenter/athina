@@ -568,6 +568,7 @@ private struct TimelinePane: View {
                     .foregroundStyle(.secondary)
                     .font(.callout)
                     .monospacedDigit()
+                    .accessibilityIdentifier("debugPanel.sideCount")
                 Spacer()
             }
             .padding(.horizontal, 14)
@@ -619,6 +620,7 @@ private struct TimelineRow: View {
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("debugPanel.timelineRow")
     }
 
     private var primary: String {
@@ -713,6 +715,9 @@ private struct MentorCard: View {
                     }
                     if let clock = clock(now: now) {
                         Field(label: "Clock", value: clock, lineLimit: 4)
+                    }
+                    if let control = state.controlField {
+                        Field(label: "Control API", value: control, lineLimit: 4)
                     }
                     Field(label: "Triage gate", value: triageGate(now: now), lineLimit: 4)
                     Field(label: "Context", value: contextVerdict(now: now), lineLimit: 4)

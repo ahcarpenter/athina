@@ -53,6 +53,7 @@ public enum DriveArguments {
         Command(name: "journal", arguments: "<db> <query>", summary: "a named read-only query over a journal; `journal - queries` lists them", minimum: 2, maximum: 2, options: []),
         Command(name: "key", arguments: "<keycode>", summary: "post a key press", minimum: 1, maximum: 1, options: ["--cmd!", "--shift!"]),
         Command(name: "shot", arguments: "<window <id> | region <x> <y> <w> <h>> <out.png>", summary: "capture a window by id or a screen region", minimum: 2, maximum: 6, options: []),
+        Command(name: "api", arguments: "<command> [key=value ...]", summary: "one request to a replay's control API, in ATHINA_CONTROL_DIR or --control; prints the answer, or one field of it with --field", minimum: 1, maximum: 24, options: ["--control", "--field"]),
     ]
 
     public static func command(named name: String) -> Command? {

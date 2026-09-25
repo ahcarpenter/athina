@@ -29,3 +29,15 @@ jobs:
         run: swift test
       - name: Build app bundle
         run: scripts/bundle.sh release
+      - name: Only the development bundle carries the control API
+        # The bundle above is a development one, built with the ControlAPI
+        # trait; a release is built without it, and scripts/release.sh refuses
+        # a binary that carries it (README "The control API").
+        run: |
+          if scripts/check-no-control-api.sh build/Athina.app/Contents/MacOS/Athina; then
+            echo "the development bundle should carry the control API" >&2
+            exit 1
+          fi
+          swift build -c release --product Athina
+          scripts/check-no-control-api.sh "$(swift build -c release --product Athina --show-bin-path)/Athina"
+
