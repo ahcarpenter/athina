@@ -16,7 +16,7 @@ PID ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
-.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release
+.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release xcodeproj xcode-build xcode-archive
 
 ## Build the .app bundle into build/Athina.app
 build:
@@ -33,6 +33,27 @@ build:
 ## fails, since that build is not one to distribute.
 release:
 	scripts/release.sh
+
+## Generate Athina.xcodeproj, the Xcode project for the Mac App Store route,
+## from project.yml with the XcodeGen pinned in Tools/XcodeGenTool (built on
+## first use). The project is not committed: run this after changing project.yml,
+## after adding or removing a source file, and before opening it in Xcode (see
+## README, "The Xcode project"). The package build never needs it.
+xcodeproj:
+	swift run --package-path Tools/XcodeGenTool xcodegen generate --spec project.yml
+
+## Build the App Store target, sandboxed, into build/xcode, signed to run
+## locally until project.yml names a development team
+xcode-build: xcodeproj
+	xcodebuild -quiet -project Athina.xcodeproj -scheme "Athina App Store" -configuration Release \
+		-destination 'generic/platform=macOS' -derivedDataPath build/xcode build
+
+## Archive the App Store target into build/xcode/Athina.xcarchive, as Xcode's
+## Product > Archive does
+xcode-archive: xcodeproj
+	xcodebuild -quiet -project Athina.xcodeproj -scheme "Athina App Store" \
+		-destination 'generic/platform=macOS' -derivedDataPath build/xcode \
+		-archivePath build/xcode/Athina.xcarchive archive
 
 ## Rebuild the app icon and the README's copy of it from Resources/Mark/AthinaMark.svg,
 ## and the menu bar mark from Resources/Mark/AthinaOwl.svg. Its
@@ -100,4 +121,4 @@ measure:
 	ATHINA_PID="$(PID)" scripts/measure.sh
 
 clean:
-	rm -rf .build build
+	rm -rf .build build Athina.xcodeproj Tools/XcodeGenTool/.build

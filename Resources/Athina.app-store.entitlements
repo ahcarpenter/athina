@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+	Athina's entitlements for the Mac App Store edition, which the Xcode
+	project's Athina App Store target signs with (project.yml, README "The Xcode
+	project"). Resources/Athina.entitlements is the direct build's; this file is
+	that one plus the App Sandbox and what the app needs inside it. Keep it to
+	what the app does today, each key with the reason it is here.
+
+	The target also runs under the hardened runtime, so it keeps the direct
+	build's hardened runtime key as well as the sandbox's own.
+-->
+<plist version="1.0">
+<dict>
+	<!--
+		Every Mac App Store app runs in the App Sandbox. RuntimeEnvironment reads
+		this key at launch, so the same binary runs as README "A sandboxed build"
+		describes.
+	-->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<!--
+		The talk-back shortcut listens through AVAudioEngine. The hardened runtime
+		refuses microphone input without this, whatever the person granted in
+		System Settings, as in Resources/Athina.entitlements.
+	-->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+	<!--
+		The same talk-back microphone, for the App Sandbox: it is the sandbox's own
+		microphone key, and the sandbox refuses microphone input without it. The
+		hardened runtime's key above does not stand in for it, nor it for that one.
+	-->
+	<key>com.apple.security.device.microphone</key>
+	<true/>
+	<!--
+		The mentor's calls to api.anthropic.com, the app's only network
+		connection. It makes outgoing connections only, so it has no
+		network.server.
+	-->
+	<key>com.apple.security.network.client</key>
+	<true/>
+</dict>
+</plist>

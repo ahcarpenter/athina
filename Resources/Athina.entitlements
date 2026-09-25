@@ -15,10 +15,11 @@
 	own team, so library validation passes without disabling it. No JIT, no
 	unsigned executable memory, no Apple Events.
 
-	The App Sandbox is off. An App Store variant starts from a copy of this file
-	that adds com.apple.security.app-sandbox and the sandbox entitlements the app
-	then needs, such as com.apple.security.network.client; the microphone key
-	below serves the sandbox as well, and nothing here needs to change for it.
+	The App Sandbox is off. The Mac App Store edition, the Xcode project's Athina
+	App Store target (project.yml), signs with Resources/Athina.app-store.entitlements
+	instead: the key below plus com.apple.security.app-sandbox and the sandbox
+	entitlements the app needs inside it. A key added here that the sandboxed app
+	needs goes there too.
 -->
 <plist version="1.0">
 <dict>
