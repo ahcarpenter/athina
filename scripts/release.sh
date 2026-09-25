@@ -148,7 +148,7 @@ cleanup() {
 trap cleanup EXIT
 
 # Universal, so it runs on every Mac that runs macOS 26, Intel ones included.
-scripts/bundle.sh release --universal --out "$OUT" --no-sign
+scripts/bundle.sh release --universal --out "$OUT" --no-sign --no-control
 BIN_DIR="$(swift build -c release --product Athina --arch arm64 --arch x86_64 --show-bin-path)"
 archs="$(lipo -archs "$APP/Contents/MacOS/Athina")"
 [[ " $archs " == *" arm64 "* && " $archs " == *" x86_64 "* ]] ||
@@ -157,6 +157,10 @@ archs="$(lipo -archs "$APP/Contents/MacOS/Athina")"
 	[ "$("$PLIST_BUDDY" -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" = "$BUILD" ] ||
 	fail "the bundle's Info.plist does not carry version $VERSION (build $BUILD)"
 ok "universal Release build ($archs), version $VERSION (build $BUILD)"
+# The end-to-end harness's control API is for development builds only.
+scripts/check-no-control-api.sh "$APP/Contents/MacOS/Athina" >/dev/null ||
+	fail "the binary carries the end-to-end harness's control API, which only a development build may"
+ok "no control API in the binary"
 
 # The debug symbols of exactly this binary, for reading crash reports from the
 # people running it.
