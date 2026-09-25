@@ -17,7 +17,7 @@ import Foundation
 /// - the process is not sandboxed (`RuntimeEnvironment`), so a sandboxed build
 ///   made from the development bundle refuses it too;
 /// - the directory is one the harness made for this run: absolute, a real
-///   directory owned by this user and closed to everyone else (0700), holding
+///   directory owned by this user with mode 0700 exactly, holding
 ///   the run's secret in `secret`, a file of its own closed to everyone else,
 ///   and short enough for a Unix socket path inside it.
 ///
@@ -155,8 +155,8 @@ public struct ControlDirectory: Equatable, Sendable {
         case .directory: break
         }
         guard ownedByUser else { return "the directory must be owned by this user" }
-        guard permissions & 0o077 == 0 else {
-            return "the directory must be closed to everyone else (0700), not \(String(permissions, radix: 8))"
+        guard permissions == 0o700 else {
+            return "the directory's mode must be exactly 0700, not \(String(permissions, radix: 8))"
         }
         guard secret != nil else { return "the directory holds no \(ControlMode.secretName) file" }
         guard secretFileIsPrivate else {

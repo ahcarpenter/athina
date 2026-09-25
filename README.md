@@ -741,10 +741,11 @@ state at a fixed real-time pace; the replay's clock is not involved.
 The controls a scenario reaches carry accessibility identifiers
 (`advanced.enableDebugPanel`, `debugPanel.timelineRow`; a link in Settings text
 carries its URL, `athina-settings:journal`), which no one sees or hears and
-which survive a change of wording. The one exception is the Settings window's
-toolbar tabs: AppKit draws them, and SwiftUI does not carry a `Tab`'s
-identifier through to them, so a scenario finds a tab by its label
-(`label=Models`). What a click cannot drive: a link
+which survive a change of wording. The exceptions are the controls the system
+draws, which carry none a scenario can give them: the Settings window's toolbar
+tabs, since SwiftUI does not carry a `Tab`'s identifier through to them, are
+found by label (`label=Models`), and a window's title-bar buttons by subrole
+(`subrole=AXCloseButton`). What a click cannot drive: a link
 inside a SwiftUI Text follows neither a click the app simulates nor
 accessibility's press, so following one stays a real-screen check
 (`settings-pane-links`).
@@ -767,7 +768,7 @@ harness (`ControlMode`):
 - **The process is not sandboxed**, so a sandboxed build made from the
   development bundle refuses it too.
 - **The directory is the harness's own for the run**: absolute, a real
-  directory owned by you and closed to everyone else (0700), holding the run's
+  directory owned by you with mode 0700 exactly, holding the run's
   secret in `secret`, a file closed to everyone else, and short enough for the
   socket's path (103 bytes). The harness makes it with `mktemp` inside your
   per-user temporary directory, not the run's home, whose path is too long.
