@@ -633,16 +633,14 @@ import Testing
       try db.execute(
         """
         CREATE TABLE suggestions (
-            id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, bundle_id TEXT, app_name TEXT NOT \
-        NULL, window_title TEXT,
-            category TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, explanation TEXT \
-        NOT NULL,
-            confidence REAL NOT NULL, observation_id INTEGER, model TEXT NOT NULL, \
-        prompt_version INTEGER NOT NULL,
-            feedback TEXT, feedback_at REAL
+            id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, bundle_id TEXT,
+            app_name TEXT NOT NULL, window_title TEXT, category TEXT NOT NULL,
+            title TEXT NOT NULL, body TEXT NOT NULL, explanation TEXT NOT NULL,
+            confidence REAL NOT NULL, observation_id INTEGER, model TEXT NOT NULL,
+            prompt_version INTEGER NOT NULL, feedback TEXT, feedback_at REAL
         );
-        INSERT INTO suggestions (timestamp, app_name, category, title, body, explanation, \
-        confidence, model, prompt_version)
+        INSERT INTO suggestions (timestamp, app_name, category, title, body, explanation,
+            confidence, model, prompt_version)
         VALUES (1700000000, 'A', 'tool', 'old', 'b', 'e', 0.5, 'm', 4);
         """
       )

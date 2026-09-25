@@ -89,10 +89,7 @@ public struct SensingSettings: Codable, Equatable, Sendable {
   /// whatever this says (`DebugPanelAccess`).
   public var showDebugPanel = false
 
-  /// Creates the default settings.
-  public init() {}
-
-  // MARK: Codable with per-field defaults
+  // MARK: Initializers, and Codable with per-field defaults
 
   private enum CodingKeys: String, CodingKey {
     case focusSettleDelay, inputSettleDelay, floorInterval, minCaptureInterval
@@ -103,6 +100,9 @@ public struct SensingSettings: Codable, Equatable, Sendable {
     case mentor
     case showDebugPanel
   }
+
+  /// Creates the default settings.
+  public init() {}
 
   /// Decodes the settings, giving any field missing from the file its
   /// default, and validates them.

@@ -620,16 +620,16 @@ public struct MentorVerdict: Codable, Equatable, Sendable {
   /// Optional so a reply that omits it still yields its suggestion.
   public var updatedUnderstanding: Understanding?
 
+  private enum CodingKeys: String, CodingKey {
+    case reason, suggestion
+    case updatedUnderstanding = "updated_understanding"
+  }
+
   /// Creates a verdict, with no updated understanding by default.
   public init(reason: String, suggestion: Payload?, updatedUnderstanding: Understanding? = nil) {
     self.reason = reason
     self.suggestion = suggestion
     self.updatedUnderstanding = updatedUnderstanding
-  }
-
-  private enum CodingKeys: String, CodingKey {
-    case reason, suggestion
-    case updatedUnderstanding = "updated_understanding"
   }
 
   /// The suggestion is what the user came for, so a bookkeeping field that
