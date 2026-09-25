@@ -318,20 +318,36 @@ import Testing
     #expect(says(output, "acquired"))
   }
 
-  @Test func theLimitCountsTheLockWaitAndEveryRoundAfterIt() throws {
-    let reader = try idleReader(20)
+  @Test func theLimitCountsTheIdleWaitsOfEveryRoundButNotTheLockWait() throws {
+    let reader = try idleReader(0)
+    let calls = directory.appendingPathComponent("idle-calls-\(UUID().uuidString)").path
+    let counted = (
+      file: reader.file,
+      function: "idle() { echo x >>'\(calls)'; cat '\(reader.file)'; }"
+    )
     let holder = try startHolder("run menubar-keyboard", seconds: 60)
     defer { holder.terminate() }
-    let (waiter, output) = try process(whenIdle(reader, "2"), checkout: "/checkouts/two")
+    let (waiter, output) = try process(whenIdle(counted, "5"), checkout: "/checkouts/two")
+    try waitFor("the run to wait for quiet") {
+      says(output, "waiting for 15s of idle input before taking the screen lock")
+    }
+    usleep(1_500_000)
+    try setIdle(20, in: reader.file)
     try waitFor("the run to queue for the lock") { says(output, "waiting for the screen lock") }
-    usleep(3_000_000)
+    // Longer than the whole limit, which a lock wait does not use up.
+    usleep(6_000_000)
+    #expect(waiter.isRunning)
     try setIdle(0, in: reader.file)
     holder.terminate()
     waiter.waitUntilExit()
     #expect(waiter.terminationStatus == 75)
     #expect(says(output, "gave it back until the Mac is quiet again"))
-    #expect(says(output, "input never went idle for 15s in 2s, so the screen lock was not taken"))
-    #expect(!says(output, "waiting for 15s of idle input"))
+    #expect(says(output, "input never went idle for 15s in 5s, so the screen lock was not taken"))
+    // One idle read per second waited in either round, one each time a round
+    // gives up or ends, and one after the lock: the limit plus three, whatever
+    // the first round used, only when the second round has just what is left.
+    let reads = try String(contentsOfFile: calls, encoding: .utf8).split(separator: "\n").count
+    #expect(reads == 5 + 3)
   }
 
   // MARK: The checkout lock
