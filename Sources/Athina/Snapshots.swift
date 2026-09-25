@@ -35,6 +35,7 @@ enum Snapshots {
             ("debug-panel", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), state),
             ("debug-panel-calls", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), state),
             ("debug-panel-empty", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), empty),
+            ("debug-panel-cleared", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), AppState.sampleCleared()),
             // The Understanding card whole, in each state it can be in.
             ("understanding-card", card(900), AnyView(SampleUnderstandingCard()), state),
             ("understanding-card-empty", card(360), AnyView(SampleUnderstandingCard()), noUnderstanding),
@@ -346,6 +347,14 @@ extension AppState {
         let state = AppState(sampleWithSettings: settings)
         state.mode = .watching
         state.mentorStatus = MentorStatus(availability: .noAPIKey)
+        return state
+    }
+
+    /// Just after Clear Journal, watching with no capture since: the frame
+    /// pane says why it is empty rather than naming a permission.
+    static func sampleCleared() -> AppState {
+        let state = sampleEmpty()
+        state.latestFrameCleared = true
         return state
     }
 

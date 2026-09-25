@@ -1320,6 +1320,51 @@ import Testing
         #expect(events.contains { $0.kind == .understanding && ($0.detail ?? "").contains("reset") })
     }
 
+    /// Clear Journal deletes every observation and model call, so the status
+    /// no longer describes any of them: not the triage gate's observation, the
+    /// last call of each tier, or the mentor gate's hold on a deleted verdict.
+    /// What holds now stays.
+    @Test func clearingTheJournalForgetsEveryRecordOfWhatItDeleted() async throws {
+        var settings = MentorSettings()
+        settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.lowerBound
+        let h = try await Harness(settings: settings, understanding: Self.existing(age: 400), activeUse: 400)
+        // A quiet triage and a periodic refresh, then a mentor call, then a
+        // triage that holds the mentor gate, so every record is set at once.
+        await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
+        await h.client.enqueue(json: Self.refresh, model: "claude-opus-5")
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date, text: "one")), expectCalls: 2)
+        h.clock.advance(by: .seconds(30))
+        await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
+        await h.client.enqueue(json: Self.silence, model: "claude-opus-5")
+        await h.observe(try await h.journal.record(Fixtures.observation(at: h.clock.date, text: "two")), expectCalls: 4)
+        h.clock.advance(by: .seconds(30))
+        await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
+        let last = try await h.journal.record(Fixtures.observation(at: h.clock.date, text: "three"))
+        await h.observe(last, expectCalls: 5)
+        let before = await h.loop.currentStatus()
+        #expect(before.lastGate?.observationID == last.id)
+        #expect(before.lastTriage?.outcome == .quiet)
+        #expect(before.lastMentorHold?.hold == .triageSaidNo(reason: "Reading docs"))
+        #expect(before.lastMentor?.outcome == .nothingToSay)
+        #expect(before.lastRefresh?.outcome == .refreshed)
+        #expect(before.lastContext != nil)
+
+        await h.loop.journalCleared()
+        let after = await h.loop.currentStatus()
+        #expect(after.lastGate == nil)
+        #expect(after.lastTriage == nil)
+        #expect(after.lastMentorHold == nil)
+        #expect(after.lastMentor == nil)
+        #expect(after.lastRefresh == nil)
+        #expect(after.mode == before.mode)
+        #expect(after.availability == before.availability)
+        #expect(after.lastContext == before.lastContext)
+        #expect(after.spendThisHour == before.spendThisHour)
+        #expect(after.callsThisHour == before.callsThisHour)
+        #expect(after.nextTriageAt == before.nextTriageAt)
+        #expect(after.nextMentorAt == before.nextMentorAt)
+    }
+
     /// After a reset the next stretch gets a whole interval for a mentor call
     /// to write the record for free, rather than buying a refresh at once.
     @Test func resetStartsAFreshRefreshPeriodInsteadOfSpendingImmediately() async throws {

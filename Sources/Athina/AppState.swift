@@ -85,6 +85,8 @@ final class AppState {
     var focus: FocusContext?
     var latestObservation: ActivityObservation?
     var latestImage: NSImage?
+    /// Clear Journal took the latest frame away and no capture has replaced it yet.
+    var latestFrameCleared = false
     var cadence = CadenceStatus()
     var timeline: [JournalEntry] = []
     var resources: ProcessResourceUsage?
@@ -524,12 +526,17 @@ final class AppState {
         do {
             await mentor?.resetUnderstanding()
             try await pipeline?.clearJournal()
+            await mentor?.journalCleared()
             timeline.removeAll()
             latestObservation = nil
             latestImage = nil
+            latestFrameCleared = true
             callLog.removeAll()
             suggestionHistory.removeAll()
             followUps.removeAll()
+            // A callout still drawn is on screen now, so its record stays until it goes.
+            if !callouts.isVisible { lastCallout = nil }
+            lastTranscript = nil
             if let journal {
                 await loadInitialTimeline(from: journal)
             }
@@ -1456,6 +1463,7 @@ final class AppState {
         case .observation(let observation):
             latestObservation = observation
             latestImage = observation.frame.jpeg.flatMap(NSImage.init(data:))
+            latestFrameCleared = false
             var slim = observation
             slim.frame.jpeg = nil
             prepend(.observation(slim))

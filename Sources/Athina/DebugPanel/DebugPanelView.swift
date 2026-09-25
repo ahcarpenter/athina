@@ -29,6 +29,7 @@ struct DebugPanelView: View {
                     observation: selected?.observation ?? state.latestObservation,
                     image: selected?.image ?? (selected == nil ? state.latestImage : nil),
                     isLive: selected == nil,
+                    empty: EmptyFrame(mode: state.mode, journalCleared: state.latestFrameCleared),
                     showBoxes: $showOCRBoxes,
                     onBackToLive: { selected = nil; selectedEntryID = nil }
                 )
@@ -392,6 +393,7 @@ private struct FramePane: View {
     let observation: ActivityObservation?
     let image: NSImage?
     let isLive: Bool
+    let empty: EmptyFrame
     @Binding var showBoxes: Bool
     let onBackToLive: () -> Void
 
@@ -432,9 +434,9 @@ private struct FramePane: View {
                     .frame(height: 220)
             } else {
                 ContentUnavailableView(
-                    "Waiting for the First Capture",
+                    empty.title,
                     systemImage: "rectangle.dashed",
-                    description: Text("Frames appear here once Screen Recording is granted and you are active.")
+                    description: Text(empty.message)
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }

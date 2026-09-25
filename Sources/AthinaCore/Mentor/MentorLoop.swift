@@ -792,6 +792,22 @@ public actor MentorLoop {
         await publishStatus()
     }
 
+    /// Clear Journal deleted every observation and model call, so each record
+    /// that describes one is dropped rather than left pointing at a row that
+    /// is gone: the triage gate's observation, the last call of each tier, and
+    /// the mentor gate's hold on a deleted triage verdict. What describes the
+    /// present stays: the mode, the context verdict, the cadence floors in
+    /// force, and the spend already incurred this hour, which still counts
+    /// against the cap.
+    public func journalCleared() async {
+        status.lastGate = nil
+        status.lastTriage = nil
+        status.lastMentorHold = nil
+        status.lastMentor = nil
+        status.lastRefresh = nil
+        await publishStatus()
+    }
+
     public func currentUnderstanding() -> UnderstandingRecord? { understanding }
 
     /// Replaces the refresh period and keeps it in the journal.
