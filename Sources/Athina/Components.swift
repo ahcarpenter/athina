@@ -81,3 +81,34 @@ struct StatusBadge: View {
         .fixedSize()
     }
 }
+
+extension EnvironmentValues {
+    /// True in a snapshot render: a view that would keep moving on its own,
+    /// such as a pulsing symbol or a readout that redraws every second, draws
+    /// once and at rest, so every render of it is the same picture.
+    @Entry var drawsStill = false
+}
+
+/// Content that redraws once a second, for ages and times read off the
+/// app's clock; once only in a snapshot render, which must not redraw between
+/// the captures it compares.
+struct EverySecond<Content: View>: View {
+    @ViewBuilder let content: () -> Content
+    @Environment(\.drawsStill) private var drawsStill
+
+    var body: some View {
+        TimelineView(SecondTicks(once: drawsStill)) { _ in content() }
+    }
+
+    private struct SecondTicks: TimelineSchedule {
+        let once: Bool
+
+        func entries(from startDate: Date, mode: TimelineScheduleMode) -> AnyIterator<Date> {
+            var next: Date? = startDate
+            return AnyIterator {
+                defer { next = once ? nil : next?.addingTimeInterval(1) }
+                return next
+            }
+        }
+    }
+}

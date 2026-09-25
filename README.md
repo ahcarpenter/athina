@@ -52,6 +52,7 @@ make record           # the same, live, writing every model call to a fixture fi
 make clear-recordings # deletes the app's own recordings directory
 make fixture-status   # checks that the committed fixtures are current (fails when not), with no network
 make test             # runs the unit tests (swift test), the loop included, with no network
+make snapshots-approve # makes the baselines match the renders CI made of HEAD, after an intended UI change
 make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 make release          # builds, signs, notarizes, and packages a direct-download release into build/release (see Releasing)
 make xcodeproj        # generates Athina.xcodeproj, the Xcode project for the App Store route, from project.yml (see The Xcode project)
@@ -190,9 +191,10 @@ or build XcodeGen.
 
 The project has one target, `Athina App Store`, and a scheme of the same name
 whose Archive action builds Release. It compiles `Sources/Athina` against the
-package's `AthinaCore`, linking the frameworks the package's `Athina` target
-does (a dependency or framework added to one goes in the other too), bundles
-the same icon and menu bar marks `scripts/bundle.sh` does, and signs with
+package's `AthinaCore` and `SnapshotDiff`, linking the frameworks the package's
+`Athina` target does (a dependency or framework added to one goes in the other
+too), bundles the same icon and menu bar marks `scripts/bundle.sh` does, and
+signs with
 `Resources/Athina.app-store.entitlements` (the App Sandbox, `network.client`,
 and the microphone keys of both the hardened runtime, `device.audio-input`,
 and the sandbox, `device.microphone`). Its Info.plist is `Resources/Info.plist`
@@ -1720,10 +1722,12 @@ particular to this app:
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs `swift test`, the bundle script, and `Athina
---snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the macOS
-26 SDK this package targets, and uploads the rendered PNGs, replay-mode renders
-on a scaled clock included, as the `ui-snapshots` artifact. A second job
+`.github/workflows/ci.yml` runs three jobs on GitHub's `macos-26` runner, which
+ships Xcode 26 and the macOS 26 SDK this package targets: `build-and-test` runs
+`swift test` and the bundle script; `ui-snapshots` renders every snapshot
+with `Athina --snapshot`, replay-mode renders on a scaled clock included,
+compares the renders with the approved baselines, and uploads them as the
+`ui-snapshots` artifact (see UI snapshot baselines); and `xcode-project`
 generates the Xcode project, archives its App Store target, and checks that
 the archived app carries the target's bundle id and the App Sandbox (see The
 Xcode project). No test waits on real time (see A faster clock). The tests
@@ -1757,3 +1761,79 @@ editor with a duplicate name, the transient status messages (a connection test,
 a refused or recording shortcut, on-device recognition unavailable), and every
 variant of the menu bar mark, at the size the bar draws it, with the word a
 replay puts beside it, and enlarged.
+
+### UI snapshot baselines
+
+`Tests/Snapshots` holds the approved render of every snapshot, light and dark,
+rendered on the CI runner, which is the one reference environment. The
+`ui-snapshots` job (`scripts/snapshots.sh gate`) builds the app, renders every
+snapshot twice and fails unless the two renders are the same picture, then
+compares each render with its baseline and fails on any drift. A pixel counts
+as changed when any of its channels moves by more than 6 of 255: that covers
+the shading an anti-aliased edge can pick up and the window server's glass,
+which on the runner draws a dark switch's knob one of two ways from one window
+to the next (a few dozen pixels, up to 5 of 255 apart), and nothing a person
+would see, since a shifted edge, a new colour or a moved line moves some
+channel much further. A new snapshot fails until its baseline is approved, and
+a baseline the renderer no longer produces fails until it is deleted. For
+every drifted snapshot the job lists what changed in its summary and uploads
+the `ui-snapshot-report` artifact: the approved image, the new render and the
+difference (changed pixels in red over a faded copy), one folder each, with an
+`index.html` that shows them side by side at real size. The comparison is
+`snapshot-diff` (`Sources/SnapshotDiff`, with unit tests), and the renderer
+uses the same rule.
+
+A render is the same on every run because nothing in it depends on when or
+where it was made:
+
+- **A fixed clock.** Every sample stands still at one moment,
+  `Snapshots.referenceDate`, so every age, clock time and date reads the same,
+  and `scripts/snapshots.sh` renders in UTC and US English with scroll bars
+  always shown, whatever the Mac is set to.
+- **Animations off.** No SwiftUI animation runs; a pulsing symbol draws at rest
+  and a readout that ticks every second draws once (`drawsStill`); and once the
+  view has settled, Core Animation's clock in the window stops at a time before
+  any animation began, so a spinner draws its resting state.
+- **A fixed backdrop.** The render window is opaque and paints the window
+  background of its appearance, so glass and materials sample that and never
+  what is behind the window. Dark mode's wallpaper tinting still reads the
+  desktop picture, which the runner never changes.
+- **Settled, and agreed.** A window is captured until two captures in a row
+  are the same picture, and each snapshot is rendered in fresh windows until
+  two in a row agree, because AppKit now and then lays a text field out a
+  point off in one window. Captures are kept in sRGB whatever the display's
+  profile.
+- **One way of capturing.** A run captures every window with ScreenCaptureKit
+  when it has Screen Recording, as the runner does, and renders each window's
+  layer tree when it does not, and says which on its first line. The two draw
+  glass differently, so a run never mixes them: a ScreenCaptureKit capture
+  that fails is taken again, never drawn the other way.
+
+**Approving an intended change.** Push the change and let CI fail on the
+drift, look at the report, then run `make snapshots-approve` (or
+`scripts/snapshots.sh approve`), which downloads the renders from HEAD's
+newest CI run and makes `Tests/Snapshots` match them: a changed or new
+snapshot's render replaces its baseline, a removed snapshot's baseline is
+deleted, and every other file is left alone. `RUN=<id>` names another CI run.
+A run publishes its renders only once both renders finished and agree, so a
+run that failed, timed out or was cancelled before then has nothing to
+approve, and the renders name the source tree they were made from, which
+approve refuses unless it is HEAD's own. A pull request's run renders the
+branch merged with main, so once main has moved on since the branch, merge or
+rebase onto main and push before approving. Commit the images with the change
+that caused them; the pull request then shows each one before and after, and
+CI passes. Baselines never come from a developer's Mac, and there is no local
+comparison: a Mac on another macOS, at another display scale, renders text
+edges and glass differently everywhere, so only the runner's renders are
+compared or approved.
+
+**A runner change is a deliberate refresh.** The baselines depend on the
+runner's macOS image and the newest Xcode on it, which `ci.yml` selects. When
+GitHub updates either, the renders change with no change to the app; approve
+them from a CI run of an unchanged commit, in a commit of their own that names
+the new image or Xcode, so a real UI change is never approved under it.
+
+**Size.** The set is a few megabytes of PNGs, rendered at the
+runner's 1x scale, and an approval adds only the images that changed to the
+history, so the repository keeps them as ordinary files rather than in Git LFS,
+which would add a download quota and an extra step to every checkout.

@@ -554,13 +554,14 @@ private struct ExchangeLine: View {
 /// The key is held: a pulsing microphone and the transcript so far.
 struct ListeningRow: View {
     let partial: String
+    @Environment(\.drawsStill) private var drawsStill
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: "mic.fill")
                 .font(.callout)
                 .foregroundStyle(.red)
-                .symbolEffect(.pulse, options: .repeating)
+                .symbolEffect(.pulse, options: .repeating, isActive: !drawsStill)
                 .frame(width: 44, alignment: .trailing)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {

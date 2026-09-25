@@ -1,6 +1,7 @@
 import AppKit
 import AthinaCore
 import ScreenCaptureKit
+import SnapshotDiff
 import SwiftUI
 
 /// Developer aid: `Athina --snapshot <dir>` renders every window with sample
@@ -18,8 +19,22 @@ enum Snapshots {
 
     static var isActive: Bool { requestedDirectory != nil }
 
+    /// The moment every sample stands still at, so every age, time and date a
+    /// render shows is the same on every run: Tuesday 15 September 2026,
+    /// 14:32:10 UTC. `scripts/snapshots.sh` renders in UTC and US English, so
+    /// the clock times read the same on every machine too.
+    static let referenceDate = Date(timeIntervalSince1970: 1_789_482_730)
+
+    /// How every window of this run is captured, decided once. The two ways
+    /// draw glass differently, so a run never mixes them, and says which it
+    /// used; renders are compared only with renders made the same way.
+    private static let capturesWithScreenCaptureKit = CGPreflightScreenCaptureAccess()
+
     static func render(to directory: URL) async throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        print(capturesWithScreenCaptureKit
+            ? "snapshot: capturing each window with ScreenCaptureKit"
+            : "snapshot: no Screen Recording permission, rendering each window's layer tree")
         let state = AppState.sample()
         let replay = AppState.sampleReplay()
         let empty = AppState.sampleEmpty()
@@ -70,7 +85,7 @@ enum Snapshots {
             ("toast-expanded", CGSize(width: ToastController.panelWidth, height: 460), AnyView(SampleToast(expanded: true)), state),
             ("toast-listening", CGSize(width: ToastController.panelWidth, height: 300), AnyView(SampleToast(expanded: false, talkBack: .listening(partial: "does that work with tags as"), suggestionID: 4)), state),
             ("toast-thinking", CGSize(width: ToastController.panelWidth, height: 300), AnyView(SampleToast(expanded: false, talkBack: .thinking(question: "does that work with tags as well"), suggestionID: 4)), state),
-            ("toast-answered", CGSize(width: ToastController.panelWidth, height: 400), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: Date(), suggestionID: 4), suggestionID: 4)), state),
+            ("toast-answered", CGSize(width: ToastController.panelWidth, height: 400), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: referenceDate, suggestionID: 4), suggestionID: 4)), state),
             ("toast-note", CGSize(width: ToastController.panelWidth, height: 120), AnyView(SampleToastNote()), state),
             ("callout", CGSize(width: 900, height: 620), AnyView(SampleCallout()), state),
             ("menu-bar-marks", SampleMenuBarMarks.wholeSize, AnyView(SampleMenuBarMarks()), state),
@@ -87,8 +102,41 @@ enum Snapshots {
         }
     }
 
+    /// Renders the view in fresh windows until two in a row give the same
+    /// picture, and writes the second. AppKit now and then lays a text field
+    /// out a point off in one window (about one window in a few hundred on the
+    /// runner), so a single window cannot be trusted to give the picture every
+    /// other run gives. The same picture means within `SnapshotComparison`'s
+    /// tolerance, since the window server draws some glass, a dark switch's
+    /// knob among it, one of two ways from one window to the next.
     private static func render(_ view: some View, size: CGSize, appearance: NSAppearance.Name, to url: URL) async throws {
-        let hosting = NSHostingView(rootView: view)
+        var previous: Bitmap?
+        for _ in 0..<5 {
+            guard let bitmap = try await renderInWindow(view, size: size, appearance: appearance) else {
+                previous = nil
+                continue
+            }
+            if let previous, samePicture(previous, bitmap) {
+                try bitmap.writePNG(to: url)
+                return
+            }
+            previous = bitmap
+        }
+        throw SnapshotError.neverSettled(url.lastPathComponent)
+    }
+
+    private static func samePicture(_ a: Bitmap, _ b: Bitmap) -> Bool {
+        a.size == b.size && PixelDiff.compare(a, b, tolerance: SnapshotComparison.defaultTolerance).matches
+    }
+
+    /// The view's settled picture in a new window, or nil when it never settled there.
+    private static func renderInWindow(_ view: some View, size: CGSize, appearance: NSAppearance.Name) async throws -> Bitmap? {
+        // No SwiftUI animation runs and nothing pulses, so a view shows its
+        // final state at once and the same state on every run.
+        let still = view
+            .environment(\.drawsStill, true)
+            .transaction { $0.disablesAnimations = true }
+        let hosting = NSHostingView(rootView: still)
         hosting.sizingOptions = []
         hosting.wantsLayer = true
         // On a display, so the window server composites glass and control
@@ -104,47 +152,69 @@ enum Snapshots {
         window.collectionBehavior = [.stationary, .ignoresCycle]
         window.hasShadow = false
         window.appearance = NSAppearance(named: appearance)
+        // A fixed backdrop: the window is opaque and paints the system window
+        // background of its appearance, so glass and materials sample that and
+        // never whatever happens to be behind the window. Dark mode's wallpaper
+        // tinting still reads the desktop picture, which the CI runner never
+        // changes; on another Mac it tints the dark forms a little, one reason
+        // baselines come only from the runner.
+        window.isOpaque = true
+        window.backgroundColor = .windowBackgroundColor
         window.contentView = hosting
         window.isReleasedWhenClosed = false
+        defer { window.close() }
         window.orderFrontRegardless()
         hosting.frame = CGRect(origin: .zero, size: size)
         hosting.layoutSubtreeIfNeeded()
-        // Let SwiftUI finish its layout passes and async tasks.
+        // Let SwiftUI finish its layout passes and async tasks, and let a
+        // fade such as an app icon's arrive at its end.
         try await Task.sleep(for: .milliseconds(700))
-        hosting.layoutSubtreeIfNeeded()
-        window.displayIfNeeded()
-
-        let image = try await captureWithFallback(window: window, hosting: hosting)
-        let rep = NSBitmapImageRep(cgImage: image)
-        guard let png = rep.representation(using: .png, properties: [:]) else {
-            throw SnapshotError.noPNG
-        }
-        try png.write(to: url)
-        window.close()
+        // Then stop Core Animation's clock in this window at a time before any
+        // animation began, so one that repeats, such as a spinner, draws its
+        // resting state on every run rather than wherever it was at capture.
+        hosting.layer?.speed = 0
+        hosting.layer?.timeOffset = 0
+        return try await settledCapture(window: window, hosting: hosting)
     }
 
-    /// ScreenCaptureKit gives the truest picture, but its stream occasionally
-    /// fails to start when many windows are captured back to back. One retry,
-    /// then the layer-tree render, so an unattended run always produces a file.
-    private static func captureWithFallback(window: NSWindow, hosting: NSView) async throws -> CGImage {
-        for attempt in 0..<2 {
-            do {
-                if let image = try await captureOwnWindow(window) { return image }
-                break
-            } catch {
-                if attempt == 0 {
-                    try? await Task.sleep(for: .milliseconds(400))
-                } else {
-                    FileHandle.standardError.write(Data("snapshot: window capture failed twice (\(error.localizedDescription)), rendering the layer tree\n".utf8))
-                }
+    /// Captures until two captures in a row are the same picture, so a view
+    /// that was still settling (a late layout pass, an image that loads on its
+    /// own) is never what gets kept; nil when no two ever are. A `Bitmap` is in
+    /// sRGB, so what is kept does not depend on the colour profile of the
+    /// display it was captured on, and every viewer shows the file the same way.
+    private static func settledCapture(window: NSWindow, hosting: NSView) async throws -> Bitmap? {
+        var previous: Bitmap?
+        for _ in 0..<8 {
+            hosting.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            if let image = try await capture(window: window, hosting: hosting) {
+                let bitmap = try Bitmap(image)
+                if let previous, samePicture(previous, bitmap) { return bitmap }
+                previous = bitmap
             }
+            try await Task.sleep(for: .milliseconds(150))
         }
-        return try renderLayerTree(of: hosting)
+        return nil
     }
 
-    /// ScreenCaptureKit for the app's own window; nil when the permission is missing.
+    /// The window captured the run's one way, or nil when ScreenCaptureKit
+    /// missed it this time: its stream occasionally fails to start when many
+    /// windows are captured back to back, and a new window can be missing from
+    /// the shareable content for a moment. A missed capture is taken again,
+    /// never drawn the other way.
+    private static func capture(window: NSWindow, hosting: NSView) async throws -> CGImage? {
+        guard capturesWithScreenCaptureKit else { return try renderLayerTree(of: hosting) }
+        do {
+            if let image = try await captureOwnWindow(window) { return image }
+            FileHandle.standardError.write(Data("snapshot: window not among the shareable windows yet, capturing again\n".utf8))
+        } catch {
+            FileHandle.standardError.write(Data("snapshot: window capture failed (\(error.localizedDescription)), capturing again\n".utf8))
+        }
+        return nil
+    }
+
+    /// ScreenCaptureKit for the app's own window; nil when it is not among the shareable windows.
     private static func captureOwnWindow(_ window: NSWindow) async throws -> CGImage? {
-        guard CGPreflightScreenCaptureAccess() else { return nil }
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         guard let scWindow = content.windows.first(where: { $0.windowID == CGWindowID(window.windowNumber) }) else { return nil }
         let filter = SCContentFilter(desktopIndependentWindow: scWindow)
@@ -185,13 +255,19 @@ enum Snapshots {
 
     enum SnapshotError: Error {
         case noBitmap
-        case noPNG
+        /// No two windows in a row gave the same settled picture of the named
+        /// file: something in the view keeps moving, it lays out differently
+        /// every time, or ScreenCaptureKit kept missing its windows.
+        case neverSettled(String)
     }
 }
 
 // MARK: - Sample state
 
 extension AppState {
+    /// A process id no app has.
+    static let samplePid: Int32 = -1
+
     /// Realistic data for snapshots and previews, stamped around `now` (the
     /// sample's own clock when nil). Nothing here touches the pipeline.
     static func sample(
@@ -205,13 +281,16 @@ extension AppState {
         settings.mentor.contexts = SampleSuggestions.contexts
         // The oldest sample suggestion was answered Never for This.
         settings.mentor.neverRules = [
-            NeverRule(bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .correctness, createdAt: (now ?? Date()).addingTimeInterval(-7990)),
+            NeverRule(bundleID: "com.apple.dt.Xcode", appName: "Xcode", category: .correctness, createdAt: (now ?? Snapshots.referenceDate).addingTimeInterval(-7990)),
         ]
         let state = AppState(sampleWithSettings: settings, speechAvailability: speechAvailability)
         let now = now ?? state.clock.date
         let focus = FocusContext(
             timestamp: now,
-            pid: ProcessInfo.processInfo.processIdentifier,
+            // No process has this id, so the Frontmost app card draws its own
+            // placeholder: any real pid's icon would be whatever app that pid
+            // is, drawn by Icon Services only once it has masked it.
+            pid: Self.samplePid,
             bundleID: "com.apple.dt.Xcode",
             appName: "Xcode",
             windowTitle: "SensingPipeline.swift - mentor",
@@ -613,7 +692,7 @@ struct SampleToast: View {
 
     var body: some View {
         let model = ToastModel()
-        model.suggestion = SampleSuggestions.make(now: Date()).first { suggestionID == nil || $0.id == suggestionID }
+        model.suggestion = SampleSuggestions.make(now: Snapshots.referenceDate).first { suggestionID == nil || $0.id == suggestionID }
         model.expanded = expanded
         model.talkBack = talkBack
         model.exchange = exchange
