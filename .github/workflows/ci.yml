@@ -1,9 +1,9 @@
 name: CI
 
-# Runs on every pull request and every push to main. The slower checks,
-# ui-snapshots and xcode-project, live in merge-checks.yml, which runs on push
-# to main and for a pull request only on demand; all three must pass at a pull
-# request's head before it merges (README "Continuous integration").
+# Runs on every pull request and every push to main. The slow ui-snapshots
+# check lives in merge-checks.yml, which runs on push to main and for a pull
+# request only with the merge-checks label; both must pass at a pull request's
+# head before it merges (README "Continuous integration").
 on:
   push:
     branches: [main]

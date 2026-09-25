@@ -180,14 +180,15 @@ signing with provisioning profiles, archiving, and uploading to App Store
 Connect. `project.yml` is its committed spec, and `make xcodeproj` generates
 `Athina.xcodeproj` from it with XcodeGen, pinned by version in
 `Tools/XcodeGenTool` (its `Package.resolved` is committed), which SwiftPM
-builds on first use, so nothing is installed and every Mac and CI generate the
+builds on first use, so nothing is installed and every Mac generates the
 same project. The generated project is not committed, so no `project.pbxproj`
 is ever merged by hand: change `project.yml` and regenerate. Opening the
 project in Xcode starts with `make xcodeproj`, then `open Athina.xcodeproj`;
 run it again after changing `project.yml` or adding or removing a source file.
 The tools package is not part of the app's package, so `make build`, `make
-test`, `scripts/bundle.sh`, `make release` and the package CI job never fetch
-or build XcodeGen.
+test`, `scripts/bundle.sh`, `make release` and CI never fetch or build XcodeGen.
+CI does not generate or archive the project: that check left CI until the App
+Store release flow brings it back as part of that flow.
 
 The project has one target, `Athina App Store`, and a scheme of the same name
 whose Archive action builds Release. It compiles `Sources/Athina` against the
@@ -205,7 +206,7 @@ in one place. That id is set only in `project.yml`, and is the development id
 chosen, which can never change once a build is uploaded. Signing is automatic
 and `DEVELOPMENT_TEAM` is left empty: until a team id is filled in there, the
 target signs to run locally, which is how `make xcode-build` and `make
-xcode-archive` build it and CI archives it; with one, Xcode signs with that
+xcode-archive` build it; with one, Xcode signs with that
 team's Apple Development certificate and Product > Archive feeds the
 Organizer's App Store Connect upload. The built app is sandboxed, so it keeps
 its files in its own container and runs as A sandboxed build describes. The
@@ -1722,33 +1723,38 @@ particular to this app:
 
 ## Continuous integration
 
-CI runs three jobs on GitHub's `macos-26` runner, which ships Xcode 26 and the
+CI runs two jobs on GitHub's `macos-26` runner, which ships Xcode 26 and the
 macOS 26 SDK this package targets: `build-and-test` runs `swift test` and the
-bundle script; `ui-snapshots` renders every snapshot with `Athina --snapshot`,
-replay-mode renders on a scaled clock included, compares the renders with the
-approved baselines, and uploads them as the `ui-snapshots` artifact (see UI
-snapshot baselines); and `xcode-project` generates the Xcode project, archives
-its App Store target, and checks that the archived app carries the target's
-bundle id and the App Sandbox (see The Xcode project).
+bundle script, and `ui-snapshots` renders every snapshot with `Athina
+--snapshot`, replay-mode renders on a scaled clock included, compares the
+renders with the approved baselines, and uploads them as the `ui-snapshots`
+artifact (see UI snapshot baselines). The Xcode project's archive check is out
+of CI until the App Store release flow brings it back as part of that flow
+(see The Xcode project).
 
-All three run on every push to main, but only `build-and-test`
-(`.github/workflows/ci.yml`) runs on its own for a pull request. The two slow
-ones (`.github/workflows/merge-checks.yml`) run for a pull request only when
-dispatched on its branch, by anyone with write access:
+Both run on every push to main. On a pull request, `build-and-test`
+(`.github/workflows/ci.yml`) runs on its own, and the slow `ui-snapshots`
+(`.github/workflows/merge-checks.yml`) runs only while the pull request carries
+the `merge-checks` label: adding the label runs it, and so does every push, or
+any other label added, while it is on. Anyone with write access can add it,
+from the pull request page or with
 
 ```sh
-gh workflow run merge-checks.yml --ref <branch>
+gh pr edit <number> --add-label merge-checks
 ```
 
-or Run workflow on the Merge checks page under Actions. A dispatch checks the
-branch's head commit at that moment, so a push after it needs another. All
-three must pass at a pull request's head before it can merge: the `main`
-ruleset requires them, with no bypass, and until both slow checks have run,
-the pull request lists them as expected and cannot merge. They are dispatched
-rather than started by a label on `pull_request` because a job that an `if`
-skips reports success to a required check, so a skipped check would let the
-merge through. The ruleset is kept in `.github/rulesets/main.json`; after a
-change to it, apply it with
+Both must pass at a pull request's head before it can merge: the `main`
+ruleset requires them, with no bypass, and until `ui-snapshots` has run there,
+the pull request lists it as expected and cannot merge. Two traps shape this.
+A job that an `if` skips still reports a check run, and a skipped check counts
+as passed for a required one, so the skipped job takes another name: GitHub
+names a skipped job after its unevaluated `name:` expression, which is not
+`ui-snapshots`, and the expression's own answer for a skip is not either. And
+a `workflow_dispatch` run of the same job does not count: its checks are on
+the commit, but a pull request's required checks ignore them.
+
+The ruleset is kept in `.github/rulesets/main.json`; after a change to it,
+apply it with
 
 ```sh
 gh api -X PUT "repos/ahcarpenter/athina/rulesets/$(gh api repos/ahcarpenter/athina/rulesets --jq '.[] | select(.name == "main") | .id')" --input .github/rulesets/main.json
@@ -1839,9 +1845,9 @@ where it was made:
   glass differently, so a run never mixes them: a ScreenCaptureKit capture
   that fails is taken again, never drawn the other way.
 
-**Approving an intended change.** Push the change, dispatch the merge checks
-on its branch (see Continuous integration) and let `ui-snapshots` fail on the
-drift, look at the report, then run `make snapshots-approve` (or
+**Approving an intended change.** Push the change, with the `merge-checks`
+label on its pull request (see Continuous integration), and let `ui-snapshots`
+fail on the drift, look at the report, then run `make snapshots-approve` (or
 `scripts/snapshots.sh approve`), which downloads the renders from HEAD's
 newest merge-checks run and makes `Tests/Snapshots` match them: a changed or new
 snapshot's render replaces its baseline, a removed snapshot's baseline is
@@ -1849,9 +1855,11 @@ deleted, and every other file is left alone. `RUN=<id>` names another CI run.
 A run publishes its renders only once both renders finished and agree, so a
 run that failed, timed out or was cancelled before then has nothing to
 approve, and the renders name the source tree they were made from, which
-approve refuses unless it is HEAD's own. Commit the images with the change
-that caused them and push; the pull request then shows each one before and
-after, and once the merge checks are dispatched again, `ui-snapshots` passes. Baselines never come from a developer's Mac, and there is no local
+approve refuses unless it is HEAD's own. A pull request's run renders the
+branch merged with main, so once main has moved on since the branch, merge or
+rebase onto main and push before approving. Commit the images with the change
+that caused them; the pull request then shows each one before and after, and
+CI passes. Baselines never come from a developer's Mac, and there is no local
 comparison: a Mac on another macOS, at another display scale, renders text
 edges and glass differently everywhere, so only the runner's renders are
 compared or approved.
