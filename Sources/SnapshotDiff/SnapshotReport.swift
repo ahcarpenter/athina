@@ -22,15 +22,12 @@ public enum SnapshotReport {
             if result.status != .added {
                 try files.copyItem(at: before, to: folder.appendingPathComponent("before.png"))
             }
-            if case .changed = result.status {
-                // Written as compared, so the three sit side by side at one size.
-                let old = try Bitmap(contentsOf: before)
-                let new = try SnapshotComparison.render(of: result.file, in: actual, beside: old, matchingScale: comparison.matchesScale)
-                try new.writePNG(to: folder.appendingPathComponent("after.png"))
-                try PixelDiff.highlight(old, new, tolerance: comparison.tolerance)
-                    .writePNG(to: folder.appendingPathComponent("diff.png"))
-            } else if result.status != .removed {
+            if result.status != .removed {
                 try files.copyItem(at: after, to: folder.appendingPathComponent("after.png"))
+            }
+            if case .changed = result.status {
+                try PixelDiff.highlight(Bitmap(contentsOf: before), Bitmap(contentsOf: after), tolerance: comparison.tolerance)
+                    .writePNG(to: folder.appendingPathComponent("diff.png"))
             }
         }
         try html(comparison, heading: heading).write(to: directory.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
@@ -39,10 +36,6 @@ public enum SnapshotReport {
 
     public static func markdown(_ comparison: SnapshotComparison, heading: String) -> String {
         var lines = ["### \(heading)", ""]
-        if comparison.matchesScale {
-            lines.append("Renders at a whole multiple of their baseline's size were scaled down to it before comparing.")
-            lines.append("")
-        }
         let drift = comparison.drift
         if drift.isEmpty {
             lines.append("All \(comparison.results.count) snapshots match their baselines (tolerance \(comparison.tolerance) of 255 per channel).")

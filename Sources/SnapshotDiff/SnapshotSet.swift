@@ -61,14 +61,11 @@ public struct SnapshotComparison: Sendable {
 
     public let results: [SnapshotResult]
     public let tolerance: Int
-    /// Whether a render a whole multiple of its baseline's size, such as a
-    /// Retina Mac's 2x beside the runner's 1x, was scaled down to it first.
-    public let matchesScale: Bool
 
     public var drift: [SnapshotResult] { results.filter(\.status.isDrift) }
     public var matches: Bool { drift.isEmpty }
 
-    public static func compare(baseline: URL, actual: URL, tolerance: Int = defaultTolerance, matchingScale: Bool = false) throws -> SnapshotComparison {
+    public static func compare(baseline: URL, actual: URL, tolerance: Int = defaultTolerance) throws -> SnapshotComparison {
         let before = try pngs(in: baseline)
         let after = try pngs(in: actual)
         var results: [SnapshotResult] = []
@@ -80,19 +77,11 @@ public struct SnapshotComparison: Sendable {
                 results.append(SnapshotResult(file: file, status: .removed))
             default:
                 let old = try Bitmap(contentsOf: baseline.appendingPathComponent(file))
-                let new = try render(of: file, in: actual, beside: old, matchingScale: matchingScale)
+                let new = try Bitmap(contentsOf: actual.appendingPathComponent(file))
                 results.append(SnapshotResult(file: file, status: status(old, new, tolerance: tolerance)))
             }
         }
-        return SnapshotComparison(results: results, tolerance: tolerance, matchesScale: matchingScale)
-    }
-
-    /// A render as it is compared: scaled down to its baseline's size first
-    /// when asked to and it is a whole multiple of it.
-    static func render(of file: String, in actual: URL, beside baseline: Bitmap, matchingScale: Bool) throws -> Bitmap {
-        let new = try Bitmap(contentsOf: actual.appendingPathComponent(file))
-        guard matchingScale, let factor = new.scaleFactor(over: baseline.size), factor > 1 else { return new }
-        return new.downsampled(by: factor)
+        return SnapshotComparison(results: results, tolerance: tolerance)
     }
 
     public static func status(_ before: Bitmap, _ after: Bitmap, tolerance: Int) -> SnapshotStatus {

@@ -18,7 +18,7 @@ RUN ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
-.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release snapshots snapshots-approve
+.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release snapshots-approve
 
 ## Build the .app bundle into build/Athina.app
 build:
@@ -96,16 +96,10 @@ fixture-status:
 test:
 	swift test
 
-## Render every UI snapshot on this Mac and compare it with the approved
-## baselines in Tests/Snapshots, writing build/snapshots/report/index.html.
-## Advisory: the baselines come from the CI runner, and another macOS renders
-## differently, so only CI's comparison gates (see README, "UI snapshot baselines").
-snapshots: build
-	scripts/snapshots.sh check
-
 ## Approve a UI change: make Tests/Snapshots match the renders the CI runner
-## made for HEAD (or for CI run RUN=<id>), never renders from this Mac, then
-## commit the changed images with the change that caused them.
+## made of HEAD's source tree (in HEAD's newest CI run, or CI run RUN=<id>),
+## never renders from this Mac, then commit the changed images with the change
+## that caused them.
 snapshots-approve:
 	scripts/snapshots.sh approve $(RUN)
 

@@ -5,14 +5,11 @@ import SnapshotDiff
 // drift (README "UI snapshot baselines"). scripts/snapshots.sh is how CI and a
 // person call it.
 //
-//   snapshot-diff compare <baseline> <actual> [--report <dir>] [--tolerance <n>] [--heading <text>] [--advisory] [--match-scale]
-//   snapshot-diff approve <baseline> <actual> [--tolerance <n>]
+//   snapshot-diff compare <baseline> <actual> [--report <dir>] [--heading <text>]
+//   snapshot-diff approve <baseline> <actual>
 //
-// compare exits 0 when every snapshot matches, 1 on any drift (0 with
-// --advisory, which still reports it), and 2 when it cannot run.
-// --match-scale scales a render that is a whole multiple of its baseline's
-// size down to it first, so a Retina Mac's 2x renders compare with the
-// runner's 1x baselines. approve never takes it: a baseline is a runner render.
+// compare exits 0 when every snapshot matches, 1 on any drift, and 2 when it
+// cannot run.
 
 func fail(_ message: String) -> Never {
     FileHandle.standardError.write(Data("snapshot-diff: \(message)\n".utf8))
@@ -29,23 +26,11 @@ var arguments = Array(CommandLine.arguments.dropFirst())
     return value
 }
 
-@MainActor func takeSwitch(_ flag: String) -> Bool {
-    guard let index = arguments.firstIndex(of: flag) else { return false }
-    arguments.remove(at: index)
-    return true
-}
-
 let report = take("--report")
 let heading = take("--heading") ?? "UI snapshots"
-let tolerance = take("--tolerance").map { text -> Int in
-    guard let value = Int(text), (0...255).contains(value) else { fail("--tolerance needs a whole number from 0 to 255") }
-    return value
-} ?? SnapshotComparison.defaultTolerance
-let advisory = takeSwitch("--advisory")
-let matchingScale = takeSwitch("--match-scale")
 
 guard arguments.count == 3, ["compare", "approve"].contains(arguments[0]) else {
-    fail("usage: snapshot-diff compare|approve <baseline> <actual> [--report <dir>] [--tolerance <n>] [--heading <text>] [--advisory] [--match-scale]")
+    fail("usage: snapshot-diff compare|approve <baseline> <actual> [--report <dir>] [--heading <text>]")
 }
 let command = arguments[0]
 let baseline = URL(fileURLWithPath: arguments[1], isDirectory: true)
@@ -54,13 +39,9 @@ guard FileManager.default.fileExists(atPath: actual.path) else { fail("no render
 
 let comparison: SnapshotComparison
 do {
-    comparison = try SnapshotComparison.compare(baseline: baseline, actual: actual, tolerance: tolerance, matchingScale: matchingScale)
+    comparison = try SnapshotComparison.compare(baseline: baseline, actual: actual)
 } catch {
     fail("\(error)")
-}
-
-if command == "approve" && matchingScale {
-    fail("approve takes renders as they are; --match-scale is for an advisory compare")
 }
 
 switch command {
@@ -89,7 +70,7 @@ default:
             fail("\(error)")
         }
     }
-    let annotate = ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true" && !advisory
+    let annotate = ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true"
     for result in comparison.drift {
         print("drift \(result.name): \(result.status.summary)")
         if annotate {
@@ -103,10 +84,10 @@ default:
         }
         let identical = deltas.filter { $0 == 0 }.count
         let largest = deltas.max() ?? 0
-        print("all \(comparison.results.count) snapshots match (tolerance \(tolerance)): \(identical) identical, largest channel difference \(largest)")
+        print("all \(comparison.results.count) snapshots match (tolerance \(comparison.tolerance)): \(identical) identical, largest channel difference \(largest)")
         exit(0)
     }
-    print("\(comparison.drift.count) of \(comparison.results.count) snapshots drifted (tolerance \(tolerance))"
+    print("\(comparison.drift.count) of \(comparison.results.count) snapshots drifted (tolerance \(comparison.tolerance))"
         + (report.map { "; report at \($0)/index.html" } ?? ""))
-    exit(advisory ? 0 : 1)
+    exit(1)
 }
