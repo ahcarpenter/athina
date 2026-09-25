@@ -8,8 +8,9 @@
 # screen, and so does every other checkout's run: two at once collide, and
 # each reports the other's clicks as its own failures. So every command that
 # touches the screen or the shared warm home takes the screen lock first: run
-# for each scenario, and a real-screen scenario only once input is idle, so
-# other checkouts' runs go between scenarios and none waits on someone typing.
+# for each scenario, and a scenario that needs a quiet Mac only once input is
+# idle, so other checkouts' runs go between scenarios and none waits on
+# someone typing.
 #
 # A run also builds its checkout's app bundle and drive tool, before it takes
 # the screen lock so no other checkout waits on the build, and then runs from
@@ -69,20 +70,11 @@ lock_set() { printf -v "$1$2" '%s' "$3"; }
 
 # The commands that take the screen lock for as long as they run: those that
 # launch the app or change the shared warm home. run takes it for each
-# scenario instead (screen_lock_per_scenario), so other checkouts' runs can
-# go between them. list, doctor, and journal touch none of them and never wait.
+# scenario instead, so other checkouts' runs can go between them. list,
+# doctor, and journal touch none of them and never wait.
 screen_lock_needed() {
 	case "$1" in
 	warm | clean) return 0 ;;
-	*) return 1 ;;
-	esac
-}
-
-# The commands that take the screen lock once for each scenario they run, and
-# give it back between them.
-screen_lock_per_scenario() {
-	case "$1" in
-	run) return 0 ;;
 	*) return 1 ;;
 	esac
 }

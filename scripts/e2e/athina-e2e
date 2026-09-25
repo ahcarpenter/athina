@@ -55,8 +55,8 @@ options:
 run and warm first take this checkout's lock, so only one of them runs from a
 checkout at a time, then build, then take one machine-wide lock, as clean does,
 so only one run is on the screen at a time across every checkout: run for each
-scenario, and a real-screen scenario only once the keyboard and mouse have been
-quiet for 15 seconds (README "End-to-end harness").
+scenario, and one that says SCENARIO_IDLE_FIRST=yes only once the keyboard and
+mouse have been quiet for 15 seconds (README "End-to-end harness").
 TEXT
 }
 
@@ -73,16 +73,17 @@ scenario_summary_of() {
 	sed -n 's/^SCENARIO_SUMMARY="\(.*\)"$/\1/p' "$SCENARIO_DIR/$1.sh" | head -1
 }
 
-# The tier a scenario names, screen unless it says otherwise, read the same way.
-scenario_tier_of() {
-	local tier
-	tier="$(sed -n 's/^SCENARIO_TIER=\([a-z]*\)$/\1/p' "$SCENARIO_DIR/$1.sh" | head -1)"
-	printf '%s\n' "${tier:-screen}"
+# Whether a scenario waits for a quiet keyboard and mouse before it takes the
+# screen, no unless it says yes, read the same way.
+scenario_idle_first_of() {
+	local idle
+	idle="$(sed -n 's/^SCENARIO_IDLE_FIRST=\([a-z]*\)$/\1/p' "$SCENARIO_DIR/$1.sh" | head -1)"
+	printf '%s\n' "${idle:-no}"
 }
 
-# How long the keyboard and mouse must be quiet before a real-screen scenario
-# takes the screen: its steps start soon after and each moves the pointer or
-# the front app, which whoever is at the Mac would feel.
+# How long the keyboard and mouse must be quiet before a scenario that says
+# SCENARIO_IDLE_FIRST=yes takes the screen: its steps start soon after and each
+# moves the pointer or the front app, which whoever is at the Mac would feel.
 IDLE_BEFORE_SCREEN=15
 
 cmd_list() {
@@ -194,12 +195,19 @@ cmd_run() {
 	ensure_drive
 	have_warm_home || die "no warm home yet: run scripts/e2e/athina-e2e warm first"
 	for name in "${names[@]}"; do
-		[ -f "$SCENARIO_DIR/$name.sh" ] || die "no scenario named $name"
 		outcome=0
+		if [ ! -f "$SCENARIO_DIR/$name.sh" ]; then
+			log "ERROR: no scenario named $name"
+			result_line "$name" fail 0 "no scenario named $name"
+			failed=$((failed + 1))
+			status=1
+			continue
+		fi
 		# The screen lock is held for one scenario at a time, so other
-		# checkouts' runs go between them. A real-screen scenario waits for a
-		# quiet keyboard and mouse before it takes it, rather than inside it.
-		if [ "$(scenario_tier_of "$name")" = screen ]; then
+		# checkouts' runs go between them. A scenario that needs a quiet
+		# keyboard and mouse waits for them before it takes it, rather than
+		# inside it.
+		if [ "$(scenario_idle_first_of "$name")" = yes ]; then
 			lock_acquire_when_idle SCREEN_LOCK "run $name" "$LOCK_TIMEOUT" "$IDLE_BEFORE_SCREEN" hid_idle_seconds || outcome=$?
 		else
 			lock_acquire SCREEN_LOCK "run $name" "$LOCK_TIMEOUT" || outcome=$?
@@ -226,7 +234,6 @@ run_scenario() (
 	# reach the next one.
 	local name="$1"
 	local file="$SCENARIO_DIR/$name.sh"
-	[ -f "$file" ] || die "no scenario named $name"
 
 	SCENARIO_SUMMARY=""
 	SCENARIO_ARGS=()

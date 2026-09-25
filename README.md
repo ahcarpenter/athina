@@ -608,8 +608,9 @@ exclusive lock, `~/Library/Caches/athina-e2e/screen.lock`, and `run` takes it
 for each scenario and gives it back between them, so only one session is on
 the screen at a time across every checkout while other checkouts' scenarios
 go between this run's, and a second run prints who holds it (checkout,
-scenario, pid, since when) and waits. A real-screen scenario first waits for
-15 seconds of quiet keyboard and mouse, before it takes the lock rather than
+scenario, pid, since when) and waits. A scenario that sets
+`SCENARIO_IDLE_FIRST=yes`, as `real-screen` does, first waits for 15 seconds
+of quiet keyboard and mouse, before it takes the lock rather than
 inside it, so no other checkout waits behind it while someone is at the Mac;
 input that comes back while it waits for the lock gives the lock back until
 the Mac is quiet again.
@@ -800,7 +801,7 @@ answer ever repeats a request, so the secret never comes back out.
   launch. While it waits for the first capture, the harness brings the staged
   TextEdit forward with each Shift press, since sensing captures nothing while
   an excluded app, such as the terminal of whoever is at the Mac, is in front.
-- **Idle input.** A real-screen scenario takes the screen only once the
+- **Idle input.** `real-screen` takes the screen only once the
   keyboard and mouse have been quiet for 15 seconds (above), each of its
   pointer steps waits for a quiet moment after the run's own input, and a
   click aborts if the pointer moves off the target, because the Mac may have
