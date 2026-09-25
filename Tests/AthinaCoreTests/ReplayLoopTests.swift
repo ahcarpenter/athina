@@ -268,18 +268,17 @@ struct ReplayLoopTests {
       """
       CREATE TABLE model_calls (
           id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, tier TEXT NOT NULL, model TEXT NOT NULL,
-          prompt_version INTEGER NOT NULL, prompt_chars INTEGER NOT NULL, image_bytes INTEGER \
-      NOT NULL,
-          input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cache_write_tokens \
-      INTEGER NOT NULL,
-          cache_read_tokens INTEGER NOT NULL, cost REAL NOT NULL, latency REAL NOT NULL, \
-      outcome TEXT NOT NULL, detail TEXT
+          prompt_version INTEGER NOT NULL, prompt_chars INTEGER NOT NULL,
+          image_bytes INTEGER NOT NULL, input_tokens INTEGER NOT NULL,
+          output_tokens INTEGER NOT NULL, cache_write_tokens INTEGER NOT NULL,
+          cache_read_tokens INTEGER NOT NULL, cost REAL NOT NULL, latency REAL NOT NULL,
+          outcome TEXT NOT NULL, detail TEXT
       );
-      INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars, \
-      image_bytes, input_tokens,
-          output_tokens, cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail)
-      VALUES (1789000000, 'triage', 'claude-haiku-4-5-20251001', 4, 10, 0, 1, 1, 0, 0, 0.01, \
-      1, 'quiet', 'old');
+      INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars,
+          image_bytes, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, cost,
+          latency, outcome, detail)
+      VALUES (1789000000, 'triage', 'claude-haiku-4-5-20251001', 4, 10, 0, 1, 1, 0, 0, 0.01, 1,
+          'quiet', 'old');
       """
     )
     let journal = try Journal(url: url)

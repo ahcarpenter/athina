@@ -116,10 +116,7 @@ public struct MentorSettings: Codable, Equatable, Sendable {
   /// One whose deadline has passed no longer counts.
   public var snoozes: [Snooze] = []
 
-  /// Creates the default settings.
-  public init() {}
-
-  // MARK: Codable with per-field defaults
+  // MARK: Initializers, and Codable with per-field defaults
 
   private enum CodingKeys: String, CodingKey {
     case enabled, triageModel, mentorModel, understandingModel
@@ -133,6 +130,9 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     case hourlySpendCap, prices
     case neverRules, snoozes
   }
+
+  /// Creates the default settings.
+  public init() {}
 
   /// Decodes the settings, giving any field missing from the file its
   /// default, and validates them.

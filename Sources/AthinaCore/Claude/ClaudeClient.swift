@@ -244,6 +244,13 @@ public struct Usage: Codable, Equatable, Sendable {
   /// Input tokens read from the prompt cache.
   public var cacheReadInputTokens: Int
 
+  private enum CodingKeys: String, CodingKey {
+    case inputTokens = "input_tokens"
+    case outputTokens = "output_tokens"
+    case cacheCreationInputTokens = "cache_creation_input_tokens"
+    case cacheReadInputTokens = "cache_read_input_tokens"
+  }
+
   /// Creates usage counts, each zero unless given.
   public init(
     inputTokens: Int = 0,
@@ -255,13 +262,6 @@ public struct Usage: Codable, Equatable, Sendable {
     self.outputTokens = outputTokens
     self.cacheCreationInputTokens = cacheCreationInputTokens
     self.cacheReadInputTokens = cacheReadInputTokens
-  }
-
-  private enum CodingKeys: String, CodingKey {
-    case inputTokens = "input_tokens"
-    case outputTokens = "output_tokens"
-    case cacheCreationInputTokens = "cache_creation_input_tokens"
-    case cacheReadInputTokens = "cache_read_input_tokens"
   }
 
   /// Decodes usage, reading a count the API leaves out as zero.

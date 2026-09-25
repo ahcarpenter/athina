@@ -46,6 +46,12 @@ public struct Understanding: Codable, Equatable, Sendable {
   /// Questions or worries worth watching for.
   public var openConcerns: [String]
 
+  private enum CodingKeys: String, CodingKey {
+    case goals, timeline
+    case mentorHistory = "mentor_history"
+    case openConcerns = "open_concerns"
+  }
+
   /// Creates an understanding; every list defaults to empty.
   public init(
     goals: [Goal] = [],
@@ -57,12 +63,6 @@ public struct Understanding: Codable, Equatable, Sendable {
     self.timeline = timeline
     self.mentorHistory = mentorHistory
     self.openConcerns = openConcerns
-  }
-
-  private enum CodingKeys: String, CodingKey {
-    case goals, timeline
-    case mentorHistory = "mentor_history"
-    case openConcerns = "open_concerns"
   }
 
   /// Every field defaults, so a record written by an older prompt version

@@ -2386,8 +2386,8 @@ struct MentorLoopTests {
           explanation TEXT NOT NULL, confidence REAL NOT NULL, observation_id INTEGER,
           model TEXT NOT NULL, prompt_version INTEGER NOT NULL, feedback TEXT, feedback_at REAL
       );
-      INSERT INTO suggestions (timestamp, app_name, category, title, body, explanation, \
-      confidence, model, prompt_version)
+      INSERT INTO suggestions (timestamp, app_name, category, title, body, explanation,
+          confidence, model, prompt_version)
       VALUES (1700000000, 'Xcode', 'shortcut', 'old one', 'b', 'e', 0.9, 'm', 3);
       """
     )
@@ -2441,18 +2441,17 @@ struct MentorLoopTests {
       """
       CREATE TABLE understanding (
           id INTEGER PRIMARY KEY, updated_at REAL NOT NULL, started_at REAL NOT NULL,
-          revision INTEGER NOT NULL, schema_version INTEGER NOT NULL, prompt_version INTEGER \
-      NOT NULL,
-          model TEXT NOT NULL, source TEXT NOT NULL, cost REAL NOT NULL, cumulative_cost REAL \
-      NOT NULL,
+          revision INTEGER NOT NULL, schema_version INTEGER NOT NULL,
+          prompt_version INTEGER NOT NULL, model TEXT NOT NULL, source TEXT NOT NULL,
+          cost REAL NOT NULL, cumulative_cost REAL NOT NULL,
           content_json TEXT NOT NULL, covered_through_observation_id INTEGER
       );
       CREATE INDEX understanding_updated_at ON understanding(updated_at);
-      INSERT INTO understanding (updated_at, started_at, revision, schema_version, \
-      prompt_version, model,
-          source, cost, cumulative_cost, content_json, covered_through_observation_id)
-      VALUES (1700000000, 1700000000, 1, 1, 8, 'm', 'periodic', 0.02, 0.02, '{"goals": [], \
-      "timeline": ["old"]}', 7);
+      INSERT INTO understanding (updated_at, started_at, revision, schema_version,
+          prompt_version, model, source, cost, cumulative_cost, content_json,
+          covered_through_observation_id)
+      VALUES (1700000000, 1700000000, 1, 1, 8, 'm', 'periodic', 0.02, 0.02,
+          '{"goals": [], "timeline": ["old"]}', 7);
       """
     )
 
