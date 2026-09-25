@@ -2270,9 +2270,11 @@ where it was made:
   desktop picture, which the runner never changes.
 - **Settled, and agreed.** A window opens with no animation and is first
   captured once three of the display's frames in a row changed nothing in it:
-  no view waiting for layout or to be drawn and no Core Animation animation
-  running, so a task that loads what a view shows, or an image fading in, is
-  waited for as long as it takes and no longer (`DisplayFrames`). It is then
+  no view waiting for layout or to be drawn, no Core Animation animation
+  running, and no layer moved, resized, faded or recoloured since the frame
+  before, as a switch's knob is while it springs across, so a task that loads
+  what a view shows, or an image fading in, is waited for as long as it takes
+  and no longer (`DisplayFrames`). It is then
   captured, a frame apart, until two captures in a row are the same picture,
   and each snapshot is rendered in fresh windows until two in a row agree,
   because AppKit now and then lays a text field out a point off in one window;
