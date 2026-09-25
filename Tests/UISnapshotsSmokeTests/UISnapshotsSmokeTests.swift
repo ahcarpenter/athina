@@ -17,6 +17,11 @@
   /// `make snapshots-smoke-approve` to take. With `UI_SNAPSHOTS_SMOKE_SHARD` set to `k/n`, as each
   /// of CI's four runners sets it, it draws and checks only the snapshots `SnapshotShard` gives
   /// shard k, the same split `ui-snapshots` uses.
+  ///
+  /// With `UI_SNAPSHOTS_SMOKE_AGAINST` set to a folder, as `make ui-snapshots-smoke-local` sets
+  /// it, it compares each snapshot with that folder's render of it instead, drawn on this Mac
+  /// from another commit, writes what it finds to `UI_SNAPSHOTS_SMOKE_OUTPUT`, and fails only on a
+  /// snapshot it could not draw: a changed screen is a report, not a failure.
   @MainActor
   @Suite(.serialized, .snapshots(record: .never))
   struct UISnapshotsSmokeTests {
@@ -31,12 +36,32 @@
     private static let testsDirectory = URL(filePath: #filePath).deletingLastPathComponent()
     private static let root = testsDirectory.deletingLastPathComponent().deletingLastPathComponent()
 
-    /// Where swift-snapshot-testing keeps this file's references, its own default.
-    private static let references = testsDirectory.appending(
-      path: "__Snapshots__/UISnapshotsSmokeTests", directoryHint: .isDirectory)
+    /// The sets of renders another commit drew on this Mac, each in a process of its own, when the
+    /// run compares with those, separated by colons. A snapshot matches when it matches any set's.
+    private static let against = ProcessInfo.processInfo.environment["UI_SNAPSHOTS_SMOKE_AGAINST"]
+      .flatMap { value -> [URL]? in
+        guard !value.isEmpty else { return nil }
+        return value.split(separator: ":").map {
+          URL(filePath: String($0), directoryHint: .isDirectory)
+        }
+      }
 
-    private static let output = root.appending(
-      path: "build/snapshots-smoke", directoryHint: .isDirectory)
+    /// The snapshots to draw, by file name and separated by commas, or nil for every one.
+    private static let only = ProcessInfo.processInfo.environment["UI_SNAPSHOTS_SMOKE_ONLY"]
+      .flatMap { $0.isEmpty ? nil : Set($0.split(separator: ",").map(String.init)) }
+
+    /// What each snapshot is compared with and a drift is reported against: the runner's
+    /// references, where swift-snapshot-testing keeps this file's references by default, or the
+    /// other commit's first set.
+    private static let references =
+      against?.first
+      ?? testsDirectory.appending(
+        path: "__Snapshots__/UISnapshotsSmokeTests", directoryHint: .isDirectory)
+
+    private static let output =
+      ProcessInfo.processInfo.environment["UI_SNAPSHOTS_SMOKE_OUTPUT"]
+      .flatMap { $0.isEmpty ? nil : URL(filePath: $0, directoryHint: .isDirectory) }
+      ?? root.appending(path: "build/snapshots-smoke", directoryHint: .isDirectory)
 
     /// The reference file of each snapshot, in both appearances.
     private static func referenceFiles(of specs: [Snapshots.Spec]) -> [String] {
@@ -69,6 +94,10 @@
       // What `scripts/snapshots.sh` gives `--snapshot`: every clock time and date reads the same
       // whatever the machine is set to. The runner's locale is already US English.
       NSTimeZone.default = TimeZone(identifier: "UTC")!
+      // Scroll bars always shown, as `scripts/snapshots.sh` has `--snapshot` show them and the
+      // runner, with no trackpad, shows them, whatever this Mac is set to.
+      UserDefaults.standard.setVolatileDomain(
+        ["AppleShowScrollBars": "Always"], forName: UserDefaults.argumentDomain)
       // An app that owns windows, with no Dock icon, as the app itself is.
       NSApplication.shared.setActivationPolicy(.accessory)
       // A test process's bundle is the test runner's, so the marks come from the folder the app
@@ -103,18 +132,25 @@
         for spec in specs {
           let name = spec.fileName(in: appearance)
           let file = "\(Self.testName).\(name).png"
+          if let only = Self.only, !only.contains(name) { continue }
           let bitmap = try await Snapshots.settledPicture(
             of: spec, in: appearance, capture: Self.capture)
+          if Self.isBlank(bitmap) {
+            Issue.record("\(name) drew nothing: every pixel is the same colour")
+          }
           let image = NSImage(cgImage: try bitmap.cgImage(), size: .zero)
-          let failure = verifySnapshot(
-            of: image, as: Self.strategy, named: name, snapshotDirectory: Self.references.path,
-            testName: Self.testName)
+          let failures = (Self.against ?? [Self.references]).map { set in
+            verifySnapshot(
+              of: image, as: Self.strategy, named: name, snapshotDirectory: set.path,
+              testName: Self.testName)
+          }
+          let failure = failures.contains { $0 == nil } ? nil : failures.first ?? nil
           guard let failure else {
             try fileManager.copyItem(
               at: Self.references.appending(path: file), to: partial.appending(path: file))
             continue
           }
-          Issue.record(Comment(rawValue: failure))
+          if Self.against == nil { Issue.record(Comment(rawValue: failure)) }
           try Self.strategy.diffing.toData(image).write(to: partial.appending(path: file))
           try Self.writeDrift(
             of: image, from: Self.references.appending(path: file), to: drift.appending(path: name))
@@ -127,6 +163,8 @@
     /// references are only ever the ones the test compares. Each shard checks the files of its own
     /// snapshots, and one whose snapshot has no shard falls to the first.
     @Test func everyReferenceHasASnapshot() throws {
+      // Another commit's renders are compared as a report, which names a removed snapshot itself.
+      guard Self.against == nil else { return }
       let shard = try Self.shard()
       let expected = Set(Self.referenceFiles(of: Snapshots.specs()))
       let prefix = "\(Self.testName)."
@@ -148,7 +186,8 @@
     /// backdrop, and it shows much of what sits on Liquid Glass, which the content view drawn on
     /// its own leaves out. Drawn in process, a view is drawn as its layers stand, so the first
     /// capture needs no wait.
-    private static let capture = Snapshots.Capture(firstCaptureDelay: .zero) { window, hosting in
+    private static let capture = Snapshots.Capture(firstCaptureDelay: .zero, backingScale: 1) {
+      window, hosting in
       let frameView = window.contentView?.superview ?? hosting
       let image = await withCheckedContinuation { continuation in
         Snapshotting<NSView, NSImage>.image.snapshot(frameView).run {
@@ -156,6 +195,14 @@
         }
       }
       return image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    }
+
+    /// A picture of one colour, which a window that drew nothing gives.
+    private static func isBlank(_ bitmap: Bitmap) -> Bool {
+      bitmap.pixels.withUnsafeBytes { bytes in
+        let pixels = bytes.bindMemory(to: UInt32.self)
+        return pixels.allSatisfy { $0 == pixels.first }
+      }
     }
 
     /// The reference, the new render and where they differ, one folder per drifted snapshot, as

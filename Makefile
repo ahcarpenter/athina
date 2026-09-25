@@ -17,10 +17,12 @@ PID ?=
 RUN ?=
 ## The shard `make ui-snapshots-smoke` draws, k/n, as each of CI's runners passes it; every snapshot when empty
 SHARD ?=
+## The commit `make ui-snapshots-smoke-local` compares HEAD with; HEAD's merge-base with origin/main when empty
+BASE ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
-.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release xcodeproj xcode-build xcode-archive snapshots-approve ui-snapshots-smoke snapshots-smoke-approve
+.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release xcodeproj xcode-build xcode-archive snapshots-approve ui-snapshots-smoke ui-snapshots-smoke-local snapshots-smoke-approve
 
 ## Build the .app bundle into build/Athina.app
 build:
@@ -133,6 +135,13 @@ snapshots-approve:
 ## build/snapshots-smoke.
 ui-snapshots-smoke:
 	scripts/snapshots.sh smoke $(SHARD)
+
+## Draw the UI smoke set on this Mac at HEAD and at its merge-base with
+## origin/main (or BASE=<commit>) and report every screen that changed, was
+## added or was removed, as local validation does; fails only on a snapshot
+## that could not be drawn. The output is in build/snapshots-smoke-local.
+ui-snapshots-smoke-local:
+	scripts/snapshots.sh smoke-local $(BASE)
 
 ## Approve a UI change for the smoke test: make its references match the set
 ## the CI runner published for HEAD (in HEAD's newest CI run, or CI run
