@@ -66,15 +66,15 @@ public actor Journal {
     try Journal.migrate(db)
   }
 
-  /// A private in-memory journal, for tests.
-  public static func inMemory() throws -> Journal {
-    try Journal(memoryOnly: ())
-  }
-
   private init(memoryOnly: Void) throws {
     url = URL(string: "sqlite:memory")!
     db = try SQLiteConnection(path: ":memory:")
     try Journal.migrate(db)
+  }
+
+  /// A private in-memory journal, for tests.
+  public static func inMemory() throws -> Journal {
+    try Journal(memoryOnly: ())
   }
 
   private static func migrate(_ db: SQLiteConnection) throws {
@@ -251,10 +251,9 @@ public actor Journal {
     do {
       try db.run(
         """
-        INSERT INTO observations (timestamp, bundle_id, app_name, window_title, ax_summary, \
-        focus_json,
-            ocr_text, text_blocks_json, frame_hash, frame_width, frame_height, display_id,
-            screen_x, screen_y, screen_w, screen_h, reason)
+        INSERT INTO observations (timestamp, bundle_id, app_name, window_title, ax_summary,
+            focus_json, ocr_text, text_blocks_json, frame_hash, frame_width, frame_height,
+            display_id, screen_x, screen_y, screen_w, screen_h, reason)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         [
@@ -314,8 +313,6 @@ public actor Journal {
     return stored
   }
 
-  // MARK: Suggestions and model calls
-
   /// Stores a shown suggestion.
   ///
   /// Returns it with its new id.
@@ -326,11 +323,9 @@ public actor Journal {
     }
     try db.run(
       """
-      INSERT INTO suggestions (timestamp, bundle_id, app_name, window_title, category, title, \
-      body, explanation,
-          confidence, judged_goal, observation_id, model, prompt_version, feedback, \
-      feedback_at, region_json,
-          callout_shown)
+      INSERT INTO suggestions (timestamp, bundle_id, app_name, window_title, category, title,
+          body, explanation, confidence, judged_goal, observation_id, model, prompt_version,
+          feedback, feedback_at, region_json, callout_shown)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       """,
       [
@@ -358,31 +353,6 @@ public actor Journal {
     return stored
   }
 
-  /// Records what the user did with a suggestion.
-  ///
-  /// Nil when the id is unknown.
-  public func updateFeedback(
-    suggestionID: Int64,
-    feedback: SuggestionFeedback,
-    at time: Date
-  ) throws -> Suggestion? {
-    try db.run(
-      "UPDATE suggestions SET feedback = ?, feedback_at = ? WHERE id = ?",
-      [.text(feedback.rawValue), .double(time.timeIntervalSince1970), .int(suggestionID)]
-    )
-    return try suggestion(id: suggestionID)
-  }
-
-  /// Records that a callout was drawn for the suggestion.
-  ///
-  /// The flag only ever turns on. Nil when the id is unknown.
-  public func noteCalloutShown(suggestionID: Int64) throws -> Suggestion? {
-    try db.run("UPDATE suggestions SET callout_shown = 1 WHERE id = ?", [.int(suggestionID)])
-    return try suggestion(id: suggestionID)
-  }
-
-  // MARK: Follow-ups
-
   /// Stores one talk-back exchange.
   ///
   /// Returns it with its new id.
@@ -390,8 +360,8 @@ public actor Journal {
   public func record(_ followUp: FollowUp) throws -> FollowUp {
     try db.run(
       """
-      INSERT INTO follow_ups (suggestion_id, timestamp, question, answer, error, model, \
-      prompt_version)
+      INSERT INTO follow_ups (suggestion_id, timestamp, question, answer, error, model,
+          prompt_version)
       VALUES (?, ?, ?, ?, ?, ?, ?)
       """,
       [
@@ -409,43 +379,6 @@ public actor Journal {
     return stored
   }
 
-  /// The exchange about one suggestion, oldest first.
-  public func followUps(suggestionID: Int64) throws -> [FollowUp] {
-    try db.query(
-      """
-      SELECT \(Journal.followUpColumns) FROM follow_ups WHERE suggestion_id = ? ORDER BY \
-      timestamp ASC, id ASC
-      """,
-      [.int(suggestionID)]
-    ) { Journal.followUp(from: $0) }
-  }
-
-  /// Newest first, across every suggestion.
-  public func recentFollowUps(limit: Int) throws -> [FollowUp] {
-    try db.query(
-      "SELECT \(Journal.followUpColumns) FROM follow_ups ORDER BY timestamp DESC, id DESC LIMIT ?",
-      [.int(Int64(limit))]
-    ) { Journal.followUp(from: $0) }
-  }
-
-  /// Returns the suggestion with this id, or nil if there is none.
-  public func suggestion(id: Int64) throws -> Suggestion? {
-    try db.query("SELECT \(Journal.suggestionColumns) FROM suggestions WHERE id = ?", [.int(id)]) {
-      Journal.suggestion(from: $0)
-    }.first
-  }
-
-  /// Newest first.
-  public func recentSuggestions(limit: Int) throws -> [Suggestion] {
-    try db.query(
-      """
-      SELECT \(Journal.suggestionColumns) FROM suggestions ORDER BY timestamp DESC, id DESC \
-      LIMIT ?
-      """,
-      [.int(Int64(limit))]
-    ) { Journal.suggestion(from: $0) }
-  }
-
   /// Stores a model call record.
   ///
   /// Returns it with its new id.
@@ -453,10 +386,9 @@ public actor Journal {
   public func record(_ call: ModelCallRecord) throws -> ModelCallRecord {
     try db.run(
       """
-      INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars, \
-      image_bytes, input_tokens,
-          output_tokens, cache_write_tokens, cache_read_tokens, cost, latency, outcome, \
-      detail, replayed)
+      INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars,
+          image_bytes, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, cost,
+          latency, outcome, detail, replayed)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       """,
       [
@@ -481,30 +413,6 @@ public actor Journal {
     stored.id = db.lastInsertRowID
     return stored
   }
-
-  /// Newest first.
-  public func recentModelCalls(limit: Int) throws -> [ModelCallRecord] {
-    try db.query(
-      """
-      SELECT \(Journal.modelCallColumns) FROM model_calls ORDER BY timestamp DESC, id DESC \
-      LIMIT ?
-      """,
-      [.int(Int64(limit))]
-    ) { Journal.modelCall(from: $0) }
-  }
-
-  /// Calls at or after `since`, oldest first, for seeding the hour's spend.
-  public func modelCalls(since: Date) throws -> [ModelCallRecord] {
-    try db.query(
-      """
-      SELECT \(Journal.modelCallColumns) FROM model_calls WHERE timestamp >= ? ORDER BY \
-      timestamp ASC, id ASC
-      """,
-      [.double(since.timeIntervalSince1970)]
-    ) { Journal.modelCall(from: $0) }
-  }
-
-  // MARK: Understanding
 
   /// Stores a revision of the understanding.
   ///
@@ -537,6 +445,94 @@ public actor Journal {
     return stored
   }
 
+  // MARK: Suggestions and model calls
+
+  /// Records what the user did with a suggestion.
+  ///
+  /// Nil when the id is unknown.
+  public func updateFeedback(
+    suggestionID: Int64,
+    feedback: SuggestionFeedback,
+    at time: Date
+  ) throws -> Suggestion? {
+    try db.run(
+      "UPDATE suggestions SET feedback = ?, feedback_at = ? WHERE id = ?",
+      [.text(feedback.rawValue), .double(time.timeIntervalSince1970), .int(suggestionID)]
+    )
+    return try suggestion(id: suggestionID)
+  }
+
+  /// Records that a callout was drawn for the suggestion.
+  ///
+  /// The flag only ever turns on. Nil when the id is unknown.
+  public func noteCalloutShown(suggestionID: Int64) throws -> Suggestion? {
+    try db.run("UPDATE suggestions SET callout_shown = 1 WHERE id = ?", [.int(suggestionID)])
+    return try suggestion(id: suggestionID)
+  }
+
+  // MARK: Follow-ups
+
+  /// The exchange about one suggestion, oldest first.
+  public func followUps(suggestionID: Int64) throws -> [FollowUp] {
+    try db.query(
+      """
+      SELECT \(Journal.followUpColumns) FROM follow_ups WHERE suggestion_id = ? ORDER BY \
+      timestamp ASC, id ASC
+      """,
+      [.int(suggestionID)]
+    ) { Journal.makeFollowUp(from: $0) }
+  }
+
+  /// Newest first, across every suggestion.
+  public func recentFollowUps(limit: Int) throws -> [FollowUp] {
+    try db.query(
+      "SELECT \(Journal.followUpColumns) FROM follow_ups ORDER BY timestamp DESC, id DESC LIMIT ?",
+      [.int(Int64(limit))]
+    ) { Journal.makeFollowUp(from: $0) }
+  }
+
+  /// Returns the suggestion with this id, or nil if there is none.
+  public func suggestion(id: Int64) throws -> Suggestion? {
+    try db.query("SELECT \(Journal.suggestionColumns) FROM suggestions WHERE id = ?", [.int(id)]) {
+      Journal.makeSuggestion(from: $0)
+    }.first
+  }
+
+  /// Newest first.
+  public func recentSuggestions(limit: Int) throws -> [Suggestion] {
+    try db.query(
+      """
+      SELECT \(Journal.suggestionColumns) FROM suggestions ORDER BY timestamp DESC, id DESC \
+      LIMIT ?
+      """,
+      [.int(Int64(limit))]
+    ) { Journal.makeSuggestion(from: $0) }
+  }
+
+  /// Newest first.
+  public func recentModelCalls(limit: Int) throws -> [ModelCallRecord] {
+    try db.query(
+      """
+      SELECT \(Journal.modelCallColumns) FROM model_calls ORDER BY timestamp DESC, id DESC \
+      LIMIT ?
+      """,
+      [.int(Int64(limit))]
+    ) { Journal.makeModelCall(from: $0) }
+  }
+
+  /// Calls at or after `since`, oldest first, for seeding the hour's spend.
+  public func modelCalls(since: Date) throws -> [ModelCallRecord] {
+    try db.query(
+      """
+      SELECT \(Journal.modelCallColumns) FROM model_calls WHERE timestamp >= ? ORDER BY \
+      timestamp ASC, id ASC
+      """,
+      [.double(since.timeIntervalSince1970)]
+    ) { Journal.makeModelCall(from: $0) }
+  }
+
+  // MARK: Understanding
+
   /// The current revision, or nil when none has been written or an
   /// `understanding` event, an expiry or a reset, was journaled after the
   /// latest one.
@@ -548,14 +544,14 @@ public actor Journal {
     try db.query(
       """
       SELECT \(Journal.understandingColumns) FROM (
-          SELECT \(Journal.understandingColumns) FROM understanding ORDER BY updated_at DESC, \
-      id DESC LIMIT 1
+          SELECT \(Journal.understandingColumns) FROM understanding
+          ORDER BY updated_at DESC, id DESC LIMIT 1
       ) AS latest
-      WHERE NOT EXISTS (SELECT 1 FROM events WHERE kind = ? AND events.timestamp > \
-      latest.updated_at)
+      WHERE NOT EXISTS (
+          SELECT 1 FROM events WHERE kind = ? AND events.timestamp > latest.updated_at)
       """,
       [.text(JournalEvent.Kind.understanding.rawValue)]
-    ) { try self.understanding(from: $0) }.first
+    ) { try self.makeUnderstanding(from: $0) }.first
   }
 
   /// Forgets every revision, for "Reset Understanding".
@@ -636,7 +632,18 @@ public actor Journal {
         cursor.map(Value.int) ?? .null,
         .int(Int64(limit)),
       ]
-    ) { try self.observation(from: $0) }
+    ) { try self.makeObservation(from: $0) }
+  }
+
+  /// Newest first, without thumbnail bytes.
+  public func recentObservations(limit: Int) throws -> [ActivityObservation] {
+    try db.query(
+      """
+      SELECT \(Journal.observationColumns) FROM observations ORDER BY timestamp DESC, id \
+      DESC LIMIT ?
+      """,
+      [.int(Int64(limit))]
+    ) { try self.makeObservation(from: $0) }
   }
 
   /// How many observations are at or after `since` or have an id above
@@ -655,17 +662,6 @@ public actor Journal {
     let observations = try recentObservations(limit: limit).map(JournalEntry.observation)
     let events = try recentEvents(limit: limit).map(JournalEntry.event)
     return Array((observations + events).sorted(by: JournalEntry.newerFirst).prefix(limit))
-  }
-
-  /// Newest first, without thumbnail bytes.
-  public func recentObservations(limit: Int) throws -> [ActivityObservation] {
-    try db.query(
-      """
-      SELECT \(Journal.observationColumns) FROM observations ORDER BY timestamp DESC, id \
-      DESC LIMIT ?
-      """,
-      [.int(Int64(limit))]
-    ) { try self.observation(from: $0) }
   }
 
   /// Returns the newest `limit` events, newest first.
@@ -696,7 +692,7 @@ public actor Journal {
       timestamp ASC, id ASC LIMIT ?
       """,
       [.double(since.timeIntervalSince1970), .int(Int64(limit))]
-    ) { try self.observation(from: $0) }
+    ) { try self.makeObservation(from: $0) }
   }
 
   /// Returns the observation with this id, without thumbnail bytes, or nil if
@@ -705,7 +701,7 @@ public actor Journal {
     try db.query(
       "SELECT \(Journal.observationColumns) FROM observations WHERE id = ?",
       [.int(id)]
-    ) { try self.observation(from: $0) }.first
+    ) { try self.makeObservation(from: $0) }.first
   }
 
   /// Returns the JPEG thumbnail stored with an observation.
@@ -763,9 +759,9 @@ public actor Journal {
     do {
       try db.execute(
         """
-        DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events; DELETE FROM \
-        suggestions; DELETE FROM follow_ups; DELETE FROM model_calls; DELETE FROM \
-        understanding; DELETE FROM refresh_period;
+        DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events;
+        DELETE FROM suggestions; DELETE FROM follow_ups; DELETE FROM model_calls;
+        DELETE FROM understanding; DELETE FROM refresh_period;
         """
       )
       try db.execute("COMMIT")
@@ -881,7 +877,7 @@ public actor Journal {
     id, suggestion_id, timestamp, question, answer, error, model, prompt_version
     """
 
-  private static func followUp(from row: SQLiteConnection.Statement) -> FollowUp {
+  private static func makeFollowUp(from row: SQLiteConnection.Statement) -> FollowUp {
     FollowUp(
       id: row.int(0),
       suggestionID: row.int(1),
@@ -894,7 +890,7 @@ public actor Journal {
     )
   }
 
-  private static func suggestion(from row: SQLiteConnection.Statement) -> Suggestion {
+  private static func makeSuggestion(from row: SQLiteConnection.Statement) -> Suggestion {
     let region = row.text(16).flatMap {
       try? JSONDecoder().decode(CalloutRegion.self, from: Data($0.utf8))
     }
@@ -926,7 +922,7 @@ public actor Journal {
     cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail, replayed
     """
 
-  private static func modelCall(from row: SQLiteConnection.Statement) -> ModelCallRecord {
+  private static func makeModelCall(from row: SQLiteConnection.Statement) -> ModelCallRecord {
     ModelCallRecord(
       id: row.int(0),
       timestamp: Date(timeIntervalSince1970: row.double(1)),
@@ -954,7 +950,8 @@ public actor Journal {
     cumulative_cost, content_json, covered_through_observation_id
     """
 
-  private func understanding(from row: SQLiteConnection.Statement) throws -> UnderstandingRecord {
+  private func makeUnderstanding(from row: SQLiteConnection.Statement) throws -> UnderstandingRecord
+  {
     UnderstandingRecord(
       id: row.int(0),
       updatedAt: Date(timeIntervalSince1970: row.double(1)),
@@ -970,7 +967,7 @@ public actor Journal {
     )
   }
 
-  private func observation(from row: SQLiteConnection.Statement) throws -> ActivityObservation {
+  private func makeObservation(from row: SQLiteConnection.Statement) throws -> ActivityObservation {
     let focus = try decoder.decode(FocusContext.self, from: Data((row.text(2) ?? "{}").utf8))
     let blocks = try decoder.decode([TextBlock].self, from: Data((row.text(3) ?? "[]").utf8))
     let hash = PerceptualHash(hexString: row.text(4) ?? "") ?? PerceptualHash(words: [0, 0, 0, 0])

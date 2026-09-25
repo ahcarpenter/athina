@@ -17,15 +17,15 @@ public struct MentorshipContext: Codable, Equatable, Sendable, Identifiable {
   /// An optional longer description, sent to the triage model with the name.
   public var detail: String
 
+  private enum CodingKeys: String, CodingKey {
+    case id, name, detail
+  }
+
   /// Creates a context, with a new id unless one is given.
   public init(id: UUID = UUID(), name: String, detail: String = "") {
     self.id = id
     self.name = name
     self.detail = detail
-  }
-
-  private enum CodingKeys: String, CodingKey {
-    case id, name, detail
   }
 
   /// Decodes a context, filling a missing id with a new one and a missing

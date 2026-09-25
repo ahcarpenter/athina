@@ -43,17 +43,6 @@ public struct PerceptualHash: Equatable, Hashable, Sendable {
     self.words = words
   }
 
-  /// Hamming distance: number of differing bits, 0...256.
-  public func distance(to other: PerceptualHash) -> Int {
-    zip(words, other.words).reduce(0) { $0 + ($1.0 ^ $1.1).nonzeroBitCount }
-  }
-
-  /// The hash as 64 lowercase hex digits, the form stored in the journal and
-  /// in JSON.
-  public var hexString: String {
-    words.map { String(format: "%016llx", $0) }.joined()
-  }
-
   /// Parses a hash from 64 hex digits, or returns nil for any other string.
   public init?(hexString: String) {
     guard hexString.count == 64 else { return nil }
@@ -67,6 +56,18 @@ public struct PerceptualHash: Equatable, Hashable, Sendable {
     }
     self.words = words
   }
+
+  /// Hamming distance: number of differing bits, 0...256.
+  public func distance(to other: PerceptualHash) -> Int {
+    zip(words, other.words).reduce(0) { $0 + ($1.0 ^ $1.1).nonzeroBitCount }
+  }
+
+  /// The hash as 64 lowercase hex digits, the form stored in the journal and
+  /// in JSON.
+  public var hexString: String {
+    words.map { String(format: "%016llx", $0) }.joined()
+  }
+
 }
 
 extension PerceptualHash: Codable {
