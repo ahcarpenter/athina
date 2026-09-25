@@ -9,79 +9,86 @@ struct UnderstandingSection: View {
 
   var body: some View {
     @Bindable var state = state
-    Section {
-      // A goal is a sentence, so it reads as the row's subtitle, leading
-      // and wrapping, rather than as a ragged value against the trailing edge.
-      if let record = state.mentorStatus.understanding, let goal = record.content.primaryGoal {
-        LabeledContent {
-          Text("Revision \(record.revision)")
-        } label: {
-          Text("Current goal")
-          Text(goal.goal)
-          Text(
-            """
-            \(Formatting.tokens(record.content.estimatedTokens)) tokens, \
-            \(Formatting.dollars(record.cumulativeCost)) in refresh calls
-            """
+    Section(
+      content: {
+        // A goal is a sentence, so it reads as the row's subtitle, leading
+        // and wrapping, rather than as a ragged value against the trailing edge.
+        if let record = state.mentorStatus.understanding, let goal = record.content.primaryGoal {
+          LabeledContent(
+            content: {
+              Text("Revision \(record.revision)")
+            },
+            label: {
+              Text("Current goal")
+              Text(goal.goal)
+              Text(
+                """
+                \(Formatting.tokens(record.content.estimatedTokens)) tokens, \
+                \(Formatting.dollars(record.cumulativeCost)) in refresh calls
+                """
+              )
+            }
           )
+          .accessibilityElement(children: .combine)
+        } else {
+          LabeledContent("Current goal") {
+            Text("Not worked out yet")
+          }
+          .accessibilityElement(children: .combine)
         }
-        .accessibilityElement(children: .combine)
-      } else {
-        LabeledContent("Current goal") {
-          Text("Not worked out yet")
+        DurationRow(
+          "Refresh at most every",
+          value: $state.settings.mentor.understandingRefreshInterval,
+          range: MentorSettings.refreshIntervalRange,
+          help:
+            """
+            Every mentor call also rewrites the understanding, at no extra cost. After at \
+            least this much active use with no mentor call, Athina makes a refresh call of its \
+            own.
+            """
+        )
+        IntRow(
+          "Size limit",
+          value: $state.settings.mentor.understandingTokenBudget,
+          range: MentorSettings.understandingTokenBudgetRange,
+          step: 100,
+          unit: .tokens,
+          help:
+            """
+            When the understanding grows past this, its oldest entries are dropped first and \
+            its strongest goal is always kept.
+            """
+        )
+        DurationRow(
+          "Forget after no activity for",
+          value: $state.settings.mentor.understandingIdleGap,
+          range: MentorSettings.idleGapRange,
+          help: "It is also forgotten when a new day starts."
+        )
+        HStack {
+          Spacer()
+          ResetUnderstandingButton()
         }
-        .accessibilityElement(children: .combine)
+      },
+      header: {
+        Text("Understanding")
+      },
+      footer: {
+        // The link opens the Journal pane in place rather than describing where it is.
+        Text(
+          settingsMarkdown:
+            """
+            Athina keeps a short written record of what you appear to be working toward and \
+            what has happened so far, so it can judge what you do against that goal rather \
+            than recent screens alone. The model writes it, and once it is forgotten Athina \
+            starts a fresh one. Its revisions stay in the journal on this Mac until they are \
+            reset here, or age out or are cleared with the rest of the journal in \
+            \(SettingsPane.journal.link("Journal settings")).
+            """
+        )
+        .settingsPaneLinks()
       }
-      DurationRow(
-        "Refresh at most every",
-        value: $state.settings.mentor.understandingRefreshInterval,
-        range: MentorSettings.refreshIntervalRange,
-        help:
-          """
-          Every mentor call also rewrites the understanding, at no extra cost. After at \
-          least this much active use with no mentor call, Athina makes a refresh call of its \
-          own.
-          """
-      )
-      IntRow(
-        "Size limit",
-        value: $state.settings.mentor.understandingTokenBudget,
-        range: MentorSettings.understandingTokenBudgetRange,
-        step: 100,
-        unit: .tokens,
-        help:
-          """
-          When the understanding grows past this, its oldest entries are dropped first and \
-          its strongest goal is always kept.
-          """
-      )
-      DurationRow(
-        "Forget after no activity for",
-        value: $state.settings.mentor.understandingIdleGap,
-        range: MentorSettings.idleGapRange,
-        help: "It is also forgotten when a new day starts."
-      )
-      HStack {
-        Spacer()
-        ResetUnderstandingButton()
-      }
-    } header: {
-      Text("Understanding")
-    } footer: {
-      // The link opens the Journal pane in place rather than describing where it is.
-      Text(
-        settingsMarkdown:
-          """
-          Athina keeps a short written record of what you appear to be working toward and \
-          what has happened so far, so it can judge what you do against that goal rather \
-          than recent screens alone. The model writes it, and once it is forgotten Athina \
-          starts a fresh one. Its revisions stay in the journal on this Mac until they are \
-          reset here, or age out or are cleared with the rest of the journal in \
-          \(SettingsPane.journal.link("Journal settings")).
-          """
-      )
-      .settingsPaneLinks()
-    }
+    )
   }
 }
 
@@ -106,23 +113,25 @@ struct ResetUnderstandingButton: View {
     .confirmationDialog(
       "Reset the understanding?",
       isPresented: $confirming,
-      titleVisibility: .visible
-    ) {
-      Button("Reset Understanding") {
-        resetting = true
-        Task {
-          await state.resetUnderstanding()
-          resetting = false
+      titleVisibility: .visible,
+      actions: {
+        Button("Reset Understanding") {
+          resetting = true
+          Task {
+            await state.resetUnderstanding()
+            resetting = false
+          }
         }
+        Button("Cancel", role: .cancel) {}
+      },
+      message: {
+        Text(
+          """
+          Athina forgets the goals, history, and concerns it has worked out, and starts a new \
+          understanding from what you do next. You can't undo this action.
+          """
+        )
       }
-      Button("Cancel", role: .cancel) {}
-    } message: {
-      Text(
-        """
-        Athina forgets the goals, history, and concerns it has worked out, and starts a new \
-        understanding from what you do next. You can't undo this action.
-        """
-      )
-    }
+    )
   }
 }

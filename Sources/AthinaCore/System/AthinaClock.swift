@@ -269,19 +269,22 @@ public final class AdjustableClock: AthinaClock {
       state.nextID += 1
       return state.nextID
     }
-    await withTaskCancellationHandler {
-      await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-        let ready = state.withLock { state -> Bool in
-          if Task.isCancelled || state.sleepers.count >= count { return true }
-          state.sleeperWaiters[id] = (count, continuation)
-          return false
+    await withTaskCancellationHandler(
+      operation: {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+          let ready = state.withLock { state -> Bool in
+            if Task.isCancelled || state.sleepers.count >= count { return true }
+            state.sleeperWaiters[id] = (count, continuation)
+            return false
+          }
+          if ready { continuation.resume() }
         }
-        if ready { continuation.resume() }
+      },
+      onCancel: {
+        let waiter = state.withLock { $0.sleeperWaiters.removeValue(forKey: id) }
+        waiter?.continuation.resume()
       }
-    } onCancel: {
-      let waiter = state.withLock { $0.sleeperWaiters.removeValue(forKey: id) }
-      waiter?.continuation.resume()
-    }
+    )
   }
 
   /// Waits until an advance ends it: when it reaches `deadline`, or on a
@@ -293,27 +296,30 @@ public final class AdjustableClock: AthinaClock {
       state.nextID += 1
       return state.nextID
     }
-    try await withTaskCancellationHandler {
-      try await withCheckedThrowingContinuation {
-        (continuation: CheckedContinuation<Void, any Error>) in
-        let (outcome, satisfied) = state.withLock {
-          state -> (Result<Void, any Error>?, [CheckedContinuation<Void, Never>]) in
-          if Task.isCancelled { return (.failure(CancellationError()), []) }
-          if let generation, generation != state.generation { return (.success(()), []) }
-          if deadline <= offset(in: state) { return (.success(()), []) }
-          state.sleepers[id] = Sleeper(deadline: deadline, continuation: continuation)
-          let count = state.sleepers.count
-          let ready = state.sleeperWaiters.filter { $0.value.count <= count }
-          for waiter in ready.keys { state.sleeperWaiters[waiter] = nil }
-          return (nil, ready.values.map(\.continuation))
+    try await withTaskCancellationHandler(
+      operation: {
+        try await withCheckedThrowingContinuation {
+          (continuation: CheckedContinuation<Void, any Error>) in
+          let (outcome, satisfied) = state.withLock {
+            state -> (Result<Void, any Error>?, [CheckedContinuation<Void, Never>]) in
+            if Task.isCancelled { return (.failure(CancellationError()), []) }
+            if let generation, generation != state.generation { return (.success(()), []) }
+            if deadline <= offset(in: state) { return (.success(()), []) }
+            state.sleepers[id] = Sleeper(deadline: deadline, continuation: continuation)
+            let count = state.sleepers.count
+            let ready = state.sleeperWaiters.filter { $0.value.count <= count }
+            for waiter in ready.keys { state.sleeperWaiters[waiter] = nil }
+            return (nil, ready.values.map(\.continuation))
+          }
+          if let outcome { continuation.resume(with: outcome) }
+          for waiter in satisfied { waiter.resume() }
         }
-        if let outcome { continuation.resume(with: outcome) }
-        for waiter in satisfied { waiter.resume() }
+      },
+      onCancel: {
+        let sleeper = state.withLock { $0.sleepers.removeValue(forKey: id) }
+        sleeper?.continuation.resume(throwing: CancellationError())
       }
-    } onCancel: {
-      let sleeper = state.withLock { $0.sleepers.removeValue(forKey: id) }
-      sleeper?.continuation.resume(throwing: CancellationError())
-    }
+    )
   }
 }
 

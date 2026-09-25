@@ -365,11 +365,15 @@ struct ToastView: View {
     .glassEffect(.regular, in: .rect(cornerRadius: ToastView.cornerRadius))
     .padding(1)
     .onHover(perform: onHover)
-    .onGeometryChange(for: CGSize.self) { proxy in
-      proxy.size
-    } action: { _ in
-      onSizeChange()
-    }
+    .onGeometryChange(
+      for: CGSize.self,
+      of: { proxy in
+        proxy.size
+      },
+      action: { _ in
+        onSizeChange()
+      }
+    )
   }
 }
 
@@ -378,13 +382,16 @@ struct ToastNote: View {
   let text: String
 
   var body: some View {
-    Label {
-      Text(text)
-        .fixedSize(horizontal: false, vertical: true)
-    } icon: {
-      Image(systemName: "mic.slash")
-        .foregroundStyle(.secondary)
-    }
+    Label(
+      title: {
+        Text(text)
+          .fixedSize(horizontal: false, vertical: true)
+      },
+      icon: {
+        Image(systemName: "mic.slash")
+          .foregroundStyle(.secondary)
+      }
+    )
     .font(.callout)
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(ToastView.inset)
@@ -440,12 +447,15 @@ struct ToastContent: View {
               .accessibilityAddTraits(.isHeader)
           }
           Spacer(minLength: 0)
-          Button {
-            onAction(.dismissed)
-          } label: {
-            Label("Close", systemImage: "xmark")
-              .labelStyle(.iconOnly)
-          }
+          Button(
+            action: {
+              onAction(.dismissed)
+            },
+            label: {
+              Label("Close", systemImage: "xmark")
+                .labelStyle(.iconOnly)
+            }
+          )
           .buttonStyle(.bordered)
           .buttonBorderShape(.circle)
           .controlSize(.small)
@@ -554,11 +564,15 @@ private struct FittedScrollView<Content: View>: View {
   var body: some View {
     ScrollView {
       content
-        .onGeometryChange(for: CGFloat.self) { proxy in
-          proxy.size.height
-        } action: { height in
-          contentHeight = height
-        }
+        .onGeometryChange(
+          for: CGFloat.self,
+          of: { proxy in
+            proxy.size.height
+          },
+          action: { height in
+            contentHeight = height
+          }
+        )
     }
     .defaultScrollAnchor(anchor)
     .scrollDisabled(contentHeight <= maxHeight)

@@ -579,10 +579,7 @@ struct ReplayClientTests {
     let inner = ScriptedClaudeClient()
     await inner.enqueue(json: "{}")
 
-    let setup = ModelClientMode.record(directory: directory).makeClient(
-      prices: .defaults,
-      live: { inner }
-    )
+    let setup = ModelClientMode.record(directory: directory).makeClient(prices: .defaults) { inner }
     let reason = try #require(setup.recordingUnavailableReason)
     #expect(reason.hasPrefix("cannot record to \(directory.path): "))
     #expect(!setup.client.isReplay)

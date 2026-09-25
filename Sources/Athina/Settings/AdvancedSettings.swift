@@ -22,28 +22,31 @@ struct AdvancedSettings: View {
   var body: some View {
     @Bindable var state = state
     Form {
-      Section {
-        Toggle(isOn: $state.settings.showDebugPanel) {
-          Text("Enable debug panel")
-          Text(
-            """
-            A window for troubleshooting Athina: the latest capture and the text read from \
-            it, each model call and why it was made, and what Athina understands you to be \
-            working toward.
-            """
-          )
-        }
-        HStack {
-          Spacer()
-          Button("Open Debug Panel") {
-            NSApp.activate()
-            openWindow(id: WindowID.debug)
+      Section(
+        content: {
+          Toggle(isOn: $state.settings.showDebugPanel) {
+            Text("Enable debug panel")
+            Text(
+              """
+              A window for troubleshooting Athina: the latest capture and the text read from \
+              it, each model call and why it was made, and what Athina understands you to be \
+              working toward.
+              """
+            )
           }
-          .disabled(!state.settings.showDebugPanel)
+          HStack {
+            Spacer()
+            Button("Open Debug Panel") {
+              NSApp.activate()
+              openWindow(id: WindowID.debug)
+            }
+            .disabled(!state.settings.showDebugPanel)
+          }
+        },
+        header: {
+          Text("Troubleshooting")
         }
-      } header: {
-        Text("Troubleshooting")
-      }
+      )
     }
     // Turned off, the panel goes too, so it is never left open with
     // nothing in the app that would have opened it.

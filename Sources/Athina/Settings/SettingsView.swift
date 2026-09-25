@@ -150,135 +150,151 @@ struct CaptureSettings: View {
   var body: some View {
     @Bindable var state = state
     Form {
-      Section {
-        NumberRow(
-          "Wait after switching windows",
-          value: $state.settings.focusSettleDelay,
-          range: 0...5,
-          step: 0.05,
-          unit: .seconds,
-          help: "Gives the new window time to finish drawing before it is captured."
-        )
-        NumberRow(
-          "Wait after typing or clicking",
-          value: $state.settings.inputSettleDelay,
-          range: 0.1...30,
-          step: 0.1,
-          unit: .seconds,
-          help: "Quiet time after keyboard, mouse, or trackpad input before a capture."
-        )
-        NumberRow(
-          "Capture at least every",
-          value: $state.settings.floorInterval,
-          range: 1...600,
-          step: 1,
-          unit: .seconds,
-          help: "A slow, steady capture while you are active, even when nothing triggers one."
-        )
-        NumberRow(
-          "Capture at most every",
-          value: $state.settings.minCaptureInterval,
-          range: 0.1...60,
-          step: 0.05,
-          unit: .seconds,
-          help: "The shortest time between two captures, whatever triggered them."
-        )
-      } header: {
-        Text("When to capture")
-      }
-      Section {
-        NumberRow(
-          "Idle after",
-          value: $state.settings.idleThreshold,
-          range: 5...3600,
-          step: 5,
-          unit: .seconds,
-          help: "Sensing stops after this long without keyboard, mouse, or trackpad input."
-        )
-        NumberRow(
-          "Check for input while active every",
-          value: $state.settings.inputPollInterval,
-          range: 0.1...5,
-          step: 0.1,
-          unit: .seconds
-        )
-        NumberRow(
-          "Check for input while idle every",
-          value: $state.settings.idlePollInterval,
-          range: 0.5...30,
-          step: 0.5,
-          unit: .seconds
-        )
-        HStack {
-          Spacer()
-          Button("Restore Default Timing") {
-            let defaults = SensingSettings()
-            var restored = state.settings
-            restored.focusSettleDelay = defaults.focusSettleDelay
-            restored.inputSettleDelay = defaults.inputSettleDelay
-            restored.floorInterval = defaults.floorInterval
-            restored.minCaptureInterval = defaults.minCaptureInterval
-            restored.idleThreshold = defaults.idleThreshold
-            restored.inputPollInterval = defaults.inputPollInterval
-            restored.idlePollInterval = defaults.idlePollInterval
-            state.settings = restored
-          }
-        }
-      } header: {
-        Text("Idle")
-      }
-      Section {
-        IntRow(
-          "Longest frame edge",
-          value: $state.settings.maxFrameDimension,
-          range: 320...4096,
-          step: 64,
-          unit: .pixels,
-          help:
-            """
-            Frames are scaled down to this size. Smaller frames are cheaper to compare, \
-            read, and store.
-            """
-        )
-        IntRow(
-          "Treat frames as unchanged within",
-          value: $state.settings.hashDistanceThreshold,
-          range: 0...PerceptualHash.bitCount,
-          step: 1,
-          unit: .bits,
-          help:
-            """
-            A frame this close to the previous one, out of \(PerceptualHash.bitCount) bits \
-            of its fingerprint, is dropped unless the window or the focused text changed.
-            """
-        )
-      } header: {
-        Text("Frames")
-      }
-      Section {
-        Picker(selection: $state.settings.ocrLevel) {
-          ForEach(OCRLevel.allCases) { level in
-            Text(level.label).tag(level)
-          }
-        } label: {
-          Text("Text recognition")
-          Text(
-            """
-            Accurate takes a few hundred milliseconds per frame. Fast is much quicker but \
-            finds no text in dark interfaces such as terminals.
-            """
+      Section(
+        content: {
+          NumberRow(
+            "Wait after switching windows",
+            value: $state.settings.focusSettleDelay,
+            range: 0...5,
+            step: 0.05,
+            unit: .seconds,
+            help: "Gives the new window time to finish drawing before it is captured."
           )
+          NumberRow(
+            "Wait after typing or clicking",
+            value: $state.settings.inputSettleDelay,
+            range: 0.1...30,
+            step: 0.1,
+            unit: .seconds,
+            help: "Quiet time after keyboard, mouse, or trackpad input before a capture."
+          )
+          NumberRow(
+            "Capture at least every",
+            value: $state.settings.floorInterval,
+            range: 1...600,
+            step: 1,
+            unit: .seconds,
+            help: "A slow, steady capture while you are active, even when nothing triggers one."
+          )
+          NumberRow(
+            "Capture at most every",
+            value: $state.settings.minCaptureInterval,
+            range: 0.1...60,
+            step: 0.05,
+            unit: .seconds,
+            help: "The shortest time between two captures, whatever triggered them."
+          )
+        },
+        header: {
+          Text("When to capture")
         }
-        .pickerStyle(.segmented)
-        PercentRow(
-          "Thumbnail quality",
-          value: $state.settings.thumbnailJPEGQuality,
-          range: 0.1...1,
-          step: 0.05
-        )
-      } header: {
-        Text("Recognition and storage")
-      }
+      )
+      Section(
+        content: {
+          NumberRow(
+            "Idle after",
+            value: $state.settings.idleThreshold,
+            range: 5...3600,
+            step: 5,
+            unit: .seconds,
+            help: "Sensing stops after this long without keyboard, mouse, or trackpad input."
+          )
+          NumberRow(
+            "Check for input while active every",
+            value: $state.settings.inputPollInterval,
+            range: 0.1...5,
+            step: 0.1,
+            unit: .seconds
+          )
+          NumberRow(
+            "Check for input while idle every",
+            value: $state.settings.idlePollInterval,
+            range: 0.5...30,
+            step: 0.5,
+            unit: .seconds
+          )
+          HStack {
+            Spacer()
+            Button("Restore Default Timing") {
+              let defaults = SensingSettings()
+              var restored = state.settings
+              restored.focusSettleDelay = defaults.focusSettleDelay
+              restored.inputSettleDelay = defaults.inputSettleDelay
+              restored.floorInterval = defaults.floorInterval
+              restored.minCaptureInterval = defaults.minCaptureInterval
+              restored.idleThreshold = defaults.idleThreshold
+              restored.inputPollInterval = defaults.inputPollInterval
+              restored.idlePollInterval = defaults.idlePollInterval
+              state.settings = restored
+            }
+          }
+        },
+        header: {
+          Text("Idle")
+        }
+      )
+      Section(
+        content: {
+          IntRow(
+            "Longest frame edge",
+            value: $state.settings.maxFrameDimension,
+            range: 320...4096,
+            step: 64,
+            unit: .pixels,
+            help:
+              """
+              Frames are scaled down to this size. Smaller frames are cheaper to compare, \
+              read, and store.
+              """
+          )
+          IntRow(
+            "Treat frames as unchanged within",
+            value: $state.settings.hashDistanceThreshold,
+            range: 0...PerceptualHash.bitCount,
+            step: 1,
+            unit: .bits,
+            help:
+              """
+              A frame this close to the previous one, out of \(PerceptualHash.bitCount) bits \
+              of its fingerprint, is dropped unless the window or the focused text changed.
+              """
+          )
+        },
+        header: {
+          Text("Frames")
+        }
+      )
+      Section(
+        content: {
+          Picker(
+            selection: $state.settings.ocrLevel,
+            content: {
+              ForEach(OCRLevel.allCases) { level in
+                Text(level.label).tag(level)
+              }
+            },
+            label: {
+              Text("Text recognition")
+              Text(
+                """
+                Accurate takes a few hundred milliseconds per frame. Fast is much quicker but \
+                finds no text in dark interfaces such as terminals.
+                """
+              )
+            }
+          )
+          .pickerStyle(.segmented)
+          PercentRow(
+            "Thumbnail quality",
+            value: $state.settings.thumbnailJPEGQuality,
+            range: 0.1...1,
+            step: 0.05
+          )
+        },
+        header: {
+          Text("Recognition and storage")
+        }
+      )
     }
   }
 }
@@ -294,98 +310,107 @@ struct JournalSettings: View {
   var body: some View {
     @Bindable var state = state
     Form {
-      Section {
-        DurationRow("Keep thumbnails for", value: $state.settings.thumbnailRetention)
-        DurationRow(
-          "Keep text and events for",
-          value: $state.settings.textRetention,
-          help: "Always at least as long as thumbnails."
-        )
-        NumberRow(
-          "Limit the journal to",
-          value: Binding(
-            get: { Double(state.settings.journalSizeCapBytes / (1024 * 1024)) },
-            set: {
-              state.settings.journalSizeCapBytes = Int64($0.clamped(to: 10...100_000)) * 1024 * 1024
+      Section(
+        content: {
+          DurationRow("Keep thumbnails for", value: $state.settings.thumbnailRetention)
+          DurationRow(
+            "Keep text and events for",
+            value: $state.settings.textRetention,
+            help: "Always at least as long as thumbnails."
+          )
+          NumberRow(
+            "Limit the journal to",
+            value: Binding(
+              get: { Double(state.settings.journalSizeCapBytes / (1024 * 1024)) },
+              set: {
+                state.settings.journalSizeCapBytes =
+                  Int64($0.clamped(to: 10...100_000)) * 1024 * 1024
+              }
+            ),
+            range: 10...100_000,
+            step: 50,
+            unit: .megabytes,
+            help:
+              """
+              The oldest thumbnails, then the oldest text and events, are removed to stay \
+              under this size.
+              """
+          )
+          NumberRow(
+            "Clean up every",
+            value: $state.settings.retentionInterval,
+            range: 30...86400,
+            step: 30,
+            unit: .seconds
+          )
+        },
+        header: {
+          Text("Retention")
+        }
+      )
+      Section(
+        content: {
+          if let note = state.dataMigration.note {
+            StatusLabel(note, kind: state.dataMigration.needsAttention ? .warning : .info)
+              .textSelection(.enabled)
+          }
+          LabeledContent("Location") {
+            Text(Formatting.path(state.journalURL))
+              .textSelection(.enabled)
+              .multilineTextAlignment(.trailing)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          if let stats = state.journalStats {
+            LabeledContent("Size", value: Formatting.bytes(stats.usedBytes))
+            LabeledContent("Contents") {
+              Text(
+                """
+                \(Plural.count(stats.observationCount, "observation", "observations")), \
+                \(Plural.count(stats.thumbnailCount, "thumbnail", "thumbnails")), \
+                \(Plural.count(stats.eventCount, "event", "events"))
+                """
+              )
+              .multilineTextAlignment(.trailing)
+              .fixedSize(horizontal: false, vertical: true)
             }
-          ),
-          range: 10...100_000,
-          step: 50,
-          unit: .megabytes,
-          help:
-            """
-            The oldest thumbnails, then the oldest text and events, are removed to stay \
-            under this size.
-            """
-        )
-        NumberRow(
-          "Clean up every",
-          value: $state.settings.retentionInterval,
-          range: 30...86400,
-          step: 30,
-          unit: .seconds
-        )
-      } header: {
-        Text("Retention")
-      }
-      Section {
-        if let note = state.dataMigration.note {
-          StatusLabel(note, kind: state.dataMigration.needsAttention ? .warning : .info)
-            .textSelection(.enabled)
-        }
-        LabeledContent("Location") {
-          Text(Formatting.path(state.journalURL))
-            .textSelection(.enabled)
-            .multilineTextAlignment(.trailing)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        if let stats = state.journalStats {
-          LabeledContent("Size", value: Formatting.bytes(stats.usedBytes))
-          LabeledContent("Contents") {
-            Text(
-              """
-              \(Plural.count(stats.observationCount, "observation", "observations")), \
-              \(Plural.count(stats.thumbnailCount, "thumbnail", "thumbnails")), \
-              \(Plural.count(stats.eventCount, "event", "events"))
-              """
-            )
-            .multilineTextAlignment(.trailing)
-            .fixedSize(horizontal: false, vertical: true)
           }
-        }
-        HStack {
-          Button("Reveal in Finder") {
-            NSWorkspace.shared.activateFileViewerSelecting([state.journalURL])
+          HStack {
+            Button("Reveal in Finder") {
+              NSWorkspace.shared.activateFileViewerSelecting([state.journalURL])
+            }
+            Spacer()
+            Button("Clear Journal…", role: .destructive) {
+              confirmClear = true
+            }
           }
-          Spacer()
-          Button("Clear Journal…", role: .destructive) {
-            confirmClear = true
-          }
+        },
+        header: {
+          Text("On disk")
         }
-      } header: {
-        Text("On disk")
-      }
+      )
     }
     // Clearing is what the person just chose, so the confirming button
     // is the plain default and Cancel stays available.
     .confirmationDialog(
       "Clear the journal?",
       isPresented: $confirmClear,
-      titleVisibility: .visible
-    ) {
-      Button("Clear Journal") {
-        Task { await state.clearJournal() }
+      titleVisibility: .visible,
+      actions: {
+        Button("Clear Journal") {
+          Task { await state.clearJournal() }
+        }
+        Button("Cancel", role: .cancel) {}
+      },
+      message: {
+        Text(
+          """
+          Every observation, thumbnail, event, suggestion, follow-up question, and model call \
+          record is deleted, along with Athina's understanding of what you are working toward. \
+          You can't undo this action.
+          """
+        )
       }
-      Button("Cancel", role: .cancel) {}
-    } message: {
-      Text(
-        """
-        Every observation, thumbnail, event, suggestion, follow-up question, and model call \
-        record is deleted, along with Athina's understanding of what you are working toward. \
-        You can't undo this action.
-        """
-      )
-    }
+    )
     .task {
       await state.refreshJournalStats()
     }
@@ -403,63 +428,73 @@ struct PrivacySettings: View {
   var body: some View {
     @Bindable var state = state
     Form {
-      Section {
-        LabeledContent {
-          HotKeyRecorder(
-            title: "Pause shortcut",
-            hotKey: $state.settings.pauseHotKey,
-            conflicts: [state.settings.mentor.pushToTalkHotKey].compactMap { $0 },
-            conflictNote: "That is the talk-back shortcut."
-          )
-        } label: {
-          Text("Pause shortcut")
-          if state.isRunning, !state.hotKeyRegistered {
-            StatusLabel(
-              """
-              Another app uses this combination, or it lacks Control, Option, or Command. \
-              Choose another.
-              """,
-              kind: .warning
-            )
-          }
-        }
-      } footer: {
-        Text(
-          """
-          Pauses and resumes watching from any app. The menu bar icon shows an eye while \
-          watching and a crossed-out eye while paused.
-          """
-        )
-      }
-      Section {
-        ForEach(state.settings.excludedBundleIDs, id: \.self) { id in
-          ExcludedAppRow(bundleID: id) {
-            state.settings.excludedBundleIDs.removeAll { $0 == id }
-          }
-        }
-        HStack {
-          Button("Add App…") { showAdd = true }
-            .popover(isPresented: $showAdd, arrowEdge: .bottom) {
-              AddExcludedAppPopover(existing: state.settings.excludedBundleIDs) { id in
-                state.settings.excludedBundleIDs.append(id)
+      Section(
+        content: {
+          LabeledContent(
+            content: {
+              HotKeyRecorder(
+                title: "Pause shortcut",
+                hotKey: $state.settings.pauseHotKey,
+                conflicts: [state.settings.mentor.pushToTalkHotKey].compactMap { $0 },
+                conflictNote: "That is the talk-back shortcut."
+              )
+            },
+            label: {
+              Text("Pause shortcut")
+              if state.isRunning, !state.hotKeyRegistered {
+                StatusLabel(
+                  """
+                  Another app uses this combination, or it lacks Control, Option, or Command. \
+                  Choose another.
+                  """,
+                  kind: .warning
+                )
               }
             }
-          Spacer()
-          Button("Restore Defaults") {
-            state.settings.excludedBundleIDs = ExcludedApps.defaults
-          }
-          .disabled(state.settings.excludedBundleIDs == ExcludedApps.defaults)
+          )
+        },
+        footer: {
+          Text(
+            """
+            Pauses and resumes watching from any app. The menu bar icon shows an eye while \
+            watching and a crossed-out eye while paused.
+            """
+          )
         }
-      } header: {
-        Text("Excluded apps")
-      } footer: {
-        Text(
-          """
-          While one of these apps is frontmost, Athina captures nothing, reads no window or \
-          element, and journals only that the app was excluded.
-          """
-        )
-      }
+      )
+      Section(
+        content: {
+          ForEach(state.settings.excludedBundleIDs, id: \.self) { id in
+            ExcludedAppRow(bundleID: id) {
+              state.settings.excludedBundleIDs.removeAll { $0 == id }
+            }
+          }
+          HStack {
+            Button("Add App…") { showAdd = true }
+              .popover(isPresented: $showAdd, arrowEdge: .bottom) {
+                AddExcludedAppPopover(existing: state.settings.excludedBundleIDs) { id in
+                  state.settings.excludedBundleIDs.append(id)
+                }
+              }
+            Spacer()
+            Button("Restore Defaults") {
+              state.settings.excludedBundleIDs = ExcludedApps.defaults
+            }
+            .disabled(state.settings.excludedBundleIDs == ExcludedApps.defaults)
+          }
+        },
+        header: {
+          Text("Excluded apps")
+        },
+        footer: {
+          Text(
+            """
+            While one of these apps is frontmost, Athina captures nothing, reads no window or \
+            element, and journals only that the app was excluded.
+            """
+          )
+        }
+      )
     }
   }
 }
@@ -476,26 +511,32 @@ private struct ExcludedAppRow: View {
 
   var body: some View {
     let url = appURL
-    LabeledContent {
-      RemoveButton(itemName: url.map(appName) ?? bundleID, action: onRemove)
-    } label: {
-      Label {
-        Text(url.map(appName) ?? bundleID)
-        Text(url == nil ? "Not installed" : bundleID)
-      } icon: {
-        if let url {
-          Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
-            .resizable()
-            .frame(width: 20, height: 20)
-            .accessibilityHidden(true)
-        } else {
-          Image(systemName: "app.dashed")
-            .foregroundStyle(.secondary)
-            .frame(width: 20, height: 20)
-            .accessibilityHidden(true)
-        }
+    LabeledContent(
+      content: {
+        RemoveButton(itemName: url.map(appName) ?? bundleID, action: onRemove)
+      },
+      label: {
+        Label(
+          title: {
+            Text(url.map(appName) ?? bundleID)
+            Text(url == nil ? "Not installed" : bundleID)
+          },
+          icon: {
+            if let url {
+              Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                .resizable()
+                .frame(width: 20, height: 20)
+                .accessibilityHidden(true)
+            } else {
+              Image(systemName: "app.dashed")
+                .foregroundStyle(.secondary)
+                .frame(width: 20, height: 20)
+                .accessibilityHidden(true)
+            }
+          }
+        )
       }
-    }
+    )
   }
 
   private func appName(_ url: URL) -> String {
@@ -622,21 +663,24 @@ struct NumberRow: View {
   private var spokenTitle: String { "\(title), in \(unit.label(for: value))" }
 
   var body: some View {
-    LabeledContent {
-      NumberControls(
-        unitLabel: unit.label(for: value),
-        field: TextField(
-          spokenTitle,
-          value: $value,
-          format: .number.precision(.fractionLength(0...2))
+    LabeledContent(
+      content: {
+        NumberControls(
+          unitLabel: unit.label(for: value),
+          field: TextField(
+            spokenTitle,
+            value: $value,
+            format: .number.precision(.fractionLength(0...2))
+          )
+          .onSubmit { value = value.clamped(to: range) },
+          stepper: Stepper(title, value: $value, in: range, step: step)
         )
-        .onSubmit { value = value.clamped(to: range) },
-        stepper: Stepper(title, value: $value, in: range, step: step)
-      )
-    } label: {
-      Text(title)
-      if let help { Text(help) }
-    }
+      },
+      label: {
+        Text(title)
+        if let help { Text(help) }
+      }
+    )
   }
 }
 
@@ -667,17 +711,20 @@ struct IntRow: View {
   private var spokenTitle: String { "\(title), in \(unit.label(for: Double(value)))" }
 
   var body: some View {
-    LabeledContent {
-      NumberControls(
-        unitLabel: unit.label(for: Double(value)),
-        field: TextField(spokenTitle, value: $value, format: .number.grouping(.never))
-          .onSubmit { value = value.clamped(to: range) },
-        stepper: Stepper(title, value: $value, in: range, step: step)
-      )
-    } label: {
-      Text(title)
-      if let help { Text(help) }
-    }
+    LabeledContent(
+      content: {
+        NumberControls(
+          unitLabel: unit.label(for: Double(value)),
+          field: TextField(spokenTitle, value: $value, format: .number.grouping(.never))
+            .onSubmit { value = value.clamped(to: range) },
+          stepper: Stepper(title, value: $value, in: range, step: step)
+        )
+      },
+      label: {
+        Text(title)
+        if let help { Text(help) }
+      }
+    )
   }
 }
 
@@ -704,17 +751,20 @@ struct DollarRow: View {
   }
 
   var body: some View {
-    LabeledContent {
-      NumberControls(
-        unitLabel: nil,
-        field: TextField(title, value: $value, format: .currency(code: "USD"))
-          .onSubmit { value = value.clamped(to: range) },
-        stepper: Stepper(title, value: $value, in: range, step: step)
-      )
-    } label: {
-      Text(title)
-      if let help { Text(help) }
-    }
+    LabeledContent(
+      content: {
+        NumberControls(
+          unitLabel: nil,
+          field: TextField(title, value: $value, format: .currency(code: "USD"))
+            .onSubmit { value = value.clamped(to: range) },
+          stepper: Stepper(title, value: $value, in: range, step: step)
+        )
+      },
+      label: {
+        Text(title)
+        if let help { Text(help) }
+      }
+    )
   }
 }
 
@@ -741,17 +791,20 @@ struct PercentRow: View {
   }
 
   var body: some View {
-    LabeledContent {
-      NumberControls(
-        unitLabel: nil,
-        field: TextField(title, value: $value, format: .percent.precision(.fractionLength(0)))
-          .onSubmit { value = value.clamped(to: range) },
-        stepper: Stepper(title, value: $value, in: range, step: step)
-      )
-    } label: {
-      Text(title)
-      if let help { Text(help) }
-    }
+    LabeledContent(
+      content: {
+        NumberControls(
+          unitLabel: nil,
+          field: TextField(title, value: $value, format: .percent.precision(.fractionLength(0)))
+            .onSubmit { value = value.clamped(to: range) },
+          stepper: Stepper(title, value: $value, in: range, step: step)
+        )
+      },
+      label: {
+        Text(title)
+        if let help { Text(help) }
+      }
+    )
   }
 }
 
@@ -853,48 +906,46 @@ struct DurationRow: View {
   private var units: [Unit] { Unit.allCases.filter { amounts(in: $0) != nil } }
 
   var body: some View {
-    LabeledContent {
-      HStack(spacing: 6) {
-        TextField(
-          "\(title), in \(unit.rawValue)",
-          value: $amount,
-          format: .number.precision(.fractionLength(0...1))
-        )
-        .labelsHidden()
-        .multilineTextAlignment(.trailing)
-        .frame(width: 72)
-        .focused($editing)
-        .onSubmit(push)
-        // A field writes the setting when its editing ends, however
-        // it ends, not only when Return commits it.
-        .onChange(of: editing) { _, focused in
-          if !focused { push() }
-        }
-        Stepper(
-          title,
-          value: $amount,
-          in: amounts(in: unit) ?? 1...10_000,
-          step: 1,
-          onEditingChanged: { _ in push() }
-        )
-        .labelsHidden()
-        Picker("Unit", selection: $unit) {
-          ForEach(units) { unit in
-            Text(unit.rawValue).tag(unit)
+    LabeledContent(
+      content: {
+        HStack(spacing: 6) {
+          TextField(
+            "\(title), in \(unit.rawValue)",
+            value: $amount,
+            format: .number.precision(.fractionLength(0...1))
+          )
+          .labelsHidden()
+          .multilineTextAlignment(.trailing)
+          .frame(width: 72)
+          .focused($editing)
+          .onSubmit(push)
+          // A field writes the setting when its editing ends, however
+          // it ends, not only when Return commits it.
+          .onChange(of: editing) { _, focused in
+            if !focused { push() }
           }
+          Stepper(title, value: $amount, in: amounts(in: unit) ?? 1...10_000, step: 1) { _ in push()
+          }
+          .labelsHidden()
+          Picker("Unit", selection: $unit) {
+            ForEach(units) { unit in
+              Text(unit.rawValue).tag(unit)
+            }
+          }
+          .labelsHidden()
+          // A minimum rather than a width, so a unit word wider than the
+          // measurement grows the control instead of clipping, and
+          // trailing so the pop-up keeps the form's edge and the slack a
+          // shorter word leaves falls between it and the stepper.
+          .frame(minWidth: Self.unitWidth, alignment: .trailing)
+          .onChange(of: unit) { _, _ in push() }
         }
-        .labelsHidden()
-        // A minimum rather than a width, so a unit word wider than the
-        // measurement grows the control instead of clipping, and
-        // trailing so the pop-up keeps the form's edge and the slack a
-        // shorter word leaves falls between it and the stepper.
-        .frame(minWidth: Self.unitWidth, alignment: .trailing)
-        .onChange(of: unit) { _, _ in push() }
+      },
+      label: {
+        Text(title)
+        if let help { Text(help) }
       }
-    } label: {
-      Text(title)
-      if let help { Text(help) }
-    }
+    )
     .onAppear(perform: pull)
     .onChange(of: value) { _, newValue in
       if newValue != amount * unit.seconds { pull() }

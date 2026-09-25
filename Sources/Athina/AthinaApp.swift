@@ -12,16 +12,20 @@ struct AthinaApp: App {
   var body: some Scene {
     // A snapshot run renders the label itself, off screen, and puts no
     // item in the real menu bar.
-    MenuBarExtra(isInserted: .constant(!Snapshots.isActive)) {
-      MenuBarContent()
-        .environment(state)
-    } label: {
-      MenuBarLabel(
-        mark: state.menuBarMark,
-        badge: state.clientModeBadge,
-        statusLine: state.statusLine
-      )
-    }
+    MenuBarExtra(
+      isInserted: .constant(!Snapshots.isActive),
+      content: {
+        MenuBarContent()
+          .environment(state)
+      },
+      label: {
+        MenuBarLabel(
+          mark: state.menuBarMark,
+          badge: state.clientModeBadge,
+          statusLine: state.statusLine
+        )
+      }
+    )
     .menuBarExtraStyle(.menu)
 
     Window("Debug Panel", id: WindowID.debug) {
