@@ -96,7 +96,8 @@ Athina on the live journal, the live settings and the same API bill. The live
 app's own windows open from its menu bar item, on the copy `make run` already
 started; the debug panel opens there and from Settings > Advanced only once it
 is turned on in that pane. `--record [<dir>]` chooses where model calls go,
-`--time-scale <n>` and `--advance-clock <interval>` set a replay's clock, and
+`--time-scale <n>` and `--advance-clock <interval>` set a replay's clock,
+`--replay-latency immediate` answers a replay's calls at once, and
 `--settings <path>` chooses the settings a replay starts from; see Iterating
 without the network.
 Where a replay keeps its own files is not an argument: it makes a directory for
@@ -243,6 +244,18 @@ recorded latency, so the in-flight states look the way they do live. Suggestions
 from replayed answers become toasts, take feedback, and land in the history like
 live ones. Test Connection replays the recorded test call.
 
+**Replay latency.** `--replay-latency immediate` answers every replayed call
+at once instead, for a scripted check that waits on what the calls bring: the
+mentor call that raises the first toast in the committed set was recorded at
+41 seconds, which the end-to-end harness has no use for (see End-to-end
+harness). `recorded`, the default, names the usual, so `make run-replay` still
+looks like a live session. The flag on a live or recording launch is refused,
+like the clock flags: nothing there is replayed, and the menu's Refused line,
+the Mentor card, and the log say why. A value other than `immediate` or
+`recorded` is refused in the same places, and the replay keeps the recorded
+latency. `ReplayLatencyMode` (`Sources/AthinaCore/System/ReplayLatencyMode.swift`)
+is the rule, under test.
+
 **A replay runs against files of its own, seeded from your live settings.** A
 replay, and a replay that was refused, keeps its journal and settings in a data
 directory of its own rather than beside the live ones: a new one for each
@@ -286,17 +299,17 @@ iterating on prompts.
 
 ### A faster clock
 
-Replay takes away the model's cost and latency, not the clock. A refresh that
-comes due after fifteen minutes of use, a Not now that lasts an hour, the spend
-hour, and a new day all still take that long. So every time-based behavior in
-Athina reads one time source, `AthinaClock`
+Replay takes away the model's cost, and its latency when asked to, not the
+clock. A refresh that comes due after fifteen minutes of use, a Not now that
+lasts an hour, the spend hour, and a new day all still take that long. So every
+time-based behavior in Athina reads one time source, `AthinaClock`
 (`Sources/AthinaCore/System/AthinaClock.swift`): the dates the journal is
 stamped with and the gates compare, the time awake a refresh counts, and every
 wait (a toast's countdown, the callout check, the sensing cadence and idle
-threshold, the talk-back timers, a replayed call's latency). The shipped app
-runs on `SystemClock`, which is `ContinuousClock` and `Date`, so a live run is
-exactly what it was. A replay runs on a clock of its own that a scripted check
-can compress:
+threshold, the talk-back timers, a replayed call's recorded latency). The
+shipped app runs on `SystemClock`, which is `ContinuousClock` and `Date`, so a
+live run is exactly what it was. A replay runs on a clock of its own that a
+scripted check can compress:
 
 ```sh
 make run-replay TIME_SCALE=60
@@ -580,7 +593,20 @@ exclusive lock, `~/Library/Caches/athina-e2e/screen.lock`, so only one
 session is on the screen at a time across every checkout, and a second run
 prints who holds it (checkout, scenario, pid, since when) and waits.
 `--lock-timeout <seconds>` gives up instead; `list`, `doctor`, and `journal`
-never wait.
+never wait. `run` and `warm` build `build/Athina.app` and `athina-drive` when a
+source file is newer, before they take the screen lock, so no other checkout
+waits on this one's build: the log says "building ... before taking the screen
+lock", then "took the screen lock". They build again inside the lock only when
+a source file changed while they waited for it, and say so. So call the
+harness bare: a hand-held `lockf` around it holds the lock through the build
+too. Before they build, `run` and `warm` take their checkout's own lock,
+`build/athina-e2e.lock`, the same way, and keep it to the end, so a second
+run from the same checkout says who holds it and waits rather than build over
+the bundle the first runs from; runs from other checkouts never wait on it.
+Under a hand-held `lockf` on the screen lock the order is turned round, so
+such a run takes its checkout's lock only if it is free, and otherwise stops
+at once naming the run that holds it, rather than wait on a run that waits on
+it.
 
 ### Scenarios
 
@@ -650,9 +676,28 @@ suite rather than every scenario.
 ### What the harness already handles, so a scenario need not
 
 - **The warm home**, above: no run pays the cold OCR stall again.
+- **Fast toasts.** Every launch replays with `--replay-latency immediate`
+  (see Replay), and the seeded settings put the triage gate at its 5 second
+  floor, so a toast comes seconds after the first capture rather than after
+  the recorded 41 second mentor call and a 20 second gate. `wait_toast` looks
+  for it every quarter second and nudges sensing every 2 seconds (the helper
+  window flips and TextEdit switches windows), pressing Capture Now only after
+  30 seconds with no toast; it logs how long it waited and how long since
+  launch. While it waits for the first capture, the harness brings the staged
+  TextEdit forward with each Shift press, since sensing captures nothing while
+  an excluded app, such as the terminal of whoever is at the Mac, is in front.
 - **Idle input.** Every pointer step waits for a quiet keyboard and mouse
   first, and a click aborts if the pointer moves off the target, because the
-  Mac may have someone at it.
+  Mac may have someone at it. A click by that person during the wait dismisses
+  the toast through its global listener, which is them using their Mac rather
+  than a failure, so `keep_toast_up` relaunches Athina for a new toast (the
+  earlier launch's journal and watcher logs are kept as
+  `journal-launch<n>.sqlite` and `<log>-launch<n>.log`, and the watchers start
+  again on fresh logs, so the checks read only what the new launch saw) and
+  waits again, up to three times. It relaunches rather than use Show Last
+  Suggestion, which brings the toast back with the dismissal already in the
+  journal, so the checks after it could not tell their answer from the one
+  before.
 - **The owner's apps are excluded** in the scratch settings from the start.
   Replay serves fixtures in order whatever is on screen, so a replayed callout
   would otherwise land over the work of whoever is using the Mac.
@@ -673,6 +718,8 @@ suite rather than every scenario.
   the file a hand-held `lockf -k` uses too, held for exactly as long as the
   harness process lives, so a killed run leaves no stale lock, and a run
   started under a holder (`run all`, or a hand-held `lockf`) never waits on it.
+  The checkout lock, `build/athina-e2e.lock`, works the same way for one
+  checkout.
 
 A validation step that needs live evidence should call this harness. Writing
 the driving again is how a check ends up overrunning its time limit on a cold
@@ -1557,8 +1604,8 @@ log is tagged Replay and not billed. In a replay the Mentor card shows what the
 clock reads and has the Advance field that moves it ahead, and the badge says
 how much faster the clock runs when it does (Replay 60x; see A faster clock).
 A replay's card also shows its own data directory and the settings it started
-from, and on any launch the card says why a `--settings` flag was refused (see
-Replays side by side).
+from, and on any launch the card says why a `--settings` or `--replay-latency`
+flag was refused (see Replays side by side and Replay).
 
 ## Design conventions
 

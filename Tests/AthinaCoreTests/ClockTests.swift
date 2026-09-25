@@ -257,6 +257,45 @@ import Testing
     }
 }
 
+/// The launch flag that sets how long a replayed call takes, and its refusal
+/// everywhere else.
+@Suite struct ReplayLatencyModeTests {
+    private let replay = ModelClientMode.replay(directory: URL(fileURLWithPath: "/fixtures"), allowStale: false)
+
+    /// A replay waits out the recorded latency unless it is asked not to, so
+    /// `make run-replay` still looks like a live session.
+    @Test func aReplayAnswersAfterTheRecordedLatencyUnlessAskedOtherwise() {
+        #expect(ReplayLatencyMode(arguments: ["Athina", "--replay", "/fixtures"], clientMode: replay) == ReplayLatencyMode(latency: .recorded))
+        #expect(ReplayLatencyMode(arguments: ["Athina", "--replay", "/f", "--replay-latency", "immediate"], clientMode: replay)
+            == ReplayLatencyMode(latency: .immediate))
+        #expect(ReplayLatencyMode(arguments: ["--replay-latency", "recorded", "--time-scale", "60"], clientMode: replay)
+            == ReplayLatencyMode(latency: .recorded))
+        #expect(ReplayLatencyMode(arguments: ["Athina"], clientMode: .live) == ReplayLatencyMode())
+        #expect(ReplayLatencyMode().refusal == nil)
+    }
+
+    /// Nothing is replayed on a live or recording launch, so the flag there is
+    /// refused rather than ignored.
+    @Test func theFlagIsRefusedOutsideAReplay() {
+        let refused = ReplayLatencyMode(latency: .recorded, refusal: "--replay-latency applies only to --replay")
+        #expect(ReplayLatencyMode(arguments: ["Athina", "--replay-latency", "immediate"], clientMode: .live) == refused)
+        #expect(ReplayLatencyMode(arguments: ["--record", "--replay-latency", "immediate"], clientMode: .record(directory: URL(fileURLWithPath: "/r")))
+            == refused)
+        #expect(ReplayLatencyMode(arguments: ["--replay-latency", "recorded"], clientMode: .live) == refused)
+        // A replay that could not start is still offline, so it is a replay here too.
+        #expect(ReplayLatencyMode(arguments: ["--replay-latency", "immediate"], clientMode: .invalid("--replay needs the directory of fixtures to replay"))
+            == ReplayLatencyMode(latency: .immediate))
+    }
+
+    /// A value that is neither is refused with the reason, and the replay
+    /// keeps the recorded latency.
+    @Test(arguments: [["--replay-latency"], ["--replay-latency", "fast"], ["--replay-latency", "Immediate"], ["--replay-latency", ""], ["--replay-latency", "--open"]])
+    func aValueThatIsNeitherIsRefused(arguments: [String]) {
+        #expect(ReplayLatencyMode(arguments: arguments, clientMode: replay)
+            == ReplayLatencyMode(latency: .recorded, refusal: "--replay-latency needs immediate or recorded"))
+    }
+}
+
 @Suite struct ClockIntervalTests {
     @Test(arguments: [
         ("90", 90.0), ("90s", 90), ("15m", 900), ("2h", 7200), ("1d", 86400), ("1h30m", 5400),

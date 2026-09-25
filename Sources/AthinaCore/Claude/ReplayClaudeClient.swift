@@ -22,9 +22,10 @@ public actor ReplayClaudeClient: ClaudeClient {
         }
     }
 
-    /// Whether a replayed call takes as long as the recorded one did.
-    public enum Latency: Equatable, Sendable {
-        /// Answer at once, for tests.
+    /// Whether a replayed call takes as long as the recorded one did. The raw
+    /// values are what `--replay-latency` takes (`ReplayLatencyMode`).
+    public enum Latency: String, CaseIterable, Equatable, Sendable {
+        /// Answer at once, for tests and scripted checks.
         case immediate
         /// Wait the recorded latency (never past the call's timeout), so the
         /// app's in-flight states look the way they do live.

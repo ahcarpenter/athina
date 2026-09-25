@@ -26,6 +26,7 @@
     "com.apple.calculator"
   ],
   "mentor": {
+    "triageMinInterval": 5,
     "toastTimeout": 600,
     "mentorMinInterval": 30
   }

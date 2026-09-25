@@ -9,7 +9,6 @@ scenario_run() {
 	local suggestion frame x y
 	stage_flip_window
 	wait_toast >/dev/null || return 1
-	suggestion="$(newest_suggestion_id)"
 
 	frame="$("$DRIVE" windows "$TEXTEDIT_PID" | awk '/layer=0/ {print; exit}')"
 	[ -n "$frame" ] || { log "TextEdit has no window on screen"; return 1; }
@@ -17,8 +16,8 @@ scenario_run() {
 	y=$(( $(sed -n 's/.* y=\([0-9-]*\) .*/\1/p' <<<"$frame") + 120 ))
 	log "clicking inside TextEdit at $x,$y"
 
-	wait_idle_input 15 || return 1
-	require_toast || return 1
+	keep_toast_up 15 || return 1
+	suggestion="$(newest_suggestion_id)"
 	snapshot_state "before"
 
 	"$DRIVE" click window "$TEXTEDIT_PID" "$x" "$y" --shot "$RUN_DIR/window-at-click.png" >>"$RUN_DIR/transcript.log" 2>&1 || {
