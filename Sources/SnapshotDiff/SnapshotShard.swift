@@ -77,7 +77,9 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
   /// Nil unless n is `count` and k is one of them.
   public init?(parsing text: String) {
     let parts = text.split(separator: "/", omittingEmptySubsequences: false)
-    guard parts.count == 2, let index = Int(parts[0]), let total = Int(parts[1]),
+    guard parts.count == 2,
+      let index = Int(parts[0]),
+      let total = Int(parts[1]),
       total == Self.count
     else { return nil }
     self.init(index: index)
@@ -123,7 +125,10 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
     }
     if !stale.isEmpty {
       problems.append(
-        "SnapshotShard.assignment names \(stale.joined(separator: ", ")), which no snapshot renders; remove each"
+        """
+        SnapshotShard.assignment names \(stale.joined(separator: ", ")), which no snapshot \
+        renders; remove each
+        """
       )
     }
     return problems.isEmpty ? nil : problems.joined(separator: "; ")

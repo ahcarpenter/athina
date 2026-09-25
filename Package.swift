@@ -23,7 +23,10 @@ let package = Package(
     .trait(
       name: "ControlAPI",
       description:
-        "The in-app control API the end-to-end harness drives a replay through; development builds only"
+        """
+        The in-app control API the end-to-end harness drives a replay through; development \
+        builds only
+        """
     ),
     // Builds the UI smoke test, the one target that uses
     // swift-snapshot-testing (README "UI snapshot smoke test"). It is off by
