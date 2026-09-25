@@ -208,10 +208,11 @@ import Testing
     holder.waitUntilExit()
     // The holder file is left behind by a kill -9; the lock is not.
     #expect(FileManager.default.fileExists(atPath: holderFile))
+    // A lock still held would last the holder's 60 s and give up at 5; the
+    // wait covers only a `sleep` the holder left, which inherited the lock.
     let next = try run("lock_acquire SCREEN_LOCK 'run next' 5 && echo acquired")
     #expect(next.status == 0)
     #expect(next.output.contains("acquired"))
-    #expect(next.seconds < 3)
   }
 
   @Test func aRunStoppedWhileWaitingLeavesNothingQueued() throws {
@@ -230,6 +231,123 @@ import Testing
     kill(waiter.processIdentifier, SIGTERM)
     waiter.waitUntilExit()
     try waitFor("its lockf to go") { kill(lockf, 0) != 0 }
+  }
+
+  // MARK: Waiting for idle input first
+
+  /// A file the test writes the seconds of idle input into, and the shell
+  /// function `idle` that reads it back the way `hid_idle_seconds` reads
+  /// the real ones.
+  private func idleReader(_ seconds: Int) throws -> (file: String, function: String) {
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let file = directory.appendingPathComponent("idle-\(UUID().uuidString)").path
+    try setIdle(seconds, in: file)
+    return (file, "idle() { cat '\(file)'; }")
+  }
+
+  private func setIdle(_ seconds: Int, in file: String) throws {
+    try "\(seconds)\n".write(toFile: file, atomically: true, encoding: .utf8)
+  }
+
+  /// A real-screen run's lock request, needing 15 seconds of quiet, then
+  /// any further arguments, printing `acquired` once it holds the lock.
+  private func whenIdle(_ reader: (file: String, function: String), _ extra: String = "") -> String
+  {
+    """
+    \(reader.function)
+    lock_acquire_when_idle SCREEN_LOCK 'run real-screen' '' 15 idle \(extra) && echo acquired
+    """
+  }
+
+  private func says(_ output: URL, _ text: String) -> Bool {
+    (try? String(contentsOf: output, encoding: .utf8))?.contains(text) ?? false
+  }
+
+  @Test func aQuietMacTakesTheLockAtOnce() throws {
+    let finished = try run(whenIdle(try idleReader(20)))
+    #expect(finished.status == 0)
+    #expect(finished.output.contains("acquired"))
+    #expect(finished.output.contains("input idle for 20s"))
+    #expect(!finished.output.contains("waiting for 15s of idle input"))
+  }
+
+  @Test func theLockWaitsForQuietBeforeItIsTaken() throws {
+    let reader = try idleReader(0)
+    let (waiter, output) = try process(whenIdle(reader), checkout: "/checkouts/two")
+    try waitFor("the run to wait for quiet") {
+      says(output, "waiting for 15s of idle input before taking the screen lock")
+    }
+    // Nothing is held while it waits for quiet: another run takes the lock at once.
+    let other = try run("lock_acquire SCREEN_LOCK 'run other' 0 && echo other-acquired")
+    #expect(other.output.contains("other-acquired"))
+    try setIdle(16, in: reader.file)
+    waiter.waitUntilExit()
+    #expect(waiter.terminationStatus == 0)
+    #expect(says(output, "input idle for 16s"))
+    #expect(says(output, "acquired"))
+  }
+
+  @Test func aMacThatNeverGoesQuietGivesUpWithoutTheLock() throws {
+    let finished = try run(whenIdle(try idleReader(2), "1"))
+    #expect(finished.status == 75)
+    #expect(
+      finished.output.contains(
+        "input never went idle for 15s in 1s, so the screen lock was not taken"
+      )
+    )
+    #expect(try run("lock_acquire SCREEN_LOCK 'run next' 0").status == 0)
+  }
+
+  @Test func inputThatComesBackDuringTheLockWaitGivesTheLockBack() throws {
+    let reader = try idleReader(20)
+    let holder = try startHolder("run menubar-keyboard", seconds: 60)
+    defer { holder.terminate() }
+    let (waiter, output) = try process(whenIdle(reader), checkout: "/checkouts/two")
+    try waitFor("the run to queue for the lock") { says(output, "waiting for the screen lock") }
+    try setIdle(0, in: reader.file)
+    holder.terminate()
+    holder.waitUntilExit()
+    try waitFor("the run to give the lock back") {
+      says(output, "gave it back until the Mac is quiet again")
+    }
+    // Given back: another run takes it while this one waits for quiet.
+    #expect(try run("lock_acquire SCREEN_LOCK 'run other' 0").status == 0)
+    try setIdle(20, in: reader.file)
+    waiter.waitUntilExit()
+    #expect(waiter.terminationStatus == 0)
+    #expect(says(output, "acquired"))
+  }
+
+  @Test func theLimitCountsTheIdleWaitsOfEveryRoundButNotTheLockWait() throws {
+    let reader = try idleReader(0)
+    let calls = directory.appendingPathComponent("idle-calls-\(UUID().uuidString)").path
+    let counted = (
+      file: reader.file,
+      function: "idle() { echo x >>'\(calls)'; cat '\(reader.file)'; }"
+    )
+    let holder = try startHolder("run menubar-keyboard", seconds: 60)
+    defer { holder.terminate() }
+    let (waiter, output) = try process(whenIdle(counted, "5"), checkout: "/checkouts/two")
+    try waitFor("the run to wait for quiet") {
+      says(output, "waiting for 15s of idle input before taking the screen lock")
+    }
+    usleep(1_500_000)
+    try setIdle(20, in: reader.file)
+    try waitFor("the run to queue for the lock") { says(output, "waiting for the screen lock") }
+    // Longer than the whole limit, which a lock wait does not use up.
+    usleep(6_000_000)
+    #expect(waiter.isRunning)
+    try setIdle(0, in: reader.file)
+    holder.terminate()
+    waiter.waitUntilExit()
+    #expect(waiter.terminationStatus == 75)
+    #expect(says(output, "gave it back until the Mac is quiet again"))
+    #expect(says(output, "input never went idle for 15s in 5s, so the screen lock was not taken"))
+    // One idle read per second waited in either round, one each time a round
+    // gives up or ends, and one after the lock: the limit plus three, whatever
+    // the first round used, only when the second round has just what is left.
+    let reads = try String(contentsOfFile: calls, encoding: .utf8).split(separator: "\n").count
+    #expect(reads == 5 + 3)
   }
 
   // MARK: The checkout lock
@@ -391,17 +509,27 @@ import Testing
     old.waitUntilExit()
 
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    // Both the hand-held lockf and the harness queued behind it stay until
+    // the test is done with them, however slow the Mac is: either one
+    // leaving early changes who the waiter names.
     let ready = directory.appendingPathComponent("hand-ready").path
+    let stop = directory.appendingPathComponent("hand-stop").path
     let hand = Process()
     hand.executableURL = URL(fileURLWithPath: "/usr/bin/lockf")
-    hand.arguments = ["-k", lock, "/bin/sh", "-c", "touch '\(ready)'; sleep 10"]
+    hand.arguments = [
+      "-k", lock, "/bin/sh", "-c",
+      "touch '\(ready)'; for _ in $(seq 1 600); do [ -e '\(stop)' ] && exit 0; sleep 0.1; done",
+    ]
     try hand.run()
-    defer { hand.terminate() }
+    defer {
+      FileManager.default.createFile(atPath: stop, contents: nil)
+      hand.waitUntilExit()
+    }
     try waitFor("the hand-held lockf") { FileManager.default.fileExists(atPath: ready) }
 
     // A harness already queued behind it is not named as a holder.
     let (queued, queuedOutput) = try process(
-      "lock_acquire SCREEN_LOCK 'run queued' 5",
+      "lock_acquire SCREEN_LOCK 'run queued' 60",
       checkout: "/checkouts/three"
     )
     defer { queued.terminate() }
@@ -409,6 +537,10 @@ import Testing
       (try? String(contentsOf: queuedOutput, encoding: .utf8))?.contains(
         "waiting for the screen lock"
       ) ?? false
+    }
+    // It says so before it starts the lockf it queues on.
+    try waitFor("the first waiter's lockf") {
+      (try? run("pgrep -P \(queued.processIdentifier) -x lockf").status) == 0
     }
 
     let waiter = try run("lock_acquire SCREEN_LOCK 'run all' 1")

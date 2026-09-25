@@ -76,6 +76,9 @@ PREFS_BACKUP=""
 PREFS_EXISTED=0
 CHECKS_FAILED=0
 CHECK_LINES=()
+# The step of a scenario that names its steps (step), which every check and a
+# scenario that stops early carry.
+STEP=""
 
 # --- Output -------------------------------------------------------------------
 
@@ -88,14 +91,16 @@ log() {
 }
 
 die() {
-	log "ERROR: $*"
+	if [ -n "$STEP" ]; then log "ERROR: step $STEP: $*"; else log "ERROR: $*"; fi
 	exit 1
 }
 
 # One check inside a scenario. A scenario fails when any of its checks does,
-# and every check reaches the result line, so a failure names itself.
+# and every check reaches the result line, so a failure names itself, and the
+# step it was made in when the scenario names its steps.
 check() {
 	local name="$1" expected="$2" actual="$3"
+	[ -n "$STEP" ] && name="step $STEP: $name"
 	if [ "$expected" = "$actual" ]; then
 		log "  ok   $name = $actual"
 		CHECK_LINES+=("ok $name=$actual")
@@ -104,6 +109,14 @@ check() {
 		CHECK_LINES+=("FAIL $name: expected=$expected actual=$actual")
 		CHECKS_FAILED=$((CHECKS_FAILED + 1))
 	fi
+}
+
+# Start the next step of a scenario that runs several, named
+# "<number> <what it proves>", so a failed check, or a scenario that stops at
+# it, says which step it was.
+step() {
+	STEP="$1"
+	log "--- step $STEP"
 }
 
 # --- Building -----------------------------------------------------------------
@@ -424,6 +437,8 @@ relaunch_athina() {
 	log "relaunching Athina (pid $ATHINA_PID's journal and watcher logs kept as journal-launch$RELAUNCHES.sqlite and *-launch$RELAUNCHES.log)"
 	stop_pid "$ATHINA_PID"
 	launch_athina "$HOME_DIR" ${LAUNCH_ARGS[@]+"${LAUNCH_ARGS[@]}"}
+	# The same control directory, where the new launch makes its socket again.
+	if [ -n "$CONTROL_DIR" ]; then control_wait; fi
 	watch_announcements
 	watch_clicks
 	wait_first_observation 90 || log "WARNING: no capture yet after the relaunch"
@@ -828,32 +843,6 @@ scripted_toast() {
 api_feedback() {
 	json_eval "$(api journal query=suggestions)" \
 		'next(("none" if s["feedback"] == "-" else s["feedback"] for s in r["rows"] if s["id"] == a[0]), "missing")' "$1"
-}
-
-# --- The menu bar -------------------------------------------------------------
-
-# Athina's own status item, as one `extra` line of the bar report.
-athina_extra() { "$DRIVE" bar | grep "^extra .*pid=$ATHINA_PID " || true; }
-
-athina_item_width() { athina_extra | sed -n 's/.* w=\([0-9.]*\) .*/\1/p'; }
-
-# The item's accessibility name, which is also how a scenario reads the mode.
-athina_item_title() { athina_extra | sed -n 's/.*title="\([^"]*\)".*/\1/p'; }
-
-# The mode out of that name, without the app's own name or the replay badge.
-# The badge carries the clock's speed under --time-scale ("Replay 4.0x"), so a
-# check on the mode has to read past it.
-athina_item_mode() { athina_item_title | sed -E 's/^Athina, (Recording, |Replay[^,]*, )?//'; }
-
-# The item's name lags an app switch by a few seconds, so a measurement taken
-# right after one can still be of the mode before it.
-wait_item_title() {
-	local want="$1" limit="${2:-30}" i
-	for i in $(seq 1 "$limit"); do
-		case "$(athina_item_title)" in *"$want"*) return 0 ;; esac
-		sleep 1
-	done
-	return 1
 }
 
 # --- Watchers -----------------------------------------------------------------
