@@ -790,14 +790,11 @@ private struct MentorCard: View {
                 let versions = summary.staleVersions.map { "v\($0)" }.joined(separator: ", ")
                 fixtures += "\n\(summary.staleCount) stale, from prompt \(versions) (now v\(summary.promptVersion)), \(summary.allowStale ? "served anyway" : "refused")"
             }
-            var fields = [ModeField(label: "Calls", value: "replayed, never sent or billed")]
-            // Only when it is not what live looks like, as the Clock field is.
-            if state.replayLatency.latency == .immediate {
-                fields.append(ModeField(label: "Latency", value: "none, each call answered at once"))
-            }
-            fields.append(ModeField(label: "Fixtures", value: fixtures, lineLimit: 3))
-            fields.append(ModeField(label: "From", value: Formatting.path(directory), truncation: .middle))
-            return fields
+            return [
+                ModeField(label: "Calls", value: "replayed, never sent or billed"),
+                ModeField(label: "Fixtures", value: fixtures, lineLimit: 3),
+                ModeField(label: "From", value: Formatting.path(directory), truncation: .middle),
+            ]
         }
     }
 

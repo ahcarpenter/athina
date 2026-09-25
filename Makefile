@@ -7,8 +7,6 @@ RECORD_DIR ?=
 ALLOW_STALE ?=
 ## Set to run a replay's clock that many times faster than real time (see README, "A faster clock")
 TIME_SCALE ?=
-## Set to immediate to answer every replayed call at once rather than after its recorded latency
-REPLAY_LATENCY ?=
 ## A settings file a replay starts from instead of the live settings, read and never written
 SETTINGS ?=
 ## Names the replay's pid file, build/<LANE>.pid: `make run-replay` replaces only the replay its own lane launched
@@ -64,7 +62,7 @@ run-replay: build
 	settings="$(SETTINGS)"; case "$$settings" in "~"|"~/"*) settings="$$HOME$${settings#\~}";; esac; \
 	if [ -n "$$settings" ]; then test -f "$$settings" || { echo "run-replay: no settings file at $$settings" >&2; exit 1; }; \
 		settings="$$(cd "$$(dirname "$$settings")" && pwd)/$$(basename "$$settings")"; fi; \
-	set -- --replay "$$(cd "$$dir" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures) $(if $(TIME_SCALE),--time-scale $(TIME_SCALE)) $(if $(REPLAY_LATENCY),--replay-latency $(REPLAY_LATENCY)); \
+	set -- --replay "$$(cd "$$dir" && pwd)" $(if $(ALLOW_STALE),--allow-stale-fixtures) $(if $(TIME_SCALE),--time-scale $(TIME_SCALE)); \
 	if [ -n "$$settings" ]; then set -- "$$@" --settings "$$settings"; fi; \
 	scripts/launch.sh "$(LANE)" -- "$$@"
 

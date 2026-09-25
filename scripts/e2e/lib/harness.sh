@@ -49,6 +49,8 @@ LAUNCHED_AT=0
 RELAUNCHES=0
 EXCLUDED_PID=""
 HELPER_PIDS=()
+# The watchers of the launch now running, whose logs the checks read.
+WATCHER_PIDS=()
 STAGED_PIDS=()
 STAGED_WINDOWS=()
 PREFS_BACKUP=""
@@ -244,13 +246,13 @@ launch_athina() {
 	local home="$1"
 	shift
 	local profile="$RUN_DIR/isolate.sb"
-	# `9>&-` here and on every helper started in the background: the screen
-	# lock's descriptor (lib/lock.sh) stays with the harness, so nothing that
-	# outlives a killed run can keep the lock.
+	# `8>&- 9>&-` here and on every helper started in the background: the
+	# locks' descriptors (lib/lock.sh) stay with the harness, so nothing that
+	# outlives a killed run can keep a lock.
 	sed -e "s#__LIVE_SUPPORT__#$LIVE_SUPPORT#" -e "s#__LEGACY_SUPPORT__#$LEGACY_SUPPORT#" "$E2E_DIR/lib/isolate.sb" >"$profile"
 	CFFIXED_USER_HOME="$home" HOME="$home" \
 		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" --replay-latency immediate "$@" \
-		>>"$RUN_DIR/app.log" 2>&1 9>&- &
+		>>"$RUN_DIR/app.log" 2>&1 8>&- 9>&- &
 	ATHINA_PID=$!
 	LAUNCH_ARGS=("$@")
 	LAUNCHED_AT=$(date +%s)
@@ -298,16 +300,24 @@ stop_pid() {
 
 # Stop the run's Athina and launch it again in the same home with the same
 # arguments. A replay makes a new data directory for each launch, so the new one
-# starts from an empty journal, as the first did; the first one's journal is
-# kept with the evidence.
+# starts from an empty journal, as the first did. The earlier launch's journal
+# and watcher logs are kept with the evidence under names of their own, and the
+# watchers start again on fresh logs, so a check after the relaunch reads only
+# what the new launch saw.
 relaunch_athina() {
+	local pid name
 	RELAUNCHES=$((RELAUNCHES + 1))
 	sqlite3 -readonly "$JOURNAL" ".backup '$RUN_DIR/journal-launch$RELAUNCHES.sqlite'" 2>/dev/null || true
-	log "relaunching Athina (pid $ATHINA_PID's journal kept as journal-launch$RELAUNCHES.sqlite)"
+	for pid in ${WATCHER_PIDS[@]+"${WATCHER_PIDS[@]}"}; do stop_pid "$pid"; done
+	WATCHER_PIDS=()
+	for name in announcements session-clicks athina-clicks; do
+		mv "$RUN_DIR/$name.log" "$RUN_DIR/$name-launch$RELAUNCHES.log"
+	done
+	log "relaunching Athina (pid $ATHINA_PID's journal and watcher logs kept as journal-launch$RELAUNCHES.sqlite and *-launch$RELAUNCHES.log)"
 	stop_pid "$ATHINA_PID"
 	launch_athina "$HOME_DIR" ${LAUNCH_ARGS[@]+"${LAUNCH_ARGS[@]}"}
 	watch_announcements
-	watch_app_clicks
+	watch_clicks
 	wait_first_observation 90 || log "WARNING: no capture yet after the relaunch"
 }
 
@@ -324,7 +334,7 @@ cleanup() {
 	for window in ${STAGED_WINDOWS[@]+"${STAGED_WINDOWS[@]}"}; do
 		"$DRIVE" close "${window%%:*}" "${window##*:}" >>"$RUN_DIR/transcript.log" 2>&1
 	done
-	for pid in ${HELPER_PIDS[@]+"${HELPER_PIDS[@]}"}; do stop_pid "$pid"; done
+	for pid in ${HELPER_PIDS[@]+"${HELPER_PIDS[@]}"} ${WATCHER_PIDS[@]+"${WATCHER_PIDS[@]}"}; do stop_pid "$pid"; done
 	for pid in ${STAGED_PIDS[@]+"${STAGED_PIDS[@]}"}; do stop_pid "$pid"; done
 	stop_pid "$ATHINA_PID"
 	prefs_restore
@@ -495,7 +505,7 @@ keep_toast_up() {
 # Mac.
 stage_flip_window() {
 	local x="${1:-120}" y="${2:-200}" w="${3:-700}" h="${4:-380}"
-	"$DRIVE" flip "$x" "$y" "$w" "$h" >>"$RUN_DIR/flip.log" 2>&1 9>&- &
+	"$DRIVE" flip "$x" "$y" "$w" "$h" >>"$RUN_DIR/flip.log" 2>&1 8>&- 9>&- &
 	FLIP_PID=$!
 	track_helper "$FLIP_PID"
 	sleep 1
@@ -604,21 +614,16 @@ wait_item_title() {
 
 # --- Watchers -----------------------------------------------------------------
 
-# Appending, so a relaunch's watchers add to the first launch's logs.
 watch_announcements() {
-	"$DRIVE" announce "$ATHINA_PID" >>"$RUN_DIR/announcements.log" 2>&1 9>&- &
-	track_helper $!
+	"$DRIVE" announce "$ATHINA_PID" >"$RUN_DIR/announcements.log" 2>&1 8>&- 9>&- &
+	WATCHER_PIDS+=($!)
 }
 
 watch_clicks() {
-	"$DRIVE" tap session >>"$RUN_DIR/session-clicks.log" 2>&1 9>&- &
-	track_helper $!
-	watch_app_clicks
-}
-
-watch_app_clicks() {
-	"$DRIVE" tap pid "$ATHINA_PID" >>"$RUN_DIR/athina-clicks.log" 2>&1 9>&- &
-	track_helper $!
+	"$DRIVE" tap session >"$RUN_DIR/session-clicks.log" 2>&1 8>&- 9>&- &
+	WATCHER_PIDS+=($!)
+	"$DRIVE" tap pid "$ATHINA_PID" >"$RUN_DIR/athina-clicks.log" 2>&1 8>&- 9>&- &
+	WATCHER_PIDS+=($!)
 	sleep 0.5
 }
 

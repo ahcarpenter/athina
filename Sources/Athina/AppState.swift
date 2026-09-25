@@ -155,7 +155,7 @@ final class AppState {
     /// call is refused while it is set.
     var recordingUnavailableReason: String?
     /// How long a replayed call takes, from the launch arguments.
-    let replayLatency: ReplayLatencyMode
+    private let replayLatency: ReplayLatencyMode
 
     // MARK: Clock
 
@@ -1400,7 +1400,6 @@ final class AppState {
             if summary.staleCount > 0 {
                 line += summary.allowStale ? ", \(summary.staleCount) stale allowed" : ", \(summary.staleCount) stale refused"
             }
-            if replayLatency.latency == .immediate { line += ", answered at once" }
             return line
         }
     }
