@@ -193,8 +193,9 @@ public enum CalloutAnchor {
     )
   }
 
-  /// Recognized text that lies mostly inside the region must still be there in
-  /// a later frame of the same window, within `tolerance` frame pixels.
+  /// At least half the recognized text blocks lying mostly inside the region
+  /// must still be there in a later frame of the same window, within
+  /// `tolerance` frame pixels.
   ///
   /// The window itself may not have moved, but a terminal scrolls and a
   /// document edits, and the spot the model pointed at goes with them; the

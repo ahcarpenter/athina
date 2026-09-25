@@ -1650,7 +1650,8 @@ counted (see Iterating without the network).
 
 - Sensing stays on this Mac: the journal, thumbnails, and settings never leave
   it. The only network peer is `api.anthropic.com`, reached only by the mentor
-  loop, only when an API key is saved and the loop is enabled. No other part
+  loop, only when an API key is saved, and only while the loop is enabled or
+  when the user asks for a Test Connection. No other part
   of the app has network code.
 - **Audio and transcripts stay on this Mac.** The microphone is open only
   while the talk-back key is held, and only the system's on-device recognizer
@@ -1659,8 +1660,11 @@ counted (see Iterating without the network).
   one of the toast's answers, is sent to the mentor tier as your follow-up
   question, together with the suggestion it is about,
   the earlier questions and answers on that suggestion, and the recognized
-  text of the screen the suggestion was made from. Transcripts are journaled
-  locally with the answers so the history window can show the exchange.
+  text of the screen the suggestion was made from; it is journaled as a
+  talk-back event too, so for up to ten minutes it is among the recent events
+  that triage, mentor and understanding calls are sent. Transcripts are
+  journaled locally with the answers so the history window can show the
+  exchange.
 - **What leaves the machine.** The triage tier receives text only: the
   frontmost app and window title, the accessibility summary (focused element
   role and an excerpt of its text), the OCR text of the latest kept
@@ -1968,27 +1972,39 @@ prints the Swift version beside it.
 
 ### Rebasing a branch across the reformat
 
-The reformat is one commit on `main` that changes nothing but formatting, named
-in `.git-blame-ignore-revs`, which `git blame` skips once `git config
-blame.ignoreRevsFile .git-blame-ignore-revs` is set (GitHub reads it itself).
-The commit before it adds `.swift-format` and `make format`. A branch started
-earlier formats itself with them first and then crosses the reformat, so that
-only real changes conflict:
+The reformat is one commit on `main` that changes nothing but formatting, the
+first of the commits named in `.git-blame-ignore-revs`, which `git blame` skips
+once `git config blame.ignoreRevsFile .git-blame-ignore-revs` is set (GitHub
+reads it itself); the others are the style commits after it. The commit before
+it adds `.swift-format` and `make format`. A branch started earlier formats
+itself with them first and then crosses the reformat, so that only real
+changes conflict:
 
 ```sh
 git fetch origin
 reformat=$(git show origin/main:.git-blame-ignore-revs | grep -v '^#' | grep . | head -n1)
+# 0. Stop unless main holds that very commit: an empty $reformat stops steps 1-3.
+git merge-base --is-ancestor "$reformat" origin/main || {
+  echo "Stop: origin/main does not contain the reformat commit $reformat." >&2
+  reformat=
+}
 # 1. Catch up to just before the reformat, resolving real conflicts as usual.
-git rebase "$reformat~1"
+git rebase "${reformat:?}~1"
 # 2. Format every commit of the branch where it stands.
-git rebase --exec 'make format && git commit -a --amend --no-edit --allow-empty' "$reformat~1"
+git rebase --exec 'make format && git commit -a --amend --no-edit --allow-empty' "${reformat:?}~1"
 # 3. Cross the reformat. Both sides are formatted now, so every conflict is
 #    formatting the branch already has right: -X theirs keeps the branch's side.
-git rebase -X theirs "$reformat"
+git rebase -X theirs "${reformat:?}"
 # 4. Carry on to the tip of main, resolving real conflicts as usual.
 git rebase origin/main
 make lint
 ```
+
+The reformat keeps its id on `main` only because the change that brought it
+landed as a merge commit; a squash or rebase merge gives it a new one, and
+`.git-blame-ignore-revs` would then name a commit `main` does not have, which
+step 0 catches. Run the steps one at a time: each must finish cleanly before
+the next begins.
 
 `-X theirs` in step 3 is safe only because step 1 settled every real conflict
 and the reformat commit holds nothing but formatting; replaying `main`'s own

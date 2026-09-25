@@ -83,8 +83,9 @@ public enum SnapshotReport {
     return lines.joined(separator: "\n") + "\n"
   }
 
-  /// The report page: the same sentence, then each differing snapshot's two
-  /// images and their difference side by side at real size.
+  /// The report page: the same sentence, then each differing snapshot's
+  /// images, whichever sides it has, and a changed one's difference, side by
+  /// side at real size.
   public static func html(_ comparison: SnapshotComparison) -> String {
     let kind = comparison.kind
     let drift = comparison.drift

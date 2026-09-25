@@ -303,7 +303,8 @@ public struct ResponseBlock: Codable, Equatable, Sendable {
 public struct MessagesResponse: Codable, Equatable, Sendable {
   /// The id the API gave the message.
   public var id: String
-  /// The id of the model that answered, which the call log records.
+  /// The id of the model that answered, which the suggestion, follow-up or
+  /// understanding made from the response records.
   public var model: String
   /// Why the model stopped, such as `end_turn`, `max_tokens`, or `refusal`.
   ///

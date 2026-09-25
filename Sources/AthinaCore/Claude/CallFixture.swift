@@ -214,9 +214,9 @@ public enum CallFixtureFiles {
   ///
   /// It is `now` when its name shows a later millisecond than the name of
   /// `previous` does, and otherwise the next millisecond. A name shows only the
-  /// millisecond, so without this two calls inside one millisecond, or either
-  /// side of the wall clock stepping back, would sort by kind and id instead of
-  /// in the order they were made.
+  /// millisecond, so without this two calls inside one millisecond would sort
+  /// by kind and id, and two either side of the wall clock stepping back would
+  /// sort the later one first, instead of in the order they were made.
   public static func recordingStamp(at now: Date, after previous: Date?) -> Date {
     guard let previous, millisecond(of: now) <= millisecond(of: previous) else { return now }
     return Date(timeIntervalSince1970: Double(millisecond(of: previous) + 1) / 1000)

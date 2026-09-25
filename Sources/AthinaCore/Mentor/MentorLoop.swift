@@ -47,7 +47,7 @@ public actor MentorLoop {
   public static func understandingMaxTokens(for budget: Int) -> Int {
     budget + understandingReplyOverhead + thinkingAllowance
   }
-  /// How many journal rows feed the event summaries and the rolling window.
+  /// How many journal rows feed the event summaries.
   public static let eventLookback = 40
   /// The most recent observations read for the rolling window; any beyond
   /// it are counted as left out.
@@ -893,7 +893,8 @@ public actor MentorLoop {
   }
 
   /// Takes a rewritten record as the current one: bounds it to the token
-  /// budget, stores it as the next revision, and publishes it.
+  /// budget and stores it as the next revision; the caller publishes the
+  /// status that carries it.
   ///
   /// False when the record was empty and nothing changed. `coveredThrough` is
   /// the highest observation id the writing call read.
