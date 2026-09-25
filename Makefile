@@ -16,16 +16,28 @@ PID ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
-.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure
+.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release
 
 ## Build the .app bundle into build/Athina.app
 build:
 	scripts/bundle.sh $(CONFIG)
 
-## Rebuild the app icon from Resources/Mark/AthinaMark.svg and the menu bar mark
-## from Resources/Mark/AthinaOwl.svg. Its outputs are committed, so a plain
-## `make build` never needs this; run it after changing either master or the
-## variant set (see scripts/mark-assets.swift).
+## Build, sign, notarize, and package a direct-download release into
+## build/release: the universal app under the hardened runtime, a disk image,
+## a zip, the debug symbols, and the release notes, which set the notes written
+## by hand in docs/release-notes/<version>.md among this build's version and
+## checksums (see README, "Releasing").
+## ATHINA_RELEASE_IDENTITY names the Developer ID Application identity and
+## ATHINA_NOTARY_PROFILE the notarytool keychain profile. Without them it runs
+## every step that needs no Apple credentials, names each one it skipped, and
+## fails, since that build is not one to distribute.
+release:
+	scripts/release.sh
+
+## Rebuild the app icon and the README's copy of it from Resources/Mark/AthinaMark.svg,
+## and the menu bar mark from Resources/Mark/AthinaOwl.svg. Its
+## outputs are committed, so a plain `make build` never needs this; run it after
+## changing either master or the variant set (see scripts/mark-assets.swift).
 mark:
 	swift scripts/mark-assets.swift .
 
@@ -57,12 +69,15 @@ run-replay: build
 ## Build and launch the app live, writing every model call to a fixture file.
 ## This spends API credits: use it only to record fixtures on purpose.
 ## Replaces only the copy this checkout's `make run` or `make record` launched
-## before, and refuses to start while another live Athina is running.
+## before, and refuses to start while another live Athina is running. Opens the
+## debug panel, whose Talk back field a recording session types into, whatever
+## Settings > Advanced > Enable debug panel says (DebugPanelAccess).
 record: build
 	@dir="$(RECORD_DIR)"; case "$$dir" in "~"|"~/"*) dir="$$HOME$${dir#\~}";; esac; \
 	if [ -n "$$dir" ]; then mkdir -p -m 700 "$$dir" && dir="$$(cd "$$dir" && pwd)" || exit 1; fi; \
 	set -- --record; \
 	if [ -n "$$dir" ]; then set -- "$$@" "$$dir"; fi; \
+	set -- "$$@" --open debug; \
 	scripts/launch.sh live --live -- "$$@"
 
 ## Delete the app's own recordings directory and every recorded call in it

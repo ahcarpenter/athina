@@ -1,21 +1,35 @@
-# Athina
+<h1 align="center">Athina</h1>
+<p align="center">
+  <a href="#requirements"
+    ><img
+      alt="Platform: macOS"
+      src="https://img.shields.io/badge/platform-macOS-blue?style=flat-square"
+  /></a>
+</p>
 
-Live mentor for macOS: watches what you are doing and offers timely guidance.
+<h3 align="center"><strong>A live mentor for your Mac.</strong> It watches how you work and shows you a better way when there is one.</h3>
+
+<p align="center">
+  <img src="Resources/Mark/ReadmeIcon.png" width="224" alt="Athina's app icon: Athena in a crested helmet, drawn in dark ink over cream shapes">
+</p>
+
+## Overview
 
 The **foundation** is a menu-bar app that senses what you are doing
 (accessibility context plus low-cadence screen capture with on-device OCR),
-records it in a local journal, and shows a debug panel with what it currently
-thinks you are doing. The **mentor loop** subscribes to that stream and asks
-Claude, in two tiers, whether there is a genuinely more helpful way to approach
-what you are doing; when there is, a small toast says so and learns from your
-answer. The **standing understanding** carries what you appear to be working
-toward from one call to the next, so Athina can look out for you: it calls out
-an approach that will not reach your goal, one that is slower than an
-alternative you have, or one that will reach it and bring a side effect you
-would not want. **Callouts and voice** let a suggestion point at the spot on
-screen it is about and take a spoken reply: an answer to the toast, or a
-question the mentor tier answers. Reading suggestions aloud is deferred.
-Halt-and-redirect and learned suppression are later phases.
+records it in a local journal, and, once turned on in Settings > Advanced,
+shows a debug panel with what it currently thinks you are doing. The **mentor
+loop** subscribes to that stream and asks Claude, in two tiers, whether there
+is a genuinely more helpful way to approach what you are doing; when there is,
+a small toast says so and learns from your answer. The **standing
+understanding** carries what you appear to be working toward from one call to
+the next, so Athina can look out for you: it calls out an approach that will
+not reach your goal, one that is slower than an alternative you have, or one
+that will reach it and bring a side effect you would not want. **Callouts and
+voice** let a suggestion point at the spot on screen it is about and take a
+spoken reply: an answer to the toast, or a question the mentor tier answers.
+Reading suggestions aloud is deferred. Halt-and-redirect and learned
+suppression are later phases.
 
 ## Requirements
 
@@ -29,7 +43,7 @@ Halt-and-redirect and learned suppression are later phases.
 
 ```sh
 make build            # builds build/Athina.app from the SwiftPM binary
-make mark             # rebuilds the app icon and the menu bar mark from the two SVG masters (their outputs are committed, so a plain build never needs it)
+make mark             # rebuilds the app icon and this README's copy of it from AthinaMark.svg, and the menu bar mark from AthinaOwl.svg (their outputs are committed, so a plain build never needs it)
 make run              # builds and launches the app, replacing only the copy this checkout's run or record launched
 make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
 make record           # the same, live, writing every model call to a fixture file (spends API credits)
@@ -37,6 +51,7 @@ make clear-recordings # deletes the app's own recordings directory
 make fixture-status   # checks that the committed fixtures are current (fails when not), with no network
 make test             # runs the unit tests (swift test), the loop included, with no network
 make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
+make release          # builds, signs, notarizes, and packages a direct-download release into build/release (see Releasing)
 ```
 
 None of the launch targets quits an Athina it did not start: each one stops
@@ -62,19 +77,22 @@ and never reads the keychain. Each view renders in a borderless window placed
 below the desktop picture, where the window server still composites glass and
 controls and ScreenCaptureKit still captures it, so nothing appears on screen
 (the run puts no item in the menu bar either) and a tall Settings pane renders
-whole. Replay mode has renders of its own.
-`open -n build/Athina.app --args --replay <dir> --open debug` (or `settings`,
-`settings:<pane>` for `general`, `contexts`, `models`, `capture`, `journal`, or
-`privacy`, `permissions`, `history`) starts a replay with that window already
-open, which is how a panel gets screenshotted from a shell. Keep the `--replay`:
-a bare `open -n` goes round `scripts/launch.sh`, so nothing stops it starting a
-second live Athina on the live journal, the live settings and the same API bill.
-The live app's own windows open from its menu bar item, on the copy `make run`
-already started. `--record [<dir>]` chooses where model calls go, `--time-scale
-<n>` and `--advance-clock <interval>` set a replay's clock, and `--settings
-<path>` chooses the settings a replay starts from; see Iterating without the
-network. Where a replay keeps its own files is not an argument: it makes a
-directory for itself and says which on the line it writes as it starts.
+whole. Replay mode has renders of its own. `open -n build/Athina.app --args
+--replay <dir> --open debug` (or `settings`, `settings:<pane>` for `general`,
+`contexts`, `models`, `capture`, `journal`, `privacy`, or `advanced`,
+`permissions`, `history`) starts a replay with that window already open, which
+is how a panel gets screenshotted from a shell. A replay opens the debug panel
+this way whatever Settings > Advanced says; a live launch opens it only while
+the switch there is on (see Debug panel). Keep the `--replay`: a bare `open -n`
+goes round `scripts/launch.sh`, so nothing stops it starting a second live
+Athina on the live journal, the live settings and the same API bill. The live
+app's own windows open from its menu bar item, on the copy `make run` already
+started, and the debug panel from Settings > Advanced once it is turned on
+there. `--record [<dir>]` chooses where model calls go, `--time-scale <n>` and
+`--advance-clock <interval>` set a replay's clock, and `--settings <path>`
+chooses the settings a replay starts from; see Iterating without the network.
+Where a replay keeps its own files is not an argument: it makes a directory for
+itself and says which on the line it writes as it starts.
 
 ### Setup: the Anthropic API key
 
@@ -102,7 +120,9 @@ with an explicit requirement on the bundle identifier
 (`identifier "com.ahcarpenter.athina"`), which every rebuild satisfies, so a
 grant made once stays valid. The trade-off is that any ad-hoc binary claiming
 that identifier would inherit the grants, which is acceptable on a development
-machine and is exactly what a development certificate fixes.
+machine and is exactly what a development certificate fixes. This is the
+development signature, without the hardened runtime or a timestamp; a release
+is signed by `make release` instead (see Releasing).
 
 The keychain is stricter than TCC: for an app that is not Apple-signed it
 trusts a keychain item's readers by the hash of the exact binary, so the
@@ -121,6 +141,25 @@ grant again:
 tccutil reset Accessibility com.ahcarpenter.athina
 tccutil reset ScreenCapture com.ahcarpenter.athina
 ```
+
+### A sandboxed build
+
+The same binary can run in the App Sandbox, which a Mac App Store edition
+needs; no such build is made yet. At launch `RuntimeEnvironment` reads the
+process's own `com.apple.security.app-sandbox` entitlement, which the direct
+and development builds carry set to false, so they run exactly as described
+everywhere else in this README. A sandboxed run differs in three ways:
+
+- Its files are in its container, its preferences domain and its keychain
+  service are its own bundle identifier rather than `com.ahcarpenter.athina`
+  (`AppPaths`), so it never shares preferences or a key with the direct build.
+- It moves nothing from Mentor, neither files, preferences nor the API key
+  (see Coming from Mentor), since all three are out of its reach, and says so
+  once in the log.
+- `--replay` and `--settings` may name only a path inside its container or its
+  own bundle, and `--record`, `--snapshot` and a clock request's reply
+  (`scripts/advance-clock.sh`) only one inside its container. Anything else is
+  refused with one line naming the path and where it could have been.
 
 ## Iterating without the network
 
@@ -243,9 +282,10 @@ open -n build/Athina.app --args --replay <dir> --time-scale 60 --advance-clock 1
   directory and outside the live data folder, and refuses anything else into
   the log: otherwise a request would be a way for any process in the login
   session to create or replace a file the user can write, the live settings
-  among them. It exits 0 with what the clock now reads, 1 when no
-  answer arrives inside `ATHINA_CLOCK_TIMEOUT` (10 seconds by default), naming
-  the pid, and 3 when the replay refused the interval.
+  among them. A request it cannot answer moves nothing, so a retry after no
+  answer never moves the clock twice. It exits 0 with what the clock now
+  reads, 1 when no answer arrives inside `ATHINA_CLOCK_TIMEOUT` (10 seconds by
+  default), naming the pid, and 3 when the replay refused the interval.
 - The debug panel's Mentor card has an **Advance** field (accessibility label
   "Advance clock"): type an interval and press Return, and the clock moves
   ahead at once, as if that much time went by with the Mac awake in the mode
@@ -481,6 +521,16 @@ scripts/e2e/athina-e2e journal suggestions   # a named query over the last run
 Every run is replay only: no API key is read, no network is reachable inside
 the sandbox, and nothing is billed. It needs a display, so it never runs in
 CI; CI runs the harness's unit tests with the rest of the suite.
+`ATHINA_E2E_APP=<bundle>` runs the scenarios against another bundle than
+`build/Athina.app`, such as the hardened release build (see Releasing), which
+the harness then checks as it is rather than rebuilding.
+
+Runs are serialized machine-wide: `run`, `warm`, and `clean` first take one
+exclusive lock, `~/Library/Caches/athina-e2e/screen.lock`, so only one
+session is on the screen at a time across every checkout, and a second run
+prints who holds it (checkout, scenario, pid, since when) and waits.
+`--lock-timeout <seconds>` gives up instead; `list`, `doctor`, and `journal`
+never wait.
 
 ### Scenarios
 
@@ -494,6 +544,7 @@ CI; CI runs the harness's unit tests with the rest of the suite.
 | `menubar-mark` | Athina's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 | `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
 | `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
+| `debug-panel-access` | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed; turned on, that button opens the panel (the menu still offers none), and turned off again, the panel closes |
 | `settings-pane-links` | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link rather than Markdown, and a real click on it changes the Settings window's pane in place rather than handing the link to the system |
 | `debug-timeline` | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started and App switch rows appear once each rather than once from the journal load and again from the live stream |
 
@@ -567,6 +618,11 @@ suite rather than every scenario.
   outbound network, so no run can reach live data or make a live call.
 - **Cleanup runs on failure**, through a trap: helpers, taps, staged apps, the
   app itself, the preferences, and the scratch home.
+- **One run on the screen at a time**, across every checkout on the Mac: a
+  flock on `~/Library/Caches/athina-e2e/screen.lock` (`scripts/e2e/lib/lock.sh`),
+  the file a hand-held `lockf -k` uses too, held for exactly as long as the
+  harness process lives, so a killed run leaves no stale lock, and a run
+  started under a holder (`run all`, or a hand-held `lockf`) never waits on it.
 
 A validation step that needs live evidence should call this harness. Writing
 the driving again is how a check ends up overrunning its time limit on a cold
@@ -677,6 +733,138 @@ leaves it where it is, and you can paste the key into Settings > Models
 instead. The copy runs off the main thread, so the app keeps sensing while the
 prompt waits.
 
+## Releasing
+
+The first releases go out directly, as a download from outside the App Store:
+signed with a Developer ID, notarized by Apple, with no App Sandbox and no App
+Review. `make release` (`scripts/release.sh`) does all of it:
+
+1. Builds the Release configuration for Apple silicon and Intel in one binary.
+2. Signs it under the hardened runtime, which notarization requires, with a
+   secure timestamp and `Resources/Athina.entitlements`, whose comments say
+   why each entitlement is there (only `device.audio-input` today, for the
+   talk-back microphone). Athina embeds no library yet; the libraries it will
+   load from `Contents/Frameworks`, such as the local speech models' runtime
+   (whisper.cpp for Whisper and Parakeet), are signed first with the same
+   identity, so library validation loads them.
+3. Submits the app to Apple's notary service, waits for the verdict, and
+   staples the ticket to it.
+4. Packages it as `Athina-<version>.dmg`, the app beside a link to
+   Applications, signs the disk image, notarizes it, and staples it too; and
+   as `Athina-<version>.zip` holding the stapled app.
+5. Verifies what people download: `codesign --verify --deep --strict`, the
+   hardened runtime flag and the exact entitlements, that the app inside the
+   disk image and the zip is the one signed (the same code directory hash) and
+   still verifies there, and Gatekeeper's
+   `spctl` assessment of the app and the disk image as notarized Developer ID.
+6. Keeps `Athina-<version>.dSYM.zip`, the debug symbols of exactly that binary,
+   for reading crash reports, and Apple's notary logs.
+7. Writes `Athina-<version>-notes.md`: the version and build, install steps,
+   the notes written by hand in `docs/release-notes/<version>.md` as they are,
+   headings included, and the SHA-256 of both downloads. Without that file it
+   puts a marked placeholder in their place and names the file to create. It
+   only reads `docs/`, never writes there.
+
+Everything lands in `build/release`. The version is set in one place,
+`Resources/Info.plist`: `CFBundleShortVersionString` is what people see
+(1.2.3), `CFBundleVersion` a whole number that grows with every release. Every
+build carries both, and the release names its files and notes from them.
+
+### Once, before the first release
+
+These need the owner's Apple account, so only the owner can do them. Nothing they
+create goes in the repository.
+
+1. Join the Apple Developer Program at developer.apple.com, with the Apple ID
+   releases go out under.
+2. Create a Developer ID Application certificate: Xcode > Settings > Accounts,
+   select the team, Manage Certificates, then + > Developer ID Application
+   (only the account holder can). Xcode puts it and its private key in the
+   login keychain. Export a backup (.p12) and keep it somewhere safe: a lost
+   private key means a new certificate. `security find-identity -v -p
+   codesigning` then lists `Developer ID Application: <name> (<team ID>)`.
+3. Make an app-specific password at account.apple.com > Sign-In and Security >
+   App-Specific Passwords, and store it for the notary service under a profile
+   name of your choosing:
+
+   ```sh
+   xcrun notarytool store-credentials athina-notary --apple-id <Apple ID> --team-id <team ID>
+   ```
+
+   It asks for the password and keeps it in the login keychain; `make release`
+   names the profile, never the password.
+
+### Each release
+
+1. Raise `CFBundleShortVersionString` and `CFBundleVersion` in
+   `Resources/Info.plist`, write what changed for the people using Athina in
+   `docs/release-notes/<version>.md` (`## What's new`, say), and commit both
+   (`chore(release): 0.2.0`). The notes live there, not in `build/release`,
+   which every `make release` replaces.
+2. From a clean checkout of that commit:
+
+   ```sh
+   ATHINA_NOTARY_PROFILE=athina-notary make release
+   ```
+
+   `ATHINA_RELEASE_IDENTITY=<name or SHA-1>` chooses the identity when the
+   keychain holds more than one Developer ID Application identity; with one,
+   it is found. The release refuses a worktree with changes, a version whose
+   tag already points at another commit, and a build number no higher than
+   the last release's.
+3. Check the release build itself end to end, in replay as always:
+   `ATHINA_E2E_APP=build/release/Athina.app scripts/e2e/athina-e2e run all`.
+4. Publish the disk image (and the zip, for anyone who prefers it) with
+   `Athina-<version>-notes.md` as its notes, and tag the commit:
+   `git tag v0.2.0 && git push origin v0.2.0`. The tag is what the next
+   release's build number has to exceed and what stops a version being built
+   twice.
+
+There are no automatic updates yet: a new version is downloaded and dragged
+over the old one.
+
+Without the identity or the profile, `make release` still runs every step
+that needs no Apple credentials: the hardened runtime build, signed ad-hoc
+with the same bundle-identifier requirement a development build has, the disk
+image and zip, and every check that needs no Apple service. (Library
+validation loads only libraries signed by the app's own team, which an ad-hoc
+signature lacks, so once the bundle embeds libraries, such as the local speech
+models' runtime, that local build alone turns library validation off; a
+Developer ID release never does.) It names each step it skipped and why (the
+missing identity or profile), marks the notes "Not for distribution", and
+exits 1. A profile that is set but does not work, or an identity that is named
+but missing, fails before anything is built.
+
+### A released copy and your data, grants, and key
+
+A released copy is the same app as a development build: bundle identifier
+`com.ahcarpenter.athina`, no sandbox, so the same
+`~/Library/Application Support/athina`, the same preferences and the same
+keychain item. It shares the live journal, settings and bill with `make run`,
+so do not run both: `make run` refuses to start while a live Athina runs,
+wherever it was installed.
+
+- **Coming from Mentor.** The move of `~/Library/Application Support/mentor`,
+  the preferences and the key (Coming from Mentor) runs on the first live
+  launch of whichever Athina comes first, released or development, and only
+  once.
+- **Grants.** A grant made to a released copy is recorded against its Developer
+  ID requirement, so every later release keeps it. Grants made earlier to an
+  ad-hoc development build, recorded against the bundle identifier alone,
+  hold for a released copy too; the reverse does not, and an ad-hoc build
+  then reports the permission missing (Code signing). Once the Developer ID
+  certificate is in the keychain, `make build` signs development builds with
+  it as well when it is the identity `scripts/bundle.sh` picks (the first
+  Apple Development or Developer ID Application one the keychain lists), or
+  when `ATHINA_SIGN_IDENTITY` names it, so both meet one requirement.
+- **The key.** The login keychain trusts a Developer ID app by its team rather
+  than its exact binary, so a released copy asks once, Always Allow, to read a
+  key a development build saved, and later releases do not ask.
+
+The App Store is a separate route: it needs the App Sandbox, which moves the
+app's data into a container, and App Review. None of that applies here, so
+the data move and the grants above work as written.
+
 ## Architecture
 
 ```
@@ -712,7 +900,8 @@ Sources/AthinaCore            library, fully testable
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
-                              and ClockRemote (moving a replay's clock from a script)
+                              and ClockRemote (moving a replay's clock from a script), RuntimeEnvironment
+                              (whether the process is sandboxed, and which app bundle it runs from)
 Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swift cannot make (it is variadic),
                               so `DataMigration` can read the old journal without altering it
 Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
@@ -1257,7 +1446,34 @@ counted (see Iterating without the network).
 
 ## Debug panel
 
-Menu bar > Debug Panel. Left: frontmost app, window, the Mentor loop card
+The debug panel is a builder's window, so it is off until the person turns it
+on: Settings > Advanced > **Enable debug panel**, then **Open Debug Panel**
+beside it. Every install starts with the switch off, an install from before it
+existed included, and turning it off closes the panel. The menu bar menu has no
+command for it and no other window links to it, so while the switch is off
+nothing in the app opens it. Which launches may open it at launch is one pure
+rule, `DebugPanelAccess`, under test. The builder's paths reach it without
+changing the owner's setting:
+
+- **A replay**: `open -n build/Athina.app --args --replay <dir> --open debug`
+  opens it whatever the switch says. `make run-replay` passes no `--open`, so
+  there it opens from the replay's own Settings > Advanced: the switch starts
+  where the live one is, and turning it on there is saved only to the replay's
+  own settings file.
+- **A recording**: `make record` passes `--open debug`, which a recording
+  honours whatever the switch says, for the follow-up question typed into the
+  panel's Talk back field (see The committed fixtures).
+- **The end-to-end harness**: a scenario that needs the panel puts
+  `--open debug` in its `SCENARIO_ARGS` (`understanding-surfaces` does), and
+  `athina-drive ax ... --scope "Debug Panel"` reaches its controls. Capture Now
+  is the menu's own command, not the panel's.
+- **Snapshots**: `--snapshot` draws the panel's view directly
+  (`debug-panel*`), and the Advanced pane with the switch off and on
+  (`settings-advanced`, `settings-advanced-on`), light and dark.
+- **A live launch** given `--open debug` opens the panel only while the switch
+  is on.
+
+The panel itself. Left: frontmost app, window, the Mentor loop card
 (availability, the last triage gate decision and its reason, the current
 mentorship context verdict, the last triage and mentor calls with tokens,
 cached tokens, estimated cost and latency, spend this hour, the cadence state
@@ -1311,10 +1527,12 @@ particular to this app:
   reference bitmap's own coordinates, with the line art and the cream shapes in
   separate groups so either stands alone. Ink is `#332C2B` and cream `#F1DEB7`,
   both sampled from the drawing rather than chosen. `make mark`
-  (`scripts/mark-assets.swift`) builds the app icon from it and the menu bar
-  mark from the second master, the owl below; their outputs are committed, so a
-  plain `make build` needs nothing else, and `MarkAssetTests` fails when either
-  master or the script changes without `make mark` being run. The script is in
+  (`scripts/mark-assets.swift`) builds the app icon from it, the icon at the
+  top of this README from that icon (as macOS itself draws it, masked and
+  shadowed), and the menu bar mark from the second master, the owl below;
+  their outputs are committed, so a plain `make build` needs nothing else, and
+  `MarkAssetTests` fails when either master or the script changes without
+  `make mark` being run. The script is in
   that record because most of the drawing lives there rather than in the
   masters: the menu bar inset, the eye treatments, the z's and the per-size
   thickening are all constants in it.
@@ -1360,6 +1578,14 @@ particular to this app:
   lists the units the range holds a whole amount of, and an amount typed outside
   the range settles at the nearest allowed one as the edit ends, rather than
   being clamped out of sight afterwards.
+- **Tools for looking inside Athina are opted into in the Advanced pane.** The
+  debug panel is offered only once Settings > Advanced > Enable debug panel
+  is on, the pane last in the toolbar as Safari's is, whose Advanced pane holds
+  "Show features for web developers" for the same reason: the HIG (Settings)
+  asks for defaults that give the best experience to the most people and for
+  panes that each group related settings, and a window of model calls and
+  captured text is neither for most people nor related to any other pane.
+  Its button sits in the switch's own group and is dimmed while it is off.
 - **Status is never color alone.** Inline messages are `StatusLabel` and badges
   are `StatusBadge` (`Sources/Athina/Components.swift`): the symbol or capsule
   carries the color, the words stay in a label color. Text uses system text

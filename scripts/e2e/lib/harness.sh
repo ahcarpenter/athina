@@ -10,7 +10,14 @@
 
 E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="$(cd "$E2E_DIR/../.." && pwd)"
+# ATHINA_E2E_APP runs the scenarios against another bundle, such as the
+# hardened release build `make release` leaves in build/release (README
+# "Releasing"); the harness then checks that bundle as it is and never rebuilds it.
 APP="$ROOT/build/Athina.app"
+if [ -n "${ATHINA_E2E_APP:-}" ]; then
+	# Absolute, since pids are matched on the path the process runs from.
+	APP="$(cd "$ATHINA_E2E_APP" 2>/dev/null && pwd || printf '%s' "$ATHINA_E2E_APP")"
+fi
 APP_BINARY="$APP/Contents/MacOS/Athina"
 DRIVE="$ROOT/.build/debug/athina-drive"
 FIXTURES="$ROOT/Tests/AthinaCoreTests/Fixtures/Replay"
@@ -96,6 +103,11 @@ ensure_drive() {
 # scripts/bundle.sh deletes the bundle first, and another lane, or the owner,
 # may be using this one.
 ensure_app() {
+	if [ -n "${ATHINA_E2E_APP:-}" ]; then
+		[ -x "$APP_BINARY" ] || die "ATHINA_E2E_APP names $APP, which holds no Athina executable"
+		sources_newer_than "$APP_BINARY" "$ROOT/Sources" && log "WARNING: a source file is newer than $APP, which is checked as it is"
+		return 0
+	fi
 	if sources_newer_than "$APP_BINARY" "$ROOT/Sources"; then
 		if pgrep -f "$APP_BINARY" >/dev/null 2>&1; then
 			die "$APP is out of date and something is running from it; rebuild it when nothing is"
@@ -110,6 +122,7 @@ record_build_provenance() {
 	{
 		printf 'commit %s\n' "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo unknown)"
 		printf 'worktree %s\n' "$(git -C "$ROOT" status --porcelain 2>/dev/null | wc -l | tr -d ' ') file(s) modified"
+		printf 'bundle %s\n' "$APP"
 		printf 'app %s\n' "$(shasum -a 256 "$APP_BINARY" | cut -c1-16)"
 		printf 'fixtures %s\n' "$FIXTURES"
 	} >"$RUN_DIR/build.txt"
@@ -211,10 +224,13 @@ launch_athina() {
 	local home="$1"
 	shift
 	local profile="$RUN_DIR/isolate.sb"
+	# `9>&-` here and on every helper started in the background: the screen
+	# lock's descriptor (lib/lock.sh) stays with the harness, so nothing that
+	# outlives a killed run can keep the lock.
 	sed -e "s#__LIVE_SUPPORT__#$LIVE_SUPPORT#" -e "s#__LEGACY_SUPPORT__#$LEGACY_SUPPORT#" "$E2E_DIR/lib/isolate.sb" >"$profile"
 	CFFIXED_USER_HOME="$home" HOME="$home" \
 		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" "$@" \
-		>>"$RUN_DIR/app.log" 2>&1 &
+		>>"$RUN_DIR/app.log" 2>&1 9>&- &
 	ATHINA_PID=$!
 	JOURNAL=""
 	log "launched Athina pid=$ATHINA_PID (replay, sandboxed, home=$home)"
@@ -405,7 +421,7 @@ require_toast() {
 # Mac.
 stage_flip_window() {
 	local x="${1:-120}" y="${2:-200}" w="${3:-700}" h="${4:-380}"
-	"$DRIVE" flip "$x" "$y" "$w" "$h" >>"$RUN_DIR/flip.log" 2>&1 &
+	"$DRIVE" flip "$x" "$y" "$w" "$h" >>"$RUN_DIR/flip.log" 2>&1 9>&- &
 	FLIP_PID=$!
 	track_helper "$FLIP_PID"
 	sleep 1
@@ -515,14 +531,14 @@ wait_item_title() {
 # --- Watchers -----------------------------------------------------------------
 
 watch_announcements() {
-	"$DRIVE" announce "$ATHINA_PID" >"$RUN_DIR/announcements.log" 2>&1 &
+	"$DRIVE" announce "$ATHINA_PID" >"$RUN_DIR/announcements.log" 2>&1 9>&- &
 	track_helper $!
 }
 
 watch_clicks() {
-	"$DRIVE" tap session >"$RUN_DIR/session-clicks.log" 2>&1 &
+	"$DRIVE" tap session >"$RUN_DIR/session-clicks.log" 2>&1 9>&- &
 	track_helper $!
-	"$DRIVE" tap pid "$ATHINA_PID" >"$RUN_DIR/athina-clicks.log" 2>&1 &
+	"$DRIVE" tap pid "$ATHINA_PID" >"$RUN_DIR/athina-clicks.log" 2>&1 9>&- &
 	track_helper $!
 	sleep 0.5
 }

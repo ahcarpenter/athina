@@ -15,7 +15,10 @@ import Foundation
 ///
 /// A command line that asks for something contradictory or incomplete is
 /// `invalid`: the app then refuses every call with the reason rather than
-/// guessing, and never falls back to live calls.
+/// guessing, and never falls back to live calls. So is one that names a
+/// directory a sandboxed process cannot reach (`RuntimeEnvironment`): the
+/// fixtures to replay must be inside its container or its own bundle, and a
+/// recording inside its container.
 public enum ModelClientMode: Equatable, Sendable {
     case live
     case record(directory: URL)
@@ -26,7 +29,11 @@ public enum ModelClientMode: Equatable, Sendable {
     public static let replayFlag = "--replay"
     public static let allowStaleFlag = "--allow-stale-fixtures"
 
-    public init(arguments: [String], defaultRecordingDirectory: URL = CallFixtureFiles.defaultRecordingDirectory()) {
+    public init(
+        arguments: [String],
+        defaultRecordingDirectory: URL = CallFixtureFiles.defaultRecordingDirectory(),
+        environment: RuntimeEnvironment = .current
+    ) {
         let recordIndex = arguments.firstIndex(of: ModelClientMode.recordFlag)
         let replayIndex = arguments.firstIndex(of: ModelClientMode.replayFlag)
         let allowStale = arguments.contains(ModelClientMode.allowStaleFlag)
@@ -45,16 +52,24 @@ public enum ModelClientMode: Equatable, Sendable {
                 self = .invalid("\(ModelClientMode.replayFlag) needs the directory of fixtures to replay")
                 return
             }
-            self = .replay(directory: ModelClientMode.url(forPath: path), allowStale: allowStale)
+            let directory = ModelClientMode.url(forPath: path)
+            if let refusal = environment.refusal(reading: directory, for: ModelClientMode.replayFlag) {
+                self = .invalid(refusal)
+                return
+            }
+            self = .replay(directory: directory, allowStale: allowStale)
         case (let record?, nil):
             guard !allowStale else {
                 self = .invalid("\(ModelClientMode.allowStaleFlag) applies only to \(ModelClientMode.replayFlag)")
                 return
             }
-            self = .record(
-                directory: value(after: record).map { ModelClientMode.url(forPath: $0, relativeTo: defaultRecordingDirectory) }
-                    ?? defaultRecordingDirectory
-            )
+            let directory = value(after: record).map { ModelClientMode.url(forPath: $0, relativeTo: defaultRecordingDirectory) }
+                ?? defaultRecordingDirectory
+            if let refusal = environment.refusal(writing: directory, for: ModelClientMode.recordFlag) {
+                self = .invalid(refusal)
+                return
+            }
+            self = .record(directory: directory)
         case (nil, nil):
             self = allowStale
                 ? .invalid("\(ModelClientMode.allowStaleFlag) applies only to \(ModelClientMode.replayFlag)")
