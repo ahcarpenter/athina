@@ -1722,15 +1722,45 @@ particular to this app:
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs three jobs on GitHub's `macos-26` runner, which
-ships Xcode 26 and the macOS 26 SDK this package targets: `build-and-test` runs
-`swift test` and the bundle script; `ui-snapshots` renders every snapshot
-with `Athina --snapshot`, replay-mode renders on a scaled clock included,
-compares the renders with the approved baselines, and uploads them as the
-`ui-snapshots` artifact (see UI snapshot baselines); and `xcode-project`
-generates the Xcode project, archives its App Store target, and checks that
-the archived app carries the target's bundle id and the App Sandbox (see The
-Xcode project). No test waits on real time (see A faster clock). The tests
+CI runs three jobs on GitHub's `macos-26` runner, which ships Xcode 26 and the
+macOS 26 SDK this package targets: `build-and-test` runs `swift test` and the
+bundle script; `ui-snapshots` renders every snapshot with `Athina --snapshot`,
+replay-mode renders on a scaled clock included, compares the renders with the
+approved baselines, and uploads them as the `ui-snapshots` artifact (see UI
+snapshot baselines); and `xcode-project` generates the Xcode project, archives
+its App Store target, and checks that the archived app carries the target's
+bundle id and the App Sandbox (see The Xcode project).
+
+All three run on every push to main, but only `build-and-test`
+(`.github/workflows/ci.yml`) runs on its own for a pull request. The two slow
+ones (`.github/workflows/merge-checks.yml`) run for a pull request only when
+dispatched on its branch, by anyone with write access:
+
+```sh
+gh workflow run merge-checks.yml --ref <branch>
+```
+
+or Run workflow on the Merge checks page under Actions. A dispatch checks the
+branch's head commit at that moment, so a push after it needs another. All
+three must pass at a pull request's head before it can merge: the `main`
+ruleset requires them, with no bypass, and until both slow checks have run,
+the pull request lists them as expected and cannot merge. They are dispatched
+rather than started by a label on `pull_request` because a job that an `if`
+skips reports success to a required check, so a skipped check would let the
+merge through. The ruleset is kept in `.github/rulesets/main.json`; after a
+change to it, apply it with
+
+```sh
+gh api -X PUT "repos/ahcarpenter/athina/rulesets/$(gh api repos/ahcarpenter/athina/rulesets --jq '.[] | select(.name == "main") | .id')" --input .github/rulesets/main.json
+```
+
+(`gh api -X POST repos/ahcarpenter/athina/rulesets --input .github/rulesets/main.json`
+creates it if it is gone). It requires each check from GitHub Actions itself
+(integration 15368), so a commit status of the same name cannot stand in for
+one, and it does not require a branch to be up to date with main, so a pull
+request is not rerun each time another merges.
+
+No test waits on real time (see A faster clock). The tests
 exercise the pure parts
 (hashing, cadence, journal, retention and its in-place migration, settings, the
 mentor scheduler and every gate, mentorship context rules and placement, spend
@@ -1809,26 +1839,26 @@ where it was made:
   glass differently, so a run never mixes them: a ScreenCaptureKit capture
   that fails is taken again, never drawn the other way.
 
-**Approving an intended change.** Push the change and let CI fail on the
+**Approving an intended change.** Push the change, dispatch the merge checks
+on its branch (see Continuous integration) and let `ui-snapshots` fail on the
 drift, look at the report, then run `make snapshots-approve` (or
 `scripts/snapshots.sh approve`), which downloads the renders from HEAD's
-newest CI run and makes `Tests/Snapshots` match them: a changed or new
+newest merge-checks run and makes `Tests/Snapshots` match them: a changed or new
 snapshot's render replaces its baseline, a removed snapshot's baseline is
 deleted, and every other file is left alone. `RUN=<id>` names another CI run.
 A run publishes its renders only once both renders finished and agree, so a
 run that failed, timed out or was cancelled before then has nothing to
 approve, and the renders name the source tree they were made from, which
-approve refuses unless it is HEAD's own. A pull request's run renders the
-branch merged with main, so once main has moved on since the branch, merge or
-rebase onto main and push before approving. Commit the images with the change
-that caused them; the pull request then shows each one before and after, and
-CI passes. Baselines never come from a developer's Mac, and there is no local
+approve refuses unless it is HEAD's own. Commit the images with the change
+that caused them and push; the pull request then shows each one before and
+after, and once the merge checks are dispatched again, `ui-snapshots` passes. Baselines never come from a developer's Mac, and there is no local
 comparison: a Mac on another macOS, at another display scale, renders text
 edges and glass differently everywhere, so only the runner's renders are
 compared or approved.
 
 **A runner change is a deliberate refresh.** The baselines depend on the
-runner's macOS image and the newest Xcode on it, which `ci.yml` selects. When
+runner's macOS image and the newest Xcode on it, which `merge-checks.yml`
+selects. When
 GitHub updates either, the renders change with no change to the app; approve
 them from a CI run of an unchanged commit, in a commit of their own that names
 the new image or Xcode, so a real UI change is never approved under it.

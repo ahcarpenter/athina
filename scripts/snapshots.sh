@@ -73,9 +73,9 @@ case "$command" in
     head="$(git -C "$ROOT" rev-parse HEAD)"
     tree="$(git -C "$ROOT" rev-parse 'HEAD^{tree}')"
     if [ -z "$run" ]; then
-      run="$(gh run list --workflow ci.yml --commit "$head" --status completed --limit 1 --json databaseId --jq '.[0].databaseId // empty')" \
-        || die "could not list the CI runs of HEAD ($head)"
-      [ -n "$run" ] || die "no finished CI run of HEAD ($head); push it and let CI finish, or name a run"
+      run="$(gh run list --workflow merge-checks.yml --commit "$head" --status completed --limit 1 --json databaseId --jq '.[0].databaseId // empty')" \
+        || die "could not list the merge-checks runs of HEAD ($head)"
+      [ -n "$run" ] || die "no finished merge-checks run of HEAD ($head); push it, run gh workflow run merge-checks.yml --ref <its branch> and let the run finish, or name a run"
     fi
     rm -rf "$OUT/approved-run"
     gh run download "$run" --name ui-snapshots --dir "$OUT/approved-run" \
@@ -83,7 +83,7 @@ case "$command" in
     run_tree="$(cat "$OUT/approved-run/source-tree" 2>/dev/null)" \
       || die "CI run $run does not name the source tree it rendered, so its renders cannot be matched to HEAD"
     [ "$run_tree" = "$tree" ] \
-      || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into these baselines; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
+      || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into these baselines; push HEAD, dispatch merge-checks.yml on its branch, and approve the run that makes of it"
     diff_tool approve "$BASELINES" "$OUT/approved-run"
     echo "snapshots: review the changed images (git status Tests/Snapshots), then commit them with the change that caused them"
     ;;

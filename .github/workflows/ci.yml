@@ -1,5 +1,9 @@
 name: CI
 
+# Runs on every pull request and every push to main. The slower checks,
+# ui-snapshots and xcode-project, live in merge-checks.yml, which runs on push
+# to main and for a pull request only on demand; all three must pass at a pull
+# request's head before it merges (README "Continuous integration").
 on:
   push:
     branches: [main]
@@ -25,105 +29,3 @@ jobs:
         run: swift test
       - name: Build app bundle
         run: scripts/bundle.sh release
-
-  ui-snapshots:
-    # The approved renders in Tests/Snapshots were made on this image with its
-    # newest Xcode, so a change to either is a deliberate baseline refresh
-    # (README "UI snapshot baselines").
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select the newest Xcode on the runner
-        run: |
-          latest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n1)"
-          echo "Using $latest"
-          sudo xcode-select -s "$latest"
-          sw_vers
-          swift --version
-      - name: Build app bundle
-        run: scripts/bundle.sh release
-      - name: Render twice and compare with the approved baselines
-        # Renders every snapshot twice and fails unless the two are the same
-        # picture, then fails on any drift from Tests/Snapshots beyond the
-        # tolerance for anti-aliasing and glass (README "UI snapshot baselines").
-        timeout-minutes: 20
-        run: scripts/snapshots.sh gate
-      - name: Summarize
-        if: always()
-        run: |
-          for summary in build/snapshots/determinism/summary.md build/snapshots/report/summary.md; do
-            if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
-          done
-      - name: Upload the renders
-        # What `scripts/snapshots.sh approve` fetches to approve a drift.
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-snapshots
-          path: build/snapshots/render
-          if-no-files-found: ignore
-      - name: Upload the drift report
-        # Before, after and difference images of each drifted snapshot, with
-        # index.html showing them side by side at real size.
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-snapshot-report
-          path: |
-            build/snapshots/report
-            build/snapshots/determinism
-          if-no-files-found: ignore
-
-  xcode-project:
-    # The Xcode project for the Mac App Store route (README "The Xcode
-    # project"), generated from project.yml with the pinned XcodeGen and
-    # archived as the sandboxed App Store target, signed to run locally since
-    # CI holds no Apple credentials. The package jobs above never read it.
-    runs-on: macos-26
-    steps:
-      - uses: actions/checkout@v4
-      - name: Select the newest Xcode on the runner
-        run: |
-          latest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n1)"
-          echo "Using $latest"
-          sudo xcode-select -s "$latest"
-          xcodebuild -version
-      - name: Generate the project and archive the App Store target
-        timeout-minutes: 30
-        run: make xcode-archive
-      - name: Check the archived app's bundle id and sandbox
-        # The id must be the target's PRODUCT_BUNDLE_IDENTIFIER, not the direct
-        # build's that Resources/Info.plist names, and the app must be sandboxed.
-        run: |
-          set -euo pipefail
-          app=build/xcode/Athina.xcarchive/Products/Applications/Athina.app
-          if ! want="$(xcodebuild -project Athina.xcodeproj -target "Athina App Store" -configuration Release -showBuildSettings \
-            | sed -n 's/^ *PRODUCT_BUNDLE_IDENTIFIER = //p')"; then
-            echo "xcodebuild could not show the Athina App Store target's build settings" >&2
-            exit 1
-          fi
-          if ! got="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$app/Contents/Info.plist")"; then
-            echo "No CFBundleIdentifier in $app/Contents/Info.plist" >&2
-            exit 1
-          fi
-          if ! sandbox="$(codesign -d --entitlements - --xml "$app" | plutil -extract 'com\.apple\.security\.app-sandbox' raw -o - -)"; then
-            echo "No com.apple.security.app-sandbox entitlement in $app's signature" >&2
-            exit 1
-          fi
-          echo "CFBundleIdentifier $got, PRODUCT_BUNDLE_IDENTIFIER $want, app-sandbox $sandbox"
-          if [ -z "$want" ]; then
-            echo "The Athina App Store target sets no PRODUCT_BUNDLE_IDENTIFIER" >&2
-            exit 1
-          fi
-          if [ "$got" != "$want" ]; then
-            echo "The archived app's id $got is not the target's $want" >&2
-            exit 1
-          fi
-          if [ "$got" = com.ahcarpenter.athina ]; then
-            echo "The archived app has the direct build's id" >&2
-            exit 1
-          fi
-          if [ "$sandbox" != true ]; then
-            echo "The archived app is not sandboxed" >&2
-            exit 1
-          fi

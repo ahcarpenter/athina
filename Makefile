@@ -13,7 +13,7 @@ SETTINGS ?=
 LANE ?= replay
 ## The pid `make measure` samples when several Athinas are running
 PID ?=
-## The CI run whose renders `make snapshots-approve` approves; the newest CI run of HEAD when empty
+## The CI run whose renders `make snapshots-approve` approves; the newest merge-checks run of HEAD when empty
 RUN ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
