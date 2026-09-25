@@ -222,7 +222,7 @@ case "$command" in
     head="$(git -C "$ROOT" rev-parse HEAD)"
     tree="$(git -C "$ROOT" rev-parse 'HEAD^{tree}')"
     if [ -z "$run" ]; then
-      run="$(gh run list --workflow ci.yml --commit "$head" --status completed --limit 1 --json databaseId --jq '.[0].databaseId // empty')" \
+      run="$(gh run list --workflow ci.yml --commit "$head" --status completed --limit 20 --json databaseId,conclusion --jq 'map(select(.conclusion != "cancelled")) | .[0].databaseId // empty')" \
         || die "could not list the CI runs of HEAD ($head)"
       [ -n "$run" ] || die "no finished CI run of HEAD ($head); push it and let CI finish, or name a run"
     fi
