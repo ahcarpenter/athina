@@ -3,3 +3,24 @@
 # scenarios against the built app, which needs permissions no runner has.
 commands:
   test: "swift test"
+# test.instructions steers the agent-driven evidence pass that follows it.
+test:
+  instructions: |
+    Hard rule: never run the Xcode project steps (make xcodeproj, make
+    xcode-build, make xcode-archive, or xcodebuild on the generated project)
+    or any screenshot render or comparison (make ui-snapshots-smoke, make
+    snapshots-smoke-approve, make snapshots-approve, scripts/snapshots.sh in
+    any mode, `Athina --snapshot`, anything setting UI_SNAPSHOTS_SMOKE_SHARD,
+    or `swift test` with the UISnapshotsSmoke trait) in this validation. CI's
+    ui-snapshots and ui-snapshots-smoke jobs prove those.
+
+    Standing Athina up for evidence (README "End-to-end harness" and
+    "Iterating without the network"):
+    - Use the development build (`make build`, build/Athina.app).
+    - Replays only: never a live launch and never a live model call, which
+      spends the owner's API credits. Never `make run` or `make record`.
+    - Drive it with the e2e harness, `scripts/e2e/athina-e2e run <scenario>`
+      (`list` names them), preferring API-tier scenarios. Screen-tier
+      scenarios take the shared screen lock per run and wait for idle input,
+      because the owner may be using the Mac; call the harness bare, never
+      wrapped in lockf.

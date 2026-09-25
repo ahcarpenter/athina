@@ -1883,6 +1883,11 @@ creates it if it is gone). It requires each check from GitHub Actions itself
 one, and it does not require a branch to be up to date with main, so a pull
 request is not rerun each time another merges.
 
+Local validation, the no-mistakes pipeline a change goes through before its
+pull request, never runs the Xcode project steps or any screenshot render or
+comparison, which only CI proves; `test.instructions` in `.no-mistakes.yaml`
+carries that rule to its test step.
+
 No test waits on real time (see A faster clock). The tests
 exercise the pure parts
 (hashing, cadence, journal, retention and its in-place migration, settings, the
