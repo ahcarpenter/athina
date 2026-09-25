@@ -289,7 +289,7 @@ final class AppState {
     settings = launchSettings
     // A hermetic run asks macOS about no permission, since even asking
     // leaves a record for an app it has not seen; it has them all, as a
-    // person's copy normally does, and senses nothing with them.
+    // person's copy normally does, and senses nothing real with them.
     let status = controlMode.isHermetic ? AppState.hermeticPermissions : PermissionProbe.current()
     permissions = status
     undeterminedPermissions =
