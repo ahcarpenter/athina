@@ -25,7 +25,8 @@ import Testing
         colorSpaceName: .deviceRGB,
         bytesPerRow: 0,
         bitsPerPixel: 0
-      ), let context = NSGraphicsContext(bitmapImageRep: rep)
+      ),
+      let context = NSGraphicsContext(bitmapImageRep: rep)
     else { return nil }
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = context

@@ -266,9 +266,13 @@ public actor Journal {
           .text(observation.ocrText),
           .text(blocksJSON),
           .text(f.hash.hexString),
-          .int(Int64(f.width)), .int(Int64(f.height)), .int(Int64(f.displayID)),
-          .double(f.screenRect.origin.x), .double(f.screenRect.origin.y),
-          .double(f.screenRect.width), .double(f.screenRect.height),
+          .int(Int64(f.width)),
+          .int(Int64(f.height)),
+          .int(Int64(f.displayID)),
+          .double(f.screenRect.origin.x),
+          .double(f.screenRect.origin.y),
+          .double(f.screenRect.width),
+          .double(f.screenRect.height),
           .text(observation.reason.rawValue),
         ]
       )
@@ -602,7 +606,8 @@ public actor Journal {
     try db.query(
       "SELECT \(Journal.observationColumns) FROM observations WHERE timestamp >= ? OR id > ? ORDER BY timestamp DESC, id DESC LIMIT ?",
       [
-        since.map { .double($0.timeIntervalSince1970) } ?? .null, cursor.map(Value.int) ?? .null,
+        since.map { .double($0.timeIntervalSince1970) } ?? .null,
+        cursor.map(Value.int) ?? .null,
         .int(Int64(limit)),
       ]
     ) { try self.observation(from: $0) }

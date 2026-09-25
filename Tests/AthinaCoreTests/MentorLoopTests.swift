@@ -704,12 +704,16 @@ struct MentorLoopTests {
     (
       Result<MessagesResponse, ClaudeClientError>.failure(
         .api(status: 529, type: "overloaded_error", message: "Overloaded")
-      ), ModelCallOutcome.error, "overloaded_error (HTTP 529): Overloaded"
+      ),
+      ModelCallOutcome.error,
+      "overloaded_error (HTTP 529): Overloaded"
     ),
     (
       .success(
         MessagesResponse(id: "r", model: "m", stopReason: "refusal", content: [], usage: Usage())
-      ), .refused, "the API declined this request"
+      ),
+      .refused,
+      "the API declined this request"
     ),
     (
       .success(
@@ -720,7 +724,9 @@ struct MentorLoopTests {
           content: [ResponseBlock(type: "text", text: "not json")],
           usage: Usage()
         )
-      ), .error, "could not parse the triage reply"
+      ),
+      .error,
+      "could not parse the triage reply"
     ),
     (
       .success(
@@ -731,7 +737,9 @@ struct MentorLoopTests {
           content: [ResponseBlock(type: "text", text: "{\"worth")],
           usage: Usage()
         )
-      ), .truncated, "could not parse the triage reply"
+      ),
+      .truncated,
+      "could not parse the triage reply"
     ),
   ])
   func errorsRefusalsAndGarbageAreRecordedNotShown(

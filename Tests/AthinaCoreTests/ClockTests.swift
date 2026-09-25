@@ -221,7 +221,10 @@ struct ScaledClockTests {
   }
 
   @Test(arguments: [
-    ["--time-scale"], ["--time-scale", "fast"], ["--time-scale", "0.5"], ["--time-scale", "101"],
+    ["--time-scale"],
+    ["--time-scale", "fast"],
+    ["--time-scale", "0.5"],
+    ["--time-scale", "101"],
     ["--time-scale", "--open"],
   ])
   func aScaleOutsideTheRangeIsRefused(arguments: [String]) {
@@ -232,8 +235,11 @@ struct ScaledClockTests {
   }
 
   @Test(arguments: [
-    ["--advance-clock"], ["--advance-clock", "soon"], ["--advance-clock", "0"],
-    ["--advance-clock", "31d"], ["--advance-clock", "-5m"],
+    ["--advance-clock"],
+    ["--advance-clock", "soon"],
+    ["--advance-clock", "0"],
+    ["--advance-clock", "31d"],
+    ["--advance-clock", "-5m"],
   ])
   func anAdvanceThatCannotBeUsedIsRefused(arguments: [String]) {
     #expect(
@@ -401,8 +407,11 @@ struct ScaledClockTests {
   /// A value that is neither is refused with the reason, and the replay
   /// keeps the recorded latency.
   @Test(arguments: [
-    ["--replay-latency"], ["--replay-latency", "fast"], ["--replay-latency", "Immediate"],
-    ["--replay-latency", ""], ["--replay-latency", "--open"],
+    ["--replay-latency"],
+    ["--replay-latency", "fast"],
+    ["--replay-latency", "Immediate"],
+    ["--replay-latency", ""],
+    ["--replay-latency", "--open"],
   ])
   func aValueThatIsNeitherIsRefused(arguments: [String]) {
     #expect(
@@ -417,8 +426,16 @@ struct ScaledClockTests {
 
 @Suite struct ClockIntervalTests {
   @Test(arguments: [
-    ("90", 90.0), ("90s", 90), ("15m", 900), ("2h", 7200), ("1d", 86400), ("1h30m", 5400),
-    ("1d 12h", 129_600), ("1.5h", 5400), ("2H", 7200), (" 45 s ", 45),
+    ("90", 90.0),
+    ("90s", 90),
+    ("15m", 900),
+    ("2h", 7200),
+    ("1d", 86400),
+    ("1h30m", 5400),
+    ("1d 12h", 129_600),
+    ("1.5h", 5400),
+    ("2H", 7200),
+    (" 45 s ", 45),
   ])
   func typedIntervalsAreRead(text: String, seconds: TimeInterval) {
     #expect(ClockInterval.seconds(from: text) == seconds)

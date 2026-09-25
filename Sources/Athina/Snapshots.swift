@@ -1612,8 +1612,14 @@ private enum SampleFrame {
     ]
     var sy = size.height - 70
     for name in [
-      "AthinaCore", "Sensing", "SensingPipeline.swift", "FocusTracker.swift",
-      "ScreenCapturer.swift", "TextRecognizer.swift", "Journal", "Journal.swift",
+      "AthinaCore",
+      "Sensing",
+      "SensingPipeline.swift",
+      "FocusTracker.swift",
+      "ScreenCapturer.swift",
+      "TextRecognizer.swift",
+      "Journal",
+      "Journal.swift",
     ] {
       let attributed = NSAttributedString(string: name, attributes: sidebar)
       let origin = CGPoint(x: 24, y: sy)

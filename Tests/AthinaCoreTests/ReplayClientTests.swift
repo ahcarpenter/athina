@@ -182,14 +182,26 @@ struct ReplayClientTests {
     }
     #expect(
       answers == [
-        "triage one", "triage two", "mentor one", "triage one", "mentor two", "mentor one",
-        "a kind this build has never heard of", "a kind this build has never heard of",
+        "triage one",
+        "triage two",
+        "mentor one",
+        "triage one",
+        "mentor two",
+        "mentor one",
+        "a kind this build has never heard of",
+        "a kind this build has never heard of",
       ]
     )
     let served = await client.served
     #expect(
       served.map(\.fixtureName) == [
-        "1-triage", "3-triage", "2-mentor", "1-triage", "4-mentor", "2-mentor", "5-understanding",
+        "1-triage",
+        "3-triage",
+        "2-mentor",
+        "1-triage",
+        "4-mentor",
+        "2-mentor",
+        "5-understanding",
         "5-understanding",
       ]
     )
