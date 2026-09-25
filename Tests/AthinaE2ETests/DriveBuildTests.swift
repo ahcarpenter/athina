@@ -1,9 +1,10 @@
 import Foundation
 import Testing
 
-/// When the harness rebuilds athina-drive (`sources_newer_than_build` in
-/// `scripts/e2e/lib/harness.sh`), on files of each test's own with explicit
-/// modification times, so no test waits on the clock or touches a real build.
+/// When and how the harness rebuilds athina-drive (`sources_newer_than_build`
+/// and `ensure_drive` in `scripts/e2e/lib/harness.sh`), on files of each
+/// test's own with explicit modification times and a stand-in `swift`, so no
+/// test waits on the clock or touches a real build.
 @Suite struct DriveBuildTests {
     private static let library = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()  // AthinaE2ETests
@@ -31,16 +32,25 @@ import Testing
         try FileManager.default.setAttributes(attributes, ofItemAtPath: url.path)
     }
 
-    /// Whether the harness would build athina-drive now.
-    private func needsBuild() throws -> Bool {
+    /// Starts bash on `body` with the harness sourced, the product, the stamp
+    /// and the sources as `$1` to `$3`, and `environment` over its own.
+    private func bash(_ body: String, environment: [String: String] = [:]) throws -> Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = [
             "-c",
-            "set -euo pipefail\nsource '\(Self.library)'\nsources_newer_than_build \"$@\"",
+            "set -euo pipefail\nsource '\(Self.library)'\n\(body)",
             "bash", product.path, stamp.path, sources.path,
         ]
+        process.environment = ProcessInfo.processInfo.environment.merging(environment) { $1 }
+        process.standardError = FileHandle.nullDevice
         try process.run()
+        return process
+    }
+
+    /// Whether the harness would build athina-drive now.
+    private func needsBuild() throws -> Bool {
+        let process = try bash("sources_newer_than_build \"$@\"")
         process.waitUntilExit()
         #expect([0, 1].contains(process.terminationStatus))
         return process.terminationStatus == 0
@@ -75,17 +85,71 @@ import Testing
     }
 
     /// A source saved after a build started may have missed it.
-    @Test func aSourceSavedAfterTheBuildStartedIsBuiltAgain() throws {
+    @Test func aSourceSavedAfterTheBuildIsBuiltAgain() throws {
         try make(stamp, at: 10)
         try make(product, at: 30)
         try make(source, at: 40)
         #expect(try needsBuild())
     }
 
-    @Test func aSourceNewerThanTheStampButNotTheProductIsNotBuilt() throws {
+    /// Even when the link that ends the build comes after the save.
+    @Test func aSourceSavedDuringTheBuildIsBuiltAgain() throws {
         try make(stamp, at: 10)
         try make(source, at: 20)
         try make(product, at: 30)
-        #expect(try !needsBuild())
+        #expect(try needsBuild())
+    }
+
+    /// Two runs in one checkout, such as `run` and `doctor`, can build at once.
+    @Test func overlappingBuildsBothSucceed() throws {
+        #expect(try ensureDrive(times: 2, status: 0) == [0, 0])
+        #expect(try stamps() == [stamp.lastPathComponent])
+    }
+
+    /// A failed build brought nothing up to date, so the last stamp stands.
+    @Test func aFailedBuildKeepsTheLastStamp() throws {
+        try make(stamp, at: 10)
+        #expect(try ensureDrive(times: 1, status: 1) == [1])
+        #expect(try stamps() == [stamp.lastPathComponent])
+        let modified = try FileManager.default.attributesOfItem(atPath: stamp.path)[.modificationDate]
+        #expect(modified as? Date == base.addingTimeInterval(10))
+    }
+
+    /// Runs the harness's `ensure_drive` on this test's files `times` times at
+    /// once, with no product so each builds, and a stand-in `swift` that exits
+    /// with `status` once every build has started, so the builds always
+    /// overlap. Returns each run's exit status.
+    private func ensureDrive(times: Int, status: Int32) throws -> [Int32] {
+        let bin = directory.appendingPathComponent("bin", isDirectory: true)
+        let started = directory.appendingPathComponent("started", isDirectory: true)
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: started, withIntermediateDirectories: true)
+        let swift = bin.appendingPathComponent("swift")
+        try """
+            #!/bin/bash
+            touch "$STARTED/$$"
+            for _ in $(seq 500); do
+                [ "$(ls "$STARTED" | wc -l)" -ge \(times) ] && break
+                sleep 0.01
+            done
+            exit \(status)
+            """.write(to: swift, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: swift.path)
+        let runs = try (0..<times).map { _ in
+            try bash(
+                "RUN_DIR=\nROOT=\"$(dirname \"$1\")\" DRIVE=\"$1\" DRIVE_BUILT=\"$2\"\nensure_drive",
+                environment: ["PATH": "\(bin.path):/usr/bin:/bin", "STARTED": started.path])
+        }
+        return runs.map { run in
+            run.waitUntilExit()
+            return run.terminationStatus
+        }
+    }
+
+    /// The stamp and any temporary one a build left beside it.
+    private func stamps() throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            .filter { $0.hasPrefix(stamp.lastPathComponent) }
+            .sorted()
     }
 }

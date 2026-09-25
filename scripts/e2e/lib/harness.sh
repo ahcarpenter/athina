@@ -99,16 +99,18 @@ sources_newer_than() {
 	[ -n "$(find "$@" -name '*.swift' -newer "$product" -print -quit)" ]
 }
 
-# Is anything under the given directories newer than both the built product
-# and the stamp of the build that last brought it up to date? SwiftPM leaves a
-# product as it was when no source really changed, so after a touch-only edit
-# the product stays older than that source however often it is built; the
-# stamp, made when that build started, is what says the source was built.
+# Is anything under the given directories newer than the stamp of the build
+# that last brought the built product up to date? Not the product itself:
+# SwiftPM leaves a product as it was when no source really changed, so after a
+# touch-only edit the product stays older than that source however often it is
+# built, and a source saved during a build, after it was compiled, is older
+# than the link that ends it. The stamp, made when that build started, is what
+# says the source was built.
 sources_newer_than_build() {
 	local product="$1" stamp="$2"
 	shift 2
 	[ -x "$product" ] && [ -e "$stamp" ] || return 0
-	[ -n "$(find "$@" -name '*.swift' -newer "$product" -newer "$stamp" -print -quit)" ]
+	[ -n "$(find "$@" -name '*.swift' -newer "$stamp" -print -quit)" ]
 }
 
 # Where a build happens, for its log line. The entry point builds before it
