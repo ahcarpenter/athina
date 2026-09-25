@@ -19,7 +19,11 @@ if [ -n "${ATHINA_E2E_APP:-}" ]; then
 	APP="$(cd "$ATHINA_E2E_APP" 2>/dev/null && pwd || printf '%s' "$ATHINA_E2E_APP")"
 fi
 APP_BINARY="$APP/Contents/MacOS/Athina"
+# When the build of the bundle now in $APP started (scripts/bundle.sh).
+APP_BUILT="$APP.built"
 DRIVE="$ROOT/.build/debug/athina-drive"
+# When the build that last brought athina-drive up to date started (ensure_drive).
+DRIVE_BUILT="$ROOT/build/athina-drive.built"
 FIXTURES="$ROOT/Tests/AthinaCoreTests/Fixtures/Replay"
 SETTINGS_SEED="$E2E_DIR/lib/settings.json"
 
@@ -97,39 +101,59 @@ sources_newer_than() {
 	[ -n "$(find "$@" -name '*.swift' -newer "$product" -print -quit)" ]
 }
 
+# Is anything under the given directories newer than the stamp of the build
+# that last brought the built product up to date? Not the product itself: a
+# source saved during a build, after it was compiled, is older than the product
+# that build lands, and SwiftPM leaves athina-drive as it was when no source
+# really changed, so after a touch-only edit it stays older than that source
+# however often it is built. The stamp, made when that build started, is what
+# says the source was built.
+sources_newer_than_build() {
+	local product="$1" stamp="$2"
+	shift 2
+	[ -x "$product" ] && [ -e "$stamp" ] || return 0
+	[ -n "$(find "$@" -name '*.swift' -newer "$stamp" -print -quit)" ]
+}
+
 # Where a build happens, for its log line. The entry point builds before it
 # takes the screen lock, so no other checkout waits on a build; one inside the
-# lock means a source file changed while this run waited for it.
+# lock means a source file was saved after the last build started, which is
+# while this run waited for the lock or during that build.
 build_when() {
 	if [ "${SCREEN_LOCK_STATE:-0}" = 0 ]; then
 		echo "before taking the screen lock"
 	else
-		echo "inside the screen lock, since a source file changed while this run waited for it"
+		echo "inside the screen lock, since a source file was saved after the last build started"
 	fi
 }
 
 ensure_drive() {
-	if sources_newer_than "$DRIVE" "$ROOT/Sources/AthinaDrive" "$ROOT/Sources/AthinaE2E"; then
-		log "building athina-drive $(build_when)"
-		(cd "$ROOT" && swift build --product athina-drive >/dev/null) || die "could not build athina-drive"
-	fi
+	sources_newer_than_build "$DRIVE" "$DRIVE_BUILT" "$ROOT/Sources/AthinaDrive" "$ROOT/Sources/AthinaE2E" || return 0
+	log "building athina-drive $(build_when)"
+	# Stamped when the build starts, so a source saved during it is still newer.
+	mkdir -p "$(dirname "$DRIVE_BUILT")"
+	local started
+	started="$(mktemp "$DRIVE_BUILT.XXXXXX")"
+	(cd "$ROOT" && swift build --product athina-drive >/dev/null) || { rm -f "$started"; die "could not build athina-drive"; }
+	mv -f "$started" "$DRIVE_BUILT"
 }
 
 # A check of a stale bundle proves nothing, so the app is rebuilt when a source
-# file is newer than it. Never while something is running from it, though:
-# scripts/bundle.sh deletes the bundle first, and another lane, or the owner,
-# may be using this one.
+# file was saved after its last build started, which scripts/bundle.sh stamps
+# for every build, `make build` included. Never while something is running
+# from it, though: scripts/bundle.sh deletes the bundle first, and another
+# lane, or the owner, may be using this one.
 ensure_app() {
 	if [ -n "${ATHINA_E2E_APP:-}" ]; then
 		[ -x "$APP_BINARY" ] || die "ATHINA_E2E_APP names $APP, which holds no Athina executable"
 		sources_newer_than "$APP_BINARY" "$ROOT/Sources" && log "WARNING: a source file is newer than $APP, which is checked as it is"
 		return 0
 	fi
-	if sources_newer_than "$APP_BINARY" "$ROOT/Sources"; then
+	if sources_newer_than_build "$APP_BINARY" "$APP_BUILT" "$ROOT/Sources"; then
 		if pgrep -f "$APP_BINARY" >/dev/null 2>&1; then
-			die "$APP is out of date and something is running from it; rebuild it when nothing is"
+			die "$APP may be out of date and something is running from it; rebuild it when nothing is"
 		fi
-		log "building $APP (a source file is newer than it) $(build_when)"
+		log "building $APP $(build_when)"
 		(cd "$ROOT" && scripts/bundle.sh release >/dev/null 2>&1) || die "could not build the app bundle"
 	fi
 }

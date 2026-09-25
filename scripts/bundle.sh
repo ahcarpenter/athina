@@ -37,11 +37,19 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 APP="$OUT_DIR/Athina.app"
+# When the build of the bundle now in $APP started, for the e2e harness, which
+# rebuilds the bundle when a source file was saved after that. Stamped in a
+# file of this build's own when it starts, so a source saved during it is still
+# newer, and moved into place only once the bundle is done.
+BUILT="$APP.built"
 
 build_args=(-c "$CONFIG" --product Athina)
 if [ "$UNIVERSAL" = 1 ]; then build_args+=(--arch arm64 --arch x86_64); fi
 
 cd "$ROOT"
+mkdir -p "$OUT_DIR"
+started="$(mktemp "$BUILT.XXXXXX")"
+trap 'rm -f "$started"' EXIT
 swift build "${build_args[@]}"
 BIN="$(swift build "${build_args[@]}" --show-bin-path)/Athina"
 
@@ -61,6 +69,7 @@ cp "$ROOT"/Resources/Mark/MenuBarMark-*.pdf "$APP/Contents/Resources/"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 if [ "$SIGN" = 0 ]; then
+  mv -f "$started" "$BUILT"
   echo "bundle: $APP (unsigned)"
   exit 0
 fi
@@ -87,4 +96,5 @@ codesign --force --sign "$identity" \
   "${requirement_args[@]}" \
   "$APP"
 codesign --verify --deep --strict "$APP"
+mv -f "$started" "$BUILT"
 echo "bundle: $APP"
