@@ -40,4 +40,3 @@ jobs:
           fi
           swift build -c release --product Athina
           scripts/check-no-control-api.sh "$(swift build -c release --product Athina --show-bin-path)/Athina"
-
