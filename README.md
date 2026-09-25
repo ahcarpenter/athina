@@ -597,7 +597,8 @@ never wait. `run` and `warm` build `build/Athina.app` and `athina-drive` when a
 source file is newer, before they take the screen lock, so no other checkout
 waits on this one's build: the log says "building ... before taking the screen
 lock", then "took the screen lock". They build again inside the lock only when
-a source file changed while they waited for it, and say so. So call the
+a source file was saved after their last build started, and say so; a
+touch-only edit builds each once. So call the
 harness bare: a hand-held `lockf` around it holds the lock through the build
 too. Before they build, `run` and `warm` take their checkout's own lock,
 `build/athina-e2e.lock`, the same way, and keep it to the end, so a second

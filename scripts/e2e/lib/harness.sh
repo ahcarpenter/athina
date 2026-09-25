@@ -20,6 +20,8 @@ if [ -n "${ATHINA_E2E_APP:-}" ]; then
 fi
 APP_BINARY="$APP/Contents/MacOS/Athina"
 DRIVE="$ROOT/.build/debug/athina-drive"
+# When the build that last brought athina-drive up to date started (ensure_drive).
+DRIVE_BUILT="$ROOT/build/athina-drive.built"
 FIXTURES="$ROOT/Tests/AthinaCoreTests/Fixtures/Replay"
 SETTINGS_SEED="$E2E_DIR/lib/settings.json"
 
@@ -97,22 +99,38 @@ sources_newer_than() {
 	[ -n "$(find "$@" -name '*.swift' -newer "$product" -print -quit)" ]
 }
 
+# Is anything under the given directories newer than both the built product
+# and the stamp of the build that last brought it up to date? SwiftPM leaves a
+# product as it was when no source really changed, so after a touch-only edit
+# the product stays older than that source however often it is built; the
+# stamp, made when that build started, is what says the source was built.
+sources_newer_than_build() {
+	local product="$1" stamp="$2"
+	shift 2
+	[ -x "$product" ] && [ -e "$stamp" ] || return 0
+	[ -n "$(find "$@" -name '*.swift' -newer "$product" -newer "$stamp" -print -quit)" ]
+}
+
 # Where a build happens, for its log line. The entry point builds before it
 # takes the screen lock, so no other checkout waits on a build; one inside the
-# lock means a source file changed while this run waited for it.
+# lock means a source file was saved after the last build started, which is
+# while this run waited for the lock or during that build.
 build_when() {
 	if [ "${SCREEN_LOCK_STATE:-0}" = 0 ]; then
 		echo "before taking the screen lock"
 	else
-		echo "inside the screen lock, since a source file changed while this run waited for it"
+		echo "inside the screen lock, since a source file was saved after the last build started"
 	fi
 }
 
 ensure_drive() {
-	if sources_newer_than "$DRIVE" "$ROOT/Sources/AthinaDrive" "$ROOT/Sources/AthinaE2E"; then
-		log "building athina-drive $(build_when)"
-		(cd "$ROOT" && swift build --product athina-drive >/dev/null) || die "could not build athina-drive"
-	fi
+	sources_newer_than_build "$DRIVE" "$DRIVE_BUILT" "$ROOT/Sources/AthinaDrive" "$ROOT/Sources/AthinaE2E" || return 0
+	log "building athina-drive $(build_when)"
+	# Stamped when the build starts, so a source saved during it is still newer.
+	mkdir -p "$(dirname "$DRIVE_BUILT")"
+	: >"$DRIVE_BUILT.new"
+	(cd "$ROOT" && swift build --product athina-drive >/dev/null) || die "could not build athina-drive"
+	mv -f "$DRIVE_BUILT.new" "$DRIVE_BUILT"
 }
 
 # A check of a stale bundle proves nothing, so the app is rebuilt when a source
