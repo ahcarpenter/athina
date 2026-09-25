@@ -8,8 +8,9 @@
 # screen, and so does every other checkout's run: two at once collide, and
 # each reports the other's clicks as its own failures. So every command that
 # touches the screen or the shared warm home takes the screen lock first: run
-# for each real-screen scenario, and only once input is idle, so other
-# checkouts' runs go between scenarios and none waits on someone typing.
+# for each real-screen scenario, and a scenario that needs a quiet Mac only
+# once input is idle, so other checkouts' runs go between scenarios and none
+# waits on someone typing.
 #
 # A run also builds its checkout's app bundle and drive tool, before it takes
 # the screen lock so no other checkout waits on the build, and then runs from

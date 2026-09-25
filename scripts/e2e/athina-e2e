@@ -60,9 +60,10 @@ options:
 run and warm first take this checkout's lock, so only one of them runs from a
 checkout at a time, then build. An API-tier scenario is hermetic and takes no
 other lock. A real-screen scenario takes one machine-wide lock for as long as
-it runs, as warm and clean do for theirs, and only once the keyboard and mouse
-have been quiet for 15 seconds, so only one run is on the screen at a time
-across every checkout (README "End-to-end harness").
+it runs, as warm and clean do for theirs, so only one run is on the screen at a
+time across every checkout, and one that says SCENARIO_IDLE_FIRST=yes only
+once the keyboard and mouse have been quiet for 15 seconds (README "End-to-end
+harness").
 TEXT
 }
 
@@ -86,9 +87,9 @@ scenario_tier_of() {
 	printf '%s\n' "${tier:-screen}"
 }
 
-# How long the keyboard and mouse must be quiet before a real-screen scenario
-# takes the screen: its steps start soon after and each moves the pointer or
-# the front app, which whoever is at the Mac would feel.
+# How long the keyboard and mouse must be quiet before a scenario that says
+# SCENARIO_IDLE_FIRST=yes takes the screen: its steps start soon after and each
+# moves the pointer or the front app, which whoever is at the Mac would feel.
 IDLE_BEFORE_SCREEN=15
 
 cmd_list() {
@@ -279,7 +280,6 @@ run_scenario() (
 	# reach the next one.
 	local name="$1"
 	local file="$SCENARIO_DIR/$name.sh"
-	[ -f "$file" ] || die "no scenario named $name"
 
 	SCENARIO_SUMMARY=""
 	SCENARIO_ARGS=()
@@ -291,6 +291,9 @@ run_scenario() (
 	# to set what macOS shows beside what the app built, says yes. It gets one
 	# only from a bundle that carries it, and reads CONTROL_API to know.
 	SCENARIO_CONTROL=no
+	# A scenario that takes the screen only once the keyboard and mouse have
+	# been quiet says yes.
+	SCENARIO_IDLE_FIRST=no
 	# A screen-tier run watches a staged TextEdit window; an API-tier one
 	# stages nothing unless its scenario says so.
 	scenario_stage() { [ "$SCENARIO_TIER" = api ] || stage_text_document; }
@@ -313,11 +316,11 @@ run_scenario() (
 	# A real-screen run is on the screen, and so is an API-tier one whose
 	# windows are left there to watch: each takes the machine-wide lock for as
 	# long as it runs, so other checkouts' runs interleave with this one's. A
-	# real-screen scenario waits for a quiet keyboard and mouse before it takes
-	# it, rather than inside it.
+	# scenario that needs a quiet keyboard and mouse waits for them before it
+	# takes it, rather than inside it.
 	if [ "$SCENARIO_TIER" = screen ] || [ "$SHOW_WINDOWS" = 1 ]; then
 		local status=0
-		if [ "$SCENARIO_TIER" = screen ]; then
+		if [ "$SCENARIO_IDLE_FIRST" = yes ]; then
 			lock_acquire_when_idle SCREEN_LOCK "run $name" "$LOCK_TIMEOUT" "$IDLE_BEFORE_SCREEN" hid_idle_seconds || status=$?
 		else
 			lock_acquire SCREEN_LOCK "run $name" "$LOCK_TIMEOUT" || status=$?
