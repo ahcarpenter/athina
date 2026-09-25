@@ -33,9 +33,10 @@
 #     that each shows as a link is settings-pane-text's, on the API tier.
 #
 # SCENARIO_IDLE_FIRST has the harness take the screen only once the keyboard
-# and mouse have been quiet for 15 seconds, so the steps run straight on: each pointer step or change of
-# the front app waits only for a short quiet moment after the run's own input,
-# and every click aborts if the pointer is moved off its target.
+# and mouse have been quiet for 15 seconds, so the steps run straight on: each
+# pointer step or change of the front app waits only for a short quiet moment
+# after the run's own input, and every click aborts if the pointer is moved off
+# its target.
 SCENARIO_SUMMARY="what only macOS routing proves, in one scenario: the item keeps the toast on an accessibility press and a real click and draws the menu the app built, Tell Me More by hover, real clicks on empty bar space and in another app dismiss it, the item keeps one width across modes, and Settings footer links change the pane in place"
 SCENARIO_CONTROL=yes
 SCENARIO_IDLE_FIRST=yes
