@@ -716,6 +716,15 @@ public actor Journal {
     .first ?? nil
   }
 
+  /// Returns every row of `sql`, a query that changes nothing, each column as text.
+  ///
+  /// It is how the control API answers the end-to-end harness's named journal
+  /// queries from the app's own connection (README "The control API"). A
+  /// statement that would write is refused rather than run.
+  public func readOnlyRows(_ sql: String) throws -> [[String]] {
+    try db.readOnlyRows(sql)
+  }
+
   /// Returns the journal's counts, size, and time span, for Settings and the
   /// debug panel.
   public func stats() throws -> JournalStats {

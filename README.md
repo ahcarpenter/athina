@@ -603,7 +603,7 @@ scripts/e2e/athina-e2e warm          # once per machine: prepare the warm home
 scripts/e2e/athina-e2e list          # the scenarios and what each one proves
 scripts/e2e/athina-e2e run all       # run them; one JSON line of result each
 scripts/e2e/athina-e2e run --jobs 4 all   # up to 4 API-tier scenarios at once
-scripts/e2e/athina-e2e run menubar-keyboard
+scripts/e2e/athina-e2e run toast-menu-answers
 scripts/e2e/athina-e2e doctor        # what is missing before a run
 scripts/e2e/athina-e2e journal suggestions   # a named query over the last run
 ```
@@ -659,8 +659,8 @@ Scenarios come in two tiers, which each scenario names in `SCENARIO_TIER`:
   clicks or types into it through its own event path, so the check still
   proves the control can be hit and is wired, with no real pointer and no wait
   for the keyboard and mouse to go quiet. The run is hermetic (see Hermetic
-  runs): it stages nothing, posts no input, shows nothing, senses nothing, and
-  takes no lock.
+  runs): it stages nothing, posts no input, shows nothing, senses only what
+  the scenario scripts (see Scripted sensing), and takes no lock.
 - **Real screen** (`screen`, the default): real HID clicks and presses through
   accessibility from outside, for what only macOS's own routing can prove: the
   menu bar item and the menu the system runs for it, clicks in other apps that
@@ -674,11 +674,12 @@ Scenarios come in two tiers, which each scenario names in `SCENARIO_TIER`:
 | `menubar-item-click` | screen | a real pointer click on Athina's menu bar item opens the menu and leaves the suggestion up, and Answer Suggestion > Tell Me More is recorded |
 | `menubar-empty-click` | screen | a real click on empty menu bar space beside the item dismisses the suggestion, attributed to a real mouse-down by a session tap |
 | `other-app-click` | screen | a real click inside a staged TextEdit window dismisses the suggestion |
-| `menubar-keyboard` | screen | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one menu bar scenario that needs no idle input |
+| `toast-menu-answers` | api | with a suggestion up from scripted sensing, the menu's Answer Suggestion offers every answer; Tell Me More from it opens the explanation and keeps the toast up, Not Now is recorded and takes the toast down, and the answers are dimmed, and refused, once no suggestion is up |
+| `toast-buttons` | api | clicks on the toast's own buttons: Tell Me More opens the explanation and is recorded once however often Show Less folds it; Close takes it down without writing over the answer; Not Now and Never for This are recorded and add a snooze and a never rule for that kind of suggestion in that app; and a click outside Athina's windows takes a toast brought back by Show Last Suggestion down |
 | `menubar-width` | screen | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
 | `menubar-mark` | screen | Athina's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
 | `capture-race` | screen | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
-| `understanding-surfaces` | screen | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
+| `understanding-surfaces` | api | the understanding the mentor call behind a scripted suggestion writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link's target opens the Journal pane in place (`open-link`); and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
 | `debug-panel-access` | api | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed, a click on it is refused, and one forced onto it opens nothing; turned on, the menu gains Debug Panel in a group of its own after Settings…, and it and the button each open the panel; turned off again, the panel closes and the command leaves the menu |
 | `settings-pane-text` | api | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link to that pane rather than Markdown, and a click on the one below the fold is refused until the pane is scrolled to it |
 | `settings-pane-links` | screen | a real click on each of those links changes the Settings window's pane in place rather than handing the link to the system |
@@ -757,6 +758,7 @@ it.
 | `windows` | Athina's open windows: title, number, frame, level, key and main |
 | `find` | controls in `window=<title>` (every window when it is left out) by `identifier=`, or by `role=`, `subrole=` and `label=` (a control's description or title, whole, ignoring case), read from Athina's own accessibility tree: role, label, identifier, value, enabled, frame |
 | `click` | a left click on the first such control, posted to the app's own event queue and dispatched by AppKit as a real click is after the window server; the answer comes once it has been handled. Refused as `disabled` when the control is dimmed, `offscreen` when a scroll area has it out of sight or it is outside its part of the window (the content, or the whole window for the toolbar and title bar), and `covered` when a sheet is up over its window or the window's own hit test at its centre lands on something else. A control inside a sheet is found under the title of the window the sheet covers, and judged against and clicked in the sheet. `force=true` clicks anyway, for proving a refusal |
+| `press` | an accessibility press on the first such control, as VoiceOver or Full Keyboard Access presses it: its own action, with no pointer. For the one kind of control a simulated click cannot drive: AppKit lets a destructive button (Reset Understanding…) act on no click into a window that is not in front, and a hermetic run's never are. Refused as `disabled` when the control is dimmed and `unsupported` when it offers no press |
 | `type` | `text=` as key presses to the first responder of `window=`, or of the sheet up over it, such as the field a click just focused |
 | `scroll` | the scroll view holding a control scrolls it into view |
 | `menu` | the menu bar extra's menu as the app builds it (`MenuModel`), without showing it, and with no menu bar extra at all in a hermetic run; `press="<title>"`, or `press="<submenu> > <title>"`, runs that item's command through the handler choosing it from the menu runs, refused as `missing` or `disabled`, naming the step, when an item or submenu on the way is not there or is dimmed |
@@ -765,10 +767,18 @@ it.
 | `wait-window` | waits until a window titled `window=` is open, or with `present=false` gone |
 | `snapshot` | a checkpoint PNG of one of Athina's windows at `path=`, taken as `--snapshot` takes one once macOS has finished animating the window open (up to two seconds); never over an existing file |
 | `outside-click` | a click outside Athina's windows at `x=`, `y=` (points from the top left of the main display, as frames are given), handed to the suggestion toast as its system-wide listener would hand it one, which a hermetic run does not have; `heard` says whether a toast was up |
+| `observe` | what a hermetic run senses next (see Scripted sensing): `app=` and `bundle=` in front, in `window=`, showing `text=`, captured at once; or `idle=true` or `idle=false` alone, input going idle or coming back. `kept` says whether the capture was journaled, `why` why not, and `after` is the newest event's sequence before it, for a `wait-event` on what it brings. Refused as `unscripted` in a run that senses the real Mac |
+| `wait-event` | waits for the first event named `name=` after the sequence `after=` (every event since launch when left out) whose fields hold every other argument: `wait-event name=feedback feedback=notNow`. The names are what the sensing pipeline and the mentor loop publish, each logged once the app has acted on it: `observation`, `focus`, `mode`, `event` (a journaled event, by `kind`), `status` (with the understanding's `revision` as `understanding`), `suggestion` (logged once its toast is up), `feedback`, `followUp` and `call` (by `tier` and `outcome`); the answer carries the event's `sequence` and fields |
+| `journal` | one of the harness's named journal queries (`journal - queries` in the drive helpers lists them), `query=<name>`, answered from the app's own journal connection, which refuses any statement that writes: the `columns`, and the `rows` as objects keyed by column |
+| `advance` | moves the replay's clock `seconds=` ahead, as the debug panel's Advance field does, and answers with the clock's time and how far it has been moved ahead in all |
+| `open-link` | follows a link in the app's own text, found as `click` finds a control, through the handler a click on it runs, with the URL SwiftUI carries as its identifier (`open-link window=Models identifier=athina-settings:journal`). It proves where the link goes and that the app handles it; that a click reaches it stays a real-screen check. Refused as `missing` when the control is not a link and `unhandled` when the app has no handler for its URL |
 | `hotkey` | `key=pause` or `key=talk-back` through the handler Carbon calls, pressed and let go, or only `phase=down` or `phase=up`; `heard=<words>` is what talking back hears while its key is down, since a hermetic run opens no microphone; refused as `disabled` when the key is not registered (unset, unusable, or taken), as Carbon then never reports it |
 
 The waits take `timeout=<seconds>`, 10 unless given, and poll the app's own
 state at a fixed real-time pace; the replay's clock is not involved.
+`wait-event` reads a log of the newest 2,000 events the app has handled
+(`ControlEventLog`), kept only while the API is served; the cadence
+bookkeeping the pipeline publishes several times a second is left out of it.
 
 The controls a scenario reaches carry accessibility identifiers
 (`advanced.enableDebugPanel`, `debugPanel.timelineRow`; a link in Settings text
@@ -780,7 +790,10 @@ found by label (`label=Models`), and a window's title-bar buttons by subrole
 (`subrole=AXCloseButton`). What a click cannot drive: a link
 inside a SwiftUI Text follows neither a click the app simulates nor
 accessibility's press, so following one stays a real-screen check
-(`settings-pane-links`).
+(`settings-pane-links`), and `open-link` checks where it goes; and a
+destructive button takes no click into a window that is not in front, as
+AppKit keeps the click that only brings a window forward from destroying
+anything, so `press` presses it.
 
 **Who can use it.** The API lets a program click Athina's controls, type into
 it, and read its state, so it must never reach anyone's own copy of the app.
@@ -837,10 +850,11 @@ serves.
   each command. The app never makes itself the active app: every request to
   come forward goes through `AppActivation.request()`, which does nothing
   here. So its windows draw as an inactive app's do, in checkpoints too.
-- **It senses nothing.** The pipeline runs with `SensingSource.hermetic`: no
-  focus tracking, no read of input or permissions, and no capture, so a run
-  never journals the screen of whoever is at the Mac, and never asks macOS
-  about a permission; it has them all, and watches with nothing to capture
+- **It senses only what it is told.** The pipeline runs with
+  `SensingSource.hermetic`: no focus tracking, no read of input or
+  permissions, and no capture, so a run never journals the screen of whoever
+  is at the Mac, and never asks macOS about a permission; it has them all,
+  and watches, sensing only what a scenario scripts (see Scripted sensing),
   until it is paused. Talking back hears only the words the API's `hotkey`
   gives it and opens no microphone.
 - **It listens to nothing outside itself.** The toast has no system-wide
@@ -880,19 +894,52 @@ where they open, to
 watch what a scenario does or to compare its checkpoints with a parked run's;
 such a run is on the screen, so it takes the screen lock.
 
+### Scripted sensing
+
+A hermetic run senses only what its scenario scripts, through the API's
+`observe` (`SensingPipeline.observe`, `ScriptedObservation`). Each call is
+one moment of a person's screen: an app's window in front, filling a display,
+with a text area holding the text given focused, as a document in an editor
+is. The pipeline senses it the way it senses a real window, with the same
+code from the journal on: a change of app or window is journaled as an app
+or window switch, an app the settings exclude is read no further than its
+name and puts sensing in the excluded mode, and otherwise a capture is taken
+at once, a focus-change capture after a switch and an input-settled one after
+the text changed, and kept or dropped by the same rule as a capture of the
+screen (`FrameKeepPolicy`), so the same window showing the same text again is
+a near duplicate. The frame is the text drawn a line at a time, and its
+recognised text is those lines, each where it was drawn, so no screen is read
+and no text recognition runs. `observe idle=true` and `idle=false` stand in
+for the keyboard and mouse going quiet past the idle threshold and coming
+back. The debug panel's Latest frame shows each scripted frame as it shows a
+real one. A suggestion's callout needs a real window to point at, so a
+hermetic run draws none and says so in the debug panel.
+
+The harness scripts the moments the committed fixtures were recorded at, from
+the documents in their `scenario/` folder (`scripted_toast` in
+`scripts/e2e/lib/harness.sh`): `reading-notes.txt` in front, whose replayed
+triage finds nothing worth a look, then, once `advance` has moved the replay
+clock past the triage gate's 5 second floor rather than waiting it out, a
+switch to `cleanup-script.txt`, whose triage and mentor call make the
+suggestion. The toast is up within 2 seconds of that second `observe`,
+measured at about 0.1 second, which the run checks, and every step waits on
+the event it needs (`wait-event`) rather than on a fixed time or the journal.
+
 ### What the harness already handles, so a scenario need not
 
 - **The warm home**, above: no run pays the cold OCR stall again.
 - **Fast toasts.** Every launch replays with `--replay-latency immediate`
   (see Replay), and the seeded settings put the triage gate at its 5 second
   floor, so a toast comes seconds after the first capture rather than after
-  the recorded 41 second mentor call and a 20 second gate. `wait_toast` looks
-  for it every quarter second and nudges sensing every 2 seconds (the helper
-  window flips and TextEdit switches windows), pressing Capture Now only after
-  30 seconds with no toast; it logs how long it waited and how long since
-  launch. While it waits for the first capture, the harness brings the staged
-  TextEdit forward with each Shift press, since sensing captures nothing while
-  an excluded app, such as the terminal of whoever is at the Mac, is in front.
+  the recorded 41 second mentor call and a 20 second gate. An API-tier
+  scenario scripts its toast (see Scripted sensing). On the real screen,
+  `wait_toast` looks for it every quarter second and nudges sensing every 2
+  seconds (the helper window flips and TextEdit switches windows), pressing
+  Capture Now only after 30 seconds with no toast; it logs how long it waited
+  and how long since launch. While it waits for the first capture, the
+  harness brings the staged TextEdit forward with each Shift press, since
+  sensing captures nothing while an excluded app, such as the terminal of
+  whoever is at the Mac, is in front.
 - **Idle input.** Every pointer step of a real-screen scenario waits for a
   quiet keyboard and mouse first, and a click aborts if the pointer moves off
   the target, because the Mac may have someone at it. A click by that person
@@ -1953,14 +2000,11 @@ every rule it can only report, and CI runs `make lint` on every pull request
 and every push to `main`.
 
 A newer swift-format can format the same code differently, so the one CI runs
-is pinned: `.swift-format-xcode-version` names the Xcode it ships with, as
-`xcodebuild -version` prints it (26.6 today: Swift 6.3.3, swift-format 6.3.0).
-The `lint` job selects that Xcode by its exact path on the runner,
-`/Applications/Xcode_<version>.app` or the image's other name for it,
-`/Applications/Xcode_<version>.0.app`, never the newest there; it fails,
-naming the Xcodes the runner has, when neither exists, fails when that Xcode
-reports another version, and prints the Swift and swift-format versions that
-ran. `make format` and `make lint` read the same file and warn when the
+is pinned: `.xcode-version` names the Xcode every CI job runs, and so the
+swift-format it ships with, as `xcodebuild -version` prints it (26.6 today:
+Swift 6.3.3, swift-format 6.3.0). The `lint` job selects that Xcode by its
+exact path, as every job does (see Continuous integration), and prints the
+Swift and swift-format versions that ran. `make format` and `make lint` read the same file and warn when the
 selected Xcode is another; `DEVELOPER_DIR=<path to that Xcode.app>`
 runs either with the pinned one. Xcode 27.0's swift-format, which reports its
 version as `main`, formats this code identically today.
@@ -1969,7 +2013,7 @@ To move the pin, once the `macos-26` image lists the new Xcode (its
 [readme](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)
 names each path):
 
-1. Write the new version into `.swift-format-xcode-version`.
+1. Write the new version into `.xcode-version`.
 2. Run `make format` and `make lint` with that Xcode, and fix what the linter
    reports.
 3. Commit the pin and any reformatting together as one `style` commit, so
@@ -2063,17 +2107,19 @@ CI runs four checks on GitHub's `macos-26` runner, which ships Xcode 26 and
 the macOS 26 SDK this package targets: `build-and-test` runs `swift test`, the
 bundle script, and `scripts/check-no-control-api.sh` (which must find the
 control API in the development bundle and none in a build without the
-`ControlAPI` trait); `lint` runs `make lint` (see Code style) and fails on any
+`ControlAPI` trait, for which it takes the debug `Athina` the tests' build
+already made rather than compiling the package again); `lint` runs `make lint` (see Code style) and fails on any
 finding; `ui-snapshots-smoke`, the fast UI check, draws every
 snapshot inside a test process with swift-snapshot-testing and compares each
 with its reference image (see UI snapshot smoke test); and `ui-snapshots`, the
 full-fidelity UI check, renders every snapshot with `Athina --snapshot`
 through the window server, so Liquid Glass and materials are in them,
 replay-mode renders on a scaled clock included, compares the renders with the
-approved baselines, and uploads them (see UI snapshot baselines). Both UI
-checks are split across four runners that each take a quarter of the
-snapshots, by the same `SnapshotShard` table, and draw the same list of
-snapshots, so a UI change drifts both, and each has its own approved images:
+approved baselines, and uploads them (see UI snapshot baselines).
+`ui-snapshots` is split across four runners that each take a quarter of the
+snapshots, by the `SnapshotShard` table, and `ui-snapshots-smoke` draws them
+all on one. Both draw the same list of snapshots, so a UI change drifts both,
+and each has its own approved images:
 `make snapshots-approve` approves the `ui-snapshots` baselines from HEAD's
 merge-checks run and `make snapshots-smoke-approve` the `ui-snapshots-smoke`
 references from HEAD's CI run, both from the runner and never from a Mac. The
@@ -2113,6 +2159,24 @@ creates it if it is gone). It requires each check from GitHub Actions itself
 (integration 15368), so a commit status of the same name cannot stand in for
 one, and it does not require a branch to be up to date with main, so a pull
 request is not rerun each time another merges.
+
+**One Xcode, pinned.** Every macOS job selects the Xcode that `.xcode-version`
+names, as `xcodebuild -version` prints it (26.6 today), through the shared
+step in `.github/actions/select-xcode`: by its exact path on the runner,
+`/Applications/Xcode_<version>.app` or the image's other name for it,
+`/Applications/Xcode_<version>.0.app`, never the newest there. It fails,
+naming the Xcodes the runner has, when neither exists, and fails when that
+Xcode reports another version. So a new runner image changes no build, render
+or formatting by itself: moving the pin is one deliberate commit that
+refreshes both sets of approved images and runs `make format` with the new
+swift-format (see Code style and UI snapshot baselines). When GitHub's macOS
+27 image leaves preview, CI moves to it in such a commit.
+
+**Superseded runs.** A new push to a pull request cancels that pull request's
+runs still going, in both workflows, and so does a label added while
+merge-checks runs, so a superseded commit stops holding runners: the account
+runs five macOS jobs at once. Pushes to main are never cancelled; each keeps
+its own run.
 
 Local validation, the no-mistakes pipeline a change goes through before its
 pull request, never runs the Xcode project steps, the full `ui-snapshots` gate
@@ -2229,11 +2293,11 @@ edges and glass differently everywhere, so only the runner's renders are
 compared or approved.
 
 **A runner change is a deliberate refresh.** The baselines depend on the
-runner's macOS image and the newest Xcode on it, which `merge-checks.yml`
-selects. When
-GitHub updates either, the renders change with no change to the app; approve
-them from a CI run of an unchanged commit, in a commit of their own that names
-the new image or Xcode, so a real UI change is never approved under it.
+runner's macOS image and the Xcode that `.xcode-version` pins (see Continuous
+integration). Moving to a new image or a new pin changes the renders with no
+change to the app; approve them from a CI run of an unchanged commit, in a
+commit of their own that names the new image or Xcode, so a real UI change is
+never approved under it.
 
 **Size.** The set is a few megabytes of PNGs, rendered at the
 runner's 1x scale, and an approval adds only the images that changed to the
@@ -2250,17 +2314,16 @@ light and dark, in the same kind of window, settled by the same rule, and
 compares each with its reference image in
 `Tests/UISnapshotsSmokeTests/__Snapshots__/UISnapshotsSmokeTests` with
 [swift-snapshot-testing](https://github.com/pointfreeco/swift-snapshot-testing).
-The two gates cannot drift apart: a snapshot added to the list is in both, and
-needs a line in `SnapshotShard`'s table, which splits both.
+The two gates cannot drift apart: a snapshot added to the list is in both.
 
-In CI it runs on four runners, like `ui-snapshots`: the
-`ui-snapshots-smoke shard 1` to `4` jobs each run `make ui-snapshots-smoke
-SHARD=<k>/4`, which draws and compares only the snapshots `SnapshotShard`
-gives shard k (the test reads the shard from `UI_SNAPSHOTS_SMOKE_SHARD`), and
-the `ui-snapshots-smoke` job, the check the ruleset requires, passes only when
-all four ran and passed. Its name is an expression that reads
-`ui-snapshots-smoke` only when the job runs, so a skipped one never passes the
-required check. Without `SHARD`, the target draws every snapshot.
+In CI it runs on one runner, the `ui-snapshots-smoke` job, the check the
+ruleset requires, which runs `make ui-snapshots-smoke` and draws every
+snapshot. Most of that job is fetching and compiling; drawing all 76 images
+takes about a minute and a half, so it ends inside `build-and-test`, where
+four runners each compiled the test again for a quarter of the drawing.
+`make ui-snapshots-smoke SHARD=<k>/4` still draws only the snapshots
+`SnapshotShard` gives shard k (the test reads the shard from
+`UI_SNAPSHOTS_SMOKE_SHARD`), should it be split again.
 
 It draws each window inside the test process, with swift-snapshot-testing's
 view strategy on the window's frame view (the view under the content that
@@ -2285,8 +2348,8 @@ it skips the wait `--snapshot` gives a fade to end before its first capture.
 
 The test never records a reference. A snapshot with no reference fails, as a
 drifted one does, and a reference no snapshot produces fails until it is
-deleted. For each drifted snapshot its shard names it in its summary and
-uploads the `ui-snapshots-smoke-report-shard-<k>` artifact: one folder per snapshot with the
+deleted. The job names each drifted snapshot in its summary and uploads the
+`ui-snapshots-smoke-report` artifact: one folder per snapshot with the
 reference (`reference.png`), the new render (`failure.png`) and their
 difference (`difference.png`), or only the render when there is no reference
 yet.
@@ -2303,20 +2366,20 @@ have every build fetch every package it names.
 **Approving an intended change.** Push the change and let
 `ui-snapshots-smoke` fail on the drift, look at the report, then run `make
 snapshots-smoke-approve` (or `scripts/snapshots.sh smoke-approve`), which
-downloads the sets HEAD's newest CI run published, one from each shard
-(`ui-snapshots-smoke-shard-<k>`), refuses unless all four are there, since a
-missing shard's snapshots would read as removed, and makes the references
-folder match them together exactly: the run's render of every snapshot that drifted or
-was new, the reference of every one that matched, which comes back unchanged,
-and nothing else, so a removed snapshot's reference goes. `RUN=<id>` names
-another CI run. A shard publishes its set only once every snapshot it draws
-has rendered, each set names its shard and the source tree it was made from, and approving refuses any tree but
-HEAD's, as `make snapshots-approve` does. A UI change drifts both gates, so
+downloads the set HEAD's newest CI run published (`ui-snapshots-smoke-set`)
+and makes the references folder match it exactly: the run's render of every
+snapshot that drifted or was new, the reference of every one that matched,
+which comes back unchanged, and nothing else, so a removed snapshot's
+reference goes. `RUN=<id>` names another CI run. The job publishes the set
+only once every snapshot has rendered, the set names the source tree it was
+made from, and approving refuses any tree but HEAD's, as `make
+snapshots-approve` does, and a set that names a shard, which holds only that
+shard's snapshots. A UI change drifts both gates, so
 approve both, each from its own run of HEAD, and commit the images together
 with the change that caused them. References never come from a Mac: they are the
 runner's, rendered at its 1x scale on its macOS, and a Mac on another macOS or
 display scale draws differently everywhere, so `make ui-snapshots-smoke` on a
-Mac only shows how it would draw. The runner's image and newest Xcode are a
+Mac only shows how it would draw. The runner's image and the pinned Xcode are a
 deliberate refresh here too, approved with the baselines in a commit of their
 own.
 

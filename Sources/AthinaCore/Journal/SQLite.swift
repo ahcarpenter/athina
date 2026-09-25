@@ -134,7 +134,10 @@ final class SQLiteConnection {
   /// Runs a query and maps each row.
   func query<T>(_ sql: String, _ values: [Value] = [], _ map: (Statement) throws -> T) throws -> [T]
   {
-    let statement = try prepare(sql, values)
+    try query(try prepare(sql, values), map)
+  }
+
+  private func query<T>(_ statement: Statement, _ map: (Statement) throws -> T) throws -> [T] {
     var rows: [T] = []
     while true {
       let rc = sqlite3_step(statement.handle)
@@ -146,6 +149,23 @@ final class SQLiteConnection {
       }
     }
     return rows
+  }
+
+  /// Returns every row of a statement that changes nothing, each column as text.
+  ///
+  /// Each column is the text SQLite gives it and a NULL is empty text, as the
+  /// `sqlite3` tool prints them. A statement that would write is refused
+  /// before it runs.
+  func readOnlyRows(_ sql: String) throws -> [[String]] {
+    let statement = try prepare(sql, [])
+    guard sqlite3_stmt_readonly(statement.handle) != 0 else {
+      throw SQLiteError(
+        code: SQLITE_READONLY,
+        message: "only a statement that changes nothing is run here"
+      )
+    }
+    let columns = sqlite3_column_count(statement.handle)
+    return try query(statement) { row in (0..<columns).map { row.text($0) ?? "" } }
   }
 
   func scalarInt(_ sql: String, _ values: [Value] = []) throws -> Int64 {

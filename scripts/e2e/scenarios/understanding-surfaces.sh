@@ -7,238 +7,168 @@
 # Models, and then through Reset Understanding, which asks before it forgets
 # every revision.
 #
-# Every button is pressed by name through accessibility; only the footer's
-# link, which accessibility offers no press for, needs the real pointer.
+# On the API tier: the suggestion comes from scripted sensing (README
+# "Scripted sensing"), every control is clicked or typed into through
+# Athina's own event path, and the journal is read through the app. The
+# footer's link to the Journal pane is followed through the handler a click
+# on it runs (`open-link`); that a real click on it reaches that handler is
+# the real-screen tier's to prove.
 SCENARIO_SUMMARY="the understanding a mentor call writes reaches the menu, the card, and Settings, and Reset Understanding asks first"
 SCENARIO_ARGS=(--open debug)
+SCENARIO_TIER=api
 
-# The goal the model wrote, strongest first, as the surfaces show it.
+# The goal the newest revision puts first, as the app's journal holds it.
 understanding_goal() {
-	sqlite3 -readonly "$JOURNAL" \
-		"select json_extract(content_json, '\$.goals[0].goal') from understanding order by updated_at desc, id desc limit 1" 2>/dev/null || echo ""
+	json_eval "$(api journal query=understanding)" 'r["rows"][-1]["goal"] if r["rows"] else ""'
 }
+
+revisions() { json_eval "$(api journal query=understanding)" 'len(r["rows"])'; }
 
 reset_events() {
-	sqlite3 -readonly "$JOURNAL" \
-		"select count(*) from events where kind = 'understanding' and detail like 'reset%'" 2>/dev/null || echo 0
+	json_eval "$(api journal query=events)" \
+		'sum(1 for e in r["rows"] if e["kind"] == "understanding" and e["detail"].startswith("reset"))'
 }
 
-# The mentor call carries the understanding in its reply, so the record lands
-# just after the suggestion it came with.
-wait_understanding() {
-	local limit="${1:-30}" i
-	for i in $(seq 1 "$limit"); do
-		[ "$(journal_count understanding)" -ge 1 ] && return 0
-		sleep 1
-	done
-	return 1
+# The menu's status rows, one title per line.
+menu_titles() {
+	json_eval "$(api menu --field items)" '"\n".join(i["title"] for i in r if not i["separator"])' >"$RUN_DIR/$1-menu.txt"
 }
 
-menu_items() {
-	local tag="$1"
-	"$DRIVE" ax "$ATHINA_PID" pressextra >>"$RUN_DIR/transcript.log" 2>&1 || return 1
-	sleep 0.8
-	"$DRIVE" ax "$ATHINA_PID" menuitems >"$RUN_DIR/$tag-menu-items.txt" 2>&1 || true
-	snapshot_state "$tag"
-	"$DRIVE" ax "$ATHINA_PID" cancelmenu >>"$RUN_DIR/transcript.log" 2>&1 || true
-	sleep 0.4
-}
-
-wait_window() {
-	local want="$1" limit="${2:-10}" i
-	for i in $(seq 1 "$limit"); do
-		[ -n "$(window_id "$want")" ] && return 0
-		sleep 0.5
-	done
-	return 1
-}
-
-# The window's text as VoiceOver reads it, which is also where a label that is
-# only a description rather than a title still shows up.
+# Everything a window shows, one line per element: labels, titles and values.
 window_texts() {
-	local scope="$1" tag="$2" id
-	"$DRIVE" ax "$ATHINA_PID" texts --scope "$scope" >"$RUN_DIR/$tag-texts.txt" 2>&1 || true
-	id="$(window_id "$scope")"
-	[ -n "$id" ] && "$DRIVE" shot window "$id" "$RUN_DIR/$tag.png" >/dev/null 2>&1
-	return 0
+	json_eval "$(api find window="$1")" '"\n".join(t for e in r["elements"] for t in (e["label"], e["title"], e["value"]) if t)' \
+		>"$RUN_DIR/$2-texts.txt"
 }
 
-# The x a duration row's amount field starts at, read from the live
-# accessibility geometry of a window. Two duration rows in one section are in
-# line only when their fields start at the same x, whatever unit word each
-# row's pop-up happens to be showing. The field is named "<row title>, in
-# <unit>", which is how each row's field is told from the other's.
-row_field_x() {
-	awk -v want="desc=\"$2, in " '
-		$1 == "AXTextField" && index($0, want) && match($0, /pos=\([-0-9]+,/) {
-			print substr($0, RSTART + 5, RLENGTH - 6)
-			exit
-		}
-	' "$RUN_DIR/$1"
-}
+has_text() { grep -qF -- "$2" "$RUN_DIR/$1" && echo yes || echo no; }
 
-# The screen point at the centre of an element, from a dump: "<x> <y>", empty
-# when the dump holds no such element. This is what a pointer step aims at.
-element_centre() {
-	awk -v role="$2" -v want="desc=\"$3\"" '
-		$1 == role && index($0, want) && match($0, /pos=\(-?[0-9]+,-?[0-9]+\) size=[0-9]+x[0-9]+/) {
-			split(substr($0, RSTART, RLENGTH), a, /[(,)x= ]+/)
-			printf "%d %d\n", a[2] + a[5] / 2, a[3] + a[6] / 2
-			exit
-		}
-	' "$RUN_DIR/$1"
-}
+checkpoint() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no checkpoint of $1"; }
 
-# The amount a duration row's field is showing, read the same way.
-row_field_value() {
-	awk -v want="desc=\"$2, in " '
-		$1 == "AXTextField" && index($0, want) && match($0, /value="[^"]*"/) {
-			print substr($0, RSTART + 7, RLENGTH - 8)
-			exit
-		}
-	' "$RUN_DIR/$1"
-}
+# The x a duration row's amount field starts at in the Models pane. Two rows
+# in one section are in line only when their fields start at the same x,
+# whatever unit word each row's pop-up happens to be showing.
+field_x() { api find window=Models identifier="$1" --field elements.0.frame.0; }
 
-# Type an amount into a duration row and end the edit by moving focus, the way
-# a person does who types and then clicks elsewhere rather than pressing
-# Return. The amount the row is left showing is what the row committed.
+field_value() { api find window=Models identifier="$1" --field elements.0.value; }
+
+# Type an amount into a duration row and end the edit with Tab, the way a
+# person moves on to the next field. The field is emptied first from wherever
+# the click put the insertion point. The amount the row is left showing is
+# what it committed.
 type_duration() {
-	local row="$1" unit="$2" typed="$3" tag="$4"
-	"$DRIVE" ax "$ATHINA_PID" set AXTextField "$row, in $unit" "$typed" --scope Models >>"$RUN_DIR/transcript.log" 2>&1 || return 1
-	"$DRIVE" ax "$ATHINA_PID" focus AXTextField "Size limit, in tokens" --scope Models >>"$RUN_DIR/transcript.log" 2>&1 || return 1
-	sleep 0.6
-	"$DRIVE" ax "$ATHINA_PID" dump --scope Models >"$RUN_DIR/$tag.txt" 2>&1 || true
-	row_field_value "$tag.txt" "$row"
+	local field="$1" typed="$2" clear=""
+	for _ in 1 2 3 4 5 6; do clear+=$'\x7f'; done
+	api scroll window=Models identifier="$field" >/dev/null || return 1
+	api click window=Models identifier="$field" >/dev/null || return 1
+	api type window=Models text="$clear$typed"$'\t' >/dev/null || return 1
+	field_value "$field"
 }
 
-has_text() {
-	grep -qF "$2" "$RUN_DIR/$1" && echo yes || echo no
-}
+# The confirmation's Cancel button, once it is up over the debug panel.
+cancel_button() { api find window="Debug Panel" role=AXButton label=Cancel --field elements.0.label; }
+
+refresh_interval() { api settings key=mentor.understandingRefreshInterval --field value; }
 
 scenario_run() {
-	local goal head revisions refresh_x idle_x link
-	stage_flip_window
-	wait_toast >/dev/null || return 1
-	wait_understanding || { log "no understanding was written"; return 1; }
+	local goal head revisions
+	api wait-window window="Debug Panel" timeout=20 >/dev/null || { log "the debug panel never opened"; return 1; }
+	scripted_toast || return 1
+	# The mentor call carries the understanding in its reply, so the record is
+	# written just after the suggestion it came with.
+	api wait-event name=status understanding=1 >/dev/null || { log "no understanding was written"; return 1; }
 	goal="$(understanding_goal)"
 	# Every goal check below compares against this text, and an empty one would
 	# match any file, so a record with no goal to follow stops the scenario.
-	[ -n "$goal" ] || { log "the understanding names no goal to follow"; return 1; }
+	[ -n "$goal" ] && [ "$goal" != "-" ] || { log "the understanding names no goal to follow"; return 1; }
 	log "the understanding names \"$goal\""
-	# Revisions are inserted, never updated, so a second mentor call before the
-	# toast leaves two rows; what matters here is that a revision was written.
-	check "the mentor call wrote an understanding" "yes" \
-		"$([ "$(journal_count understanding)" -ge 1 ] && echo yes || echo no)"
+	check "the mentor call wrote an understanding" "1" "$(revisions)"
 
 	# The menu shows the goal, clipped to fit a menu item, so only its start
 	# can be compared with the record.
 	head="$(printf '%s' "$goal" | cut -c1-40)"
-	menu_items "menu-with-goal"
-	check "the menu shows the goal it worked out" "yes" "$(has_text menu-with-goal-menu-items.txt "title=\"Goal: $head")"
+	menu_titles with-goal
+	check "the menu shows the goal it worked out" "yes" "$(has_text with-goal-menu.txt "Goal: $head")"
 
-	# The card sits under the Mentor loop card in the Now pane, so the pane is
-	# scrolled to the end before the shot; AXScrollToVisible does nothing here.
-	"$DRIVE" ax "$ATHINA_PID" set AXScrollBar "" 1 --scope "Debug Panel" >>"$RUN_DIR/transcript.log" 2>&1 || true
-	sleep 0.5
-	window_texts "Debug Panel" "card"
+	# The card sits under the Mentor loop card in the Now pane, below the fold.
+	api scroll window="Debug Panel" identifier=understanding.reset >/dev/null || log "the card could not be scrolled to"
+	window_texts "Debug Panel" card
+	checkpoint "Debug Panel" card
 	check "the card shows the goal" "yes" "$(has_text card-texts.txt "$goal")"
 	check "the card names the refresh interval" "yes" "$(has_text card-texts.txt "of active use")"
 	check "the card offers Reset Understanding" "yes" "$(has_text card-texts.txt "Reset Understanding…")"
 
-	# Settings opens on the pane it last showed, and accessibility offers no
-	# way to change panes, so the pane is chosen before the window opens. The
-	# harness puts the owner's preferences back whatever happens.
-	defaults write "$PREFS_DOMAIN" SettingsPane models >>"$RUN_DIR/transcript.log" 2>&1 || true
-	# A menu item is only in the tree while the menu is open, so the extra is
-	# pressed right before it, and closed again in case the press left it up.
-	"$DRIVE" ax "$ATHINA_PID" pressextra >>"$RUN_DIR/transcript.log" 2>&1 || { log "the menu bar extra would not open"; return 1; }
-	sleep 0.8
-	"$DRIVE" ax "$ATHINA_PID" pressx AXMenuItem "Settings…" --scope extras >>"$RUN_DIR/transcript.log" 2>&1 \
-		|| { log "the menu offered no Settings… item to press"; return 1; }
-	"$DRIVE" ax "$ATHINA_PID" cancelmenu >>"$RUN_DIR/transcript.log" 2>&1 || true
-	wait_window "Models" || { log "Settings never opened on the Models pane"; return 1; }
-	window_texts "Models" "settings"
+	check "the menu's Settings… command is chosen" "true" "$(api menu press="Settings…" --field ok)"
+	api wait-window window=General timeout=10 >/dev/null || { log "Settings never opened"; return 1; }
+	check "a click on the Models toolbar item lands" "true" "$(api click window=General label=Models --field ok)"
+	api wait-window window=Models timeout=5 >/dev/null || { log "the Models pane never showed"; return 1; }
+	window_texts Models settings
+	checkpoint Models models
 	check "Settings shows the current goal" "yes" "$(has_text settings-texts.txt "$goal")"
 
 	# The section's two duration rows show different unit words, minutes beside
 	# hours with the shipped defaults, and a unit pop-up sizes to the word it is
 	# showing, so this is where a row that reserves only its own word pushes its
 	# field and stepper off the other row's x.
-	"$DRIVE" ax "$ATHINA_PID" dump --scope Models >"$RUN_DIR/models-dump.txt" 2>&1 || true
-	refresh_x="$(row_field_x models-dump.txt "Refresh at most every")"
-	idle_x="$(row_field_x models-dump.txt "Forget after no activity for")"
+	local refresh_x idle_x
+	refresh_x="$(field_x understanding.refreshInterval)"
+	idle_x="$(field_x understanding.idleGap)"
 	# Two empty readings would match each other, so nothing to measure is a
 	# scenario failure rather than a check that passes by saying nothing.
 	[ -n "$refresh_x" ] && [ -n "$idle_x" ] || { log "the Models pane showed no duration fields to measure"; return 1; }
 	check "the duration rows start their fields on one x" "$refresh_x" "$idle_x"
 
 	# The row is held to the seconds the setting itself accepts, 5 minutes to
-	# 12 hours, and it commits when the edit ends however it ends, so typing an
-	# amount outside that and clicking away leaves the nearest one it allows
-	# rather than a figure validated() would quietly clamp behind the person.
+	# 12 hours, and it commits when the edit ends, so typing an amount outside
+	# that and moving on leaves the nearest one it allows rather than a figure
+	# validated() would quietly clamp behind the person.
 	check "a refresh below the range settles at the shortest allowed" "5" \
-		"$(type_duration "Refresh at most every" minutes 1 refresh-too-short)"
+		"$(type_duration understanding.refreshInterval 1)"
+	check "the setting holds the shortest refresh" "300" "$(settled 300 refresh_interval)"
 	check "a refresh above the range settles at the longest allowed" "720" \
-		"$(type_duration "Refresh at most every" minutes 1000 refresh-too-long)"
-	check "an allowed refresh is left as typed" "20" \
-		"$(type_duration "Refresh at most every" minutes 20 refresh-in-range)"
+		"$(type_duration understanding.refreshInterval 1000)"
+	check "the setting holds the longest refresh" "43200" "$(settled 43200 refresh_interval)"
+	check "an allowed refresh is left as typed" "20" "$(type_duration understanding.refreshInterval 20)"
+	check "the setting holds the refresh typed" "1200" "$(settled 1200 refresh_interval)"
 
 	# The footer names the Journal pane by linking to it, and the link opens it
 	# here rather than in a browser, so the Settings window itself changes pane.
-	# A link inside a Text offers accessibility nothing to press, so this is the
-	# one step that needs the real pointer; the footer is below the fold, so the
-	# pane is scrolled to the end and the link found again before it is aimed at.
-	"$DRIVE" ax "$ATHINA_PID" set AXScrollBar "" 1 --scope Models >>"$RUN_DIR/transcript.log" 2>&1 || true
-	sleep 0.6
-	"$DRIVE" ax "$ATHINA_PID" dump --scope Models >"$RUN_DIR/footer-dump.txt" 2>&1 || true
-	link="$(element_centre footer-dump.txt AXLink "Journal settings")"
-	[ -n "$link" ] || { log "the footer showed no Journal settings link to aim at"; return 1; }
-	# The flipping helper floats above the Settings window and has already
-	# earned the mentor call this scenario follows, so it is stopped rather
-	# than left over the point the pointer is about to aim at.
-	stop_pid "$FLIP_PID"
-	sleep 0.5
-	wait_idle_input || return 1
-	# A click into a window that is not key only makes it key, so the Settings
-	# window is brought forward before the pointer aims at anything inside it.
-	"$DRIVE" raise "$ATHINA_PID" Models >>"$RUN_DIR/transcript.log" 2>&1 || true
-	sleep 0.5
-	# shellcheck disable=SC2086
-	"$DRIVE" click window "$ATHINA_PID" $link --shot "$RUN_DIR/footer-link.png" >>"$RUN_DIR/transcript.log" 2>&1 \
-		|| { log "the click on the Journal settings link would not land"; return 1; }
-	sleep 1
+	check "the footer's link to Journal is followed" "athina-settings:journal" \
+		"$(api open-link window=Models identifier=athina-settings:journal --field url)"
 	check "the footer link opens the Journal pane in place" "yes" \
-		"$([ -n "$(window_id "Journal")" ] && echo yes || echo no)"
-	window_texts "Journal" "journal-pane"
-
-	"$DRIVE" close "$ATHINA_PID" Journal >>"$RUN_DIR/transcript.log" 2>&1 || true
-	"$DRIVE" close "$ATHINA_PID" Models >>"$RUN_DIR/transcript.log" 2>&1 || true
-	sleep 0.5
+		"$(api wait-window window=Journal timeout=5 >/dev/null && echo yes || echo no)"
+	checkpoint Journal journal-pane
+	api click window=Journal subrole=AXCloseButton >/dev/null
+	api wait-window window=Journal present=false timeout=5 >/dev/null || log "Settings would not close"
 
 	# Asking first, and Cancel keeping every revision.
-	revisions="$(journal_count understanding)"
-	"$DRIVE" ax "$ATHINA_PID" pressx AXButton "Reset Understanding…" --scope "Debug Panel" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
-	sleep 1.5
-	window_texts "Debug Panel" "confirmation"
+	revisions="$(revisions)"
+	api scroll window="Debug Panel" identifier=understanding.reset >/dev/null
+	# A destructive button takes no click into a window that is not forward,
+	# and a hermetic run's never are, so it is pressed as VoiceOver presses it.
+	check "Reset Understanding… is pressed" "true" \
+		"$(api press window="Debug Panel" identifier=understanding.reset --field ok)"
+	check "the confirmation comes up" "Cancel" "$(settled Cancel cancel_button)"
+	window_texts "Debug Panel" confirmation
+	checkpoint "Debug Panel" confirmation
 	check "the confirmation asks before resetting" "yes" "$(has_text confirmation-texts.txt "Reset the understanding?")"
 	check "the confirmation says it cannot be undone" "yes" "$(has_text confirmation-texts.txt "You can't undo this action.")"
-	check "the confirmation offers Cancel" "yes" "$(has_text confirmation-texts.txt "Cancel")"
-	"$DRIVE" ax "$ATHINA_PID" pressx AXButton "Cancel" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
-	sleep 1
-	check "Cancel keeps every revision" "$revisions" "$(journal_count understanding)"
+	check "a click on Cancel lands" "true" "$(api click window="Debug Panel" role=AXButton label=Cancel --field ok)"
+	check "Cancel keeps every revision" "$revisions" "$(revisions)"
 	check "Cancel journals no reset" "0" "$(reset_events)"
 
-	"$DRIVE" ax "$ATHINA_PID" pressx AXButton "Reset Understanding…" --scope "Debug Panel" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
-	sleep 1.5
-	"$DRIVE" ax "$ATHINA_PID" pressx AXButton "Reset Understanding" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
-	sleep 2
-	check "Reset Understanding forgets every revision" "0" "$(journal_count understanding)"
-	check "the reset is journaled" "1" "$(reset_events)"
-	window_texts "Debug Panel" "card-after-reset"
+	check "Reset Understanding… is pressed again" "true" \
+		"$(api press window="Debug Panel" identifier=understanding.reset --field ok)"
+	check "a click on the confirmation's Reset Understanding lands" "true" \
+		"$(api click window="Debug Panel" role=AXButton label="Reset Understanding" --field ok)"
+	check "the reset is journaled" "understanding" \
+		"$(api wait-event name=event kind=understanding --field event.kind)"
+	check "Reset Understanding forgets every revision" "0" "$(revisions)"
+	check "the reset is journaled once" "1" "$(reset_events)"
+	window_texts "Debug Panel" card-after-reset
+	checkpoint "Debug Panel" card-after-reset
 	check "the card says there is no understanding yet" "yes" "$(has_text card-after-reset-texts.txt "No understanding yet.")"
 
-	menu_items "menu-after-reset"
-	check "the menu says the goal is not worked out yet" "yes" \
-		"$(has_text menu-after-reset-menu-items.txt 'title="Goal: not worked out yet"')"
+	menu_titles after-reset
+	check "the menu says the goal is not worked out yet" "yes" "$(has_text after-reset-menu.txt "Goal: not worked out yet")"
 	return 0
 }

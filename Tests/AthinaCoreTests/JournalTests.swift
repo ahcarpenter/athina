@@ -51,6 +51,19 @@ import Testing
     return try Journal(url: dir.appendingPathComponent("journal.sqlite"))
   }
 
+  @Test func readOnlyRowsAnswerAQueryAndRefuseAWrite() async throws {
+    let journal = try Journal.inMemory()
+    let now = Date(timeIntervalSince1970: 1_700_000_000)
+    try await journal.record(JournalEvent(timestamp: now, kind: .started))
+    try await journal.record(JournalEvent(timestamp: now, kind: .paused, appName: "TextEdit"))
+    let rows = try await journal.readOnlyRows("select kind, app_name from events order by id")
+    #expect(rows == [["started", ""], ["paused", "TextEdit"]])
+    await #expect(throws: SQLiteError.self) {
+      try await journal.readOnlyRows("delete from events")
+    }
+    #expect(try await journal.readOnlyRows("select count(*) from events") == [["2"]])
+  }
+
   @Test func observationRoundTrips() async throws {
     let journal = try Journal.inMemory()
     let now = Date(timeIntervalSince1970: 1_700_000_000)

@@ -202,8 +202,8 @@ cmd_run() {
 	for name in "${names[@]}"; do
 		if [ "$(scenario_tier_of "$name")" = api ]; then api+=("$name"); else screen+=("$name"); fi
 	done
-	# The API tier captures nothing, so only the real-screen tier needs the
-	# warm home.
+	# The API tier reads no screen and runs no text recognition, so only the
+	# real-screen tier needs the warm home.
 	if [ ${#screen[@]} -gt 0 ]; then
 		have_warm_home || die "no warm home yet: run scripts/e2e/athina-e2e warm first"
 	fi

@@ -97,7 +97,7 @@ SCENARIO ?= all
 JOBS ?= 1
 ## BASE         ui-snapshots-smoke-local: the commit to compare with; the fork from origin/main
 BASE ?=
-## SHARD        ui-snapshots-smoke: the shard to draw, k/n, as CI passes it; all when empty
+## SHARD        ui-snapshots-smoke: the shard to draw, k/n, by the full gate's table; all when empty
 SHARD ?=
 ## RUN          snapshots-approve, snapshots-smoke-approve: the CI run to take; HEAD's newest
 RUN ?=
@@ -107,8 +107,9 @@ PID ?=
 # Every Swift file in the checkout, tracked or new, that git does not ignore
 SWIFT_FILES = git ls-files -z --cached --others --exclude-standard '*.swift'
 
-# The Xcode whose swift-format CI lints with (README "Code style")
-SWIFT_FORMAT_XCODE := $(shell cat .swift-format-xcode-version)
+# The Xcode every CI job runs, whose swift-format CI lints with (README "Code
+# style" and "Continuous integration")
+SWIFT_FORMAT_XCODE := $(shell cat .xcode-version)
 
 # Warns when the selected Xcode is not the one CI lints with, whose swift-format
 # may format differently

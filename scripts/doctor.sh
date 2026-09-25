@@ -16,7 +16,7 @@ lack() {
 }
 
 xcode="$(xcodebuild -version 2>/dev/null | head -n1)"
-want="Xcode $(cat "$ROOT/.swift-format-xcode-version")"
+want="Xcode $(cat "$ROOT/.xcode-version")"
 if [ -z "$xcode" ]; then
 	lack xcode "no Xcode selected (xcode-select -s /Applications/Xcode.app)"
 elif [ "$xcode" != "$want" ]; then

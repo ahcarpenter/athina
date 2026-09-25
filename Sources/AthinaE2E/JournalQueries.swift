@@ -107,6 +107,18 @@ public enum JournalQueries {
       """
   )
 
+  /// Every revision of the standing understanding and the goal it puts first.
+  public static let understanding = JournalQuery(
+    name: "understanding",
+    summary: "every revision of the standing understanding and the goal it puts first",
+    columns: ["id", "at", "revision", "source", "goal"],
+    sql: """
+      select id, \(localTime("updated_at")) as at, revision, source,
+             coalesce(json_extract(content_json, '$.goals[0].goal'), '-') as goal
+      from understanding order by id
+      """
+  )
+
   /// One row of row counts, one column per table that tracks a run's
   /// progress, the cheapest way to poll it.
   public static let counts = JournalQuery(
@@ -125,7 +137,7 @@ public enum JournalQueries {
 
   /// Every query, in the order `athina-drive journal - queries` lists them.
   public static let all: [JournalQuery] = [
-    suggestions, calls, followUps, events, observations, counts,
+    suggestions, calls, followUps, events, observations, understanding, counts,
   ]
 
   /// The query called `name`, or nil when there is none.
