@@ -144,6 +144,51 @@ import Testing
         #expect(drawing.attributeNames.allSatisfy { !$0.localizedCaseInsensitiveContains("c2pa") })
     }
 
+    /// The README's pictures, today the icon at its top, are drawn by the same
+    /// script as the app's assets and committed beside them: the README shows
+    /// every one of them, points at none that is missing, and nothing drawn
+    /// for the README is left lying unused.
+    @Test func theReadmeShowsEveryPictureDrawnForIt() throws {
+        let files = Set(try FileManager.default.contentsOfDirectory(atPath: markDirectory.path)
+            .filter { $0.hasPrefix("Readme") })
+        let readme = try String(contentsOf: root.appendingPathComponent("README.md"), encoding: .utf8)
+        let shown = Set(readme.matches(of: /Resources\/Mark\/(Readme[A-Za-z-]+\.[a-z]+)/).map { String($0.output.1) })
+        #expect(shown == files, "the README shows \(shown.sorted()), but Resources/Mark holds \(files.sorted())")
+    }
+
+    /// The README icon is the icon as Finder draws it, masked and shadowed,
+    /// not the full bleed square the .icns carries: its corners are clear, so
+    /// the page shows through them the way the desktop does in the Dock.
+    @Test func theReadmeIconIsMaskedTheWayFinderShowsIt() throws {
+        let url = markDirectory.appendingPathComponent("ReadmeIcon.png")
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            Issue.record("cannot read ReadmeIcon.png; run `make mark`")
+            return
+        }
+        #expect(image.width == 1024 && image.height == 1024, "ReadmeIcon.png is \(image.width) x \(image.height)")
+        let alpha = try alphaSamples(of: image, at: [(0, 0), (1023, 0), (0, 1023), (1023, 1023), (112, 112), (512, 512)])
+        #expect(alpha[0...4].allSatisfy { $0 == 0 }, "the corners should be clear, found \(alpha)")
+        #expect(alpha[5] == 255, "the body should be opaque, found \(alpha[5])")
+    }
+
+    private func alphaSamples(of image: CGImage, at points: [(Int, Int)]) throws -> [UInt8] {
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = CGContext(
+                data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8,
+                bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ) else { return false }
+            context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return true
+        }
+        #expect(drawn)
+        // The bitmap's rows run top down in memory, as the points are given.
+        return points.map { pixels[($0.1 * width + $0.0) * 4 + 3] }
+    }
+
     /// The icon carries every size the format holds, so macOS never has to
     /// resample one from another and show a soft icon.
     @Test func theAppIconCarriesEverySize() {

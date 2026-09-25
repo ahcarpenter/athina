@@ -1,6 +1,19 @@
-# Athina
+<h1 align="center">Athina</h1>
+<p align="center">
+  <a href="#requirements"
+    ><img
+      alt="Platform: macOS"
+      src="https://img.shields.io/badge/platform-macOS-blue?style=flat-square"
+  /></a>
+</p>
 
-Live mentor for macOS: watches what you are doing and offers timely guidance.
+<h3 align="center"><strong>A live mentor for your Mac.</strong> It watches how you work and shows you a better way when there is one.</h3>
+
+<p align="center">
+  <img src="Resources/Mark/ReadmeIcon.png" width="224" alt="Athina's app icon: Athena in a crested helmet, drawn in dark ink over cream shapes">
+</p>
+
+## Overview
 
 The **foundation** is a menu-bar app that senses what you are doing
 (accessibility context plus low-cadence screen capture with on-device OCR),
@@ -30,7 +43,7 @@ suppression are later phases.
 
 ```sh
 make build            # builds build/Athina.app from the SwiftPM binary
-make mark             # rebuilds the app icon and the menu bar mark from the two SVG masters (their outputs are committed, so a plain build never needs it)
+make mark             # rebuilds the app icon and this README's copy of it from AthinaMark.svg, and the menu bar mark from AthinaOwl.svg (their outputs are committed, so a plain build never needs it)
 make run              # builds and launches the app, replacing only the copy this checkout's run or record launched
 make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
 make record           # the same, live, writing every model call to a fixture file (spends API credits)
@@ -1492,10 +1505,12 @@ particular to this app:
   reference bitmap's own coordinates, with the line art and the cream shapes in
   separate groups so either stands alone. Ink is `#332C2B` and cream `#F1DEB7`,
   both sampled from the drawing rather than chosen. `make mark`
-  (`scripts/mark-assets.swift`) builds the app icon from it and the menu bar
-  mark from the second master, the owl below; their outputs are committed, so a
-  plain `make build` needs nothing else, and `MarkAssetTests` fails when either
-  master or the script changes without `make mark` being run. The script is in
+  (`scripts/mark-assets.swift`) builds the app icon from it, the icon at the
+  top of this README from that icon (as macOS itself draws it, masked and
+  shadowed), and the menu bar mark from the second master, the owl below;
+  their outputs are committed, so a plain `make build` needs nothing else, and
+  `MarkAssetTests` fails when either master or the script changes without
+  `make mark` being run. The script is in
   that record because most of the drawing lives there rather than in the
   masters: the menu bar inset, the eye treatments, the z's and the per-size
   thickening are all constants in it.

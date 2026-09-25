@@ -15,6 +15,8 @@ import Foundation
 //   Resources/AppIcon.icns           the app icon, full Athena artwork, every size
 //   Resources/Mark/MenuBarMark-*.pdf the menu bar mark, the owl's silhouette,
 //                                    one file per variant of MenuBarMark
+//   Resources/Mark/ReadmeIcon.png    the app icon as Finder draws it, for the
+//                                    top of README.md
 //
 // Two things about macOS 26 shape what it does. First, the system masks a
 // legacy .icns to the standard app icon shape itself and adds the shadow: a
@@ -24,7 +26,7 @@ import Foundation
 // tinted by the system when it is a template, so the menu bar files carry
 // shape and alpha only, never colour.
 
-enum Failure: Error { case iconutil, pdfLengthChanged, owlShape(String), svg(String) }
+enum Failure: Error { case iconutil, pdfLengthChanged, owlShape(String), svg(String), readmeIcon(String) }
 
 /// A small reader for the subset of SVG this project's mark uses: groups,
 /// paths, and the three primitives the cream layer is made of, all in one flat
@@ -616,11 +618,97 @@ func writeMenuBarMarks() throws {
           + "\(menuBarWidth) x \(Int(menuBarHeight)) pt, one width in every mode)")
 }
 
+// MARK: The README's icon
+
+// The README opens with the icon, drawn here from the same master as the
+// app's own assets, so the picture a person sees before trying Athina is the
+// one the app shows once they do.
+
+/// The icon as Finder and the Dock show it, rather than the full bleed square
+/// the .icns carries. A page is not masked by macOS, so the picture has to
+/// carry the mask, the shadow and the glass the system adds, and the one
+/// thing that draws those exactly as Finder does is the system: the new .icns
+/// is put in a throwaway bundle and macOS is asked for that bundle's icon.
+/// Drawing them here instead would be an imitation that drifts from the real
+/// thing with every macOS release, as the Big Sur grid already has.
+///
+/// The bundle's path is new on every run, so the icon is never one the system
+/// cached from an earlier build.
+let readmeIconSize = 1024
+
+func writeReadmeIcon() throws {
+    let bundle = FileManager.default.temporaryDirectory
+        .appendingPathComponent("AthinaReadmeIcon-\(UUID().uuidString).app", isDirectory: true)
+    let resources = bundle.appendingPathComponent("Contents/Resources", isDirectory: true)
+    try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: bundle) }
+    try FileManager.default.copyItem(at: root.appendingPathComponent("Resources/AppIcon.icns"),
+                                     to: resources.appendingPathComponent("AppIcon.icns"))
+    // An app bundle with no executable is drawn with a "cannot open" badge
+    // across it, so the bundle carries one that is never run.
+    let executable = bundle.appendingPathComponent("Contents/MacOS/stub")
+    try FileManager.default.createDirectory(at: executable.deletingLastPathComponent(),
+                                            withIntermediateDirectories: true)
+    try Data("#!/bin/sh\n".utf8).write(to: executable)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+    let info: [String: Any] = ["CFBundlePackageType": "APPL", "CFBundleExecutable": "stub",
+                               "CFBundleIconFile": "AppIcon",
+                               "CFBundleIdentifier": "com.ahcarpenter.athina.readme-icon"]
+    try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+        .write(to: bundle.appendingPathComponent("Contents/Info.plist"))
+
+    let rep = try readmeBitmap(of: NSWorkspace.shared.icon(forFile: bundle.path))
+
+    // A system that did not take the bundle's icon hands back the generic
+    // application icon instead, and committing that would put a stranger's
+    // picture at the top of the README. So the generic icon is drawn the same
+    // way and the render is refused when it is that picture.
+    let generic = try readmeBitmap(of: NSWorkspace.shared.icon(for: .applicationBundle))
+    guard !samePicture(rep, generic) else {
+        throw Failure.readmeIcon("macOS did not render the Athina icon for the bundle; nothing was written")
+    }
+    try rep.representation(using: .png, properties: [:])!
+        .write(to: markDirectory.appendingPathComponent("ReadmeIcon.png"))
+    print("  Resources/Mark/ReadmeIcon.png  (the icon as this Mac's Finder draws it, \(readmeIconSize) px)")
+}
+
+/// An icon drawn into a new bitmap the size of the README icon.
+func readmeBitmap(of icon: NSImage) throws -> NSBitmapImageRep {
+    let size = readmeIconSize
+    guard let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: size, pixelsHigh: size, bitsPerSample: 8, samplesPerPixel: 4,
+        hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+    ) else { throw Failure.readmeIcon("cannot make a \(size) px bitmap") }
+    rep.size = NSSize(width: size, height: size)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    icon.draw(in: NSRect(x: 0, y: 0, width: size, height: size))
+    NSGraphicsContext.restoreGraphicsState()
+    return rep
+}
+
+/// Whether two bitmaps from `readmeBitmap` show the same picture: nine in ten
+/// pixels or more within 2 of 255 of each other in every channel. The generic
+/// icon matches itself in every pixel, and the Athina icon matches it in about
+/// a third, the clear margin both share.
+func samePicture(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep) -> Bool {
+    let pa = a.bitmapData!, pb = b.bitmapData!
+    var matching = 0
+    for y in 0..<a.pixelsHigh {
+        for x in 0..<a.pixelsWide {
+            let i = y * a.bytesPerRow + x * 4
+            if (0..<4).allSatisfy({ abs(Int(pa[i + $0]) - Int(pb[i + $0])) <= 2 }) { matching += 1 }
+        }
+    }
+    return matching * 10 >= a.pixelsWide * a.pixelsHigh * 9
+}
+
 /// Records what the committed assets were built from: both masters, and this
 /// script.
 ///
-/// Core Graphics stamps the running macOS version into every PDF it writes, so
-/// two machines cannot produce the same bytes and "rebuild and diff" is not a
+/// Core Graphics stamps the running macOS version into every PDF it writes,
+/// and the README icon is that macOS's own drawing of the icon, so two
+/// machines cannot produce the same bytes and "rebuild and diff" is not a
 /// check that can hold. What matters is not the bytes but whether the assets
 /// came from the drawing and the drawing code that are in the tree now, and
 /// that is what this records: `MarkAssetTests` fails when any of the three has
@@ -630,8 +718,8 @@ func writeMenuBarMarks() throws {
 /// than in the masters: the inset, the eye treatments, the z's and the
 /// per-size thickening are all constants in this file, and an edit to any of
 /// them leaves the committed assets stale with nothing else to catch it. The
-/// output is a pure function of these three, so rerunning after an edit
-/// rewrites one line here and leaves the seven binary files untouched.
+/// output is a pure function of these three on any one Mac, so rerunning
+/// after an edit rewrites one line here and leaves the drawn files untouched.
 func writeProvenance() throws {
     let generator = URL(fileURLWithPath: #filePath)
     let digest = try [master, owlMaster, generator].map { url -> String in
@@ -639,8 +727,8 @@ func writeProvenance() throws {
         return url.lastPathComponent + " " + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }.joined(separator: "\n")
     let text = """
-    # What Resources/AppIcon.icns and the MenuBarMark PDFs beside it were built
-    # from: both masters and the script that drew them. Written by
+    # What Resources/AppIcon.icns, the MenuBarMark PDFs and the README icon
+    # were built from: both masters and the script that drew them. Written by
     # scripts/mark-assets.swift; run `make mark` after changing a master, the
     # script or the variant set, never edit this by hand.
     \(digest)
@@ -653,4 +741,5 @@ func writeProvenance() throws {
 
 try writeIcon()
 try writeMenuBarMarks()
+try writeReadmeIcon()
 try writeProvenance()
