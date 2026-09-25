@@ -2,13 +2,14 @@ import Foundation
 
 /// The debug panel's timeline: journal rows newest first, each shown once.
 ///
-/// Rows reach it two ways that overlap. The live stream carries every row the
-/// moment it is journaled, and a load reads the newest rows back from the
-/// journal. At launch sensing journals its first events before the load runs,
-/// so the load and the stream both carry them, in either order and with more
-/// arriving while the load is still reading. Rows are therefore merged by
-/// their journal id rather than appended, and kept in one order however they
-/// arrived.
+/// Rows reach it two ways that can overlap. The live stream carries every row
+/// the moment it is journaled, and a load reads the newest rows back from the
+/// journal. At launch AppState loads the timeline before `pipeline.start()`,
+/// so the startup rows arrive on the stream alone and are listed once. A later
+/// load still overlaps the stream: the reload after Clear Journal reads rows
+/// the stream also carries, in either order and with more arriving while the
+/// load is still reading. Rows are therefore merged by their journal id rather
+/// than appended, and kept in one order however they arrived.
 ///
 /// The journal gives a new row the id of one it has deleted once a table
 /// empties, after a clear or when retention removes every row. What arrives is

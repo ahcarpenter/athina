@@ -1,11 +1,14 @@
 # shellcheck shell=bash
 # SCENARIO_* below are read by scripts/e2e/athina-e2e, which sources this file.
 # shellcheck disable=SC2034
-# The debug panel's Timeline lists each journal row once. At launch sensing
-# journals its first events, Started among them, before the panel reads the
-# journal back, and the live stream carries the same rows, so a timeline that
-# took both as they came showed every startup row twice. The panel is open from
-# launch here, which is where a person saw it.
+# The debug panel's Timeline lists each journal row once. A timeline that read
+# the journal back after sensing had journaled its first events, Started among
+# them, while the live stream carried the same rows, showed every startup row
+# twice. AppState loads the timeline before pipeline.start(), so the startup
+# rows arrive on the stream alone, and the timeline merges rows by journal id
+# for any later load that overlaps the stream, such as the reload after Clear
+# Journal, and for ids the journal reuses. The panel is open from launch here,
+# which is where a person saw it.
 SCENARIO_SUMMARY="the debug panel's Timeline shows each startup row once"
 SCENARIO_ARGS=(--open debug)
 

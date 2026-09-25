@@ -20,8 +20,9 @@ import Testing
         return .observation(ActivityObservation(id: id, timestamp: time, focus: focus, frame: frame, textBlocks: [], reason: .inputSettled))
     }
 
-    /// What a launch journals before the timeline is first loaded: sensing
-    /// starts, notes the frontmost app and the permissions, all in one instant.
+    /// What a launch journals as sensing starts: Started, the frontmost app and
+    /// the permissions, all in one instant. AppState loads the timeline before
+    /// `pipeline.start()`, so at launch these reach it on the stream alone.
     private var startup: [JournalEntry] {
         [event(1, .started), event(2, .appSwitch), event(3, .permissionsChanged)]
     }
@@ -30,8 +31,9 @@ import Testing
         timeline.entries.map(\.id)
     }
 
-    // The launch this reproduces: the stream buffered the startup rows, the
-    // load read some of them back, and then the buffered rows were delivered.
+    // A load that overlaps the stream, as the reload after Clear Journal can:
+    // the stream buffered rows, the load read some of them back, and then the
+    // buffered rows were delivered. At launch the load runs first instead.
     @Test func startupRowsAppearOnceWhenTheStreamDeliversThemAfterTheLoad() {
         var timeline = JournalTimeline(limit: 300)
         timeline.merge([event(2, .appSwitch), event(1, .started)])
