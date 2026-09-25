@@ -314,7 +314,8 @@ public actor Journal {
     return stored
   }
 
-  /// Stores a shown suggestion.
+  /// Stores a suggestion the mentor made, before `publishGate` decides
+  /// whether it is shown.
   ///
   /// Returns it with its new id.
   @discardableResult

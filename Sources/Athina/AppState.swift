@@ -127,8 +127,9 @@ final class AppState {
   /// Keeps a replay's data directory its own while the app runs.
   private let dataDirectoryLock: DataDirectoryLock?
   /// Why this launch must not start: a replay was given a `--settings` file
-  /// that is not settings, or the files the app kept as Mentor could not be
-  /// moved (`DataMigration.Outcome.stopsLaunch`).
+  /// that is not settings or could not hold its data directory, or the files
+  /// the app kept as Mentor could not be moved
+  /// (`DataMigration.Outcome.stopsLaunch`).
   ///
   /// The app says so and exits rather than running on settings nobody asked
   /// for, or on an empty journal in place of the owner's.
@@ -637,7 +638,8 @@ final class AppState {
 
   /// Saves a new key to the Keychain.
   ///
-  /// Returns false when the text is not usable as a key.
+  /// Returns false when the text is not usable as a key, or when the
+  /// Keychain save fails, which `apiKeyError` then says.
   @discardableResult
   func saveAPIKey(_ raw: String) -> Bool {
     guard let key = APIKey.normalized(raw) else { return false }

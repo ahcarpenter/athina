@@ -9,7 +9,8 @@ public struct MentorSettings: Codable, Equatable, Sendable {
 
   /// Master switch.
   ///
-  /// Off means no model call of any kind.
+  /// Off means no model call of any kind, but for a Test Connection the user
+  /// asks for.
   public var enabled = true
   /// The id of the model that makes the triage call, one of
   /// `ModelCatalog.triageChoices`.
@@ -43,8 +44,8 @@ public struct MentorSettings: Codable, Equatable, Sendable {
   /// Hard boundary: when on, only activity the triage tier places in one of the
   /// declared contexts may reach the mentor tier.
   ///
-  /// On with no context declared means nowhere is inside, so no tier runs at
-  /// all.
+  /// On with no context declared means nowhere is inside, so no triage,
+  /// mentor or refresh call runs; a question asked of a toast still does.
   public var onlyMentorInsideContexts = false
   /// The kinds of work the user wants mentoring in, in their own words.
   public var contexts: [MentorshipContext] = []
@@ -101,7 +102,8 @@ public struct MentorSettings: Codable, Equatable, Sendable {
 
   /// Dollars per clock hour.
   ///
-  /// Cadence slows as spend approaches it; calls stop at it.
+  /// Cadence slows as spend approaches it; calls stop at it, but for a Test
+  /// Connection the user asks for.
   public var hourlySpendCap = 1.0
   /// Dollars per million tokens for each model, which every call's usage is
   /// priced with toward the spend cap; edited in Settings > Models.

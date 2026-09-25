@@ -136,8 +136,8 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
   public var confidence: Double
   /// The inferred goal this was judged against, when there was one.
   ///
-  /// Shown in the history window and the debug panel so a suggestion can be
-  /// read against what Athina thought the user was trying to do.
+  /// Shown in the history window so a suggestion can be read against what
+  /// Athina thought the user was trying to do.
   public var judgedGoal: String?
   /// The observation it was made from, or nil when that observation was never
   /// journaled.

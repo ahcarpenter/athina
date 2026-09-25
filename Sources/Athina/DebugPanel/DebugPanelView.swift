@@ -765,8 +765,8 @@ private struct TimelineRow: View {
 
 // MARK: - Mentor card
 
-/// The debug panel's Mentor section: gate decisions, the last call of each
-/// tier, spend and cadence.
+/// The debug panel's Mentor section: gate decisions, the last triage and
+/// mentor calls, spend and cadence.
 ///
 /// The call log lives under the timeline.
 private struct MentorCard: View {

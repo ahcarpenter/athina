@@ -471,7 +471,8 @@ struct Owl {
   var bounds: CGRect
 
   static func read(_ document: SVG.Document) throws -> Owl {
-    // Copying a path, done below as each subpath closes, cannot fail.
+    // Copying a path, done below as each next subpath starts and after the
+    // last, cannot fail.
     var subpaths: [CGPath] = []
     var current = CGMutablePath()
     for element in document.elements {
