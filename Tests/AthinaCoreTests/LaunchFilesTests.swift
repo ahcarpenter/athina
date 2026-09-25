@@ -206,11 +206,12 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
     _ = lock
   }
 
-  /// A settings file that is there but is not settings stops the launch. A
-  /// check names a file it generated; if that file came out truncated, a
-  /// replay that carried on would run on the owner's live thresholds,
-  /// contexts and retention and could report a pass on settings it never
-  /// chose, which is the one silent success left in these flags.
+  /// A settings file that is there but is not settings stops the launch.
+  ///
+  /// A check names a file it generated; if that file came out truncated, a
+  /// replay that carried on would run on the owner's live thresholds, contexts
+  /// and retention and could report a pass on settings it never chose, which is
+  /// the one silent success left in these flags.
   @Test(arguments: ["not settings at all", "{\"idleThreshold\": ", ""])
   func aSettingsFileThatIsNotSettingsRefusesToStart(content: String) throws {
     let root = scratch()
@@ -403,14 +404,16 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
     #expect(left == ["launch-401-0000000a"])
   }
 
-  /// A journal writes into its `-wal` file and changes the journal file
-  /// itself only when it is made and at a checkpoint, and a replay that quits
-  /// leaves its writes there. A lane whose writes all landed in the `-wal`
-  /// is dated by them: it stays inside the window its journal file alone is
-  /// past, and it is newer than a lane last written an hour ago. A read-only
-  /// read of a finished lane rewrites its `-shm` file and nothing else, so a
-  /// lane last written nine hours ago and read that way a moment ago is
-  /// still past the window, and never pushes out a lane written since.
+  /// A journal writes into its `-wal` file and changes the journal file itself
+  /// only when it is made and at a checkpoint, and a replay that quits leaves
+  /// its writes there.
+  ///
+  /// A lane whose writes all landed in the `-wal` is dated by them: it stays
+  /// inside the window its journal file alone is past, and it is newer than a
+  /// lane last written an hour ago. A read-only read of a finished lane
+  /// rewrites its `-shm` file and nothing else, so a lane last written nine
+  /// hours ago and read that way a moment ago is still past the window, and
+  /// never pushes out a lane written since.
   @Test func aLaneWhoseWritesAreAllInTheWalSurvivesTheSweepAndAReadOnlyReadExtendsNone()
     async throws
   {
@@ -543,8 +546,10 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
   }
 
   /// A request names a file to answer at, so a script can tell a clock that
-  /// moved from a post nobody heard. A relative path is not resolved: the
-  /// app's working directory is `/` when it was started with `open`.
+  /// moved from a post nobody heard.
+  ///
+  /// A relative path is not resolved: the app's working directory is `/` when
+  /// it was started with `open`.
   @Test func aRequestCarriesWhereToAnswer() {
     #expect(
       ClockRemote.replyURL(from: [ClockRemote.replyKey: "/tmp/reply.json"])?.path
@@ -617,10 +622,11 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
     }
   }
 
-  /// Nothing authenticates the channel, so a request must never be able to
-  /// make the replay create or replace a file of the sender's choosing: the
-  /// answer goes to a new file in the temporary directory or nowhere. A
-  /// request refused that way moves nothing, so a script that retries after
+  /// Nothing authenticates the channel, so a request must never be able to make
+  /// the replay create or replace a file of the sender's choosing: the answer
+  /// goes to a new file in the temporary directory or nowhere.
+  ///
+  /// A request refused that way moves nothing, so a script that retries after
   /// getting no answer never moves the clock twice.
   @Test func aRequestIsNotAnsweredWhereItCouldClobberAFile() throws {
     let root = scratch()

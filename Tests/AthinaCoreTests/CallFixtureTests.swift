@@ -179,11 +179,13 @@ import Testing
     #expect(earlyName < lateName)
   }
 
-  /// A name shows only the millisecond, so each recording is stamped in a
-  /// later millisecond than the one before, whatever the clock read: the
-  /// same millisecond, the same instant, or earlier after the wall clock
-  /// stepped back. Otherwise these names would tie on the time and sort by
-  /// their ids, backwards.
+  /// A name shows only the millisecond, so each recording is stamped in a later
+  /// millisecond than the one before, whatever the clock read: the same
+  /// millisecond, the same instant, or earlier after the wall clock stepped
+  /// back.
+  ///
+  /// Otherwise these names would tie on the time and sort by their ids,
+  /// backwards.
   @Test func eachRecordingIsStampedInALaterMillisecond() {
     let readings = [
       Date(timeIntervalSince1970: 1_789_000_000.2501),

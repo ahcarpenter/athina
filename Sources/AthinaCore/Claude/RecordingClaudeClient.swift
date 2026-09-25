@@ -16,8 +16,10 @@ public actor RecordingClaudeClient: ClaudeClient {
   private let prices: PriceTable
   /// Stamps each recording and times its call; a recording always runs on real time.
   private let clock: any AthinaClock
-  /// The last call's stamp. Each call is stamped when it starts, in a later
-  /// millisecond than this, so the files sort in the order the calls were made.
+  /// The last call's stamp.
+  ///
+  /// Each call is stamped when it starts, in a later millisecond than this, so
+  /// the files sort in the order the calls were made.
   private var lastStamp: Date?
   /// The files written so far this run, oldest first.
   public private(set) var written: [URL] = []
@@ -85,9 +87,10 @@ public actor RecordingClaudeClient: ClaudeClient {
 }
 
 /// Sends nothing and refuses every call with one reason, for a recording whose
-/// directory cannot be written. It is not a replay: the loop reads the key as
-/// for any live launch, and each refused call is journaled as a live error
-/// that cost nothing.
+/// directory cannot be written.
+///
+/// It is not a replay: the loop reads the key as for any live launch, and each
+/// refused call is journaled as a live error that cost nothing.
 public struct RefusingClaudeClient: ClaudeClient {
   public let reason: String
 

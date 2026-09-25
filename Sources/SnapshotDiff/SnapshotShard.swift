@@ -5,18 +5,21 @@ import Foundation
 /// snapshots `assignment` gives it, and a gate passes only when every shard
 /// does (README "UI snapshot baselines" and "UI snapshot smoke test").
 public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
-  /// How many runners each gate is split across. Each workflow passes its
-  /// matrix size with each shard, so a matrix of another size fails every
-  /// shard rather than leaving some snapshots unchecked.
+  /// How many runners each gate is split across.
+  ///
+  /// Each workflow passes its matrix size with each shard, so a matrix of
+  /// another size fails every shard rather than leaving some snapshots
+  /// unchecked.
   public static let count = 4
 
-  /// Which shard renders each snapshot, by the name `Snapshots.swift` gives
-  /// it, both appearances together. Fixed rather than hashed so the shards
-  /// stay even: every render costs about the same, the few large windows
-  /// (the debug panel, the Models pane, the callout) are spread out, and each
-  /// shard gets nine or ten. A snapshot with no entry fails the render and
-  /// an entry with no snapshot fails it too, so the table always names
-  /// exactly the snapshots there are.
+  /// Which shard renders each snapshot, by the name `Snapshots.swift` gives it,
+  /// both appearances together.
+  ///
+  /// Fixed rather than hashed so the shards stay even: every render costs about
+  /// the same, the few large windows (the debug panel, the Models pane, the
+  /// callout) are spread out, and each shard gets nine or ten. A snapshot with
+  /// no entry fails the render and an entry with no snapshot fails it too, so
+  /// the table always names exactly the snapshots there are.
   public static let assignment: [String: Int] = [
     "permissions": 1,
     "debug-panel": 1,
@@ -69,8 +72,9 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
     self.index = index
   }
 
-  /// Reads `k/n`, the form the workflow passes: shard k of n runners. Nil
-  /// unless n is `count` and k is one of them.
+  /// Reads `k/n`, the form the workflow passes: shard k of n runners.
+  ///
+  /// Nil unless n is `count` and k is one of them.
   public init?(parsing text: String) {
     let parts = text.split(separator: "/", omittingEmptySubsequences: false)
     guard parts.count == 2, let index = Int(parts[0]), let total = Int(parts[1]),
@@ -86,10 +90,12 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
     Self.assignment[name] == index
   }
 
-  /// Whether this shard compares the file `file`, a render or a baseline
-  /// such as `settings-general-light.png`. A file whose snapshot has no
-  /// shard, such as the baseline of a snapshot since removed, falls to the
-  /// first, so it is still reported rather than never looked at.
+  /// Whether this shard compares the file `file`, a render or a baseline such
+  /// as `settings-general-light.png`.
+  ///
+  /// A file whose snapshot has no shard, such as the baseline of a snapshot
+  /// since removed, falls to the first, so it is still reported rather than
+  /// never looked at.
   public func compares(file: String) -> Bool {
     (Self.assignment[Self.snapshotName(ofFile: file)] ?? 1) == index
   }

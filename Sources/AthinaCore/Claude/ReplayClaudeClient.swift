@@ -22,8 +22,9 @@ public actor ReplayClaudeClient: ClaudeClient {
     }
   }
 
-  /// Whether a replayed call takes as long as the recorded one did. The raw
-  /// values are what `--replay-latency` takes (`ReplayLatencyMode`).
+  /// Whether a replayed call takes as long as the recorded one did.
+  ///
+  /// The raw values are what `--replay-latency` takes (`ReplayLatencyMode`).
   public enum Latency: String, CaseIterable, Equatable, Sendable {
     /// Answer at once, for tests and scripted checks.
     case immediate
@@ -72,14 +73,18 @@ public actor ReplayClaudeClient: ClaudeClient {
     unavailableReason = reason
   }
 
-  /// A client that refuses every call with `reason`, for a replay that
-  /// could not start. It still never touches the network.
+  /// A client that refuses every call with `reason`, for a replay that could
+  /// not start.
+  ///
+  /// It still never touches the network.
   public static func unavailable(_ reason: String) -> ReplayClaudeClient {
     ReplayClaudeClient(unavailable: reason)
   }
 
-  /// Loads every fixture in `directory`. Throws when the directory or a
-  /// fixture cannot be read, or when there is nothing to replay.
+  /// Loads every fixture in `directory`.
+  ///
+  /// Throws when the directory or a fixture cannot be read, or when there is
+  /// nothing to replay.
   public static func load(
     from directory: URL,
     allowStale: Bool = false,

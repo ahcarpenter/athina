@@ -1,8 +1,9 @@
 import Foundation
 
-/// Fixed 24-hour formats for prompts and the app's panels. The locale's own
-/// style may be 12-hour without a marker when the marker is omitted, which
-/// made every afternoon time read as a morning one.
+/// Fixed 24-hour formats for prompts and the app's panels.
+///
+/// The locale's own style may be 12-hour without a marker when the marker is
+/// omitted, which made every afternoon time read as a morning one.
 public enum ClockFormat {
   private static let timeFormatter: DateFormatter = {
     let formatter = DateFormatter()
@@ -29,8 +30,10 @@ public enum ClockFormat {
   }
 }
 
-/// A rough token estimate for budgeting prompt text. The API bills the real
-/// count; this only decides how much journal fits in the window.
+/// A rough token estimate for budgeting prompt text.
+///
+/// The API bills the real count; this only decides how much journal fits in the
+/// window.
 public enum TokenEstimate {
   public static let charactersPerToken = 4
 
@@ -69,9 +72,11 @@ public enum RollingWindow {
   /// similar collapse to the newer one, so a slow edit does not fill the window.
   public static let duplicateSimilarity = 0.95
 
-  /// Builds the window from observations in any order. The newest observation
-  /// is always included (truncated to the budget if it alone exceeds it);
-  /// older ones are added newest-first until the budget or window runs out.
+  /// Builds the window from observations in any order.
+  ///
+  /// The newest observation is always included (truncated to the budget if it
+  /// alone exceeds it); older ones are added newest-first until the budget or
+  /// window runs out.
   public static func build(
     observations: [ActivityObservation],
     now: Date,
@@ -88,10 +93,11 @@ public enum RollingWindow {
     ).entries
   }
 
-  /// `build`, and how many observations inside the window were left out for
-  /// the budget or the entry cap (a near-duplicate collapsing into the kept
-  /// newer one is not left out). With `countingAfter`, only those with a
-  /// greater id are counted.
+  /// `build`, and how many observations inside the window were left out for the
+  /// budget or the entry cap (a near-duplicate collapsing into the kept newer
+  /// one is not left out).
+  ///
+  /// With `countingAfter`, only those with a greater id are counted.
   public static func fill(
     observations: [ActivityObservation],
     now: Date,
@@ -142,8 +148,10 @@ public enum RollingWindow {
   }
 }
 
-/// Renders the user messages for every tier. Only text from the journal is
-/// used; the thumbnail is attached separately by the loop when enabled.
+/// Renders the user messages for every tier.
+///
+/// Only text from the journal is used; the thumbnail is attached separately by
+/// the loop when enabled.
 public enum PromptBuilder {
   /// OCR text sent to triage is cut here so a dense screen stays cheap.
   public static let triageTextLimit = 6000
@@ -279,9 +287,10 @@ public enum PromptBuilder {
   }
 
   /// The refresh tier's message: the record as it stands, recent suggestions
-  /// and events, then the screens since it was last written. Text only; no
-  /// screenshot is ever attached to a refresh, because summarising does not
-  /// need one.
+  /// and events, then the screens since it was last written.
+  ///
+  /// Text only; no screenshot is ever attached to a refresh, because
+  /// summarising does not need one.
   public static func understandingMessage(
     current: UnderstandingRecord?,
     window: [RollingWindow.Entry],

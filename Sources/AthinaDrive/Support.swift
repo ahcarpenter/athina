@@ -149,14 +149,17 @@ func onScreenWindows() -> [ScreenWindow] {
 }
 
 /// The window a click at `point` would land on: the frontmost normal window
-/// containing it. Menus and the menu bar sit above every app window, so a
-/// caller that cares about them checks accessibility as well.
+/// containing it.
+///
+/// Menus and the menu bar sit above every app window, so a caller that cares
+/// about them checks accessibility as well.
 func topmostWindow(at point: CGPoint) -> ScreenWindow? {
   onScreenWindows().first { $0.layer < 1000 && $0.alpha > 0 && $0.bounds.contains(point) }
 }
 
 /// Athina's suggestion toast, found by the fixed panel width
 /// (`ToastController.panelWidth`, 380 plus a point of shadow inset each side).
+///
 /// The callout panel sits at the same window level but is sized to the region
 /// it points at, so the width is what tells them apart.
 let toastPanelWidth = 382.0

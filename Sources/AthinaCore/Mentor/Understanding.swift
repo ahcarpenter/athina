@@ -72,8 +72,10 @@ public struct Understanding: Codable, Equatable, Sendable {
   // MARK: Shape
 
   /// Drops blank entries, replaces any dash the model reached for, and sorts
-  /// goals strongest first. Two goals with the same text collapse into the
-  /// stronger one, so a goal's text can serve as its identity.
+  /// goals strongest first.
+  ///
+  /// Two goals with the same text collapse into the stronger one, so a goal's
+  /// text can serve as its identity.
   public func normalized() -> Understanding {
     func clean(_ line: String) -> String {
       line.withPlainDashes.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -111,8 +113,10 @@ public struct Understanding: Codable, Equatable, Sendable {
 
   /// The record trimmed until it fits `tokenBudget`: the oldest timeline
   /// entries go first, then the oldest mentor history, then the least recent
-  /// concern, then the weakest goal. The strongest goal always survives, so a
-  /// tiny budget still answers "what is this person trying to do".
+  /// concern, then the weakest goal.
+  ///
+  /// The strongest goal always survives, so a tiny budget still answers "what
+  /// is this person trying to do".
   public func bounded(toTokens tokenBudget: Int) -> Understanding {
     var result = normalized()
     let budget = max(1, tokenBudget)
@@ -222,10 +226,11 @@ public enum UnderstandingExpiry: Equatable, Sendable {
     }
   }
 
-  /// Why a reading written at `writtenAt` no longer describes the present,
-  /// or nil while it still does. The idle gap runs from the user's last
-  /// activity, or from the write when nothing has been observed since it,
-  /// as after a relaunch.
+  /// Why a reading written at `writtenAt` no longer describes the present, or
+  /// nil while it still does.
+  ///
+  /// The idle gap runs from the user's last activity, or from the write when
+  /// nothing has been observed since it, as after a relaunch.
   public static func of(
     writtenAt: Date,
     now: Date,
@@ -240,15 +245,18 @@ public enum UnderstandingExpiry: Equatable, Sendable {
   }
 }
 
-/// One stored revision of the understanding. Revisions are inserted, never
-/// updated, so the journal keeps the trail of how the reading developed and
-/// retention and Clear Journal treat them like every other journal row.
+/// One stored revision of the understanding.
+///
+/// Revisions are inserted, never updated, so the journal keeps the trail of how
+/// the reading developed and retention and Clear Journal treat them like every
+/// other journal row.
 public struct UnderstandingRecord: Codable, Equatable, Sendable, Identifiable {
   public var id: Int64
   /// When this revision was written.
   public var updatedAt: Date
-  /// When the understanding these revisions belong to first formed. Reset
-  /// starts a new one; so does expiry.
+  /// When the understanding these revisions belong to first formed.
+  ///
+  /// Reset starts a new one; so does expiry.
   public var startedAt: Date
   /// 1 for the first revision, one more for each refresh that folds into it.
   public var revision: Int
@@ -261,9 +269,10 @@ public struct UnderstandingRecord: Codable, Equatable, Sendable, Identifiable {
   /// Everything refresh calls have cost since `startedAt`.
   public var cumulativeCost: Double
   public var content: Understanding
-  /// The highest observation id the call that wrote this revision read, so
-  /// the next write reads every observation journaled after it. Nil when
-  /// that call read none.
+  /// The highest observation id the call that wrote this revision read, so the
+  /// next write reads every observation journaled after it.
+  ///
+  /// Nil when that call read none.
   public var coveredThroughObservationID: Int64?
 
   public init(

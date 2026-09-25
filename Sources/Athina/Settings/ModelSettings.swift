@@ -104,8 +104,10 @@ struct ModelSettings: View {
   }
 }
 
-/// A tier's model picker and effort picker. The effort picker is disabled,
-/// with a note, when the chosen model does not accept the effort parameter.
+/// A tier's model picker and effort picker.
+///
+/// The effort picker is disabled, with a note, when the chosen model does not
+/// accept the effort parameter.
 private struct TierRows: View {
   let tier: String
   let choices: [ClaudeModel]

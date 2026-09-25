@@ -15,9 +15,11 @@ public struct CalloutRegion: Codable, Equatable, Sendable {
   }
 }
 
-/// One display as it is right now, so a frame's display can be checked
-/// against the current configuration. Bounds are global display points with
-/// the origin at the top-left of the main display, like `FrameInfo.screenRect`.
+/// One display as it is right now, so a frame's display can be checked against
+/// the current configuration.
+///
+/// Bounds are global display points with the origin at the top-left of the main
+/// display, like `FrameInfo.screenRect`.
 public struct DisplayBounds: Equatable, Sendable {
   public var id: UInt32
   public var bounds: CGRect
@@ -42,8 +44,9 @@ public struct CalloutPlacement: Equatable, Sendable {
   }
 }
 
-/// Why a callout was not placed, or was taken down. Every reason is a way
-/// the highlight could have landed on the wrong thing.
+/// Why a callout was not placed, or was taken down.
+///
+/// Every reason is a way the highlight could have landed on the wrong thing.
 public enum CalloutRejection: Error, Equatable, Sendable {
   /// The region is not inside the frame the model saw, or is too small to point at.
   case outsideFrame
@@ -80,8 +83,9 @@ public enum CalloutRejection: Error, Equatable, Sendable {
 }
 
 /// Maps a region from frame pixels to screen points and decides whether the
-/// screen still shows what the frame showed there. Pure, so every rule is
-/// unit-tested; the app supplies the live readings.
+/// screen still shows what the frame showed there.
+///
+/// Pure, so every rule is unit-tested; the app supplies the live readings.
 public enum CalloutAnchor {
   /// A callout is not drawn when the screen under it was last confirmed
   /// unchanged longer ago than this: content scrolls and windows change
@@ -126,12 +130,12 @@ public enum CalloutAnchor {
     )
   }
 
-  /// Whether the region may be drawn right now, and where. Checks run from
-  /// the cheapest to the most specific so the reason names the first thing
-  /// that is wrong.
-  /// `confirmedAt` is the latest time the screen was seen unchanged
-  /// (`CalloutWitness`); staleness counts from it, and from the frame
-  /// itself when there is none.
+  /// Whether the region may be drawn right now, and where.
+  ///
+  /// Checks run from the cheapest to the most specific so the reason names the
+  /// first thing that is wrong. `confirmedAt` is the latest time the screen was
+  /// seen unchanged (`CalloutWitness`); staleness counts from it, and from the
+  /// frame itself when there is none.
   public static func resolve(
     _ region: CalloutRegion,
     for observation: ActivityObservation,
@@ -172,8 +176,9 @@ public enum CalloutAnchor {
     )
   }
 
-  /// Recognized text that lies mostly inside the region must still be there
-  /// in a later frame of the same window, within `tolerance` frame pixels.
+  /// Recognized text that lies mostly inside the region must still be there in
+  /// a later frame of the same window, within `tolerance` frame pixels.
+  ///
   /// The window itself may not have moved, but a terminal scrolls and a
   /// document edits, and the spot the model pointed at goes with them; the
   /// sensing pipeline's next kept frame is the cheapest witness. Frames of
@@ -205,12 +210,13 @@ public enum CalloutAnchor {
 }
 
 /// Where the box and the note go inside the overlay window, and where the
-/// window goes on the display. Global coordinates are display points with
-/// the origin at the top-left of the main display; local ones are points from
-/// the window's top-left, which is what the overlay view uses. The window's
-/// origin and size are whole points, because a window is placed on whole
-/// points anyway; the box keeps its exact fractional position inside it, so
-/// rounding the window never moves the box.
+/// window goes on the display.
+///
+/// Global coordinates are display points with the origin at the top-left of the
+/// main display; local ones are points from the window's top-left, which is
+/// what the overlay view uses. The window's origin and size are whole points,
+/// because a window is placed on whole points anyway; the box keeps its exact
+/// fractional position inside it, so rounding the window never moves the box.
 ///
 /// The note goes beside the box, to its right, where the rest of a line of
 /// text usually is empty. Only when the display has no room there does it go
@@ -234,9 +240,10 @@ public struct CalloutLayout: Equatable, Sendable {
 
   public var windowRect: CGRect
   public var box: CGRect
-  /// Where the note may be drawn, in window coordinates. The note is aligned
-  /// to its leading edge, and to its vertical centre beside the box or its
-  /// edge nearest the box otherwise.
+  /// Where the note may be drawn, in window coordinates.
+  ///
+  /// The note is aligned to its leading edge, and to its vertical centre beside
+  /// the box or its edge nearest the box otherwise.
   public var noteRect: CGRect
   public var notePlacement: NotePlacement
 
@@ -284,13 +291,15 @@ public struct CalloutLayout: Equatable, Sendable {
 }
 
 /// What says the screen under a callout still shows what the model saw, and
-/// since when. A kept frame of the same window that still shows the framed
-/// text in place is a witness. So is a capture the sensing pipeline dropped
-/// as a near duplicate of the newest kept frame while that frame is a
-/// witness: it dropped it because the screen, the window, and the focused
-/// text had not changed. The callout's staleness is counted from the latest
-/// such confirmation, so a callout on a screen nobody touches stays up while
-/// its toast does, and one whose text scrolled away comes down.
+/// since when.
+///
+/// A kept frame of the same window that still shows the framed text in place is
+/// a witness. So is a capture the sensing pipeline dropped as a near duplicate
+/// of the newest kept frame while that frame is a witness: it dropped it
+/// because the screen, the window, and the focused text had not changed. The
+/// callout's staleness is counted from the latest such confirmation, so a
+/// callout on a screen nobody touches stays up while its toast does, and one
+/// whose text scrolled away comes down.
 public struct CalloutWitness: Equatable, Sendable {
   public let region: CGRect
   public let original: ActivityObservation
@@ -306,8 +315,10 @@ public struct CalloutWitness: Equatable, Sendable {
     confirmedAt = original.timestamp
   }
 
-  /// A kept frame arrived. Returns false when it shows the framed text
-  /// moved or changed, which takes the callout down.
+  /// A kept frame arrived.
+  ///
+  /// Returns false when it shows the framed text moved or changed, which takes
+  /// the callout down.
   public mutating func observe(_ observation: ActivityObservation) -> Bool {
     guard observation.id != original.id else { return true }
     let sameWindow =

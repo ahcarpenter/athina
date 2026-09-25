@@ -54,9 +54,11 @@ public enum DataMigration {
   /// happens to exist.
   public static let markerName = "migrated-from-mentor.json"
 
-  /// Written inside the new directory before anything is put there, naming
-  /// what is about to be, and removed once the marker is written. Found on
-  /// its own, it is the proof of which names an unfinished move created.
+  /// Written inside the new directory before anything is put there, naming what
+  /// is about to be, and removed once the marker is written.
+  ///
+  /// Found on its own, it is the proof of which names an unfinished move
+  /// created.
   static let pendingName = "migrating-from-mentor.json"
 
   /// Where the copy is assembled: beside the new directory, so putting it
@@ -74,8 +76,10 @@ public enum DataMigration {
   /// The journal, which SQLite copies rather than the file manager.
   static var journalName: String { Journal.defaultURL().lastPathComponent }
 
-  /// The journal's write-ahead log and its index. The copy SQLite makes is
-  /// one whole file, so neither has anything to add to it.
+  /// The journal's write-ahead log and its index.
+  ///
+  /// The copy SQLite makes is one whole file, so neither has anything to add to
+  /// it.
   static var journalSidecars: Set<String> { ["\(journalName)-wal", "\(journalName)-shm"] }
 
   /// What a launch found, and did.
@@ -114,9 +118,10 @@ public enum DataMigration {
       }
     }
 
-    /// Whether this launch must not go on: the owner's data is still
-    /// under the old name, so running would start an empty journal in its
-    /// place. The next launch tries the move again.
+    /// Whether this launch must not go on: the owner's data is still under the
+    /// old name, so running would start an empty journal in its place.
+    ///
+    /// The next launch tries the move again.
     public var stopsLaunch: Bool {
       switch self {
       case .inUse, .failed: true
@@ -125,9 +130,10 @@ public enum DataMigration {
     }
   }
 
-  /// What the marker holds: where the files came from and when, so the move
-  /// can be read back long afterwards. The record of a move under way
-  /// (`pendingName`) holds the same.
+  /// What the marker holds: where the files came from and when, so the move can
+  /// be read back long afterwards.
+  ///
+  /// The record of a move under way (`pendingName`) holds the same.
   public struct Marker: Codable, Equatable, Sendable {
     public var from: String
     public var at: Date
@@ -140,8 +146,10 @@ public enum DataMigration {
     }
   }
 
-  /// Moves what is under the old name to the new one, once. Safe to call on
-  /// every launch: it does nothing at all unless there is something to move.
+  /// Moves what is under the old name to the new one, once.
+  ///
+  /// Safe to call on every launch: it does nothing at all unless there is
+  /// something to move.
   public static func run(
     from old: URL = AppPaths.legacySupportDirectory(),
     to new: URL = AppPaths.supportDirectory(),
@@ -233,8 +241,10 @@ public enum DataMigration {
     return trimmed.hasSuffix(".") ? trimmed : trimmed + "."
   }
 
-  /// The names in `directory` that are somebody's data rather than what the
-  /// app leaves there on its own (`skipped`). Empty when it is not there.
+  /// The names in `directory` that are somebody's data rather than what the app
+  /// leaves there on its own (`skipped`).
+  ///
+  /// Empty when it is not there.
   static func ownersData(in directory: URL, manager: FileManager) -> [String] {
     ((try? manager.contentsOfDirectory(atPath: directory.path)) ?? [])
       .filter { !skipped.contains($0) }
@@ -242,7 +252,9 @@ public enum DataMigration {
   }
 
   /// Takes out what a move that never finished put into `new`: exactly the
-  /// names its record lists, then the record. Nothing when there is none.
+  /// names its record lists, then the record.
+  ///
+  /// Nothing when there is none.
   private static func takeBackUnfinishedMove(in new: URL, manager: FileManager) throws {
     let pending = new.appendingPathComponent(pendingName)
     guard manager.fileExists(atPath: pending.path) else { return }
@@ -261,9 +273,11 @@ public enum DataMigration {
   }
 
   /// Opens the old journal holding SQLite's exclusive lock, which it keeps
-  /// until the connection goes. Any other connection to the file, even an
-  /// idle one, holds a shared lock in write-ahead-log mode, so this throws
-  /// `SQLITE_BUSY` while another copy of the app has the journal open.
+  /// until the connection goes.
+  ///
+  /// Any other connection to the file, even an idle one, holds a shared lock in
+  /// write-ahead-log mode, so this throws `SQLITE_BUSY` while another copy of
+  /// the app has the journal open.
   ///
   /// The journal is only read, and stays byte for byte what it was: in
   /// exclusive mode the log's index lives in memory rather than in `-shm`,
@@ -282,8 +296,10 @@ public enum DataMigration {
     return connection
   }
 
-  /// Assembles the copy in `staging`, thrown away first if an earlier
-  /// attempt left one. Returns the names copied, in order.
+  /// Assembles the copy in `staging`, thrown away first if an earlier attempt
+  /// left one.
+  ///
+  /// Returns the names copied, in order.
   private static func stage(
     _ old: URL,
     in staging: URL,
@@ -313,9 +329,11 @@ public enum DataMigration {
   }
 
   /// Puts the staged names into `new`, which holds nothing of the owner's,
-  /// behind the record that names them. Whatever goes wrong, what this call
-  /// put there is taken out again, and the directory too when this call
-  /// made it, so a failed move leaves `new` as it was found.
+  /// behind the record that names them.
+  ///
+  /// Whatever goes wrong, what this call put there is taken out again, and the
+  /// directory too when this call made it, so a failed move leaves `new` as it
+  /// was found.
   private static func place(
     _ names: [String],
     from staging: URL,
@@ -353,11 +371,13 @@ public enum DataMigration {
     }
   }
 
-  /// The first way the copy differs from what it was copied from: a missing
-  /// or extra path, a file whose SHA-256 digest is not the original's, or a
+  /// The first way the copy differs from what it was copied from: a missing or
+  /// extra path, a file whose SHA-256 digest is not the original's, or a
   /// journal that fails SQLite's integrity check or holds another number of
-  /// rows. Nil when the copy is faithful. `journal` is the open original;
-  /// without it the journal is compared like any other file.
+  /// rows.
+  ///
+  /// Nil when the copy is faithful. `journal` is the open original; without it
+  /// the journal is compared like any other file.
   static func firstDifference(
     between source: URL,
     and copy: URL,
@@ -412,8 +432,9 @@ public enum DataMigration {
     case unreadable
   }
 
-  /// Every path under `directory` relative to it, with what is there. The
-  /// names the move skips are left out at any depth, and `leavingOut` at
+  /// Every path under `directory` relative to it, with what is there.
+  ///
+  /// The names the move skips are left out at any depth, and `leavingOut` at
   /// the top.
   private static func contents(
     of directory: URL,

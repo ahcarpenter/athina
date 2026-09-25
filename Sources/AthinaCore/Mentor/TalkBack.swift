@@ -15,8 +15,10 @@ public enum TranscriptMatcher {
     case question(String)
   }
 
-  /// Words that may surround an answer without changing it. Both names the
-  /// app has had are here: someone who used it as Mentor still says that.
+  /// Words that may surround an answer without changing it.
+  ///
+  /// Both names the app has had are here: someone who used it as Mentor still
+  /// says that.
   static let fillers: Set<String> = [
     "please", "athina", "mentor", "hey", "ok", "okay", "thanks", "thank", "you", "um", "uh", "so",
     "just", "yeah",
@@ -152,11 +154,12 @@ public enum TalkBackState: Equatable, Sendable {
   /// The key was released and the question is with the mentor model.
   case thinking(question: String)
 
-  /// True while the user is talking back: the key is held, or the
-  /// transcript or the answer is in progress. The toast then stays visible
-  /// whatever else happens: it is not dismissed by a click elsewhere, does
-  /// not expire, is kept in front, and a new suggestion waits for the
-  /// exchange to end rather than replacing it.
+  /// True while the user is talking back: the key is held, or the transcript or
+  /// the answer is in progress.
+  ///
+  /// The toast then stays visible whatever else happens: it is not dismissed by
+  /// a click elsewhere, does not expire, is kept in front, and a new suggestion
+  /// waits for the exchange to end rather than replacing it.
   public var keepsToastUp: Bool {
     switch self {
     case .idle: false
@@ -175,6 +178,7 @@ public enum TalkBackState: Equatable, Sendable {
 }
 
 /// Where a mouse-down landed while a toast is up, and whether that closes it.
+///
 /// A click elsewhere closes the toast, the way a notification banner goes away
 /// when you click elsewhere. A click on the toast works its buttons, and a
 /// click on Athina's own menu bar item opens the menu whose Answer Suggestion
@@ -185,13 +189,14 @@ public enum ToastClick: Equatable, Sendable {
   /// Any other window, Athina's or another app's, or the desktop.
   case elsewhere
 
-  /// Classifies a mouse-down from its location in screen coordinates. The
-  /// menu bar item is found by where the click fell, not by the window the
+  /// Classifies a mouse-down from its location in screen coordinates.
+  ///
+  /// The menu bar item is found by where the click fell, not by the window the
   /// event names: on macOS 27 the system's menu bar window takes the
   /// mouse-down, so it reaches Athina with no window at all. Cocoa puts the
   /// pointer at the top edge of the point it is over, so a click on the
-  /// screen's top row is at an item frame's `maxY` and still opens the
-  /// menu, and one at its `minY` is just under the bar.
+  /// screen's top row is at an item frame's `maxY` and still opens the menu,
+  /// and one at its `minY` is just under the bar.
   public init(onToast: Bool, location: CGPoint, menuBarItems: [CGRect]) {
     self =
       if onToast {
@@ -214,10 +219,11 @@ public enum ToastClick: Equatable, Sendable {
   }
 }
 
-/// One thing the user said about a suggestion while holding the talk-back
-/// key, and what the mentor tier answered. The question is the transcript,
-/// stored here and nowhere else off this Mac except in the one follow-up
-/// call that carried it.
+/// One thing the user said about a suggestion while holding the talk-back key,
+/// and what the mentor tier answered.
+///
+/// The question is the transcript, stored here and nowhere else off this Mac
+/// except in the one follow-up call that carried it.
 public struct FollowUp: Codable, Equatable, Sendable, Identifiable {
   public var id: Int64
   public var suggestionID: Int64

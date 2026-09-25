@@ -4,12 +4,13 @@ import Testing
 @testable import AthinaCore
 
 /// The move from the folder the app kept its files in while it was called
-/// Mentor to the one Athina keeps them in. This is the owner's real journal,
-/// settings, recordings and understanding, so every case is checked: a fresh
-/// install, a move, a launch after one, both folders holding data, a replay
-/// that got there first, a journal still open elsewhere, and a move that
-/// failed or was interrupted partway. Every case runs in a throwaway
-/// directory, never the real Application Support.
+/// Mentor to the one Athina keeps them in.
+///
+/// This is the owner's real journal, settings, recordings and understanding, so
+/// every case is checked: a fresh install, a move, a launch after one, both
+/// folders holding data, a replay that got there first, a journal still open
+/// elsewhere, and a move that failed or was interrupted partway. Every case
+/// runs in a throwaway directory, never the real Application Support.
 @Suite struct DataMigrationTests {
   private let manager = FileManager.default
   private let moved = ["journal.sqlite", "recordings", "settings.json"]
@@ -141,8 +142,10 @@ import Testing
   }
 
   /// Mentor did not quit cleanly, so its last writes are still in the
-  /// write-ahead log. They arrive with the rest, and the log is left as it
-  /// was found rather than folded into the old database.
+  /// write-ahead log.
+  ///
+  /// They arrive with the rest, and the log is left as it was found rather than
+  /// folded into the old database.
   @Test func writesStillInTheWriteAheadLogAreMovedAndTheLogIsLeftAlone() throws {
     let files = try support()
     defer { try? manager.removeItem(at: files.root) }
@@ -213,9 +216,11 @@ import Testing
     )
   }
 
-  /// A replay run before the first live launch leaves its per-launch
-  /// directory in the new folder. That is the app's own, not the owner's
-  /// data, so the move goes ahead around it and the replay keeps its files.
+  /// A replay run before the first live launch leaves its per-launch directory
+  /// in the new folder.
+  ///
+  /// That is the app's own, not the owner's data, so the move goes ahead around
+  /// it and the replay keeps its files.
   @Test func aReplayThatRanFirstDoesNotStandInTheWay() throws {
     let files = try support()
     defer { try? manager.removeItem(at: files.root) }
@@ -268,9 +273,11 @@ import Testing
     #expect(try everyByte(in: files.old) == before.old)
   }
 
-  /// Mentor, or another copy of the app, still has the old journal open, so
-  /// a copy made now could miss what it writes next. Nothing is copied, the
-  /// launch stops, and the next one, with the journal closed, moves it all.
+  /// Mentor, or another copy of the app, still has the old journal open, so a
+  /// copy made now could miss what it writes next.
+  ///
+  /// Nothing is copied, the launch stops, and the next one, with the journal
+  /// closed, moves it all.
   @Test func aJournalStillOpenElsewhereStopsTheLaunchAndTheNextOneMoves() throws {
     let files = try support()
     defer { try? manager.removeItem(at: files.root) }
@@ -388,9 +395,11 @@ import Testing
     #expect(!manager.fileExists(atPath: staging.path))
   }
 
-  /// A move that was interrupted while putting files in place leaves its
-  /// record of the names it was putting there. The next launch takes out
-  /// exactly those, keeps what it did not put there, and starts again.
+  /// A move that was interrupted while putting files in place leaves its record
+  /// of the names it was putting there.
+  ///
+  /// The next launch takes out exactly those, keeps what it did not put there,
+  /// and starts again.
   @Test func aMoveInterruptedWhilePuttingFilesInPlaceIsStartedAgain() throws {
     let files = try support()
     defer { try? manager.removeItem(at: files.root) }
@@ -543,9 +552,10 @@ import Testing
     #expect(defaults.persistentDomain(forName: names.old)?[PreferencesMigration.doneKey] == nil)
   }
 
-  /// A replay shares the new domain and can run before the first live
-  /// launch. What it left there is not the owner's, so the owner's
-  /// preferences still arrive, over it.
+  /// A replay shares the new domain and can run before the first live launch.
+  ///
+  /// What it left there is not the owner's, so the owner's preferences still
+  /// arrive, over it.
   @Test func whatAReplayWroteFirstDoesNotKeepTheOwnersPreferencesOut() {
     let defaults = UserDefaults.standard
     let names = domains()
@@ -590,9 +600,11 @@ import Testing
 }
 
 /// Carrying the Anthropic API key from the item the app saved while it was
-/// called Mentor. Every case runs against in-memory stores and a throwaway
-/// preferences domain: no test reads or writes the login keychain, and no
-/// assertion here names a key's value.
+/// called Mentor.
+///
+/// Every case runs against in-memory stores and a throwaway preferences domain:
+/// no test reads or writes the login keychain, and no assertion here names a
+/// key's value.
 @Suite struct KeyMigrationTests {
   /// A preferences domain of this test's own, so nothing it records reaches
   /// the app's own preferences or another test's.

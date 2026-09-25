@@ -199,8 +199,9 @@ public actor Journal {
     try db.query("PRAGMA table_info(\(table))") { $0.text(1) }
   }
 
-  /// Adds a column to an existing table, once. Nothing happens when the table
-  /// was created with it already.
+  /// Adds a column to an existing table, once.
+  ///
+  /// Nothing happens when the table was created with it already.
   private static func addColumn(
     _ definition: String,
     named name: String,
@@ -211,8 +212,9 @@ public actor Journal {
     try db.execute("ALTER TABLE \(table) ADD COLUMN \(definition)")
   }
 
-  /// Drops a column from an existing table, once. Nothing happens when the
-  /// table was created without it.
+  /// Drops a column from an existing table, once.
+  ///
+  /// Nothing happens when the table was created without it.
   private static func dropColumn(
     named name: String,
     from table: String,
@@ -224,7 +226,9 @@ public actor Journal {
 
   // MARK: Writes
 
-  /// Stores the observation and its thumbnail. Returns the observation with its new id.
+  /// Stores the observation and its thumbnail.
+  ///
+  /// Returns the observation with its new id.
   @discardableResult
   public func record(_ observation: ActivityObservation) throws -> ActivityObservation {
     let focusJSON = String(decoding: try encoder.encode(observation.focus), as: UTF8.self)
@@ -291,7 +295,9 @@ public actor Journal {
 
   // MARK: Suggestions and model calls
 
-  /// Stores a shown suggestion. Returns it with its new id.
+  /// Stores a shown suggestion.
+  ///
+  /// Returns it with its new id.
   @discardableResult
   public func record(_ suggestion: Suggestion) throws -> Suggestion {
     let regionJSON = try suggestion.region.map {
@@ -329,7 +335,9 @@ public actor Journal {
     return stored
   }
 
-  /// Records what the user did with a suggestion. Nil when the id is unknown.
+  /// Records what the user did with a suggestion.
+  ///
+  /// Nil when the id is unknown.
   public func updateFeedback(
     suggestionID: Int64,
     feedback: SuggestionFeedback,
@@ -342,8 +350,9 @@ public actor Journal {
     return try suggestion(id: suggestionID)
   }
 
-  /// Records that a callout was drawn for the suggestion. The flag only
-  /// ever turns on. Nil when the id is unknown.
+  /// Records that a callout was drawn for the suggestion.
+  ///
+  /// The flag only ever turns on. Nil when the id is unknown.
   public func noteCalloutShown(suggestionID: Int64) throws -> Suggestion? {
     try db.run("UPDATE suggestions SET callout_shown = 1 WHERE id = ?", [.int(suggestionID)])
     return try suggestion(id: suggestionID)
@@ -351,7 +360,9 @@ public actor Journal {
 
   // MARK: Follow-ups
 
-  /// Stores one talk-back exchange. Returns it with its new id.
+  /// Stores one talk-back exchange.
+  ///
+  /// Returns it with its new id.
   @discardableResult
   public func record(_ followUp: FollowUp) throws -> FollowUp {
     try db.run(
@@ -453,8 +464,10 @@ public actor Journal {
 
   // MARK: Understanding
 
-  /// Stores a revision of the understanding. Revisions are inserted, never
-  /// updated, so the journal keeps the trail of how the reading developed.
+  /// Stores a revision of the understanding.
+  ///
+  /// Revisions are inserted, never updated, so the journal keeps the trail of
+  /// how the reading developed.
   @discardableResult
   public func record(_ record: UnderstandingRecord) throws -> UnderstandingRecord {
     let contentJSON = String(decoding: try encoder.encode(record.content), as: UTF8.self)
@@ -484,9 +497,11 @@ public actor Journal {
 
   /// The current revision, or nil when none has been written or an
   /// `understanding` event, an expiry or a reset, was journaled after the
-  /// latest one. Deciding expiry is the caller's job; the event it journals
-  /// is what keeps an expired revision from being current again, while the
-  /// revision itself stays in the trail.
+  /// latest one.
+  ///
+  /// Deciding expiry is the caller's job; the event it journals is what keeps
+  /// an expired revision from being current again, while the revision itself
+  /// stays in the trail.
   public func latestUnderstanding() throws -> UnderstandingRecord? {
     try db.query(
       """
@@ -556,8 +571,9 @@ public actor Journal {
   }
 
   /// The newest `limit` observations at or after `since` or with an id above
-  /// `cursor`, newest first, without thumbnail bytes. A nil bound matches
-  /// nothing on its own.
+  /// `cursor`, newest first, without thumbnail bytes.
+  ///
+  /// A nil bound matches nothing on its own.
   public func recentObservations(
     since: Date?,
     after cursor: Int64? = nil,
@@ -690,7 +706,9 @@ public actor Journal {
     try record(JournalEvent(timestamp: now, kind: .journalCleared))
   }
 
-  /// Applies age limits, then the size cap. Returns what was removed.
+  /// Applies age limits, then the size cap.
+  ///
+  /// Returns what was removed.
   public func applyRetention(_ policy: RetentionPolicy, now: Date) throws -> RetentionResult {
     var result = RetentionResult(bytesBefore: try usedBytes())
 

@@ -2,12 +2,14 @@ import AppKit
 import AthinaCore
 import SwiftUI
 
-/// Owns the callout overlay: a transparent, click-through, non-activating
-/// panel above normal windows that frames the spot a suggestion is about and
-/// shows its note beside it. It never takes focus and never sees a click, key,
-/// or scroll; `ignoresMouseEvents` passes everything to whatever is under it.
-/// Deciding whether the spot is still valid is `AppState`'s job with
-/// `CalloutAnchor`; this only draws and removes.
+/// Owns the callout overlay: a transparent, click-through, non-activating panel
+/// above normal windows that frames the spot a suggestion is about and shows
+/// its note beside it.
+///
+/// It never takes focus and never sees a click, key, or scroll;
+/// `ignoresMouseEvents` passes everything to whatever is under it. Deciding
+/// whether the spot is still valid is `AppState`'s job with `CalloutAnchor`;
+/// this only draws and removes.
 @MainActor
 final class CalloutController {
   private var panel: NSPanel?
@@ -81,8 +83,9 @@ final class CalloutController {
 
 /// The highlight box and its note, styled like the toast: an accent-colored
 /// rounded stroke with a soft glow around the spot, and the note on the same
-/// Liquid Glass as the toast. Increase Contrast thickens the stroke and drops
-/// the glow for a crisp edge.
+/// Liquid Glass as the toast.
+///
+/// Increase Contrast thickens the stroke and drops the glow for a crisp edge.
 struct CalloutView: View {
   static let cornerRadius: CGFloat = 8
 

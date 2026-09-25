@@ -45,9 +45,11 @@ public struct SettingsStore: Sendable {
 
 /// Where Athina keeps its files.
 public enum AppPaths {
-  /// The application support directory's name. The app was called Mentor
-  /// and kept its files under `mentor`; `DataMigration` moves what is there
-  /// to this one on the first launch under the new name.
+  /// The application support directory's name.
+  ///
+  /// The app was called Mentor and kept its files under `mentor`;
+  /// `DataMigration` moves what is there to this one on the first launch under
+  /// the new name.
   public static let directoryName = "athina"
   /// The name the app kept its files under before it was renamed.
   public static let legacyDirectoryName = "mentor"
@@ -100,9 +102,10 @@ public enum AppPaths {
   /// True when `url` names `directory` itself or something inside it, as the
   /// file system sees it rather than as it was spelled: symlinks resolved, a
   /// trailing slash and `..` normalized, and case ignored, since the boot
-  /// volume is case-insensitive by default. Used where a path someone else
-  /// chose must be kept out of somewhere (`ClockRemote.answer`), so spelling
-  /// it differently is never a way in.
+  /// volume is case-insensitive by default.
+  ///
+  /// Used where a path someone else chose must be kept out of somewhere
+  /// (`ClockRemote.answer`), so spelling it differently is never a way in.
   public static func isAt(_ url: URL, orInside directory: URL) -> Bool {
     let subject = resolvedPath(url)
     let parent = resolvedPath(directory)

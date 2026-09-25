@@ -118,7 +118,9 @@ public struct FrameInfo: Codable, Equatable, Sendable {
   public var displayID: UInt32
   /// The display rectangle the frame shows, in global display coordinates.
   public var screenRect: CGRect
-  /// JPEG thumbnail. Nil when it has been deleted by retention or not loaded.
+  /// JPEG thumbnail.
+  ///
+  /// Nil when it has been deleted by retention or not loaded.
   public var jpeg: Data?
 
   public init(
@@ -366,7 +368,9 @@ public struct CadenceStatus: Equatable, Sendable {
   }
 }
 
-/// Everything the pipeline publishes. Later phases subscribe to this stream.
+/// Everything the pipeline publishes.
+///
+/// Later phases subscribe to this stream.
 public enum SensingEvent: Sendable {
   /// A frame was kept, recognized, and journaled.
   case observation(ActivityObservation)
