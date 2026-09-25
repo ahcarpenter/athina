@@ -1,0 +1,35 @@
+name: Select the pinned Xcode
+description: >-
+  Selects the Xcode that .xcode-version pins, by its exact path on the runner,
+  and fails when the runner does not have it. Every macOS job uses it, so the
+  build, the tests, both UI checks and swift-format run on one Xcode, and a new
+  runner image never changes any of them unannounced (README "Continuous
+  integration").
+runs:
+  using: composite
+  steps:
+    - name: Select the pinned Xcode
+      shell: bash
+      # Never the newest on the runner: a newer Xcode can render the snapshot
+      # baselines and format Swift differently, failing every pull request with
+      # no change. The image names an Xcode both <version>.app and
+      # <version>.0.app.
+      run: |
+        pin="$(cat .xcode-version)"
+        for xcode in "/Applications/Xcode_$pin.app" "/Applications/Xcode_$pin.0.app" ""; do
+          [ -z "$xcode" ] || [ -d "$xcode" ] && break
+        done
+        if [ -z "$xcode" ]; then
+          echo "::error::The runner has no Xcode $pin at /Applications/Xcode_$pin.app or /Applications/Xcode_$pin.0.app, the Xcode .xcode-version pins; it has $(ls -d /Applications/Xcode_*.app | xargs). Bump the pin (README \"Continuous integration\")."
+          exit 1
+        fi
+        echo "Using $xcode"
+        sudo xcode-select -s "$xcode"
+        if [ "$(xcodebuild -version | head -n1)" != "Xcode $pin" ]; then
+          echo "::error::$xcode is $(xcodebuild -version | head -n1), not the Xcode $pin that .xcode-version pins."
+          exit 1
+        fi
+        sw_vers
+        xcodebuild -version
+        swift --version
+        echo "swift-format $(xcrun swift-format --version)"
