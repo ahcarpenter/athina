@@ -1,6 +1,8 @@
 import AppKit
 import AthinaControlProtocol
 import AthinaCore
+import CoreGraphics
+import Foundation
 
 /// The control API's commands, run on the main actor one at a time.
 ///
@@ -23,9 +25,19 @@ final class ControlCommands {
   }
 
   static let commands = [
-    "ping", "windows", "find", "click", "type", "scroll", "menu", "settings", "wait-setting",
-    "wait-window", "snapshot",
-    "outside-click", "hotkey",
+    "ping",
+    "windows",
+    "find",
+    "click",
+    "type",
+    "scroll",
+    "menu",
+    "settings",
+    "wait-setting",
+    "wait-window",
+    "snapshot",
+    "outside-click",
+    "hotkey",
   ]
 
   /// Answers a request; a parameter of the wrong type is answered with an
@@ -48,7 +60,10 @@ final class ControlCommands {
       case "hotkey": return try await hotKey(request)
       default:
         return .error(
-          "no command \"\(request.command)\"; the commands are \(Self.commands.joined(separator: ", "))"
+          """
+          no command \"\(request.command)\"; the commands are \
+          \(Self.commands.joined(separator: ", "))
+          """
         )
       }
     } catch {
@@ -72,8 +87,10 @@ final class ControlCommands {
         AppAccessibility.windows(titled: nil).map { window in
           let frame = AppAccessibility.globalFrame(of: window.frame)
           return .object([
-            "title": .string(window.title), "number": .number(Double(window.windowNumber)),
-            "key": .bool(window.isKeyWindow), "main": .bool(window.isMainWindow),
+            "title": .string(window.title),
+            "number": .number(Double(window.windowNumber)),
+            "key": .bool(window.isKeyWindow),
+            "main": .bool(window.isMainWindow),
             "level": .number(Double(window.level.rawValue)),
             "frame": .array(
               [frame.minX, frame.minY, frame.width, frame.height].map { .number(Double($0)) }
@@ -307,7 +324,8 @@ final class ControlCommands {
     .array(
       items.map { item in
         var fields: [String: ControlValue] = [
-          "title": .string(item.title), "enabled": .bool(item.isEnabled),
+          "title": .string(item.title),
+          "enabled": .bool(item.isEnabled),
           "separator": .bool(item == .separator),
         ]
         if case .submenu(_, let children, _) = item {
@@ -419,7 +437,8 @@ final class ControlCommands {
       }
       try png.write(to: URL(fileURLWithPath: path), options: .withoutOverwriting)
       return .ok([
-        "path": .string(path), "width": .number(Double(image.width)),
+        "path": .string(path),
+        "width": .number(Double(image.width)),
         "height": .number(Double(image.height)),
       ])
     } catch {
@@ -441,8 +460,10 @@ final class ControlCommands {
     while clock.now < deadline {
       let expected = AppAccessibility.globalFrame(of: window.frame)
       if let drawn = Self.drawnBounds(of: window),
-        abs(drawn.minX - expected.minX) < 1, abs(drawn.minY - expected.minY) < 1,
-        abs(drawn.width - expected.width) < 1, abs(drawn.height - expected.height) < 1
+        abs(drawn.minX - expected.minX) < 1,
+        abs(drawn.minY - expected.minY) < 1,
+        abs(drawn.width - expected.width) < 1,
+        abs(drawn.height - expected.height) < 1
       {
         let since = steadySince ?? clock.now
         steadySince = since
@@ -460,7 +481,8 @@ final class ControlCommands {
     guard
       let list = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(window.windowNumber))
         as? [[String: Any]],
-      let info = list.first, (info[kCGWindowIsOnscreen as String] as? Bool) == true,
+      let info = list.first,
+      (info[kCGWindowIsOnscreen as String] as? Bool) == true,
       let bounds = info[kCGWindowBounds as String] as? NSDictionary
     else { return nil }
     return CGRect(dictionaryRepresentation: bounds)

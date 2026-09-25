@@ -23,9 +23,8 @@ import Testing
       arguments: ["Athina"] + arguments,
       clientMode: client ?? replay,
       environment: environment ?? unsandboxed,
-      compiledIn: compiledIn,
-      inspect: { _ in facts }
-    )
+      compiledIn: compiledIn
+    ) { _ in facts }
   }
 
   @Test func noFlagMeansOff() {

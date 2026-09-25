@@ -351,7 +351,7 @@ import Testing
   }
 
   @Test func theShardsStayEven() {
-    let sizes = Dictionary(grouping: SnapshotShard.assignment.values, by: { $0 }).mapValues(\.count)
+    let sizes = Dictionary(grouping: SnapshotShard.assignment.values) { $0 }.mapValues(\.count)
     #expect(Set(sizes.keys) == Set(1...SnapshotShard.count))
     #expect(sizes.values.max()! - sizes.values.min()! <= 1)
   }

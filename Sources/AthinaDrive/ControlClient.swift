@@ -89,6 +89,8 @@ enum ControlClient {
     guard connected == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .ECONNREFUSED) }
     try request.withUnsafeBytes { buffer in
       var offset = 0
+      // The loop runs only while the buffer holds bytes, and a buffer with
+      // bytes always has a base address.
       while offset < buffer.count {
         let written = write(
           descriptor,
@@ -108,6 +110,7 @@ enum ControlClient {
       }
       received.append(contentsOf: chunk[0..<count])
     }
+    // The loop above ends only once a newline has arrived.
     return received.prefix(upTo: received.firstIndex(of: 0x0A)!)
   }
 }

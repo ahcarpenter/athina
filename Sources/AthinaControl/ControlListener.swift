@@ -136,6 +136,8 @@ final class ControlListener: @unchecked Sendable {
   private func write(_ data: Data, to client: Int32) -> Bool {
     data.withUnsafeBytes { buffer in
       var offset = 0
+      // The loop runs only while the buffer holds bytes, and a buffer with
+      // bytes always has a base address.
       while offset < buffer.count {
         let written = Darwin.write(
           client,

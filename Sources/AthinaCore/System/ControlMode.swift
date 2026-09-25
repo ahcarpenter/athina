@@ -98,7 +98,10 @@ public enum ControlMode: Equatable, Sendable {
     let socketPath = directory.appendingPathComponent(ControlMode.socketName).path
     guard socketPath.utf8.count <= ControlMode.socketPathLimit else {
       self = .refused(
-        "\(ControlMode.flag): a socket path is at most \(ControlMode.socketPathLimit) bytes, and one inside this directory would be \(socketPath.utf8.count): \(directory.path)"
+        """
+        \(ControlMode.flag): a socket path is at most \(ControlMode.socketPathLimit) bytes, \
+        and one inside this directory would be \(socketPath.utf8.count): \(directory.path)
+        """
       )
       return
     }
@@ -109,7 +112,10 @@ public enum ControlMode: Equatable, Sendable {
     }
     guard let secret = facts.secret, secret.count >= ControlMode.minimumSecretLength else {
       self = .refused(
-        "\(ControlMode.flag): the directory's \(ControlMode.secretName) file must hold at least \(ControlMode.minimumSecretLength) characters: \(directory.path)"
+        """
+        \(ControlMode.flag): the directory's \(ControlMode.secretName) file must hold at \
+        least \(ControlMode.minimumSecretLength) characters: \(directory.path)
+        """
       )
       return
     }

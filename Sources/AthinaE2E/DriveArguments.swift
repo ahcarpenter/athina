@@ -206,7 +206,10 @@ public enum DriveArguments {
       name: "api",
       arguments: "<command> [key=value ...]",
       summary:
-        "one request to a replay's control API, in ATHINA_CONTROL_DIR; prints the answer, or one field of it with --field",
+        """
+        one request to a replay's control API, in ATHINA_CONTROL_DIR; prints the answer, or \
+        one field of it with --field
+        """,
       minimum: 1,
       maximum: 24,
       options: ["--field"]

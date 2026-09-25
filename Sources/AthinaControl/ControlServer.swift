@@ -1,6 +1,7 @@
 import AppKit
 import AthinaControlProtocol
 import AthinaCore
+import CoreGraphics
 
 // The end-to-end harness's control API (README "The control API"), compiled
 // into the app only under the ControlAPI package trait and started only on a

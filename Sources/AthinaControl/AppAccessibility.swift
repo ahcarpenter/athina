@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import AthinaControlProtocol
+import CoreGraphics
 
 /// Athina's own accessibility tree, as an assistive app sees it, read through
 /// the AXUIElement API on the main actor.
@@ -34,13 +35,18 @@ struct AppAccessibility {
 
     var summary: ControlValue {
       .object([
-        "role": .string(role), "subrole": .string(subrole), "label": .string(label),
+        "role": .string(role),
+        "subrole": .string(subrole),
+        "label": .string(label),
         "title": .string(title),
-        "identifier": .string(identifier), "value": .string(value), "enabled": .bool(enabled),
+        "identifier": .string(identifier),
+        "value": .string(value),
+        "enabled": .bool(enabled),
         "frame": .array(
           [frame.minX, frame.minY, frame.width, frame.height].map { .number(Double($0)) }
         ),
-        "window": .string(windowTitle), "chrome": .bool(inChrome),
+        "window": .string(windowTitle),
+        "chrome": .bool(inChrome),
       ])
     }
   }
