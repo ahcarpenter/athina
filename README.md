@@ -1941,10 +1941,28 @@ line wrapping in one direction, and the guide's naming, documentation and
 programming-practice rules that swift-format checks. `make format` rewrites
 every Swift file to it, `make lint` fails on anything it would change and on
 every rule it can only report, and CI runs `make lint` on every pull request
-and every push to `main`. The configuration was checked against the
-swift-format in Xcode 27.0 (Swift 6.4) and in Xcode 26.6 (Swift 6.3.3), the
-`macos-26` runner's, which format this code identically; Xcode's swift-format
-reports its version as `main`, so CI prints the Swift version beside it.
+and every push to `main`.
+
+A newer swift-format can format the same code differently, so the one CI runs
+is pinned: `.swift-format-xcode-version` names the Xcode it ships with, as
+`xcodebuild -version` prints it (26.6 today: Swift 6.3.3, swift-format 6.3.0).
+The `lint` job selects that Xcode by its exact path on the runner,
+`/Applications/Xcode_<version>.app`, never the newest there, fails with the
+Xcodes the runner has when it lacks it, and prints the Swift and swift-format
+versions that ran. `make format` and `make lint` read the same file and warn
+when the selected Xcode is another; `DEVELOPER_DIR=<path to that Xcode.app>`
+runs either with the pinned one. Xcode 27.0's swift-format, which reports its
+version as `main`, formats this code identically today.
+
+To move the pin, once the `macos-26` image lists the new Xcode (its
+[readme](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)
+names each path):
+
+1. Write the new version into `.swift-format-xcode-version`.
+2. Run `make format` and `make lint` with that Xcode, and fix what the linter
+   reports.
+3. Commit the pin and any reformatting together as one `style` commit, so
+   every commit lints clean with the swift-format it pins.
 
 `make lint` cannot see every rule. By hand, and in review:
 
