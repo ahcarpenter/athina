@@ -2,6 +2,7 @@
 // turns on, so `make test` compiles none of this.
 #if UISnapshotsSmoke
   import AppKit
+  import Foundation
   import SnapshotDiff
   import SnapshotTesting
   import Testing
@@ -120,8 +121,8 @@
       let fileManager = FileManager.default
       // The set a run publishes for approving: the reference of every snapshot that matched and
       // the new render of every other one. It is filled beside its final place and moved there
-      // only once every snapshot it draws has rendered, so an unfinished run never publishes a partial
-      // set that approving would take for the whole one.
+      // only once every snapshot it draws has rendered, so an unfinished run never publishes a
+      // partial set that approving would take for the whole one.
       let partial = Self.output.appending(path: "references-partial", directoryHint: .isDirectory)
       let approvable = Self.output.appending(path: "references", directoryHint: .isDirectory)
       let drift = Self.output.appending(path: "drift", directoryHint: .isDirectory)
