@@ -32,6 +32,8 @@ public struct RuntimeEnvironment: Equatable, Sendable {
   /// nil when it is not sandboxed.
   public var containerURL: URL?
 
+  /// Creates an environment from what a launch would read; tests build
+  /// either answer this way.
   public init(
     isSandboxed: Bool,
     bundleIdentifier: String? = nil,

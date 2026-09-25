@@ -4,11 +4,15 @@ import Foundation
 /// A spot on the screen the mentor tier pointed at, in the pixel coordinates
 /// of the frame it saw (origin top-left), with a few words to show beside it.
 public struct CalloutRegion: Codable, Equatable, Sendable {
+  /// The longest note kept, in characters; a longer one is cut off.
   public static let maxNoteLength = 80
 
+  /// The spot, in pixels of the frame the model saw, origin top-left.
   public var rect: CGRect
+  /// The few words the model gave to show beside the spot.
   public var note: String
 
+  /// Creates a region, cutting the note to `maxNoteLength` characters.
   public init(rect: CGRect, note: String) {
     self.rect = rect
     self.note = String(note.prefix(CalloutRegion.maxNoteLength))
@@ -21,9 +25,12 @@ public struct CalloutRegion: Codable, Equatable, Sendable {
 /// Bounds are global display points with the origin at the top-left of the main
 /// display, like `FrameInfo.screenRect`.
 public struct DisplayBounds: Equatable, Sendable {
+  /// The display's Core Graphics id, as in `FrameInfo.displayID`.
   public var id: UInt32
+  /// The display's frame in global display points.
   public var bounds: CGRect
 
+  /// Creates the bounds of one display.
   public init(id: UInt32, bounds: CGRect) {
     self.id = id
     self.bounds = bounds
@@ -32,11 +39,14 @@ public struct DisplayBounds: Equatable, Sendable {
 
 /// Where a callout goes on screen once its anchor checks out.
 public struct CalloutPlacement: Equatable, Sendable {
+  /// The Core Graphics id of the display the callout goes on.
   public var displayID: UInt32
   /// Global display points, origin top-left of the main display.
   public var screenRect: CGRect
+  /// The few words shown beside the spot.
   public var note: String
 
+  /// Creates a placement on a display.
   public init(displayID: UInt32, screenRect: CGRect, note: String) {
     self.displayID = displayID
     self.screenRect = screenRect
@@ -67,6 +77,8 @@ public enum CalloutRejection: Error, Equatable, Sendable {
   /// A later frame of the same window no longer shows the framed text at that place.
   case contentChanged
 
+  /// A short lowercase phrase for the reason, such as "window moved", shown
+  /// in the debug panel and the log for a callout not shown or taken down.
   public var label: String {
     switch self {
     case .outsideFrame: "region outside the frame"
@@ -99,13 +111,17 @@ public enum CalloutAnchor {
 
   /// What the app reads right before placing or keeping a callout.
   public struct Live: Equatable, Sendable {
+    /// The process id of the frontmost app, or nil when there is none.
     public var frontmostPID: Int32?
     /// A fresh accessibility read of the frontmost window, or nil when
     /// there is none to read.
     public var focus: FocusContext?
+    /// The displays connected right now.
     public var displays: [DisplayBounds]
+    /// The time of the reading, from the app's clock.
     public var now: Date
 
+    /// Creates a reading from the live values the app gathered.
     public init(frontmostPID: Int32?, focus: FocusContext?, displays: [DisplayBounds], now: Date) {
       self.frontmostPID = frontmostPID
       self.focus = focus
@@ -223,6 +239,8 @@ public enum CalloutAnchor {
 /// below the box, or above it at the bottom of the display, where it covers
 /// the next line.
 public struct CalloutLayout: Equatable, Sendable {
+  /// Where the note sits relative to the box: beside it to the right, below
+  /// it, or above it.
   public enum NotePlacement: Equatable, Sendable {
     case trailing
     case below
@@ -238,15 +256,25 @@ public struct CalloutLayout: Equatable, Sendable {
   /// A note wider than this wraps.
   public static let noteMaxWidth: CGFloat = 320
 
+  /// The overlay window's frame in global coordinates, on whole points and
+  /// kept on the display.
   public var windowRect: CGRect
+  /// The highlighted spot, in window coordinates.
   public var box: CGRect
   /// Where the note may be drawn, in window coordinates.
   ///
   /// The note is aligned to its leading edge, and to its vertical centre beside
   /// the box or its edge nearest the box otherwise.
   public var noteRect: CGRect
+  /// Which side of the box the note went on.
   public var notePlacement: NotePlacement
 
+  /// Lays out a callout for a spot on a display.
+  ///
+  /// - Parameters:
+  ///   - spot: The spot to highlight, in global coordinates.
+  ///   - display: The bounds of the display the spot is on, in global
+  ///     coordinates.
   public init(screenRect spot: CGRect, display: CGRect) {
     let glow = CalloutLayout.glow
     let gap = CalloutLayout.gap
@@ -301,7 +329,9 @@ public struct CalloutLayout: Equatable, Sendable {
 /// callout on a screen nobody touches stays up while its toast does, and one
 /// whose text scrolled away comes down.
 public struct CalloutWitness: Equatable, Sendable {
+  /// The spot the callout points at, in the frame pixels of `original`.
   public let region: CGRect
+  /// The observation whose frame the model saw when it chose the spot.
   public let original: ActivityObservation
   /// The latest time the screen was seen unchanged.
   public private(set) var confirmedAt: Date
@@ -309,6 +339,8 @@ public struct CalloutWitness: Equatable, Sendable {
   /// confirms the screen too.
   public private(set) var newestKeptIsWitness = true
 
+  /// Creates a witness for a spot in the original frame, confirmed as of
+  /// that frame's timestamp.
   public init(region: CGRect, original: ActivityObservation) {
     self.region = region
     self.original = original

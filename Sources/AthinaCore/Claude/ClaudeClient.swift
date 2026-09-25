@@ -12,8 +12,10 @@ public enum Effort: String, Codable, CaseIterable, Sendable, Identifiable {
   case high
   case xhigh
 
+  /// The raw value, which identifies a level in the effort picker.
   public var id: String { rawValue }
 
+  /// The level's name in Settings > Models.
   public var label: String {
     switch self {
     case .low: "Low"
@@ -24,11 +26,15 @@ public enum Effort: String, Codable, CaseIterable, Sendable, Identifiable {
   }
 }
 
+/// A prompt-cache marker, the API's `cache_control`.
 public struct CacheControl: Codable, Equatable, Sendable {
+  /// The cache type; Athina sends only `ephemeral`.
   public var type: String
 
+  /// The API's default marker, which caches for five minutes.
   public static let ephemeral = CacheControl(type: "ephemeral")
 
+  /// Creates a marker of the given cache type.
   public init(type: String) {
     self.type = type
   }
@@ -39,10 +45,14 @@ public struct CacheControl: Codable, Equatable, Sendable {
 /// Every Athina system prompt carries a cache marker so repeated calls read it
 /// from the prompt cache; a block that changes on every call passes nil.
 public struct SystemBlock: Codable, Equatable, Sendable {
+  /// The block type, always `text`.
   public var type: String
+  /// The prompt text of this block.
   public var text: String
+  /// The cache marker, or nil for a block that changes on every call.
   public var cacheControl: CacheControl?
 
+  /// Creates a text block, marked for the cache unless `cacheControl` is nil.
   public init(text: String, cacheControl: CacheControl? = .ephemeral) {
     type = "text"
     self.text = text
@@ -55,6 +65,7 @@ public struct SystemBlock: Codable, Equatable, Sendable {
   }
 }
 
+/// Who a message is from.
 public enum Role: String, Codable, Sendable {
   case user
   case assistant
@@ -77,6 +88,7 @@ public enum ContentBlock: Codable, Equatable, Sendable {
     case data
   }
 
+  /// Decodes a text block or a base64 image block, throwing on any other type.
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     switch try container.decode(String.self, forKey: .type) {
@@ -97,6 +109,7 @@ public enum ContentBlock: Codable, Equatable, Sendable {
     }
   }
 
+  /// Encodes the block in the API's shape, an image as a base64 `source`.
   public func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     switch self {
@@ -113,10 +126,14 @@ public enum ContentBlock: Codable, Equatable, Sendable {
   }
 }
 
+/// One turn of the conversation sent to the model.
 public struct Message: Codable, Equatable, Sendable {
+  /// Who the turn is from.
   public var role: Role
+  /// The turn's text and image blocks, in order.
   public var content: [ContentBlock]
 
+  /// Creates a message.
   public init(role: Role, content: [ContentBlock]) {
     self.role = role
     self.content = content
@@ -125,19 +142,26 @@ public struct Message: Codable, Equatable, Sendable {
 
 /// Structured output: the response text is JSON matching `schema`.
 public struct OutputFormat: Codable, Equatable, Sendable {
+  /// The format type, always `json_schema`.
   public var type: String
+  /// The JSON schema the response text must match.
   public var schema: JSONValue
 
+  /// Creates a JSON schema format for `schema`.
   public init(schema: JSONValue) {
     type = "json_schema"
     self.schema = schema
   }
 }
 
+/// The request's `output_config`: structured output and reasoning effort.
 public struct OutputConfig: Codable, Equatable, Sendable {
+  /// The schema the response must follow, or nil for free text.
   public var format: OutputFormat?
+  /// The reasoning effort, or nil to send none, as for a model that rejects it.
   public var effort: Effort?
 
+  /// Creates an output config.
   public init(format: OutputFormat? = nil, effort: Effort? = nil) {
     self.format = format
     self.effort = effort
@@ -148,12 +172,20 @@ public struct OutputConfig: Codable, Equatable, Sendable {
 ///
 /// Field names follow the API's snake_case.
 public struct MessagesRequest: Codable, Equatable, Sendable {
+  /// The model id, such as `claude-opus-5`.
   public var model: String
+  /// The most output tokens the response may use.
+  ///
+  /// A response that reaches it stops with `max_tokens` and is truncated.
   public var maxTokens: Int
+  /// The system prompt, block by block.
   public var system: [SystemBlock]
+  /// The conversation, oldest turn first.
   public var messages: [Message]
+  /// Structured output and effort, or nil to send neither.
   public var outputConfig: OutputConfig?
 
+  /// Creates a request.
   public init(
     model: String,
     maxTokens: Int,
@@ -203,11 +235,16 @@ public struct MessagesRequest: Codable, Equatable, Sendable {
 
 /// Token counts the API reports for one response.
 public struct Usage: Codable, Equatable, Sendable {
+  /// Input tokens read outside the prompt cache.
   public var inputTokens: Int
+  /// Tokens the model generated.
   public var outputTokens: Int
+  /// Input tokens written to the prompt cache.
   public var cacheCreationInputTokens: Int
+  /// Input tokens read from the prompt cache.
   public var cacheReadInputTokens: Int
 
+  /// Creates usage counts, each zero unless given.
   public init(
     inputTokens: Int = 0,
     outputTokens: Int = 0,
@@ -227,6 +264,7 @@ public struct Usage: Codable, Equatable, Sendable {
     case cacheReadInputTokens = "cache_read_input_tokens"
   }
 
+  /// Decodes usage, reading a count the API leaves out as zero.
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     inputTokens = try container.decodeIfPresent(Int.self, forKey: .inputTokens) ?? 0
@@ -249,22 +287,34 @@ public struct Usage: Codable, Equatable, Sendable {
 /// decode to their type and are ignored. Encodable so a recorded call can store
 /// the response it replays.
 public struct ResponseBlock: Codable, Equatable, Sendable {
+  /// The block type, such as `text` or `thinking`.
   public var type: String
+  /// The block's text, or nil for a block that carries none.
   public var text: String?
 
+  /// Creates a response block.
   public init(type: String, text: String? = nil) {
     self.type = type
     self.text = text
   }
 }
 
+/// A Messages API response, as Athina decodes it.
 public struct MessagesResponse: Codable, Equatable, Sendable {
+  /// The id the API gave the message.
   public var id: String
+  /// The id of the model that answered, which the call log records.
   public var model: String
+  /// Why the model stopped, such as `end_turn`, `max_tokens`, or `refusal`.
+  ///
+  /// Nil when the API sent none.
   public var stopReason: String?
+  /// The response's content blocks, in order.
   public var content: [ResponseBlock]
+  /// The call's token counts, which its cost is priced from.
   public var usage: Usage
 
+  /// Creates a response.
   public init(
     id: String,
     model: String,
@@ -289,20 +339,27 @@ public struct MessagesResponse: Codable, Equatable, Sendable {
     content.compactMap { $0.type == "text" ? $0.text : nil }.joined()
   }
 
+  /// Whether the model declined to answer (`stop_reason` is `refusal`).
   public var isRefusal: Bool { stopReason == "refusal" }
+  /// Whether the response was cut off at `max_tokens`.
   public var isTruncated: Bool { stopReason == "max_tokens" }
 }
 
 /// The API's error envelope.
 public struct APIErrorBody: Decodable, Equatable, Sendable {
+  /// The error's type and message.
   public struct Detail: Decodable, Equatable, Sendable {
+    /// The API's error type, such as `overloaded_error`.
     public var type: String
+    /// The API's explanation of the error.
     public var message: String
   }
 
+  /// The error the API reported.
   public var error: Detail
 }
 
+/// Why a model call brought back no response.
 public enum ClaudeClientError: Error, Equatable, CustomStringConvertible, Sendable {
   /// The API answered with an error status and, when it sent one, its own message.
   case api(status: Int, type: String, message: String)
@@ -316,6 +373,8 @@ public enum ClaudeClientError: Error, Equatable, CustomStringConvertible, Sendab
   /// A live client would not send the call, and why. Nothing was sent.
   case notSent(String)
 
+  /// The error as one line for the call log, such as
+  /// `overloaded_error (HTTP 529): Overloaded`.
   public var description: String {
     switch self {
     case .api(let status, let type, let message): "\(type) (HTTP \(status)): \(message)"
@@ -334,6 +393,7 @@ extension ClaudeClientError: Codable {
     case kind, status, type, message
   }
 
+  /// Decodes a recorded error, throwing on an unknown `kind`.
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     let message = try container.decode(String.self, forKey: .message)
@@ -357,6 +417,8 @@ extension ClaudeClientError: Codable {
     }
   }
 
+  /// Encodes the error as its `kind` and message, adding the status and type
+  /// for an API error.
   public func encode(to encoder: Encoder) throws {
     var container = encoder.container(keyedBy: CodingKeys.self)
     switch self {
@@ -395,6 +457,7 @@ public struct CallIdentity: Codable, Hashable, Sendable {
   /// The prompt version the request was built with.
   public var promptVersion: Int
 
+  /// Creates an identity from a call kind and a prompt version.
   public init(kind: String, promptVersion: Int) {
     self.kind = kind
     self.promptVersion = promptVersion
@@ -418,6 +481,7 @@ public protocol ClaudeClient: Sendable {
 }
 
 extension ClaudeClient {
+  /// False: a client is live unless it says otherwise.
   public var isReplay: Bool { false }
 }
 
@@ -425,11 +489,14 @@ extension ClaudeClient {
 ///
 /// The only host Athina ever talks to.
 public struct AnthropicClient: ClaudeClient {
+  /// The Messages API URL, the only one Athina sends to.
   public static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
+  /// The `anthropic-version` header every request carries.
   public static let apiVersion = "2023-06-01"
 
   private let session: URLSession
 
+  /// Creates a client that sends over `session`.
   public init(session: URLSession = AnthropicClient.makeSession()) {
     self.session = session
   }
@@ -437,6 +504,11 @@ public struct AnthropicClient: ClaudeClient {
   /// The most a whole call may take, whatever its own timeout says.
   public static let resourceTimeout: TimeInterval = 600
 
+  /// Returns the session calls go over by default.
+  ///
+  /// It is ephemeral, so nothing is kept on disk; it fails at once without a
+  /// network rather than waiting for one; and it caps a whole call at
+  /// `resourceTimeout`.
   public static func makeSession() -> URLSession {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.waitsForConnectivity = false
@@ -452,6 +524,13 @@ public struct AnthropicClient: ClaudeClient {
     return encoder
   }()
 
+  /// Posts `request` with `apiKey` and returns the decoded response.
+  ///
+  /// `call` is not sent; only recording and replay use it.
+  ///
+  /// - Throws: `ClaudeClientError.transport` when the request does not
+  ///   complete, `.api` for any status but 200, and `.badResponse` for a body
+  ///   that does not decode.
   public func send(
     _ request: MessagesRequest,
     call: CallIdentity,

@@ -4,16 +4,22 @@ import ScreenCaptureKit
 
 /// A downscaled capture of one display.
 public struct CapturedFrame: @unchecked Sendable {
+  /// The captured image, its longest edge at most the requested maximum,
+  /// without the cursor or Athina's own windows.
   public let image: CGImage
+  /// The display the frame was captured from.
   public let displayID: CGDirectDisplayID
   /// The display's bounds in global display coordinates.
   public let screenRect: CGRect
 }
 
+/// Why a screen capture failed.
 public enum ScreenCaptureError: Error, CustomStringConvertible {
   case noDisplays
   case captureFailed(String)
 
+  /// A short message saying what went wrong, for the cadence status's last
+  /// error.
   public var description: String {
     switch self {
     case .noDisplays: "no displays available to capture"
@@ -31,8 +37,19 @@ public actor ScreenCapturer {
   private var contentFetchedAt: Date = .distantPast
   private let contentMaxAge: TimeInterval = 30
 
+  /// Creates a capturer with no shareable content cached yet.
   public init() {}
 
+  /// Captures the display the focused window overlaps most, or the main
+  /// display when there is no window frame or it overlaps none.
+  ///
+  /// - Parameters:
+  ///   - windowFrame: The focused window's frame in global display
+  ///     coordinates, or nil when it is not known.
+  ///   - maxDimension: The longest edge of the captured image, in pixels.
+  /// - Returns: The downscaled frame and the display it came from.
+  /// - Throws: `ScreenCaptureError` when there is no display or the capture
+  ///   fails.
   public func capture(windowFrame: CGRect?, maxDimension: Int) async throws -> CapturedFrame {
     let content = try await shareableContent()
     guard let display = ScreenCapturer.display(for: windowFrame, in: content.displays) else {

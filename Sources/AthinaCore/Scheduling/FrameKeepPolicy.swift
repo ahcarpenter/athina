@@ -2,9 +2,16 @@ import Foundation
 
 /// Decides whether a freshly captured frame is worth keeping.
 public enum FrameKeepPolicy {
+  /// Whether to keep a frame, and why.
   public struct Verdict: Equatable, Sendable {
+    /// Whether the frame is kept; a dropped frame is never recognized or
+    /// journaled.
     public var keep: Bool
+    /// The Hamming distance to the previous kept frame, or nil for the first
+    /// frame.
     public var distance: Int?
+    /// A short human-readable reason, such as "window changed" or
+    /// "near-duplicate (distance 3 <= 5)".
     public var reason: String
   }
 

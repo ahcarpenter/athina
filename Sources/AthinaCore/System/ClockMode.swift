@@ -28,7 +28,9 @@ public enum ClockMode: Equatable, Sendable {
   /// A clock flag outside a replay, which was not accepted; the app runs on real time.
   case refused(String)
 
+  /// The flag that runs a replay's clock faster than real time.
   public static let scaleFlag = "--time-scale"
+  /// The flag that starts a replay's clock ahead of real time.
   public static let advanceFlag = "--advance-clock"
   /// A replay's clock runs at most this many times real time: past it the
   /// sensing loop's polls come faster than a capture can finish.
@@ -36,6 +38,12 @@ public enum ClockMode: Equatable, Sendable {
   /// The furthest one step moves a replay's clock ahead.
   public static let maxAdvance: TimeInterval = 30 * 86400
 
+  /// Reads the clock flags from the launch's command-line arguments.
+  ///
+  /// - Parameters:
+  ///   - arguments: The launch's command-line arguments.
+  ///   - clientMode: The launch's model client mode; the flags are honored
+  ///     only in a replay, including one that could not start.
   public init(arguments: [String], clientMode: ModelClientMode) {
     func value(after flag: String) -> String?? {
       guard let index = arguments.firstIndex(of: flag) else { return nil }
@@ -186,8 +194,11 @@ public enum ClockInterval {
 /// when it never appears. Only a replay listens, and only for its own pid, so
 /// a request can never reach a live or recording launch or another replay.
 public enum ClockRemote {
+  /// The distributed notification's name.
   public static let name = "com.ahcarpenter.athina.advance-clock"
+  /// The user info key for the interval to move the clock ahead by.
   public static let intervalKey = "interval"
+  /// The user info key for the absolute path the replay answers at.
   public static let replyKey = "replyTo"
 
   /// Whether a launch in `mode` listens at all.
@@ -240,6 +251,7 @@ public enum ClockRemote {
     /// The replay that answered.
     public var pid: Int32
 
+    /// Creates an answer; `pid` defaults to this process's.
     public init(
       moved: Bool,
       reason: String? = nil,
@@ -254,6 +266,8 @@ public enum ClockRemote {
       self.pid = pid
     }
 
+    /// Returns the answer as JSON with sorted keys and ISO 8601 dates, as
+    /// written to the reply file.
     public func encoded() throws -> Data {
       let encoder = JSONEncoder()
       encoder.outputFormatting = [.sortedKeys]
@@ -261,6 +275,7 @@ public enum ClockRemote {
       return try encoder.encode(self)
     }
 
+    /// Reads an answer from the JSON `encoded()` writes.
     public static func decode(_ data: Data) throws -> Reply {
       let decoder = JSONDecoder()
       decoder.dateDecodingStrategy = .iso8601
@@ -359,7 +374,9 @@ public enum ClockRemote {
     return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
   }
 
+  /// Why a request was refused or could not be answered.
   public struct Refusal: Error, Equatable {
+    /// What was wrong, for the log or the reply's reason.
     public var reason: String
   }
 }

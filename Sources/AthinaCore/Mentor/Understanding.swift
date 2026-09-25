@@ -9,20 +9,26 @@ import Foundation
 public struct Understanding: Codable, Equatable, Sendable {
   /// Something the user appears to be working toward, and why Athina thinks so.
   public struct Goal: Codable, Equatable, Sendable, Identifiable {
+    /// The goal, in a sentence.
     public var goal: String
     /// What on screen or in the journal supports this reading.
     public var evidence: String
     /// How sure the model is, 0 to 1.
     public var confidence: Double
 
+    /// The goal's text, which identifies it among the goals.
     public var id: String { goal }
 
+    /// Creates a goal from its text, evidence, and confidence.
     public init(goal: String, evidence: String, confidence: Double) {
       self.goal = goal
       self.evidence = evidence
       self.confidence = confidence
     }
 
+    /// Decodes a goal the model wrote, reading a missing field as empty or 0.
+    ///
+    /// Dashes are made plain and the confidence is clamped to 0 to 1.
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       goal = (try c.decodeIfPresent(String.self, forKey: .goal) ?? "").withPlainDashes
@@ -40,6 +46,7 @@ public struct Understanding: Codable, Equatable, Sendable {
   /// Questions or worries worth watching for.
   public var openConcerns: [String]
 
+  /// Creates an understanding; every list defaults to empty.
   public init(
     goals: [Goal] = [],
     timeline: [String] = [],
@@ -203,6 +210,7 @@ public enum UnderstandingSource: String, Codable, Sendable, CaseIterable {
   /// the record within the refresh interval.
   case periodic
 
+  /// The source as the debug panel's understanding card names it.
   public var label: String {
     switch self {
     case .mentorCall: "carried by a mentor call"
@@ -218,6 +226,8 @@ public enum UnderstandingExpiry: Equatable, Sendable {
   /// It was last written on an earlier day.
   case newDay
 
+  /// The reason as the log and the journal's expiry event word it, such as "no
+  /// activity for 30m".
   public var label: String {
     switch self {
     case .idleGap(let gap):
@@ -251,6 +261,7 @@ public enum UnderstandingExpiry: Equatable, Sendable {
 /// the reading developed and retention and Clear Journal treat them like every
 /// other journal row.
 public struct UnderstandingRecord: Codable, Equatable, Sendable, Identifiable {
+  /// The revision's journal id, or 0 before it is journaled.
   public var id: Int64
   /// When this revision was written.
   public var updatedAt: Date
@@ -262,12 +273,16 @@ public struct UnderstandingRecord: Codable, Equatable, Sendable, Identifiable {
   public var revision: Int
   /// `MentorPrompts.version` at the time of writing.
   public var promptVersion: Int
+  /// The model id of the call that wrote the revision.
   public var model: String
+  /// Which call wrote the revision.
   public var source: UnderstandingSource
   /// What this revision's own call cost; zero when a mentor call carried it.
   public var cost: Double
   /// Everything refresh calls have cost since `startedAt`.
   public var cumulativeCost: Double
+  /// The understanding itself, bounded to the understanding token budget in the
+  /// mentor settings.
   public var content: Understanding
   /// The highest observation id the call that wrote this revision read, so the
   /// next write reads every observation journaled after it.
@@ -275,6 +290,7 @@ public struct UnderstandingRecord: Codable, Equatable, Sendable, Identifiable {
   /// Nil when that call read none.
   public var coveredThroughObservationID: Int64?
 
+  /// Creates a revision, with an id of 0 until the journal stores it.
   public init(
     id: Int64 = 0,
     updatedAt: Date,

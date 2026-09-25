@@ -14,15 +14,24 @@ public struct CallFixture: Equatable, Sendable {
   /// The file format this code reads and writes.
   public static let format = 1
 
+  /// Which kind of call this was and the prompt version that built it.
+  ///
+  /// A replay serves a fixture to calls of the same kind and refuses it as
+  /// stale when the versions differ.
   public var identity: CallIdentity
+  /// When the call started, stamped so file names sort in the order the calls
+  /// were made (`CallFixtureFiles.recordingStamp(at:after:)`).
   public var recordedAt: Date
+  /// The request exactly as the loop built it.
   public var request: MessagesRequest
+  /// The response as Athina decoded it, or the error the call ended in.
   public var result: Result<MessagesResponse, ClaudeClientError>
   /// Seconds the call took when it was recorded.
   public var latency: TimeInterval
   /// Estimated dollars when it was recorded.
   public var cost: Double
 
+  /// Creates a fixture from a call's parts.
   public init(
     identity: CallIdentity,
     recordedAt: Date,
@@ -52,6 +61,10 @@ extension CallFixture: Codable {
       error
   }
 
+  /// Decodes a fixture file.
+  ///
+  /// Throws for any format but `format`, and for a file with neither a response
+  /// nor an error.
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     let format = try container.decode(Int.self, forKey: .format)
@@ -133,6 +146,7 @@ public enum CallFixtureFiles {
     return encoder
   }()
 
+  /// Reads fixture files, with the ISO 8601 dates `encoder` writes.
   public static let decoder: JSONDecoder = {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
@@ -281,6 +295,8 @@ public enum ReplayLoadError: Error, Equatable, CustomStringConvertible, Sendable
   case unreadableFixture(String, String)
   case empty(String)
 
+  /// The reason as one line naming the directory or file, which the menu, the
+  /// Mentor card, and the call log show.
   public var description: String {
     switch self {
     case .unreadableDirectory(let path, let reason):

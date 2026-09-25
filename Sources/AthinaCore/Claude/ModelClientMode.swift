@@ -25,10 +25,22 @@ public enum ModelClientMode: Equatable, Sendable {
   case replay(directory: URL, allowStale: Bool)
   case invalid(String)
 
+  /// The flag for a live launch that records every call, optionally followed by
+  /// a directory.
   public static let recordFlag = "--record"
+  /// The flag for a replay, followed by the directory of fixtures.
   public static let replayFlag = "--replay"
+  /// The flag that lets a replay serve fixtures recorded with another prompt
+  /// version.
   public static let allowStaleFlag = "--allow-stale-fixtures"
 
+  /// Reads the mode from the launch arguments.
+  ///
+  /// - Parameters:
+  ///   - arguments: The process's command line.
+  ///   - defaultRecordingDirectory: Where `--record` writes when it names no
+  ///     directory, and what a relative one is taken inside.
+  ///   - environment: Decides which directories a sandboxed process may name.
   public init(
     arguments: [String],
     defaultRecordingDirectory: URL = CallFixtureFiles.defaultRecordingDirectory(),
@@ -107,7 +119,9 @@ public enum ModelClientMode: Equatable, Sendable {
 
   /// The client for this mode, plus what a replay is serving from.
   public struct Setup: Sendable {
+    /// The client every model call goes through.
     public var client: any ClaudeClient
+    /// What the replay serves from; nil in any mode but replay.
     public var replay: ReplaySummary?
     /// Why a recording cannot be written, when that is the case.
     public var recordingUnavailableReason: String?

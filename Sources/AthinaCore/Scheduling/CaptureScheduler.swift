@@ -6,6 +6,7 @@ import Foundation
 /// `setActive`) and ask `evaluate(now:)` what to do. It never touches a clock
 /// itself, so it is fully testable.
 public struct CaptureScheduler: Equatable, Sendable {
+  /// What `evaluate(now:)` says to do: capture now, or wait.
   public enum Decision: Equatable, Sendable {
     /// Capture right now for this reason.
     case capture(CaptureReason)
@@ -13,18 +14,32 @@ public struct CaptureScheduler: Equatable, Sendable {
     case wait(until: Date?)
   }
 
+  /// The sensing settings whose intervals and delays set when captures fall
+  /// due.
   public var settings: SensingSettings
+  /// Whether captures are scheduled at all; false while sensing is paused,
+  /// idle, in an excluded app, or without Screen Recording.
   public private(set) var isActive = false
+  /// When the scheduler was last activated, the base of the floor interval
+  /// until the first capture finishes.
   public private(set) var activatedAt: Date?
+  /// When the last capture finished, or nil before the first.
   public private(set) var lastCaptureAt: Date?
+  /// The time of the latest keyboard or mouse input noted.
   public private(set) var lastInputAt: Date?
+  /// When a focus change was noted that no capture has seen yet, or nil when
+  /// none is pending.
   public private(set) var pendingFocusChangeAt: Date?
   /// Input noted after the last capture started, which that capture could not see.
   public private(set) var inputSinceLastCapture = false
+  /// When a manual capture was requested that no capture has served yet, or
+  /// nil when none is pending.
   public private(set) var manualRequestedAt: Date?
 
+  /// Whether a manual capture is pending.
   public var manualRequested: Bool { manualRequestedAt != nil }
 
+  /// Creates an inactive scheduler with these settings.
   public init(settings: SensingSettings) {
     self.settings = settings
   }
@@ -46,16 +61,24 @@ public struct CaptureScheduler: Equatable, Sendable {
     }
   }
 
+  /// Notes that the frontmost app, window, or focused element changed, which
+  /// schedules a capture once focus has settled.
   public mutating func noteFocusChange(at now: Date) {
     pendingFocusChangeAt = now
   }
 
+  /// Notes keyboard or mouse input at `time`, which schedules a capture once
+  /// input has settled.
+  ///
+  /// An input time no later than the one already noted is ignored.
   public mutating func noteInput(at time: Date) {
     if let lastInputAt, lastInputAt >= time { return }
     lastInputAt = time
     inputSinceLastCapture = true
   }
 
+  /// Asks for a capture right away, ahead of every other trigger and the
+  /// minimum interval between captures.
   public mutating func requestManualCapture(at now: Date) {
     manualRequestedAt = now
   }
@@ -104,6 +127,8 @@ public struct CaptureScheduler: Equatable, Sendable {
     return best.map { ($0.at, $0.reason) }
   }
 
+  /// Returns whether a capture is due at `now` and why, or when the next one
+  /// falls due.
   public func evaluate(now: Date) -> Decision {
     guard let due = nextDue(now: now) else { return .wait(until: nil) }
     return due.at <= now ? .capture(due.reason) : .wait(until: due.at)

@@ -18,6 +18,7 @@ public struct ToastCountdown: Equatable, Sendable {
   /// What the countdown had left when it was held, while it is held.
   public private(set) var held: TimeInterval?
 
+  /// Creates a countdown that is off.
   public init() {}
 
   /// Runs the countdown for `duration` from `now`, whatever it was doing.

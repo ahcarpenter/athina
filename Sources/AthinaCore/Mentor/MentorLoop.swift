@@ -11,7 +11,9 @@ import OSLog
 /// call is journaled as a replay with zero cost, and none of them counts
 /// toward the hour's spend or its cap.
 public actor MentorLoop {
+  /// How long a triage call may take, in seconds.
   public static let triageTimeout: TimeInterval = 30
+  /// How long a Test Connection call may take, in seconds.
   public static let testTimeout: TimeInterval = 30
   /// Output tokens a second a reply is assumed to arrive at, under the rate
   /// measured on Opus 5 (README), so a reply that runs to max_tokens still
@@ -47,6 +49,8 @@ public actor MentorLoop {
   }
   /// How many journal rows feed the event summaries and the rolling window.
   public static let eventLookback = 40
+  /// The most recent observations read for the rolling window; any beyond
+  /// it are counted as left out.
   public static let windowLookback = 200
   /// How many past suggestions a refresh call is told about.
   public static let suggestionLookback = 20
@@ -59,6 +63,8 @@ public actor MentorLoop {
   /// path run unchanged without reading the keychain.
   public static let replayCredential = "replay-needs-no-key"
 
+  /// The settings the loop runs on, as validated; `updateSettings(_:)`
+  /// replaces them.
   public private(set) var settings: MentorSettings
   private let journal: Journal
   private let client: any ClaudeClient
@@ -117,6 +123,17 @@ public actor MentorLoop {
   /// Decides when a day ends for expiry.
   private let calendar: Calendar
 
+  /// Creates a loop that reads `events` and journals to `journal`; call
+  /// `start()` to begin.
+  ///
+  /// - Parameters:
+  ///   - settings: The mentor settings, validated before use.
+  ///   - journal: Where every call, suggestion, and understanding is kept.
+  ///   - client: The seam every model call goes through: live or replay.
+  ///   - keyStore: Where the API key is read from; never read in a replay.
+  ///   - events: The sensing stream.
+  ///   - clock: The clock every date, wait, and uptime is read from.
+  ///   - calendar: Decides when a day ends for expiry.
   public init(
     settings: MentorSettings,
     journal: Journal,
@@ -147,6 +164,11 @@ public actor MentorLoop {
 
   // MARK: Control
 
+  /// Reads the key, restores this hour's spend, the last calls, and the
+  /// understanding from the journal, publishes the status, and starts
+  /// reading the sensing stream.
+  ///
+  /// Does nothing when already started.
   public func start() async {
     guard consumeTask == nil else { return }
     await reloadKey()
@@ -160,6 +182,9 @@ public actor MentorLoop {
     }
   }
 
+  /// Stops reading the sensing stream, drops a question waiting on a call,
+  /// counts the active use toward the next refresh, and ends every
+  /// subscriber's event stream.
   public func stop() async {
     consumeTask?.cancel()
     consumeTask = nil
@@ -206,6 +231,11 @@ public actor MentorLoop {
     await publishStatus()
   }
 
+  /// Applies new settings, validated, to the gates and the spend cap, and
+  /// publishes the status.
+  ///
+  /// A change to the contexts, or to whether the mentor tier runs only inside
+  /// them, clears the last context verdict.
   public func updateSettings(_ newSettings: MentorSettings) async {
     let validated = newSettings.validated()
     if validated.onlyMentorInsideContexts != settings.onlyMentorInsideContexts
@@ -225,8 +255,11 @@ public actor MentorLoop {
     await publishStatus()
   }
 
+  /// Whether the loop holds a key to call with: one read from the key store,
+  /// or the replay stand-in when calls are replayed.
   public var hasAPIKey: Bool { apiKey != nil }
 
+  /// Returns the loop's status as it stands now.
   public func currentStatus() -> MentorStatus { status }
 
   /// Records the user's response to a suggestion and journals it, at the
@@ -961,6 +994,7 @@ public actor MentorLoop {
     await publishStatus()
   }
 
+  /// Returns the understanding carried between calls, or nil until one forms.
   public func currentUnderstanding() -> UnderstandingRecord? { understanding }
 
   /// Replaces the refresh period and keeps it in the journal.

@@ -7,10 +7,15 @@ import Foundation
 /// through this one tool, so a mistyped drive step must fail with a usage
 /// message rather than click somewhere unintended.
 public struct DriveInvocation: Equatable, Sendable {
+  /// The command's name, such as `click` or `journal`.
   public let command: String
+  /// The arguments that are not options, in order.
   public let positionals: [String]
+  /// The options given, keyed by name with its `--`; a flag's value is
+  /// empty.
   public let options: [String: String]
 
+  /// Creates an invocation of `command` with these arguments and options.
   public init(command: String, positionals: [String], options: [String: String]) {
     self.command = command
     self.positionals = positionals
@@ -18,22 +23,36 @@ public struct DriveInvocation: Equatable, Sendable {
   }
 }
 
+/// A command line `athina-drive` cannot run, with the usage message it
+/// prints instead.
 public struct DriveUsageError: Error, Equatable, CustomStringConvertible {
+  /// What was wrong, followed where it helps by the usage text.
   public let description: String
+  /// Creates the error with its message.
   public init(_ description: String) { self.description = description }
 }
 
+/// The commands `athina-drive` knows, and the parser that checks a command
+/// line against them.
 public enum DriveArguments {
+  /// One command: its name, how its arguments are written, and how many it
+  /// takes.
   public struct Command: Sendable, Equatable {
+    /// What the command is called on the command line.
     public let name: String
+    /// The command's arguments as the usage message writes them.
     public let arguments: String
+    /// A line saying what the command does, for its usage message.
     public let summary: String
+    /// The fewest arguments the command takes, not counting options.
     public let minimum: Int
+    /// The most arguments the command takes, not counting options.
     public let maximum: Int
     /// Options this command understands, as `--name` (a value) or `--name!` (a flag).
     public let options: [String]
   }
 
+  /// Every command, in the order the usage message lists them.
   public static let commands: [Command] = [
     Command(
       name: "permissions",
@@ -182,10 +201,19 @@ public enum DriveArguments {
     ),
   ]
 
+  /// The command called `name`, or nil when there is none.
   public static func command(named name: String) -> Command? {
     commands.first { $0.name == name }
   }
 
+  /// Checks a command line, without the program name, against the command
+  /// it names.
+  ///
+  /// - Parameter argv: The command's name followed by its arguments and
+  ///   options.
+  /// - Returns: The command, its arguments, and its options.
+  /// - Throws: `DriveUsageError` for help, an unknown command or option, an
+  ///   option without its value, or the wrong number of arguments.
   public static func parse(_ argv: [String]) throws -> DriveInvocation {
     guard let name = argv.first else { throw DriveUsageError(usage()) }
     if name == "-h" || name == "--help" || name == "help" { throw DriveUsageError(usage()) }
@@ -234,6 +262,8 @@ public enum DriveArguments {
       : "\(command.minimum) to \(command.maximum) arguments"
   }
 
+  /// The usage message for `command`, or when it is nil the list of every
+  /// command.
   public static func usage(for command: Command? = nil) -> String {
     guard let command else {
       let width = (commands.map(\.name.count).max() ?? 8) + 2
@@ -247,6 +277,9 @@ public enum DriveArguments {
 }
 
 extension DriveInvocation {
+  /// The argument at `index`, counting from zero.
+  ///
+  /// - Throws: `DriveUsageError` when there are not that many.
   public func positional(_ index: Int) throws -> String {
     guard index < positionals.count else {
       throw DriveUsageError("athina-drive \(command): missing argument \(index + 1)")
@@ -254,6 +287,10 @@ extension DriveInvocation {
     return positionals[index]
   }
 
+  /// The argument at `index`, counting from zero, as a process id.
+  ///
+  /// - Throws: `DriveUsageError` when it is missing or not a positive
+  ///   integer.
   public func pid(_ index: Int) throws -> Int32 {
     let raw = try positional(index)
     guard let value = Int32(raw), value > 0 else {
@@ -262,6 +299,9 @@ extension DriveInvocation {
     return value
   }
 
+  /// The argument at `index`, counting from zero, as a number.
+  ///
+  /// - Throws: `DriveUsageError` when it is missing or not a number.
   public func number(_ index: Int) throws -> Double {
     let raw = try positional(index)
     guard let value = Double(raw) else {
@@ -270,6 +310,9 @@ extension DriveInvocation {
     return value
   }
 
+  /// The value of the option `name`, written with its `--`, or nil when it
+  /// was not given.
   public func option(_ name: String) -> String? { options[name] }
+  /// Whether the flag `name`, written with its `--`, was given.
   public func flag(_ name: String) -> Bool { options[name] != nil }
 }

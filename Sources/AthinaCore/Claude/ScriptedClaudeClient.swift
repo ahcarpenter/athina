@@ -6,14 +6,20 @@ import Foundation
 /// served in the order they were queued, whatever kind of call asks. Recorded
 /// responses are served by `ReplayClaudeClient` instead.
 public actor ScriptedClaudeClient: ClaudeClient {
+  /// One call the client received, with everything it was given.
   public struct Sent: Sendable {
+    /// The request as the loop built it.
     public var request: MessagesRequest
+    /// The identity the call was made with.
     public var call: CallIdentity
+    /// The key the call was made with.
     public var apiKey: String
+    /// The call's timeout, in seconds.
     public var timeout: TimeInterval
   }
 
   private var queue: [Result<MessagesResponse, ClaudeClientError>]
+  /// Every call received so far, oldest first.
   public private(set) var sent: [Sent] = []
   /// Optional delay per call, to test in-flight behavior.
   public var delay: Duration = .zero
@@ -21,6 +27,9 @@ public actor ScriptedClaudeClient: ClaudeClient {
   /// until the test advances it.
   private let clock: any AthinaClock
 
+  /// Creates a client that serves `responses` in order.
+  ///
+  /// `clock` is what a delay is waited out on.
   public init(
     responses: [Result<MessagesResponse, ClaudeClientError>] = [],
     clock: any AthinaClock = SystemClock()
@@ -29,10 +38,18 @@ public actor ScriptedClaudeClient: ClaudeClient {
     self.clock = clock
   }
 
+  /// Queues a response or an error to serve after those already queued.
   public func enqueue(_ response: Result<MessagesResponse, ClaudeClientError>) {
     queue.append(response)
   }
 
+  /// Queues a successful response whose text is `json`, as a reply that ended
+  /// normally.
+  ///
+  /// - Parameters:
+  ///   - json: The response text.
+  ///   - model: The model id the response names.
+  ///   - usage: The token counts it reports.
   public func enqueue(
     json: String,
     model: String = "scripted",
@@ -51,10 +68,14 @@ public actor ScriptedClaudeClient: ClaudeClient {
     )
   }
 
+  /// Sets how long each later call waits before it is answered.
   public func setDelay(_ delay: Duration) {
     self.delay = delay
   }
 
+  /// Records the call, waits out `delay`, and serves the next queued response.
+  ///
+  /// - Throws: The queued error, or a transport error when nothing is queued.
   public func send(
     _ request: MessagesRequest,
     call: CallIdentity,

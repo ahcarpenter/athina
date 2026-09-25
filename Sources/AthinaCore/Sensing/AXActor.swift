@@ -58,9 +58,12 @@ final class RunLoopExecutor: SerialExecutor, @unchecked Sendable {
 /// Global actor for everything that touches the accessibility API.
 @globalActor
 public actor AXActor {
+  /// The one instance the global actor isolates to.
   public static let shared = AXActor()
   static let executor = RunLoopExecutor(name: "athina.accessibility")
 
+  /// The dedicated accessibility thread's executor, so isolated code runs on
+  /// its run loop.
   public nonisolated var unownedExecutor: UnownedSerialExecutor {
     AXActor.executor.asUnownedSerialExecutor()
   }

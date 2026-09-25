@@ -11,6 +11,7 @@ import OSLog
 public actor RecordingClaudeClient: ClaudeClient {
   private static let log = Logger(subsystem: "com.ahcarpenter.athina", category: "recording")
 
+  /// Where each call's fixture file is written.
   public nonisolated let directory: URL
   private let inner: any ClaudeClient
   private let prices: PriceTable
@@ -24,6 +25,13 @@ public actor RecordingClaudeClient: ClaudeClient {
   /// The files written so far this run, oldest first.
   public private(set) var written: [URL] = []
 
+  /// Creates a recorder around `inner`.
+  ///
+  /// - Parameters:
+  ///   - inner: The client that makes the call, the live one behind `--record`.
+  ///   - directory: Where the fixture files go.
+  ///   - prices: What each fixture's estimated cost is priced from.
+  ///   - clock: What each recording is stamped and timed with.
   public init(
     wrapping inner: any ClaudeClient,
     directory: URL,
@@ -36,6 +44,12 @@ public actor RecordingClaudeClient: ClaudeClient {
     self.clock = clock
   }
 
+  /// Sends the call through the wrapped client, writes it as a fixture, and
+  /// returns or throws what the wrapped client did.
+  ///
+  /// A fixture that cannot be written is logged and changes nothing about the
+  /// call. An error other than a `ClaudeClientError` is recorded as a transport
+  /// error but rethrown as it was.
   public func send(
     _ request: MessagesRequest,
     call: CallIdentity,
@@ -92,12 +106,15 @@ public actor RecordingClaudeClient: ClaudeClient {
 /// It is not a replay: the loop reads the key as for any live launch, and each
 /// refused call is journaled as a live error that cost nothing.
 public struct RefusingClaudeClient: ClaudeClient {
+  /// Why nothing can be recorded, which every refused call carries.
   public let reason: String
 
+  /// Creates a client that refuses every call with `reason`.
   public init(reason: String) {
     self.reason = reason
   }
 
+  /// Throws `ClaudeClientError.notSent` with the reason, sending nothing.
   public func send(
     _ request: MessagesRequest,
     call: CallIdentity,
