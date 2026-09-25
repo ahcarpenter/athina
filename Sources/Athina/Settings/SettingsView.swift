@@ -235,7 +235,10 @@ struct CaptureSettings: View {
           step: 64,
           unit: .pixels,
           help:
-            "Frames are scaled down to this size. Smaller frames are cheaper to compare, read, and store."
+            """
+            Frames are scaled down to this size. Smaller frames are cheaper to compare, \
+            read, and store.
+            """
         )
         IntRow(
           "Treat frames as unchanged within",
@@ -244,7 +247,10 @@ struct CaptureSettings: View {
           step: 1,
           unit: .bits,
           help:
-            "A frame this close to the previous one, out of \(PerceptualHash.bitCount) bits of its fingerprint, is dropped unless the window or the focused text changed."
+            """
+            A frame this close to the previous one, out of \(PerceptualHash.bitCount) bits \
+            of its fingerprint, is dropped unless the window or the focused text changed.
+            """
         )
       } header: {
         Text("Frames")
@@ -257,7 +263,10 @@ struct CaptureSettings: View {
         } label: {
           Text("Text recognition")
           Text(
-            "Accurate takes a few hundred milliseconds per frame. Fast is much quicker but finds no text in dark interfaces such as terminals."
+            """
+            Accurate takes a few hundred milliseconds per frame. Fast is much quicker but \
+            finds no text in dark interfaces such as terminals.
+            """
           )
         }
         .pickerStyle(.segmented)
@@ -304,7 +313,10 @@ struct JournalSettings: View {
           step: 50,
           unit: .megabytes,
           help:
-            "The oldest thumbnails, then the oldest text and events, are removed to stay under this size."
+            """
+            The oldest thumbnails, then the oldest text and events, are removed to stay \
+            under this size.
+            """
         )
         NumberRow(
           "Clean up every",
@@ -331,7 +343,11 @@ struct JournalSettings: View {
           LabeledContent("Size", value: Formatting.bytes(stats.usedBytes))
           LabeledContent("Contents") {
             Text(
-              "\(Plural.count(stats.observationCount, "observation", "observations")), \(Plural.count(stats.thumbnailCount, "thumbnail", "thumbnails")), \(Plural.count(stats.eventCount, "event", "events"))"
+              """
+              \(Plural.count(stats.observationCount, "observation", "observations")), \
+              \(Plural.count(stats.thumbnailCount, "thumbnail", "thumbnails")), \
+              \(Plural.count(stats.eventCount, "event", "events"))
+              """
             )
             .multilineTextAlignment(.trailing)
             .fixedSize(horizontal: false, vertical: true)
@@ -363,7 +379,11 @@ struct JournalSettings: View {
       Button("Cancel", role: .cancel) {}
     } message: {
       Text(
-        "Every observation, thumbnail, event, suggestion, follow-up question, and model call record is deleted, along with Athina's understanding of what you are working toward. You can't undo this action."
+        """
+        Every observation, thumbnail, event, suggestion, follow-up question, and model call \
+        record is deleted, along with Athina's understanding of what you are working toward. \
+        You can't undo this action.
+        """
       )
     }
     .task {
@@ -395,14 +415,20 @@ struct PrivacySettings: View {
           Text("Pause shortcut")
           if state.isRunning, !state.hotKeyRegistered {
             StatusLabel(
-              "Another app uses this combination, or it lacks Control, Option, or Command. Choose another.",
+              """
+              Another app uses this combination, or it lacks Control, Option, or Command. \
+              Choose another.
+              """,
               kind: .warning
             )
           }
         }
       } footer: {
         Text(
-          "Pauses and resumes watching from any app. The menu bar icon shows an eye while watching and a crossed-out eye while paused."
+          """
+          Pauses and resumes watching from any app. The menu bar icon shows an eye while \
+          watching and a crossed-out eye while paused.
+          """
         )
       }
       Section {
@@ -428,7 +454,10 @@ struct PrivacySettings: View {
         Text("Excluded apps")
       } footer: {
         Text(
-          "While one of these apps is frontmost, Athina captures nothing, reads no window or element, and journals only that the app was excluded."
+          """
+          While one of these apps is frontmost, Athina captures nothing, reads no window or \
+          element, and journals only that the app was excluded.
+          """
         )
       }
     }

@@ -72,7 +72,10 @@ func names(_ element: AXUIElement) -> [String] {
 func line(_ element: AXUIElement) -> String {
   "\(role(element)) title=\"\(title(element))\" desc=\"\(describe(element))\" "
     + "value=\"\(value(element).prefix(160))\" en=\(text(attr(element, kAXEnabledAttribute))) "
-    + "pos=\(text(attr(element, kAXPositionAttribute))) size=\(text(attr(element, kAXSizeAttribute)))"
+      + """
+      pos=\(text(attr(element, kAXPositionAttribute))) \
+      size=\(text(attr(element, kAXSizeAttribute)))
+      """
 }
 
 func findAll(

@@ -34,9 +34,11 @@ enum Bar {
     for item in BarGeometry.sorted(extras) {
       let target = BarGeometry.centre(of: item.frame)
       say(
-        "extra app=\"\(item.app)\" pid=\(item.pid) title=\"\(item.title)\" "
-          + "x=\(item.frame.minX) y=\(item.frame.minY) w=\(item.frame.width) h=\(item.frame.height) "
-          + "centre=\(Int(target.x)),\(Int(target.y))"
+        """
+        extra app="\(item.app)" pid=\(item.pid) title="\(item.title)" \
+        x=\(item.frame.minX) y=\(item.frame.minY) w=\(item.frame.width) h=\(item.frame.height) \
+        centre=\(Int(target.x)),\(Int(target.y))
+        """
       )
     }
     say("# gaps between neighbouring extras")
@@ -67,7 +69,10 @@ enum Bar {
       say("# menu titles of \(owner.localizedName ?? "?") (pid \(owner.processIdentifier))")
       for item in BarGeometry.sorted(titles) {
         say(
-          "title app=\"\(item.app)\" title=\"\(item.title)\" x=\(item.frame.minX) w=\(item.frame.width)"
+          """
+          title app=\"\(item.app)\" title=\"\(item.title)\" x=\(item.frame.minX) \
+          w=\(item.frame.width)
+          """
         )
       }
     }

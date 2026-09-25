@@ -114,8 +114,11 @@ import Testing
     #expect(decoded.effort(for: .understanding) == nil)
 
     let outOfRange = Data(
-      #"{"understandingTokenBudget": 99999, "understandingIdleGap": 5, "understandingModel": "not-a-model"}"#
-        .utf8
+      #"""
+      {"understandingTokenBudget": 99999, "understandingIdleGap": 5, "understandingModel": \#
+      "not-a-model"}
+      """#
+      .utf8
     )
     let clamped = try JSONDecoder().decode(MentorSettings.self, from: outOfRange)
     #expect(

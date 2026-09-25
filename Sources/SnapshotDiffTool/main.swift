@@ -31,7 +31,10 @@ let report = take("--report")
 
 guard arguments.count == 3, ["compare", "agree", "approve"].contains(arguments[0]) else {
   fail(
-    "usage: snapshot-diff compare|agree|approve <baseline or first render> <render> [--report <dir>]"
+    """
+    usage: snapshot-diff compare|agree|approve \
+    <baseline or first render> <render> [--report <dir>]
+    """
   )
 }
 let command = arguments[0]
@@ -67,7 +70,10 @@ case "approve":
   print(
     comparison.drift.isEmpty
       ? "every snapshot already matches its baseline; nothing to approve"
-      : "approved \(comparison.drift.count) of \(comparison.results.count) snapshots into \(baseline.path)"
+      : """
+      approved \(comparison.drift.count) of \(comparison.results.count) snapshots into \
+      \(baseline.path)
+      """
   )
 
 default:
@@ -99,12 +105,18 @@ default:
     let identical = deltas.filter { $0 == 0 }.count
     let largest = deltas.max() ?? 0
     print(
-      "all \(comparison.results.count) snapshots match (tolerance \(comparison.tolerance)): \(identical) identical, largest channel difference \(largest)"
+      """
+      all \(comparison.results.count) snapshots match (tolerance \(comparison.tolerance)): \
+      \(identical) identical, largest channel difference \(largest)
+      """
     )
     exit(0)
   }
   print(
-    "\(comparison.drift.count) of \(comparison.results.count) snapshots \(comparison.kind.differ) (tolerance \(comparison.tolerance))"
+    """
+    \(comparison.drift.count) of \(comparison.results.count) snapshots \
+    \(comparison.kind.differ) (tolerance \(comparison.tolerance))
+    """
       + (report.map { "; report at \($0)/index.html" } ?? "")
   )
   exit(1)

@@ -26,7 +26,11 @@ public enum SnapshotStatus: Equatable, Sendable {
       diff.largestDelta == 0
         ? "identical" : "within tolerance (largest channel difference \(diff.largestDelta))"
     case .changed(let diff):
-      "\(diff.changedPixels) \(diff.changedPixels == 1 ? "pixel" : "pixels") changed in \(diff.changedBounds.map(String.init(describing:)) ?? "none"), largest channel difference \(diff.largestDelta)"
+      """
+      \(diff.changedPixels) \(diff.changedPixels == 1 ? "pixel" : "pixels") changed in \
+      \(diff.changedBounds.map(String.init(describing:)) ?? "none"), largest channel \
+      difference \(diff.largestDelta)
+      """
     case .resized(let from, let to):
       "size changed from \(from) to \(to)"
     case .added:

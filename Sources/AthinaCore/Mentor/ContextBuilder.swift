@@ -226,36 +226,54 @@ public enum PromptBuilder {
     var lines: [String] = []
     lines.append("Time: \(clock(now))")
     lines.append(
-      "The user is in \(latest.focus.appName), window \"\(latest.focus.windowTitle ?? "untitled")\"."
+      """
+      The user is in \(latest.focus.appName), window \
+      \"\(latest.focus.windowTitle ?? "untitled")\".
+      """
     )
     if let context {
       var line = "The user asked to be mentored while \(context.name)"
       if !context.detail.isEmpty { line += " (\(context.detail))" }
       lines.append(
         line
-          + ", and this moment was placed in that context. Keep the suggestion useful for that work."
+          + """
+          , and this moment was placed in that context. Keep the suggestion useful for that \
+          work.
+          """
       )
     }
     if suppressed.isEmpty {
       lines.append("Suppressed categories for this app: none.")
     } else {
       lines.append(
-        "Suppressed categories for this app (do not raise these): \(suppressed.map(\.rawValue).joined(separator: ", "))."
+        """
+        Suppressed categories for this app (do not raise these): \
+        \(suppressed.map(\.rawValue).joined(separator: ", ")).
+        """
       )
     }
     if hasUnderstanding {
       lines.append(
-        "Your standing understanding is the block above the messages. Judge what they are doing now against it, and rewrite it in updated_understanding."
+        """
+        Your standing understanding is the block above the messages. Judge what they are \
+        doing now against it, and rewrite it in updated_understanding.
+        """
       )
     } else {
       lines.append(
-        "There is no standing understanding yet, so do not raise the three goal categories; write the first one in updated_understanding."
+        """
+        There is no standing understanding yet, so do not raise the three goal categories; \
+        write the first one in updated_understanding.
+        """
       )
     }
     lines.append("Keep updated_understanding within about \(understandingTokenBudget) tokens.")
     if includesImage {
       lines.append(
-        "The attached image is the latest screen, \(latest.frame.width) by \(latest.frame.height) pixels; a region, if you give one, is in those pixels."
+        """
+        The attached image is the latest screen, \(latest.frame.width) by \
+        \(latest.frame.height) pixels; a region, if you give one, is in those pixels.
+        """
       )
     } else {
       lines.append("No screenshot is attached, so leave region null.")
@@ -265,7 +283,10 @@ public enum PromptBuilder {
     lines.append(eventSummary(recentEvents, now: now))
     lines.append("")
     lines.append(
-      "Recent screens, oldest first. Each entry: time, app, window, trigger, accessibility focus, then recognized text."
+      """
+      Recent screens, oldest first. Each entry: time, app, window, trigger, accessibility \
+      focus, then recognized text.
+      """
     )
     if screensLeftOut > 0 { lines.append(leftOutLine(screensLeftOut)) }
     appendWindow(&lines, window: window, markLatest: true)
@@ -277,7 +298,10 @@ public enum PromptBuilder {
   static func leftOutLine(_ count: Int) -> String {
     let noun = count == 1 ? "screen" : "screens"
     return
-      "\(count) older \(noun) from this period did not fit the token budget: left out and not summarized anywhere."
+      """
+      \(count) older \(noun) from this period did not fit the token budget: left out and not \
+      summarized anywhere.
+      """
   }
 
   /// The rolling window rendered oldest first, one block per entry.
@@ -290,7 +314,10 @@ public enum PromptBuilder {
     }
     for (index, entry) in window.enumerated() {
       var header =
-        "--- \(clock(entry.timestamp)) | \(entry.appName) | \"\(entry.windowTitle ?? "untitled")\" | \(entry.reason.label)"
+        """
+        --- \(clock(entry.timestamp)) | \(entry.appName) | \
+        \"\(entry.windowTitle ?? "untitled")\" | \(entry.reason.label)
+        """
       if markLatest, index == window.count - 1 { header += " | latest" }
       lines.append("")
       lines.append(header)
@@ -321,7 +348,10 @@ public enum PromptBuilder {
     lines.append("")
     if let current, !current.content.isEmpty {
       lines.append(
-        "The record as it stands, written \(age(current.updatedAt, now: now)) as revision \(current.revision):"
+        """
+        The record as it stands, written \(age(current.updatedAt, now: now)) as revision \
+        \(current.revision):
+        """
       )
       lines.append(current.content.promptBlock)
     } else {
@@ -337,7 +367,10 @@ public enum PromptBuilder {
     lines.append(eventSummary(recentEvents, now: now))
     lines.append("")
     lines.append(
-      "Screens since then, oldest first. Each entry: time, app, window, trigger, accessibility focus, then recognized text."
+      """
+      Screens since then, oldest first. Each entry: time, app, window, trigger, \
+      accessibility focus, then recognized text.
+      """
     )
     if screensLeftOut > 0 { lines.append(leftOutLine(screensLeftOut)) }
     appendWindow(&lines, window: window, markLatest: false)
@@ -358,7 +391,11 @@ public enum PromptBuilder {
     lines.append("Time: \(clock(now))")
     let window = suggestion.windowTitle.map { ", window \"\($0)\"" } ?? ""
     lines.append(
-      "Your suggestion, made \(age(suggestion.timestamp, now: now)) in \(suggestion.appName)\(window) (\(suggestion.category.rawValue), confidence \(Int((suggestion.confidence * 100).rounded()))%):"
+      """
+      Your suggestion, made \(age(suggestion.timestamp, now: now)) in \
+      \(suggestion.appName)\(window) (\(suggestion.category.rawValue), confidence \
+      \(Int((suggestion.confidence * 100).rounded()))%):
+      """
     )
     lines.append("Title: \(suggestion.title)")
     lines.append("Body: \(suggestion.body)")
@@ -370,7 +407,10 @@ public enum PromptBuilder {
     if let screenText, !screenText.isEmpty {
       let cut = screenText.count > triageTextLimit
       lines.append(
-        "Recognized text of the screen the suggestion was made from (top to bottom\(cut ? ", first \(triageTextLimit) characters" : "")):"
+        """
+        Recognized text of the screen the suggestion was made from (top to \
+        bottom\(cut ? ", first \(triageTextLimit) characters" : "")):
+        """
       )
       lines.append(cut ? String(screenText.prefix(triageTextLimit)) : screenText)
     } else {
@@ -395,7 +435,10 @@ public enum PromptBuilder {
     return suggestions.prefix(eventLimit).map { suggestion in
       let answer = suggestion.feedback?.label.lowercased() ?? "no answer yet"
       return
-        "- \(age(suggestion.timestamp, now: now)) in \(suggestion.appName): [\(suggestion.category.rawValue)] \(suggestion.title) (\(answer))"
+        """
+        - \(age(suggestion.timestamp, now: now)) in \(suggestion.appName): \
+        [\(suggestion.category.rawValue)] \(suggestion.title) (\(answer))
+        """
     }.joined(separator: "\n")
   }
 

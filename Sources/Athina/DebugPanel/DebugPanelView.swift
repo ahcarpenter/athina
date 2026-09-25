@@ -97,7 +97,10 @@ private struct DebugStatusBar: View {
         LabeledValue(
           label: "Spend",
           value:
-            "\(Formatting.dollars(state.mentorStatus.spendThisHour)) / \(Formatting.dollars(state.settings.mentor.hourlySpendCap))"
+            """
+            \(Formatting.dollars(state.mentorStatus.spendThisHour)) / \
+            \(Formatting.dollars(state.settings.mentor.hourlySpendCap))
+            """
         )
       }
       if let resources = state.resources {
@@ -292,7 +295,10 @@ private struct NowPane: View {
             if let value = focus.focusedValue, !value.isEmpty {
               VStack(alignment: .leading, spacing: 3) {
                 Text(
-                  "Value · \(Plural.count(focus.focusedValueLength ?? value.count, "char", "chars"))"
+                  """
+                  Value · \
+                  \(Plural.count(focus.focusedValueLength ?? value.count, "char", "chars"))
+                  """
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -357,7 +363,10 @@ private struct NowPane: View {
             Field(
               label: "Rows",
               value:
-                "\(stats.observationCount) observations, \(stats.thumbnailCount) thumbnails, \(stats.eventCount) events"
+                """
+                \(stats.observationCount) observations, \(stats.thumbnailCount) thumbnails, \
+                \(stats.eventCount) events
+                """
             )
             if let oldest = stats.oldest {
               Field(label: "Oldest", value: oldest.formatted(date: .abbreviated, time: .shortened))
@@ -451,7 +460,10 @@ private struct FramePane: View {
             Text(isLive ? "Latest frame" : "Observation #\(observation.id)")
               .font(.headline)
             Text(
-              "\(Formatting.clockTime(observation.timestamp)) · \(observation.reason.label) · \(observation.frame.width)×\(observation.frame.height)"
+              """
+              \(Formatting.clockTime(observation.timestamp)) · \(observation.reason.label) · \
+              \(observation.frame.width)×\(observation.frame.height)
+              """
             )
             .foregroundStyle(.secondary)
             .font(.callout)
@@ -870,7 +882,10 @@ private struct MentorCard: View {
       if summary.staleCount > 0 {
         let versions = summary.staleVersions.map { "v\($0)" }.joined(separator: ", ")
         fixtures +=
-          "\n\(summary.staleCount) stale, from prompt \(versions) (now v\(summary.promptVersion)), \(summary.allowStale ? "served anyway" : "refused")"
+          """
+          \n\(summary.staleCount) stale, from prompt \(versions) (now \
+          v\(summary.promptVersion)), \(summary.allowStale ? "served anyway" : "refused")
+          """
       }
       return [
         ModeField(label: "Calls", value: "replayed, never sent or billed"),
@@ -991,12 +1006,15 @@ private struct MentorCard: View {
   private func describe(_ record: ModelCallRecord?, now: Date) -> String {
     guard let record else { return "none yet" }
     let model = ModelCatalog.displayName(for: record.model)
-    var text =
-      "\(record.outcome.label) \(Formatting.age(record.timestamp, now: now)), \(record.replayed ? "replay of \(model)" : model), "
-    text +=
-      "\(Formatting.tokens(record.usage.totalInputTokens)) in (\(Formatting.tokens(record.usage.cacheReadInputTokens)) cached), \(Formatting.tokens(record.usage.outputTokens)) out, "
-    text +=
-      "\(record.replayed ? Formatting.unbroken("not billed") : Formatting.dollars(record.cost)), \(Formatting.seconds(record.latency))"
+    var text = """
+      \(record.outcome.label) \(Formatting.age(record.timestamp, now: now)), \
+      \(record.replayed ? "replay of \(model)" : model), \
+      \(Formatting.tokens(record.usage.totalInputTokens)) in \
+      (\(Formatting.tokens(record.usage.cacheReadInputTokens)) cached), \
+      \(Formatting.tokens(record.usage.outputTokens)) out, \
+      \(record.replayed ? Formatting.unbroken("not billed") : Formatting.dollars(record.cost)), \
+      \(Formatting.seconds(record.latency))
+      """
     if let detail = record.detail, !detail.isEmpty { text += "\n\(detail)" }
     return text
   }
@@ -1006,7 +1024,11 @@ private struct MentorCard: View {
     let status = state.mentorStatus
     let rollover = Formatting.countdown(to: SpendMeter.nextHourStart(after: now), now: now)
     return
-      "\(Formatting.dollars(status.spendThisHour)) of \(Formatting.dollars(state.settings.mentor.hourlySpendCap)) this hour over \(Plural.count(status.callsThisHour, "call", "calls")), hour rolls over \(rollover)"
+      """
+      \(Formatting.dollars(status.spendThisHour)) of \
+      \(Formatting.dollars(state.settings.mentor.hourlySpendCap)) this hour over \
+      \(Plural.count(status.callsThisHour, "call", "calls")), hour rolls over \(rollover)
+      """
   }
 
   private func cadence(now: Date) -> String {
@@ -1052,7 +1074,10 @@ private struct TalkBackField: View {
     .controlSize(.small)
     .padding(.top, 2)
     .help(
-      "Sends these words the way releasing the talk-back shortcut sends what you said, to the toast that is up or the last suggestion."
+      """
+      Sends these words the way releasing the talk-back shortcut sends what you said, to the \
+      toast that is up or the last suggestion.
+      """
     )
   }
 
@@ -1102,14 +1127,21 @@ private struct ClockAdvanceField: View {
     .font(.callout)
     .controlSize(.small)
     .help(
-      "Moves the replay's clock ahead at once, as if that much time went by with the Mac awake in the mode Athina is in: waits due in it end, and while watching it counts as active use."
+      """
+      Moves the replay's clock ahead at once, as if that much time went by with the Mac \
+      awake in the mode Athina is in: waits due in it end, and while watching it counts as \
+      active use.
+      """
     )
   }
 
   private func advance() {
     guard let seconds, state.advanceClock(by: seconds) else {
       refusal =
-        "Type an interval such as 90s, 15m, 2h, or 1d, up to \(ClockInterval.description(of: ClockMode.maxAdvance))."
+        """
+        Type an interval such as 90s, 15m, 2h, or 1d, up to \
+        \(ClockInterval.description(of: ClockMode.maxAdvance)).
+        """
       return
     }
     text = ""
@@ -1214,7 +1246,11 @@ private struct CallLogRow: View {
     }
     line += ", " + Formatting.unbroken("\(Formatting.tokens(call.usage.outputTokens)) out")
     line +=
-      ", \(call.replayed ? Formatting.unbroken("not billed") : Formatting.dollars(call.cost)), \(Formatting.seconds(call.latency))"
+      """
+      , \
+      \(call.replayed ? Formatting.unbroken("not billed") : Formatting.dollars(call.cost)), \
+      \(Formatting.seconds(call.latency))
+      """
     var prompt =
       "prompt " + Formatting.unbroken("\(Formatting.tokens(call.promptCharacters)) chars")
     if call.imageBytes > 0 {

@@ -251,7 +251,8 @@ public actor Journal {
     do {
       try db.run(
         """
-        INSERT INTO observations (timestamp, bundle_id, app_name, window_title, ax_summary, focus_json,
+        INSERT INTO observations (timestamp, bundle_id, app_name, window_title, ax_summary, \
+        focus_json,
             ocr_text, text_blocks_json, frame_hash, frame_width, frame_height, display_id,
             screen_x, screen_y, screen_w, screen_h, reason)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -325,8 +326,10 @@ public actor Journal {
     }
     try db.run(
       """
-      INSERT INTO suggestions (timestamp, bundle_id, app_name, window_title, category, title, body, explanation,
-          confidence, judged_goal, observation_id, model, prompt_version, feedback, feedback_at, region_json,
+      INSERT INTO suggestions (timestamp, bundle_id, app_name, window_title, category, title, \
+      body, explanation,
+          confidence, judged_goal, observation_id, model, prompt_version, feedback, \
+      feedback_at, region_json,
           callout_shown)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       """,
@@ -387,7 +390,8 @@ public actor Journal {
   public func record(_ followUp: FollowUp) throws -> FollowUp {
     try db.run(
       """
-      INSERT INTO follow_ups (suggestion_id, timestamp, question, answer, error, model, prompt_version)
+      INSERT INTO follow_ups (suggestion_id, timestamp, question, answer, error, model, \
+      prompt_version)
       VALUES (?, ?, ?, ?, ?, ?, ?)
       """,
       [
@@ -408,7 +412,10 @@ public actor Journal {
   /// The exchange about one suggestion, oldest first.
   public func followUps(suggestionID: Int64) throws -> [FollowUp] {
     try db.query(
-      "SELECT \(Journal.followUpColumns) FROM follow_ups WHERE suggestion_id = ? ORDER BY timestamp ASC, id ASC",
+      """
+      SELECT \(Journal.followUpColumns) FROM follow_ups WHERE suggestion_id = ? ORDER BY \
+      timestamp ASC, id ASC
+      """,
       [.int(suggestionID)]
     ) { Journal.followUp(from: $0) }
   }
@@ -431,7 +438,10 @@ public actor Journal {
   /// Newest first.
   public func recentSuggestions(limit: Int) throws -> [Suggestion] {
     try db.query(
-      "SELECT \(Journal.suggestionColumns) FROM suggestions ORDER BY timestamp DESC, id DESC LIMIT ?",
+      """
+      SELECT \(Journal.suggestionColumns) FROM suggestions ORDER BY timestamp DESC, id DESC \
+      LIMIT ?
+      """,
       [.int(Int64(limit))]
     ) { Journal.suggestion(from: $0) }
   }
@@ -443,8 +453,10 @@ public actor Journal {
   public func record(_ call: ModelCallRecord) throws -> ModelCallRecord {
     try db.run(
       """
-      INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars, image_bytes, input_tokens,
-          output_tokens, cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail, replayed)
+      INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars, \
+      image_bytes, input_tokens,
+          output_tokens, cache_write_tokens, cache_read_tokens, cost, latency, outcome, \
+      detail, replayed)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       """,
       [
@@ -473,7 +485,10 @@ public actor Journal {
   /// Newest first.
   public func recentModelCalls(limit: Int) throws -> [ModelCallRecord] {
     try db.query(
-      "SELECT \(Journal.modelCallColumns) FROM model_calls ORDER BY timestamp DESC, id DESC LIMIT ?",
+      """
+      SELECT \(Journal.modelCallColumns) FROM model_calls ORDER BY timestamp DESC, id DESC \
+      LIMIT ?
+      """,
       [.int(Int64(limit))]
     ) { Journal.modelCall(from: $0) }
   }
@@ -481,7 +496,10 @@ public actor Journal {
   /// Calls at or after `since`, oldest first, for seeding the hour's spend.
   public func modelCalls(since: Date) throws -> [ModelCallRecord] {
     try db.query(
-      "SELECT \(Journal.modelCallColumns) FROM model_calls WHERE timestamp >= ? ORDER BY timestamp ASC, id ASC",
+      """
+      SELECT \(Journal.modelCallColumns) FROM model_calls WHERE timestamp >= ? ORDER BY \
+      timestamp ASC, id ASC
+      """,
       [.double(since.timeIntervalSince1970)]
     ) { Journal.modelCall(from: $0) }
   }
@@ -530,9 +548,11 @@ public actor Journal {
     try db.query(
       """
       SELECT \(Journal.understandingColumns) FROM (
-          SELECT \(Journal.understandingColumns) FROM understanding ORDER BY updated_at DESC, id DESC LIMIT 1
+          SELECT \(Journal.understandingColumns) FROM understanding ORDER BY updated_at DESC, \
+      id DESC LIMIT 1
       ) AS latest
-      WHERE NOT EXISTS (SELECT 1 FROM events WHERE kind = ? AND events.timestamp > latest.updated_at)
+      WHERE NOT EXISTS (SELECT 1 FROM events WHERE kind = ? AND events.timestamp > \
+      latest.updated_at)
       """,
       [.text(JournalEvent.Kind.understanding.rawValue)]
     ) { try self.understanding(from: $0) }.first
@@ -552,7 +572,10 @@ public actor Journal {
       return
     }
     try db.run(
-      "INSERT OR REPLACE INTO refresh_period (id, started_at, active_use, counted_at) VALUES (1, ?, ?, ?)",
+      """
+      INSERT OR REPLACE INTO refresh_period (id, started_at, active_use, counted_at) VALUES \
+      (1, ?, ?, ?)
+      """,
       [
         .double(period.startedAt.timeIntervalSince1970),
         .double(period.activeUse),
@@ -604,7 +627,10 @@ public actor Journal {
     limit: Int
   ) throws -> [ActivityObservation] {
     try db.query(
-      "SELECT \(Journal.observationColumns) FROM observations WHERE timestamp >= ? OR id > ? ORDER BY timestamp DESC, id DESC LIMIT ?",
+      """
+      SELECT \(Journal.observationColumns) FROM observations WHERE timestamp >= ? OR id > ? \
+      ORDER BY timestamp DESC, id DESC LIMIT ?
+      """,
       [
         since.map { .double($0.timeIntervalSince1970) } ?? .null,
         cursor.map(Value.int) ?? .null,
@@ -634,7 +660,10 @@ public actor Journal {
   /// Newest first, without thumbnail bytes.
   public func recentObservations(limit: Int) throws -> [ActivityObservation] {
     try db.query(
-      "SELECT \(Journal.observationColumns) FROM observations ORDER BY timestamp DESC, id DESC LIMIT ?",
+      """
+      SELECT \(Journal.observationColumns) FROM observations ORDER BY timestamp DESC, id \
+      DESC LIMIT ?
+      """,
       [.int(Int64(limit))]
     ) { try self.observation(from: $0) }
   }
@@ -642,7 +671,10 @@ public actor Journal {
   /// Returns the newest `limit` events, newest first.
   public func recentEvents(limit: Int) throws -> [JournalEvent] {
     try db.query(
-      "SELECT id, timestamp, kind, bundle_id, app_name, detail FROM events ORDER BY timestamp DESC, id DESC LIMIT ?",
+      """
+      SELECT id, timestamp, kind, bundle_id, app_name, detail FROM events ORDER BY timestamp \
+      DESC, id DESC LIMIT ?
+      """,
       [.int(Int64(limit))]
     ) { row in
       JournalEvent(
@@ -659,7 +691,10 @@ public actor Journal {
   /// Observations at or after `since`, oldest first, without thumbnail bytes.
   public func observations(since: Date, limit: Int) throws -> [ActivityObservation] {
     try db.query(
-      "SELECT \(Journal.observationColumns) FROM observations WHERE timestamp >= ? ORDER BY timestamp ASC, id ASC LIMIT ?",
+      """
+      SELECT \(Journal.observationColumns) FROM observations WHERE timestamp >= ? ORDER BY \
+      timestamp ASC, id ASC LIMIT ?
+      """,
       [.double(since.timeIntervalSince1970), .int(Int64(limit))]
     ) { try self.observation(from: $0) }
   }
@@ -727,7 +762,11 @@ public actor Journal {
     try db.execute("BEGIN")
     do {
       try db.execute(
-        "DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events; DELETE FROM suggestions; DELETE FROM follow_ups; DELETE FROM model_calls; DELETE FROM understanding; DELETE FROM refresh_period;"
+        """
+        DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events; DELETE FROM \
+        suggestions; DELETE FROM follow_ups; DELETE FROM model_calls; DELETE FROM \
+        understanding; DELETE FROM refresh_period;
+        """
       )
       try db.execute("COMMIT")
     } catch {
@@ -832,8 +871,10 @@ public actor Journal {
     """
 
   private static let suggestionColumns = """
-    id, timestamp, bundle_id, app_name, window_title, category, title, body, explanation, confidence,
-    judged_goal, observation_id, model, prompt_version, feedback, feedback_at, region_json, callout_shown
+    id, timestamp, bundle_id, app_name, window_title, category, title, body, explanation, \
+    confidence,
+    judged_goal, observation_id, model, prompt_version, feedback, feedback_at, region_json, \
+    callout_shown
     """
 
   private static let followUpColumns = """
@@ -880,7 +921,8 @@ public actor Journal {
   }
 
   private static let modelCallColumns = """
-    id, timestamp, tier, model, prompt_version, prompt_chars, image_bytes, input_tokens, output_tokens,
+    id, timestamp, tier, model, prompt_version, prompt_chars, image_bytes, input_tokens, \
+    output_tokens,
     cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail, replayed
     """
 

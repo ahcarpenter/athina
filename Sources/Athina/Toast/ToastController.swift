@@ -425,7 +425,10 @@ struct ToastContent: View {
           VStack(alignment: .leading, spacing: 2) {
             // No system notification chrome names the source, so the toast does.
             Text(
-              "\(Text("Athina").fontWeight(.semibold)) · \(suggestion.category.label) in \(suggestion.appName)"
+              """
+              \(Text("Athina").fontWeight(.semibold)) · \(suggestion.category.label) in \
+              \(suggestion.appName)
+              """
             )
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -510,7 +513,10 @@ struct ToastContent: View {
           .buttonStyle(.borderedProminent)
         Button("Not Now") { onAction(.notNow) }
           .help(
-            "Hide \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName) for a while"
+            """
+            Hide \(suggestion.category.label.lowercased()) suggestions in \
+            \(suggestion.appName) for a while
+            """
           )
         Button("Never for This") { onAction(.never) }
           .help(

@@ -113,7 +113,10 @@ public enum DriveArguments {
     Command(
       name: "ax",
       arguments:
-        "<pid> <dump|texts|menuitems|pressextra|cancelmenu|get|press|pressx|focus|set> [role] [match] [value]",
+        """
+        <pid> <dump|texts|menuitems|pressextra|cancelmenu|get|press|pressx|focus|set> [role] \
+        [match] [value]
+        """,
       summary: "read or press elements through accessibility",
       minimum: 2,
       maximum: 6,
@@ -250,7 +253,10 @@ public enum DriveArguments {
 
     guard positionals.count >= command.minimum, positionals.count <= command.maximum else {
       throw DriveUsageError(
-        "athina-drive \(name): expected \(arity(command)), got \(positionals.count)\n\n\(usage(for: command))"
+        """
+        athina-drive \(name): expected \(arity(command)), got \
+        \(positionals.count)\n\n\(usage(for: command))
+        """
       )
     }
     return DriveInvocation(command: name, positionals: positionals, options: options)

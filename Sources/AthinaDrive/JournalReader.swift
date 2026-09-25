@@ -19,7 +19,10 @@ enum JournalReader {
         say(table)
         say("")
         say(
-          "moments=\(report.moments.count) kept=\(report.kept) dropped=\(report.dropped) pending=\(report.pending)"
+          """
+          moments=\(report.moments.count) kept=\(report.kept) dropped=\(report.dropped) \
+          pending=\(report.pending)
+          """
         )
         return
       }
