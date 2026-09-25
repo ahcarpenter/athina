@@ -78,6 +78,6 @@ extension JSONValue:
   public init(arrayLiteral elements: JSONValue...) { self = .array(elements) }
   /// Creates an object value; a key written twice keeps its last value.
   public init(dictionaryLiteral elements: (String, JSONValue)...) {
-    self = .object(Dictionary(elements, uniquingKeysWith: { _, last in last }))
+    self = .object(Dictionary(elements) { _, last in last })
   }
 }

@@ -248,12 +248,15 @@ import Testing
     try CallFixtureFiles.write(Self.fixture(), to: directory, redacting: "")
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     try Data("{".utf8).write(to: directory.appendingPathComponent("zz-broken.json"))
-    #expect {
-      try CallFixtureFiles.load(from: directory)
-    } throws: { error in
-      guard case ReplayLoadError.unreadableFixture(let name, _) = error else { return false }
-      return name == "zz-broken.json"
-    }
+    #expect(
+      performing: {
+        try CallFixtureFiles.load(from: directory)
+      },
+      throws: { error in
+        guard case ReplayLoadError.unreadableFixture(let name, _) = error else { return false }
+        return name == "zz-broken.json"
+      }
+    )
     #expect(throws: ReplayLoadError.self) {
       try CallFixtureFiles.load(from: directory.appendingPathComponent("missing"))
     }

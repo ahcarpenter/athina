@@ -31,53 +31,63 @@ struct MentorshipContextsSection: View {
 
   var body: some View {
     @Bindable var state = state
-    Section {
-      Toggle(isOn: $state.settings.mentor.onlyMentorInsideContexts) {
-        Text("Only mentor inside these contexts")
-        Text(
-          "Athina stays silent unless it can place what you are doing in one of the contexts below."
-        )
-      }
-      if enforcing, contexts.isEmpty {
-        StatusLabel(
-          "No context is declared, so Athina mentors nowhere. Add a context, or turn this off.",
-          kind: .warning
-        )
-      }
-      if contexts.isEmpty {
-        Text("None yet. Add a context to say what you want mentoring in.")
-          .foregroundStyle(.secondary)
-      } else {
-        ForEach(contexts) { context in
-          ContextRow(context: context) { editing = context }
+    Section(
+      content: {
+        Toggle(isOn: $state.settings.mentor.onlyMentorInsideContexts) {
+          Text("Only mentor inside these contexts")
+          Text(
+            """
+            Athina stays silent unless it can place what you are doing in one of the \
+            contexts below.
+            """
+          )
         }
-      }
-      LabeledContent {
-        Button("Add Context…") {
-          editing = MentorshipContext(name: "")
+        if enforcing, contexts.isEmpty {
+          StatusLabel(
+            "No context is declared, so Athina mentors nowhere. Add a context, or turn this off.",
+            kind: .warning
+          )
         }
-        .disabled(atCap)
-        .accessibilityIdentifier("contexts.addContext")
-      } label: {
-        if atCap {
-          Text("That is all \(ContextRules.maxContexts) contexts. Remove one to add another.")
+        if contexts.isEmpty {
+          Text("None yet. Add a context to say what you want mentoring in.")
             .foregroundStyle(.secondary)
+        } else {
+          ForEach(contexts) { context in
+            ContextRow(context: context) { editing = context }
+          }
         }
+        LabeledContent(
+          content: {
+            Button("Add Context…") {
+              editing = MentorshipContext(name: "")
+            }
+            .disabled(atCap)
+            .accessibilityIdentifier("contexts.addContext")
+          },
+          label: {
+            if atCap {
+              Text("That is all \(ContextRules.maxContexts) contexts. Remove one to add another.")
+                .foregroundStyle(.secondary)
+            }
+          }
+        )
+      },
+      header: {
+        Text("Mentorship contexts")
+      },
+      footer: {
+        // The link opens the Privacy pane in place rather than describing where it is.
+        Text(
+          settingsMarkdown:
+            """
+            Triage places each moment in one of your contexts as part of the judgment it \
+            already makes, so contexts cost no extra call. To keep an app from being looked at \
+            at all, exclude it in \(SettingsPane.privacy.link("Privacy settings")).
+            """
+        )
+        .settingsPaneLinks()
       }
-    } header: {
-      Text("Mentorship contexts")
-    } footer: {
-      // The link opens the Privacy pane in place rather than describing where it is.
-      Text(
-        settingsMarkdown:
-          """
-          Triage places each moment in one of your contexts as part of the judgment it \
-          already makes, so contexts cost no extra call. To keep an app from being looked at \
-          at all, exclude it in \(SettingsPane.privacy.link("Privacy settings")).
-          """
-      )
-      .settingsPaneLinks()
-    }
+    )
     .sheet(item: $editing) { context in
       ContextEditor(context: context, existing: contexts) { edited in
         commit(edited)
@@ -105,26 +115,32 @@ private struct ContextRow: View {
   let onEdit: () -> Void
 
   var body: some View {
-    LabeledContent {
-      HStack(spacing: 8) {
-        Button("Edit…", action: onEdit)
-          .accessibilityLabel("Edit \(context.name)")
-        RemoveButton(itemName: context.name) {
-          state.settings.mentor.contexts.removeAll { $0.id == context.id }
+    LabeledContent(
+      content: {
+        HStack(spacing: 8) {
+          Button("Edit…", action: onEdit)
+            .accessibilityLabel("Edit \(context.name)")
+          RemoveButton(itemName: context.name) {
+            state.settings.mentor.contexts.removeAll { $0.id == context.id }
+          }
         }
+      },
+      label: {
+        Label(
+          title: {
+            Text(context.name)
+            if !context.detail.isEmpty {
+              Text(context.detail)
+            }
+          },
+          icon: {
+            Image(systemName: "target")
+              .foregroundStyle(.tint)
+              .accessibilityHidden(true)
+          }
+        )
       }
-    } label: {
-      Label {
-        Text(context.name)
-        if !context.detail.isEmpty {
-          Text(context.detail)
-        }
-      } icon: {
-        Image(systemName: "target")
-          .foregroundStyle(.tint)
-          .accessibilityHidden(true)
-      }
-    }
+    )
   }
 }
 
@@ -173,48 +189,52 @@ struct ContextEditor: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       Form {
-        Section {
-          TextField("Name", text: $draft.name, prompt: Text("building web apps"))
-            .accessibilityIdentifier("contextEditor.name")
-            .onSubmit(save)
-            .onChange(of: draft.name) { _, typed in
-              draft.name = ContextRules.capped(typed, to: MentorshipContext.maxNameLength)
+        Section(
+          content: {
+            TextField("Name", text: $draft.name, prompt: Text("building web apps"))
+              .accessibilityIdentifier("contextEditor.name")
+              .onSubmit(save)
+              .onChange(of: draft.name) { _, typed in
+                draft.name = ContextRules.capped(typed, to: MentorshipContext.maxNameLength)
+              }
+            if isDuplicate {
+              StatusLabel(
+                "Another context is already called \"\(trimmedName)\". Choose a different name.",
+                kind: .warning
+              )
+            } else if nameAtLimit {
+              Text("A name can be at most \(MentorshipContext.maxNameLength) characters.")
+                .foregroundStyle(.secondary)
             }
-          if isDuplicate {
-            StatusLabel(
-              "Another context is already called \"\(trimmedName)\". Choose a different name.",
-              kind: .warning
+            TextField(
+              "What it covers",
+              text: $draft.detail,
+              prompt: Text("Optional. React and TypeScript work in the editor and the browser."),
+              axis: .vertical
             )
-          } else if nameAtLimit {
-            Text("A name can be at most \(MentorshipContext.maxNameLength) characters.")
-              .foregroundStyle(.secondary)
+            .lineLimit(2...4)
+            .onChange(of: draft.detail) { _, typed in
+              draft.detail = ContextRules.capped(typed, to: MentorshipContext.maxDetailLength)
+            }
+            if detailAtLimit {
+              Text("A description can be at most \(MentorshipContext.maxDetailLength) characters.")
+                .foregroundStyle(.secondary)
+            }
+          },
+          header: {
+            Text(isNew ? "New Context" : "Edit Context")
+              .font(.headline)
+              .foregroundStyle(.primary)
+          },
+          footer: {
+            Text(
+              """
+              A short name in your own words, and optionally a sentence saying what counts. \
+              Both go to the triage model, which answers with this name when it places you here.
+              """
+            )
           }
-          TextField(
-            "What it covers",
-            text: $draft.detail,
-            prompt: Text("Optional. React and TypeScript work in the editor and the browser."),
-            axis: .vertical
-          )
-          .lineLimit(2...4)
-          .onChange(of: draft.detail) { _, typed in
-            draft.detail = ContextRules.capped(typed, to: MentorshipContext.maxDetailLength)
-          }
-          if detailAtLimit {
-            Text("A description can be at most \(MentorshipContext.maxDetailLength) characters.")
-              .foregroundStyle(.secondary)
-          }
-        } header: {
-          Text(isNew ? "New Context" : "Edit Context")
-            .font(.headline)
-            .foregroundStyle(.primary)
-        } footer: {
-          Text(
-            """
-            A short name in your own words, and optionally a sentence saying what counts. \
-            Both go to the triage model, which answers with this name when it places you here.
-            """
-          )
-        }
+        )
       }
       .formStyle(.grouped)
       .scrollDisabled(true)

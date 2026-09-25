@@ -66,15 +66,18 @@ struct HotKeyRecorder: View {
           Button("Clear") { hotKey = nil }
             .accessibilityLabel("Clear \(title.lowercased())")
         }
-        Button {
-          isRecording ? stop() : start()
-        } label: {
-          Text(isRecording ? "Type Shortcut" : (hotKey?.displayString ?? placeholder))
-            .foregroundStyle(
-              hotKey == nil && !isRecording ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)
-            )
-            .frame(minWidth: 96)
-        }
+        Button(
+          action: {
+            isRecording ? stop() : start()
+          },
+          label: {
+            Text(isRecording ? "Type Shortcut" : (hotKey?.displayString ?? placeholder))
+              .foregroundStyle(
+                hotKey == nil && !isRecording ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)
+              )
+              .frame(minWidth: 96)
+          }
+        )
         .buttonStyle(.bordered)
         .tint(isRecording ? .accentColor : nil)
         .accessibilityLabel(title)

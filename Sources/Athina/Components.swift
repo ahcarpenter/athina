@@ -29,24 +29,30 @@ struct StatusLabel: View {
   }
 
   var body: some View {
-    Label {
-      Text(text)
-        .foregroundStyle(
-          kind == .success || kind == .info ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)
-        )
-        .fixedSize(horizontal: false, vertical: true)
-    } icon: {
-      switch kind {
-      case .success:
-        Image(systemName: kind.symbol).symbolRenderingMode(.palette).foregroundStyle(.white, .green)
-      case .warning:
-        Image(systemName: kind.symbol).symbolRenderingMode(.multicolor)
-      case .error:
-        Image(systemName: kind.symbol).symbolRenderingMode(.palette).foregroundStyle(.white, .red)
-      case .info:
-        Image(systemName: kind.symbol).foregroundStyle(.secondary)
+    Label(
+      title: {
+        Text(text)
+          .foregroundStyle(
+            kind == .success || kind == .info ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)
+          )
+          .fixedSize(horizontal: false, vertical: true)
+      },
+      icon: {
+        switch kind {
+        case .success:
+          Image(systemName: kind.symbol).symbolRenderingMode(.palette).foregroundStyle(
+            .white,
+            .green
+          )
+        case .warning:
+          Image(systemName: kind.symbol).symbolRenderingMode(.multicolor)
+        case .error:
+          Image(systemName: kind.symbol).symbolRenderingMode(.palette).foregroundStyle(.white, .red)
+        case .info:
+          Image(systemName: kind.symbol).foregroundStyle(.secondary)
+        }
       }
-    }
+    )
   }
 }
 

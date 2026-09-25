@@ -31,12 +31,11 @@ struct DebugPanelView: View {
           observation: selected?.observation ?? state.latestObservation,
           image: selected?.image ?? (selected == nil ? state.latestImage : nil),
           isLive: selected == nil,
-          showBoxes: $showOCRBoxes,
-          onBackToLive: {
-            selected = nil
-            selectedEntryID = nil
-          }
-        )
+          showBoxes: $showOCRBoxes
+        ) {
+          selected = nil
+          selectedEntryID = nil
+        }
         .frame(maxWidth: .infinity)
         Divider()
         TimelinePane(selectedID: $selectedEntryID, page: $sidePage)
@@ -248,11 +247,14 @@ private struct NowPane: View {
               }
             }
             if focus.isExcluded {
-              Label {
-                Text("Excluded: nothing is read or captured here")
-              } icon: {
-                Image(systemName: "hand.raised.fill").foregroundStyle(.purple)
-              }
+              Label(
+                title: {
+                  Text("Excluded: nothing is read or captured here")
+                },
+                icon: {
+                  Image(systemName: "hand.raised.fill").foregroundStyle(.purple)
+                }
+              )
               .font(.callout)
             } else if !focus.accessibilityAvailable {
               StatusLabel("Accessibility is unavailable for this app", kind: .warning)
@@ -404,17 +406,20 @@ struct Card<Content: View>: View {
   @ViewBuilder let content: Content
 
   var body: some View {
-    GroupBox {
-      VStack(alignment: .leading, spacing: 8) {
-        content
+    GroupBox(
+      content: {
+        VStack(alignment: .leading, spacing: 8) {
+          content
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(4)
+      },
+      label: {
+        Text(title)
+          .font(.headline)
+          .accessibilityAddTraits(.isHeader)
       }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(4)
-    } label: {
-      Text(title)
-        .font(.headline)
-        .accessibilityAddTraits(.isHeader)
-    }
+    )
   }
 }
 
