@@ -1,5 +1,34 @@
 # no-mistakes repository configuration (read from the default branch).
-# The test step runs this exact command instead of having an agent derive
-# scenarios against the built app, which needs permissions no runner has.
+# The test step runs these exact commands instead of having an agent derive
+# scenarios against the built app, which needs permissions no runner has:
+# the tests, then the UI smoke set drawn at HEAD and at main on this Mac and
+# compared (README "UI snapshot smoke test").
 commands:
-  test: "swift test"
+  test: "swift test && make ui-snapshots-smoke-local"
+# test.instructions steers the agent-driven evidence pass that follows it.
+test:
+  instructions: |
+    Hard rule: never run the Xcode project steps (make xcodeproj, make
+    xcode-build, make xcode-archive, or xcodebuild on the generated project),
+    the full ui-snapshots gate (scripts/snapshots.sh gate, `Athina
+    --snapshot`), or either approve command (make snapshots-approve, make
+    snapshots-smoke-approve, which change the references) in this
+    validation. CI's ui-snapshots and ui-snapshots-smoke jobs prove those.
+
+    The test command ends with make ui-snapshots-smoke-local, whose summary
+    (build/snapshots-smoke-local/summary.md) lists every UI smoke screen the
+    change altered, added or removed against main, drawn on this Mac, with
+    the base, new and difference images of each. Read it and explain each
+    screen in your evidence: a changed screen the change did not intend is
+    a finding.
+
+    Standing Athina up for evidence (README "End-to-end harness" and
+    "Iterating without the network"):
+    - Use the development build (`make build`, build/Athina.app).
+    - Replays only: never a live launch and never a live model call, which
+      spends the owner's API credits. Never `make run` or `make record`.
+    - Drive it with the e2e harness, `scripts/e2e/athina-e2e run <scenario>`
+      (`list` names them), preferring API-tier scenarios. Screen-tier
+      scenarios take the shared screen lock per run and wait for idle input,
+      because the owner may be using the Mac; call the harness bare, never
+      wrapped in lockf.

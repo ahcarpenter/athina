@@ -57,6 +57,7 @@ make fixture-status   # checks that the committed fixtures are current (fails wh
 make test             # runs the unit tests (swift test), the loop included, with no network
 make snapshots-approve # makes the baselines match the renders CI made of HEAD, after an intended UI change
 make ui-snapshots-smoke # the UI smoke test: every snapshot drawn in process with swift-snapshot-testing and compared with the runner's references
+make ui-snapshots-smoke-local # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported, as local validation runs it
 make snapshots-smoke-approve # makes the smoke test's references match the set CI made of HEAD, after an intended UI change
 make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 make release          # builds, signs, notarizes, and packages a direct-download release into build/release (see Releasing)
@@ -1980,6 +1981,12 @@ creates it if it is gone). It requires each check from GitHub Actions itself
 one, and it does not require a branch to be up to date with main, so a pull
 request is not rerun each time another merges.
 
+Local validation, the no-mistakes pipeline a change goes through before its
+pull request, never runs the Xcode project steps, the full `ui-snapshots` gate
+or either approve command, which only CI proves, and compares the UI smoke set
+with main's on the Mac itself (see UI snapshot smoke test);
+`test.instructions` in `.no-mistakes.yaml` carries that rule to its test step.
+
 No test waits on real time (see A faster clock). The tests
 exercise the pure parts
 (hashing, cadence, journal, retention and its in-place migration, settings, the
@@ -2130,15 +2137,15 @@ Its pictures leave out what only the window server composites: Liquid Glass
 and materials are not drawn, so a toast shows its words and controls on the
 plain window background, and what sits on glass can take another colour or,
 like the toast's button bezels, close button and microphone in light mode,
-not show at all. Scroll bars follow the runner's own setting, which hides
-them. It catches a changed
+not show at all. Scroll bars are always shown, as on the runner, whatever the
+Mac is set to. It catches a changed
 layout, text, colour, control or state; how glass looks is `ui-snapshots`' to
 check. A pixel matches when it is within 2 Delta E of the reference (a
 perceptual precision of 98 percent), the difference the eye cannot see, which
 covers anti-aliasing and nothing a person would notice. A render reads the same
 on every run for the reasons a `--snapshot` render does (see UI snapshot
-baselines), with the test setting UTC itself and the runner's US English
-locale: a fixed clock, animations and Core Animation's clock stopped, a window
+baselines), in UTC and the runner's US English locale, drawn at the runner's
+1x scale whatever the display's: a fixed clock, animations and Core Animation's clock stopped, a window
 with a fixed backdrop, and captures until two in a row agree, in fresh windows
 until two agree. A window drawn in process is drawn as its layers stand, so
 it skips the wait `--snapshot` gives a fade to end before its first capture.
@@ -2152,11 +2159,11 @@ difference (`difference.png`), or only the render when there is no reference
 yet.
 
 The target and its one dependency sit behind the `UISnapshotsSmoke` package
-trait, which only `make ui-snapshots-smoke` turns on. Without it the target
+trait, which only `make ui-snapshots-smoke` and `make ui-snapshots-smoke-local`
+turn on. Without it the target
 has no tests and no dependencies, so a plain `swift test` (what `make test`
-and every local validation run), `build-and-test`, the app, `make release`
-and the Xcode project never fetch, build or run it, and no snapshot is drawn
-or compared on a developer's Mac unless asked for by name. It is pinned to one release in `Package.swift`, and
+runs), `build-and-test`, the app, `make release` and the Xcode project never
+fetch, build or run it. It is pinned to one release in `Package.swift`, and
 the package's `Package.resolved` is not committed, since a committed one would
 have every build fetch every package it names.
 
@@ -2179,3 +2186,22 @@ display scale draws differently everywhere, so `make ui-snapshots-smoke` on a
 Mac only shows how it would draw. The runner's image and newest Xcode are a
 deliberate refresh here too, approved with the baselines in a commit of their
 own.
+
+**On a Mac, against main.** Since a Mac cannot match the runner's references,
+local validation compares a change with main on the same Mac instead: `make
+ui-snapshots-smoke-local` (`scripts/snapshots.sh smoke-local`) draws the smoke
+set at HEAD and at its merge-base with `origin/main` (or `BASE=<commit>`) and
+compares each pair by the same 98 percent rule. A few details, such as a dark
+switch's knob or a text field laid out a point off, settle one of two ways in
+a process and keep it for every draw there, so the base is drawn in three
+processes and a screen matches when it matches any of them, and a screen that
+matches none is drawn again in up to two fresh processes and is changed only
+when it differs every time. The base's sources come from `git archive` into a
+temporary folder, never a worktree, and its renders are kept in
+`~/Library/Caches/athina-snapshots-smoke/<commit>`, so later runs off the same
+main draw only HEAD. It fails only when a snapshot could not be drawn (the test
+failed, drew a blank picture, or ran past 30 minutes); a changed, added or
+removed screen is a report, in `build/snapshots-smoke-local/summary.md` with
+the base, new and difference images of each, for whoever reads the change to
+judge. A base from before this mode has no set to compare, so HEAD is drawn
+alone. The pixel comparison with the runner's references stays in CI.
