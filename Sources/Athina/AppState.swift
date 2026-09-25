@@ -1,8 +1,8 @@
 import AppKit
 import AthinaCore
+import Foundation
 import OSLog
 import Observation
-import SwiftUI
 
 /// The last callout decision, for the debug panel.
 struct CalloutRecord: Equatable {

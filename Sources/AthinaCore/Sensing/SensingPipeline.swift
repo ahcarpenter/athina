@@ -1,4 +1,3 @@
-import CoreGraphics
 import Foundation
 
 /// Where the pipeline's senses come from.

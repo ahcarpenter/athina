@@ -1,5 +1,7 @@
 import AppKit
 import AthinaCore
+import CoreGraphics
+import Foundation
 import SwiftUI
 
 /// A pane of the Settings window.

@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import CoreGraphics
 import Foundation
 
 // Shared plumbing for the drive commands: accessibility reads, window lists,

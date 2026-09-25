@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// Reads a push-to-talk transcript as one of the toast's answers, a request

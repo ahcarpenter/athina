@@ -1,5 +1,7 @@
 import AppKit
 import AthinaCore
+import CoreGraphics
+import Foundation
 import ScreenCaptureKit
 import SnapshotDiff
 import SwiftUI

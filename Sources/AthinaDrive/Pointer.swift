@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import AthinaE2E
+import CoreGraphics
 import Foundation
 
 // Real pointer input. Every click here is a HID event, the same kind a hand

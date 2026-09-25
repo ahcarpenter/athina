@@ -1,5 +1,6 @@
 import AppKit
 import AthinaCore
+import Foundation
 import SwiftUI
 
 /// Past suggestions with their feedback, and the full text of the selected one.

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// A summary of what the journal holds: its counts, size on disk, and the time
