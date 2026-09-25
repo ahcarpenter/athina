@@ -24,7 +24,6 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MACOSX_DEPLOYMENT_TARGET: "26.0"
 
 targets:
   Athina App Store:

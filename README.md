@@ -153,10 +153,12 @@ tccutil reset ScreenCapture com.ahcarpenter.athina
 ### A sandboxed build
 
 The same binary can run in the App Sandbox, which a Mac App Store edition
-needs; no such build is made yet. At launch `RuntimeEnvironment` reads the
-process's own `com.apple.security.app-sandbox` entitlement, which the direct
-and development builds carry set to false, so they run exactly as described
-everywhere else in this README. A sandboxed run differs in three ways:
+needs; the Xcode project's `Athina App Store` target builds it, signed with
+`Resources/Athina.app-store.entitlements` (see The Xcode project). At launch
+`RuntimeEnvironment` reads the process's own `com.apple.security.app-sandbox`
+entitlement, which the direct and development builds carry set to false, so
+they run exactly as described everywhere else in this README. A sandboxed run
+differs in three ways:
 
 - Its files are in its container, its preferences domain and its keychain
   service are its own bundle identifier rather than `com.ahcarpenter.athina`
@@ -189,9 +191,10 @@ The project has one target, `Athina App Store`, and a scheme of the same name
 whose Archive action builds Release. It compiles `Sources/Athina` against the
 package's `AthinaCore`, linking the frameworks the package's `Athina` target
 does (a dependency or framework added to one goes in the other too), bundles
-the same icon and menu bar marks `scripts/bundle.sh` does, and signs with `Resources/Athina.app-store.entitlements`
-(the App Sandbox, `network.client`, `device.audio-input` and
-`device.microphone`). Its Info.plist is `Resources/Info.plist` with
+the same icon and menu bar marks `scripts/bundle.sh` does, and signs with
+`Resources/Athina.app-store.entitlements` (the App Sandbox, `network.client`,
+and the microphone keys of both the hardened runtime, `device.audio-input`,
+and the sandbox, `device.microphone`). Its Info.plist is `Resources/Info.plist` with
 `CFBundleIdentifier` rewritten at build time to the target's
 `PRODUCT_BUNDLE_IDENTIFIER`, so the version and every other key are still set
 in one place. That id is set only in `project.yml`, and is the development id
