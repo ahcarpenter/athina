@@ -243,15 +243,40 @@ locate_link() {
 	echo "$link"
 }
 
-# Opens Settings on the pane titled $1. Settings opens on the pane it last
-# showed, and accessibility offers no way to change panes, so the pane is
-# chosen before the window opens; the harness puts the owner's preferences
-# back whatever happens.
+# The title of the Settings window now open, whichever pane it shows, or
+# nothing: the window takes its title from its pane.
+SETTINGS_PANES="General Contexts Models Capture Journal Privacy Advanced"
+settings_window() {
+	local pane
+	for pane in $SETTINGS_PANES; do
+		[ -n "$(window_id "$pane")" ] && { echo "$pane"; return 0; }
+	done
+	return 1
+}
+
+# Opens Settings from the menu and brings it to the pane titled $1 with a real
+# click on that pane's toolbar tab, as a person would. Settings opens on the
+# pane it last showed, which the app keeps to itself once it is running, so the
+# pane is chosen in the window rather than in the preferences beforehand.
 open_settings_on() {
-	local pane="$1" key="$2"
-	defaults write "$PREFS_DOMAIN" SettingsPane "$key" >>"$RUN_DIR/transcript.log" 2>&1 || true
+	local pane="$1" shown="" tab="" i
 	menu_press "Settings…" || { log "the menu offered no Settings… item to press"; return 1; }
-	wait_window "$pane" 20 || { log "Settings never opened on the $pane pane"; return 1; }
+	for i in $(seq 1 40); do
+		shown="$(settings_window)" && break
+		sleep 0.5
+	done
+	[ -n "$shown" ] || { log "Settings never opened"; return 1; }
+	[ "$shown" = "$pane" ] && return 0
+	"$DRIVE" ax "$ATHINA_PID" dump --scope "$shown" >"$RUN_DIR/tabs-$pane-dump.txt" 2>&1 || true
+	tab="$(element_centre "tabs-$pane-dump.txt" AXButton "$pane")"
+	[ -n "$tab" ] || { log "the $shown window showed no $pane tab to click"; return 1; }
+	quiet_moment || return 1
+	"$DRIVE" raise "$ATHINA_PID" "$shown" >>"$RUN_DIR/transcript.log" 2>&1 || true
+	sleep 0.5
+	# shellcheck disable=SC2086
+	real_click window "$ATHINA_PID" $tab --shot "$RUN_DIR/tabs-$pane-click.png" \
+		|| { log "the click on the $pane tab would not land"; return 1; }
+	wait_window "$pane" 10 || { log "Settings never showed the $pane pane"; return 1; }
 }
 
 # Click the link named $2 in the Settings pane titled $1, and check the window
