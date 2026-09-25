@@ -14,12 +14,24 @@ let package = Package(
         // Compares UI snapshot renders with the approved baselines (scripts/snapshots.sh, see README "UI snapshot baselines").
         .executable(name: "snapshot-diff", targets: ["SnapshotDiffTool"]),
     ],
-    // The end-to-end harness's in-app control API (README "The control API"),
-    // off by default: scripts/bundle.sh turns it on for the development bundle,
-    // and the release and App Store builds never do, so their binaries carry
-    // none of it.
     traits: [
+        // The end-to-end harness's in-app control API (README "The control
+        // API"), off by default: scripts/bundle.sh turns it on for the
+        // development bundle, and the release and App Store builds never do,
+        // so their binaries carry none of it.
         .trait(name: "ControlAPI", description: "The in-app control API the end-to-end harness drives a replay through; development builds only"),
+        // Builds the UI smoke test, the one target that uses
+        // swift-snapshot-testing (README "UI snapshot smoke test"). It is off by
+        // default, so the app, `make test` and every other build neither fetch
+        // nor build it; `make ui-snapshots-smoke` turns it on.
+        .trait(name: "UISnapshotsSmoke"),
+    ],
+    dependencies: [
+        // Only for the UI smoke test, and fetched only with its trait on. Pinned
+        // exactly, and no Package.resolved is committed, since a committed one
+        // has every build fetch every package it names; the one product used,
+        // SnapshotTesting, depends on no other package.
+        .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.6"),
     ],
     targets: [
         // The one SQLite call Swift cannot make for itself (see the header).
@@ -88,6 +100,20 @@ let package = Package(
             name: "AthinaCoreTests",
             dependencies: ["AthinaCore"],
             resources: [.copy("Fixtures")]
+        ),
+        .testTarget(
+            // The app target itself, so the test draws the very views and
+            // sample data `--snapshot` draws. Without the trait the target has
+            // no dependencies and no tests, so `swift test` builds nothing of it.
+            name: "UISnapshotsSmokeTests",
+            dependencies: [
+                .target(name: "Athina", condition: .when(traits: ["UISnapshotsSmoke"])),
+                .product(
+                    name: "SnapshotTesting", package: "swift-snapshot-testing",
+                    condition: .when(traits: ["UISnapshotsSmoke"])
+                ),
+            ],
+            exclude: ["__Snapshots__"]
         ),
     ],
     swiftLanguageModes: [.v6]

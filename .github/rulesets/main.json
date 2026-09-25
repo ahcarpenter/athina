@@ -19,7 +19,8 @@
         "do_not_enforce_on_create": false,
         "required_status_checks": [
           { "context": "build-and-test", "integration_id": 15368 },
-          { "context": "ui-snapshots", "integration_id": 15368 }
+          { "context": "ui-snapshots", "integration_id": 15368 },
+          { "context": "ui-snapshots-smoke", "integration_id": 15368 }
         ]
       }
     }

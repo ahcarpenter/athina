@@ -34,19 +34,34 @@ enum Snapshots {
     /// used; renders are compared only with renders made the same way.
     private static let capturesWithScreenCaptureKit = CGPreflightScreenCaptureAccess()
 
-    static func render(to directory: URL) async throws {
-        let arguments = CommandLine.arguments
-        var shard: SnapshotShard?
-        if let index = arguments.firstIndex(of: shardFlag) {
-            guard index + 1 < arguments.count, let parsed = SnapshotShard(parsing: arguments[index + 1]) else {
-                throw SnapshotError.badShard
-            }
-            shard = parsed
+    /// One snapshot: a view, the sample state it shows, and the size of the
+    /// window it is drawn in.
+    struct Spec {
+        let name: String
+        let size: CGSize
+        let view: AnyView
+        let state: AppState
+
+        init(_ name: String, _ size: CGSize, _ view: AnyView, _ state: AppState) {
+            self.name = name
+            self.size = size
+            self.view = view
+            self.state = state
         }
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        print(capturesWithScreenCaptureKit
-            ? "snapshot: capturing each window with ScreenCaptureKit"
-            : "snapshot: no Screen Recording permission, rendering each window's layer tree")
+
+        /// The file a render of it in the appearance is kept in, without its extension.
+        func fileName(in appearance: NSAppearance.Name) -> String {
+            "\(name)-\(appearance == .aqua ? "light" : "dark")"
+        }
+    }
+
+    /// Every snapshot is drawn in both appearances, light first.
+    static let appearances: [NSAppearance.Name] = [.aqua, .darkAqua]
+
+    /// Every snapshot, with its sample data. `--snapshot` renders these and so
+    /// does the UI smoke test (README "UI snapshot smoke test"), so the two
+    /// gates always cover the same states.
+    static func specs() -> [Spec] {
         let state = AppState.sample()
         let replay = AppState.sampleReplay()
         let empty = AppState.sampleEmpty()
@@ -60,51 +75,67 @@ enum Snapshots {
         // Render windows are not held to a display's height, so a pane that
         // scrolls in the Settings window renders whole.
         func whole(_ height: CGFloat) -> CGSize { CGSize(width: SettingsView.paneWidth, height: height) }
-        let specs: [(name: String, size: CGSize, view: AnyView, state: AppState)] = [
-            ("permissions", CGSize(width: 580, height: 780), AnyView(PermissionsView()), state),
-            ("debug-panel", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), state),
-            ("debug-panel-calls", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), state),
-            ("debug-panel-empty", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), empty),
+        return [
+            Spec("permissions", CGSize(width: 580, height: 780), AnyView(PermissionsView()), state),
+            Spec("debug-panel", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), state),
+            Spec("debug-panel-calls", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), state),
+            Spec("debug-panel-empty", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), empty),
             // The Understanding card whole, in each state it can be in.
-            ("understanding-card", card(900), AnyView(SampleUnderstandingCard()), state),
-            ("understanding-card-empty", card(360), AnyView(SampleUnderstandingCard()), noUnderstanding),
-            ("understanding-card-paused", card(900), AnyView(SampleUnderstandingCard()), AppState.sampleUnderstanding(.paused)),
-            ("understanding-card-refreshing", card(900), AnyView(SampleUnderstandingCard()), AppState.sampleUnderstanding(.refreshing)),
-            ("understanding-card-failed", card(900), AnyView(SampleUnderstandingCard()), AppState.sampleUnderstanding(.failed)),
-            ("settings-general", whole(860), AnyView(GeneralSettings().formStyle(.grouped)), state),
-            ("settings-contexts", pane, AnyView(ContextsSettings().formStyle(.grouped)), state),
-            ("settings-contexts-empty", CGSize(width: SettingsView.paneWidth, height: 420), AnyView(ContextsSettings().formStyle(.grouped)), empty),
-            ("settings-contexts-at-cap", whole(1200), AnyView(ContextsSettings().formStyle(.grouped)), atCap),
-            ("settings-context-editor", CGSize(width: 520, height: 360), AnyView(SampleContextEditor(duplicate: false)), state),
-            ("settings-context-editor-duplicate", CGSize(width: 520, height: 360), AnyView(SampleContextEditor(duplicate: true)), state),
-            ("settings-status-messages", CGSize(width: SettingsView.paneWidth, height: 760), AnyView(StatusMessagesPreview()), noSpeech),
-            ("settings-models", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), state),
-            ("settings-models-empty", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), empty),
+            Spec("understanding-card", card(900), AnyView(SampleUnderstandingCard()), state),
+            Spec("understanding-card-empty", card(360), AnyView(SampleUnderstandingCard()), noUnderstanding),
+            Spec("understanding-card-paused", card(900), AnyView(SampleUnderstandingCard()), AppState.sampleUnderstanding(.paused)),
+            Spec("understanding-card-refreshing", card(900), AnyView(SampleUnderstandingCard()), AppState.sampleUnderstanding(.refreshing)),
+            Spec("understanding-card-failed", card(900), AnyView(SampleUnderstandingCard()), AppState.sampleUnderstanding(.failed)),
+            Spec("settings-general", whole(860), AnyView(GeneralSettings().formStyle(.grouped)), state),
+            Spec("settings-contexts", pane, AnyView(ContextsSettings().formStyle(.grouped)), state),
+            Spec("settings-contexts-empty", CGSize(width: SettingsView.paneWidth, height: 420), AnyView(ContextsSettings().formStyle(.grouped)), empty),
+            Spec("settings-contexts-at-cap", whole(1200), AnyView(ContextsSettings().formStyle(.grouped)), atCap),
+            Spec("settings-context-editor", CGSize(width: 520, height: 360), AnyView(SampleContextEditor(duplicate: false)), state),
+            Spec("settings-context-editor-duplicate", CGSize(width: 520, height: 360), AnyView(SampleContextEditor(duplicate: true)), state),
+            Spec("settings-status-messages", CGSize(width: SettingsView.paneWidth, height: 760), AnyView(StatusMessagesPreview()), noSpeech),
+            Spec("settings-models", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), state),
+            Spec("settings-models-empty", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), empty),
             // The Understanding section sits below the fold of the Models pane,
             // so it also renders on its own, with a record and without one.
-            ("settings-understanding", whole(560), AnyView(SampleUnderstandingSettings()), state),
-            ("settings-understanding-empty", whole(480), AnyView(SampleUnderstandingSettings()), noUnderstanding),
-            ("settings-capture", whole(920), AnyView(CaptureSettings().formStyle(.grouped)), state),
-            ("settings-journal", CGSize(width: SettingsView.paneWidth, height: 500), AnyView(JournalSettings().formStyle(.grouped)), state),
-            ("settings-privacy", pane, AnyView(PrivacySettings().formStyle(.grouped)), state),
+            Spec("settings-understanding", whole(560), AnyView(SampleUnderstandingSettings()), state),
+            Spec("settings-understanding-empty", whole(480), AnyView(SampleUnderstandingSettings()), noUnderstanding),
+            Spec("settings-capture", whole(920), AnyView(CaptureSettings().formStyle(.grouped)), state),
+            Spec("settings-journal", CGSize(width: SettingsView.paneWidth, height: 500), AnyView(JournalSettings().formStyle(.grouped)), state),
+            Spec("settings-privacy", pane, AnyView(PrivacySettings().formStyle(.grouped)), state),
             // Off, as every install starts, and enabled, with its button live.
-            ("settings-advanced", CGSize(width: SettingsView.paneWidth, height: 180), AnyView(AdvancedSettings().formStyle(.grouped)), state),
-            ("settings-advanced-on", CGSize(width: SettingsView.paneWidth, height: 180), AnyView(AdvancedSettings().formStyle(.grouped)), debugPanelOn),
+            Spec("settings-advanced", CGSize(width: SettingsView.paneWidth, height: 180), AnyView(AdvancedSettings().formStyle(.grouped)), state),
+            Spec("settings-advanced-on", CGSize(width: SettingsView.paneWidth, height: 180), AnyView(AdvancedSettings().formStyle(.grouped)), debugPanelOn),
             // The side-effect suggestion, so the goal it was judged against shows.
-            ("history", CGSize(width: 860, height: 520), AnyView(HistoryView(initialSelection: 5)), state),
-            ("history-empty", CGSize(width: 860, height: 520), AnyView(HistoryView()), empty),
-            ("toast", CGSize(width: ToastController.panelWidth, height: 180), AnyView(SampleToast(expanded: false)), state),
-            ("toast-expanded", CGSize(width: ToastController.panelWidth, height: 460), AnyView(SampleToast(expanded: true)), state),
-            ("toast-listening", CGSize(width: ToastController.panelWidth, height: 300), AnyView(SampleToast(expanded: false, talkBack: .listening(partial: "does that work with tags as"), suggestionID: 4)), state),
-            ("toast-thinking", CGSize(width: ToastController.panelWidth, height: 300), AnyView(SampleToast(expanded: false, talkBack: .thinking(question: "does that work with tags as well"), suggestionID: 4)), state),
-            ("toast-answered", CGSize(width: ToastController.panelWidth, height: 400), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: referenceDate, suggestionID: 4), suggestionID: 4)), state),
-            ("toast-note", CGSize(width: ToastController.panelWidth, height: 120), AnyView(SampleToastNote()), state),
-            ("callout", CGSize(width: 900, height: 620), AnyView(SampleCallout()), state),
-            ("menu-bar-marks", SampleMenuBarMarks.wholeSize, AnyView(SampleMenuBarMarks()), state),
-            ("debug-panel-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), replay),
-            ("debug-panel-calls-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
-            ("settings-models-replay", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), replay),
+            Spec("history", CGSize(width: 860, height: 520), AnyView(HistoryView(initialSelection: 5)), state),
+            Spec("history-empty", CGSize(width: 860, height: 520), AnyView(HistoryView()), empty),
+            Spec("toast", CGSize(width: ToastController.panelWidth, height: 180), AnyView(SampleToast(expanded: false)), state),
+            Spec("toast-expanded", CGSize(width: ToastController.panelWidth, height: 460), AnyView(SampleToast(expanded: true)), state),
+            Spec("toast-listening", CGSize(width: ToastController.panelWidth, height: 300), AnyView(SampleToast(expanded: false, talkBack: .listening(partial: "does that work with tags as"), suggestionID: 4)), state),
+            Spec("toast-thinking", CGSize(width: ToastController.panelWidth, height: 300), AnyView(SampleToast(expanded: false, talkBack: .thinking(question: "does that work with tags as well"), suggestionID: 4)), state),
+            Spec("toast-answered", CGSize(width: ToastController.panelWidth, height: 400), AnyView(SampleToast(expanded: false, exchange: SampleSuggestions.followUps(now: referenceDate, suggestionID: 4), suggestionID: 4)), state),
+            Spec("toast-note", CGSize(width: ToastController.panelWidth, height: 120), AnyView(SampleToastNote()), state),
+            Spec("callout", CGSize(width: 900, height: 620), AnyView(SampleCallout()), state),
+            Spec("menu-bar-marks", SampleMenuBarMarks.wholeSize, AnyView(SampleMenuBarMarks()), state),
+            Spec("debug-panel-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), replay),
+            Spec("debug-panel-calls-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
+            Spec("settings-models-replay", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), replay),
         ]
+    }
+
+    static func render(to directory: URL) async throws {
+        let arguments = CommandLine.arguments
+        var shard: SnapshotShard?
+        if let index = arguments.firstIndex(of: shardFlag) {
+            guard index + 1 < arguments.count, let parsed = SnapshotShard(parsing: arguments[index + 1]) else {
+                throw SnapshotError.badShard
+            }
+            shard = parsed
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        print(capturesWithScreenCaptureKit
+            ? "snapshot: capturing each window with ScreenCaptureKit"
+            : "snapshot: no Screen Recording permission, rendering each window's layer tree")
+        let specs = specs()
         if let mismatch = SnapshotShard.mismatch(with: specs.map(\.name)) {
             throw SnapshotError.shardTable(mismatch)
         }
@@ -112,44 +143,69 @@ enum Snapshots {
         if let shard {
             print("snapshot: shard \(shard), \(rendered.count) of \(specs.count) snapshots")
         }
-        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+        for appearance in appearances {
             for spec in rendered {
-                let suffix = appearance == .aqua ? "light" : "dark"
-                let url = directory.appendingPathComponent("\(spec.name)-\(suffix).png")
-                try await render(spec.view.environment(spec.state), size: spec.size, appearance: appearance, to: url)
+                let file = "\(spec.fileName(in: appearance)).png"
+                let bitmap = try await settledPicture(
+                    of: spec, in: appearance, capture: fromWindowServer)
+                try bitmap.writePNG(to: directory.appendingPathComponent(file))
             }
         }
     }
 
-    /// Renders the view in fresh windows until two in a row give the same
-    /// picture, and writes the second. AppKit now and then lays a text field
+    /// How a snapshot's window becomes a picture. `--snapshot` takes it from
+    /// the window server; the UI smoke test draws the window in its own process.
+    struct Capture {
+        /// How long a new window is left before its first capture. The window
+        /// server shows a fade, such as an app icon's, part of the way through
+        /// until it ends; a window drawn in process is drawn as its layers
+        /// stand, which the settled captures that follow already wait for.
+        let firstCaptureDelay: Duration
+        /// The picture, or nil when it could not be taken this time and should
+        /// be taken again.
+        let take: @MainActor (_ window: NSWindow, _ hosting: NSView) async throws -> CGImage?
+    }
+
+    /// The window as the window server composites it, as the run decided.
+    static let fromWindowServer = Capture(firstCaptureDelay: .milliseconds(700), take: capture)
+
+    /// Renders the snapshot in fresh windows until two in a row give the same
+    /// picture, and returns the second. AppKit now and then lays a text field
     /// out a point off in one window (about one window in a few hundred on the
     /// runner), so a single window cannot be trusted to give the picture every
     /// other run gives. The same picture means within `SnapshotComparison`'s
     /// tolerance, since the window server draws some glass, a dark switch's
     /// knob among it, one of two ways from one window to the next.
-    private static func render(_ view: some View, size: CGSize, appearance: NSAppearance.Name, to url: URL) async throws {
+    static func settledPicture(
+        of spec: Spec, in appearance: NSAppearance.Name, capture: Capture
+    ) async throws -> Bitmap {
+        let view = spec.view.environment(spec.state)
         var previous: Bitmap?
         for _ in 0..<5 {
-            guard let bitmap = try await renderInWindow(view, size: size, appearance: appearance) else {
+            guard let bitmap = try await renderInWindow(
+                view, size: spec.size, appearance: appearance, capture: capture)
+            else {
                 previous = nil
                 continue
             }
-            if let previous, samePicture(previous, bitmap) {
-                try bitmap.writePNG(to: url)
-                return
-            }
+            if let previous, samePicture(previous, bitmap) { return bitmap }
             previous = bitmap
         }
-        throw SnapshotError.neverSettled(url.lastPathComponent)
+        throw SnapshotError.neverSettled(spec.fileName(in: appearance))
     }
 
+    /// Two pictures that are the same bytes, as two draws of a settled view
+    /// in process always are, match without the pixel by pixel comparison.
     private static func samePicture(_ a: Bitmap, _ b: Bitmap) -> Bool {
-        a.size == b.size && PixelDiff.compare(a, b, tolerance: SnapshotComparison.defaultTolerance).matches
+        a == b
+            || a.size == b.size
+                && PixelDiff.compare(a, b, tolerance: SnapshotComparison.defaultTolerance).matches
     }
 
     /// The view's settled picture in a new window, or nil when it never settled there.
-    private static func renderInWindow(_ view: some View, size: CGSize, appearance: NSAppearance.Name) async throws -> Bitmap? {
+    private static func renderInWindow(
+        _ view: some View, size: CGSize, appearance: NSAppearance.Name, capture: Capture
+    ) async throws -> Bitmap? {
         // No SwiftUI animation runs and nothing pulses, so a view shows its
         // final state at once and the same state on every run.
         let still = view
@@ -185,15 +241,16 @@ enum Snapshots {
         window.orderFrontRegardless()
         hosting.frame = CGRect(origin: .zero, size: size)
         hosting.layoutSubtreeIfNeeded()
-        // Let SwiftUI finish its layout passes and async tasks, and let a
-        // fade such as an app icon's arrive at its end.
-        try await Task.sleep(for: .milliseconds(700))
+        // Let SwiftUI finish its layout passes and async tasks, and, for a
+        // capture from the window server, let a fade such as an app icon's
+        // arrive at its end.
+        try await Task.sleep(for: capture.firstCaptureDelay)
         // Then stop Core Animation's clock in this window at a time before any
         // animation began, so one that repeats, such as a spinner, draws its
         // resting state on every run rather than wherever it was at capture.
         hosting.layer?.speed = 0
         hosting.layer?.timeOffset = 0
-        return try await settledCapture(window: window, hosting: hosting)
+        return try await settledCapture(window: window, hosting: hosting, capture: capture)
     }
 
     /// Captures until two captures in a row are the same picture, so a view
@@ -201,12 +258,14 @@ enum Snapshots {
     /// own) is never what gets kept; nil when no two ever are. A `Bitmap` is in
     /// sRGB, so what is kept does not depend on the colour profile of the
     /// display it was captured on, and every viewer shows the file the same way.
-    private static func settledCapture(window: NSWindow, hosting: NSView) async throws -> Bitmap? {
+    private static func settledCapture(
+        window: NSWindow, hosting: NSView, capture: Capture
+    ) async throws -> Bitmap? {
         var previous: Bitmap?
         for _ in 0..<8 {
             hosting.layoutSubtreeIfNeeded()
             window.displayIfNeeded()
-            if let image = try await capture(window: window, hosting: hosting) {
+            if let image = try await capture.take(window, hosting) {
                 let bitmap = try Bitmap(image)
                 if let previous, samePicture(previous, bitmap) { return bitmap }
                 previous = bitmap
