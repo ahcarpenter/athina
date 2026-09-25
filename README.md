@@ -628,9 +628,10 @@ Scenarios come in two tiers, which each scenario names in `SCENARIO_TIER`:
 - **API** (`api`): the harness drives Athina through its control API (see The
   control API). The app finds a control in its own accessibility tree and
   clicks or types into it through its own event path, so the check still
-  proves the control can be hit and is wired, with no real pointer, no Shift
-  presses to keep sensing awake, and no wait for the keyboard and mouse to go
-  quiet. It stages nothing unless the scenario asks.
+  proves the control can be hit and is wired, with no real pointer and no wait
+  for the keyboard and mouse to go quiet, and it presses no Shift to keep
+  sensing awake unless the scenario needs a capture, as `debug-timeline` does.
+  It stages nothing unless the scenario asks.
 - **Real screen** (`screen`, the default): real HID clicks and presses through
   accessibility from outside, for what only macOS's own routing can prove: the
   menu bar item and the menu the system runs for it, clicks in other apps that
@@ -796,8 +797,10 @@ answer ever repeats a request, so the secret never comes back out.
   launch saw) and waits again, up to three times. It relaunches rather than
   use Show Last Suggestion, which brings the toast back with the dismissal
   already in the journal, so the checks after it could not tell their answer
-  from the one before. An API-tier scenario posts no input of its own, so it
-  waits for none.
+  from the one before. An API-tier scenario makes no pointer step, so it waits
+  for none; unless it needs a capture, as `debug-timeline` does, it posts no
+  input at all, and then only the Shift presses that keep sensing awake, which
+  type nothing.
 - **The owner's apps are excluded** in the scratch settings from the start.
   Replay serves fixtures in order whatever is on screen, so a replayed callout
   would otherwise land over the work of whoever is using the Mac.

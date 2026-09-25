@@ -47,7 +47,6 @@ let package = Package(
                 "SnapshotDiff",
                 .target(name: "AthinaControl", condition: .when(traits: ["ControlAPI"])),
             ],
-            swiftSettings: [.define("ATHINA_CONTROL", .when(traits: ["ControlAPI"]))],
             linkerSettings: [
                 .linkedFramework("Carbon"),
                 .linkedFramework("AVFoundation"),
@@ -61,10 +60,7 @@ let package = Package(
         .target(
             name: "AthinaControl",
             dependencies: ["AthinaCore", "AthinaControlProtocol"],
-            linkerSettings: [
-                .linkedFramework("ApplicationServices"),
-                .linkedFramework("ScreenCaptureKit"),
-            ]
+            linkerSettings: [.linkedFramework("ApplicationServices")]
         ),
         .target(name: "AthinaE2E"),
         .executableTarget(

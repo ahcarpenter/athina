@@ -1,6 +1,6 @@
 import AppKit
 import AthinaCore
-#if ATHINA_CONTROL
+#if ControlAPI
 import AthinaControl
 #endif
 import SwiftUI
@@ -251,7 +251,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             FileHandle.standardError.write(Data("control API refused: \(refusal)\n".utf8))
             return
         }
-        #if ATHINA_CONTROL
+        #if ControlAPI
         guard case .on(let channel) = state.controlMode else { return }
         do {
             try ControlServer.start(channel, host: state)

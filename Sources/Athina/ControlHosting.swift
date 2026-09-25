@@ -1,6 +1,6 @@
 import AppKit
 import AthinaCore
-#if ATHINA_CONTROL
+#if ControlAPI
 import AthinaControl
 import AthinaControlProtocol
 #endif
@@ -9,14 +9,14 @@ import AthinaControlProtocol
 /// build with the ControlAPI package trait, which the development bundle turns
 /// on and the release and App Store builds never do (README "The control API").
 enum ControlAvailability {
-    #if ATHINA_CONTROL
+    #if ControlAPI
     static let compiledIn = true
     #else
     static let compiledIn = false
     #endif
 }
 
-#if ATHINA_CONTROL
+#if ControlAPI
 extension AppState: ControlHost {
     var controlSettings: ControlValue {
         guard let data = try? JSONEncoder().encode(settings),
