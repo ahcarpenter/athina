@@ -204,8 +204,7 @@ final class ControlCommands {
         guard let text = try request.string("text") else { return .error("type needs text=<what to type>") }
         // Keys go where a person's would: to the sheet up over the window.
         while let sheet = window.attachedSheet { window = sheet }
-        // Return, Tab, Delete, Escape, and Forward Delete (AppKit's function-key character for it).
-        let codes: [Character: UInt16] = ["\r": 36, "\n": 36, "\t": 48, "\u{7f}": 51, "\u{1b}": 53, "\u{F728}": 117]
+        let codes: [Character: UInt16] = ["\r": 36, "\n": 36, "\t": 48, "\u{7f}": 51, "\u{1b}": 53]
         let now = ProcessInfo.processInfo.systemUptime
         for character in text {
             let string = String(character)
