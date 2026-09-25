@@ -58,7 +58,8 @@ scenario_run() {
 	# the event path itself honours the disabled state.
 	check "a click on the dimmed button is refused" "disabled" \
 		"$(api click window=Advanced identifier=advanced.openDebugPanel --field refused)"
-	api click window=Advanced identifier=advanced.openDebugPanel force=true >/dev/null
+	check "the click forced onto the dimmed button is posted and dispatched" "[true, true]" \
+		"$(json_eval "$(api click window=Advanced identifier=advanced.openDebugPanel force=true)" 'json.dumps([r.get("ok"), r.get("dispatched")])')"
 	check "a click forced onto the dimmed button opens nothing" "no" "$(panel_open 1)"
 
 	check "the click on the switch lands" "true" "$(api click window=Advanced identifier=advanced.enableDebugPanel --field ok)"
