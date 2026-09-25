@@ -1,8 +1,10 @@
 import Foundation
 
-/// Per-hour spend accounting. Spend is bucketed by clock hour: the cap
-/// releases at the top of the next hour, and the cadence multiplier grows as
-/// the hour's total approaches the cap.
+/// Per-hour spend accounting.
+///
+/// Spend is bucketed by clock hour: the cap releases at the top of the next
+/// hour, and the cadence multiplier grows as the hour's total approaches the
+/// cap.
 public struct SpendMeter: Equatable, Sendable {
   public struct Entry: Equatable, Sendable {
     public var at: Date
@@ -68,7 +70,9 @@ public struct SpendMeter: Equatable, Sendable {
   }
 
   /// 1x at zero spend, 2x at half the cap, 4x at three quarters, capped at
-  /// `maximumMultiplier`. Continuous, so the slowdown creeps in rather than jumping.
+  /// `maximumMultiplier`.
+  ///
+  /// Continuous, so the slowdown creeps in rather than jumping.
   public static func multiplier(forFraction fraction: Double) -> Double {
     guard fraction > 0 else { return 1 }
     guard fraction < 1 else { return maximumMultiplier }

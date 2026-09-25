@@ -2,8 +2,10 @@ import Foundation
 
 // MARK: - Request
 
-/// Reasoning depth for models that accept `output_config.effort`. Sent as-is;
-/// `xhigh` is accepted by every effort-capable model in the catalog.
+/// Reasoning depth for models that accept `output_config.effort`.
+///
+/// Sent as-is; `xhigh` is accepted by every effort-capable model in the
+/// catalog.
 public enum Effort: String, Codable, CaseIterable, Sendable, Identifiable {
   case low
   case medium
@@ -32,9 +34,10 @@ public struct CacheControl: Codable, Equatable, Sendable {
   }
 }
 
-/// One block of the system prompt. Every Athina system prompt carries a
-/// cache marker so repeated calls read it from the prompt cache; a block that
-/// changes on every call passes nil.
+/// One block of the system prompt.
+///
+/// Every Athina system prompt carries a cache marker so repeated calls read it
+/// from the prompt cache; a block that changes on every call passes nil.
 public struct SystemBlock: Codable, Equatable, Sendable {
   public var type: String
   public var text: String
@@ -57,7 +60,9 @@ public enum Role: String, Codable, Sendable {
   case assistant
 }
 
-/// A user or assistant content block. Images are base64 JPEGs.
+/// A user or assistant content block.
+///
+/// Images are base64 JPEGs.
 public enum ContentBlock: Codable, Equatable, Sendable {
   case text(String)
   case image(mediaType: String, base64: String)
@@ -139,7 +144,9 @@ public struct OutputConfig: Codable, Equatable, Sendable {
   }
 }
 
-/// A Messages API request body. Field names follow the API's snake_case.
+/// A Messages API request body.
+///
+/// Field names follow the API's snake_case.
 public struct MessagesRequest: Codable, Equatable, Sendable {
   public var model: String
   public var maxTokens: Int
@@ -236,9 +243,11 @@ public struct Usage: Codable, Equatable, Sendable {
   }
 }
 
-/// A response content block. Only text blocks matter to Athina; thinking
-/// blocks and any future kinds decode to their type and are ignored. Encodable
-/// so a recorded call can store the response it replays.
+/// A response content block.
+///
+/// Only text blocks matter to Athina; thinking blocks and any future kinds
+/// decode to their type and are ignored. Encodable so a recorded call can store
+/// the response it replays.
 public struct ResponseBlock: Codable, Equatable, Sendable {
   public var type: String
   public var text: String?
@@ -374,10 +383,11 @@ extension ClaudeClientError: Codable {
 
 // MARK: - Client
 
-/// Which kind of call a request is and which prompt version built it. The loop
-/// passes it with every request, so recording and replay can file and find a
-/// call without reading its bytes, which differ on every run. It is opaque to
-/// them: a new kind of call needs no change in either.
+/// Which kind of call a request is and which prompt version built it.
+///
+/// The loop passes it with every request, so recording and replay can file and
+/// find a call without reading its bytes, which differ on every run. It is
+/// opaque to them: a new kind of call needs no change in either.
 public struct CallIdentity: Codable, Hashable, Sendable {
   /// The kind of call: the raw value of the tier that made it, such as
   /// `triage` or `mentor`.
@@ -391,7 +401,9 @@ public struct CallIdentity: Codable, Hashable, Sendable {
   }
 }
 
-/// Sends one Messages API request. The API key is passed per call and never stored.
+/// Sends one Messages API request.
+///
+/// The API key is passed per call and never stored.
 public protocol ClaudeClient: Sendable {
   /// True when calls are answered from recordings: nothing reaches the
   /// network, nothing is billed, and no key is needed.
@@ -409,7 +421,9 @@ extension ClaudeClient {
   public var isReplay: Bool { false }
 }
 
-/// The Anthropic Messages API over URLSession. The only host Athina ever talks to.
+/// The Anthropic Messages API over URLSession.
+///
+/// The only host Athina ever talks to.
 public struct AnthropicClient: ClaudeClient {
   public static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
   public static let apiVersion = "2023-06-01"
@@ -465,7 +479,9 @@ public struct AnthropicClient: ClaudeClient {
     return try AnthropicClient.decode(status: http.statusCode, body: data)
   }
 
-  /// Maps a status and body to a response or a typed error. Shared with tests.
+  /// Maps a status and body to a response or a typed error.
+  ///
+  /// Shared with tests.
   public static func decode(status: Int, body: Data) throws -> MessagesResponse {
     let decoder = JSONDecoder()
     guard status == 200 else {

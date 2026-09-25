@@ -2,8 +2,10 @@ import AppKit
 import AthinaCore
 import SwiftUI
 
-/// A pane of the Settings window. The last pane viewed is remembered, and
-/// `--open settings:<pane>` or a link inside another pane can choose it.
+/// A pane of the Settings window.
+///
+/// The last pane viewed is remembered, and `--open settings:<pane>` or a link
+/// inside another pane can choose it.
 enum SettingsPane: String, CaseIterable, Identifiable {
   case general, contexts, models, capture, journal, privacy, advanced
 
@@ -50,9 +52,10 @@ enum SettingsPane: String, CaseIterable, Identifiable {
   }
 }
 
-/// The Settings window: a standard toolbar of panes. The window takes its
-/// title from the pane, and each pane is a grouped form of a fixed size that
-/// scrolls when its settings run longer.
+/// The Settings window: a standard toolbar of panes.
+///
+/// The window takes its title from the pane, and each pane is a grouped form of
+/// a fixed size that scrolls when its settings run longer.
 struct SettingsView: View {
   static let paneWidth: CGFloat = 600
 
@@ -89,9 +92,11 @@ struct SettingsView: View {
 
 extension Text {
   /// Text with a link to another Settings pane in it (`SettingsPane.link`),
-  /// from Markdown. A string literal is the only Markdown `Text` parses on
-  /// its own, and the link is built rather than written, so it is parsed
-  /// here; text that would not parse is shown as it is.
+  /// from Markdown.
+  ///
+  /// A string literal is the only Markdown `Text` parses on its own, and the
+  /// link is built rather than written, so it is parsed here; text that would
+  /// not parse is shown as it is.
   init(settingsMarkdown markdown: String) {
     let options = AttributedString.MarkdownParsingOptions(
       interpretedSyntax: .inlineOnlyPreservingWhitespace
@@ -550,6 +555,7 @@ enum SettingsUnit {
 }
 
 /// A number with a field for typing it, a stepper for nudging it, and its unit.
+///
 /// The label can carry a line of help underneath, styled by the form.
 struct NumberRow: View {
   let title: String
@@ -711,9 +717,11 @@ struct PercentRow: View {
   }
 }
 
-/// The trailing controls of a number row. The field and stepper are titled
-/// with the row's title, the field's with its unit too, which VoiceOver reads
-/// once; a separate accessibility label would be read beside that title.
+/// The trailing controls of a number row.
+///
+/// The field and stepper are titled with the row's title, the field's with its
+/// unit too, which VoiceOver reads once; a separate accessibility label would
+/// be read beside that title.
 private struct NumberControls<Field: View, StepperView: View>: View {
   let unitLabel: String?
   let field: Field
@@ -741,9 +749,10 @@ private struct NumberControls<Field: View, StepperView: View>: View {
 struct DurationRow: View {
   let title: String
   @Binding var value: TimeInterval
-  /// The seconds the setting itself accepts, where it bounds them. A unit is
-  /// offered only where the range holds a whole amount of it, and the stepper
-  /// and a typed amount are held inside it, so the row cannot offer a
+  /// The seconds the setting itself accepts, where it bounds them.
+  ///
+  /// A unit is offered only where the range holds a whole amount of it, and the
+  /// stepper and a typed amount are held inside it, so the row cannot offer a
   /// duration `MentorSettings.validated()` would clamp away.
   let range: ClosedRange<TimeInterval>?
   var help: String?
@@ -760,13 +769,15 @@ struct DurationRow: View {
     }
   }
 
-  /// The width the unit pop-up reserves. A menu-style Picker sizes to the
-  /// unit it is showing, not to the widest in its menu, and a form's rows are
-  /// trailing aligned, so a row showing "minutes" puts its field and stepper
-  /// 12 pt left of a row showing "hours". Reserving what a pop-up needs for
-  /// the widest unit word holds every duration row on one x whatever unit
-  /// each is showing, and measuring it rather than naming a number keeps that
-  /// true whatever font the control draws in.
+  /// The width the unit pop-up reserves.
+  ///
+  /// A menu-style Picker sizes to the unit it is showing, not to the widest in
+  /// its menu, and a form's rows are trailing aligned, so a row showing
+  /// "minutes" puts its field and stepper 12 pt left of a row showing "hours".
+  /// Reserving what a pop-up needs for the widest unit word holds every
+  /// duration row on one x whatever unit each is showing, and measuring it
+  /// rather than naming a number keeps that true whatever font the control
+  /// draws in.
   @MainActor private static let unitWidth: CGFloat = {
     let sizing = NSPopUpButton(frame: .zero, pullsDown: false)
     sizing.addItems(withTitles: Unit.allCases.map(\.rawValue))
@@ -789,9 +800,11 @@ struct DurationRow: View {
     self.help = help
   }
 
-  /// The whole amounts of `unit` the range allows, or the unbounded row's
-  /// own 1...10_000 where the setting has no range. Nil where the range holds
-  /// no whole amount of the unit, which is how that unit is left out.
+  /// The whole amounts of `unit` the range allows, or the unbounded row's own
+  /// 1...10_000 where the setting has no range.
+  ///
+  /// Nil where the range holds no whole amount of the unit, which is how that
+  /// unit is left out.
   private func amounts(in unit: Unit) -> ClosedRange<Double>? {
     guard let range else { return 1...10_000 }
     let low = max(1, (range.lowerBound / unit.seconds).rounded(.up))

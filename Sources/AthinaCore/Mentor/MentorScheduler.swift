@@ -133,8 +133,9 @@ public struct MentorScheduler: Equatable, Sendable {
     case expired(age: TimeInterval)
   }
 
-  /// Whether a follow-up question may go to the mentor tier. A held
-  /// question is journaled with the reason and never sent; a waiting one
+  /// Whether a follow-up question may go to the mentor tier.
+  ///
+  /// A held question is journaled with the reason and never sent; a waiting one
   /// is asked once the call in flight returns.
   public enum FollowUpGate: Equatable, Sendable {
     case run
@@ -219,9 +220,10 @@ public struct MentorScheduler: Equatable, Sendable {
 
   // MARK: Mentor gate
 
-  /// The single yes-or-no between triage and the mentor tier. The context
-  /// placement is checked first: while the user enforces contexts, an
-  /// activity outside them can never produce a suggestion, whatever else
+  /// The single yes-or-no between triage and the mentor tier.
+  ///
+  /// The context placement is checked first: while the user enforces contexts,
+  /// an activity outside them can never produce a suggestion, whatever else
   /// triage thought of it.
   public func mentorGate(
     triage: TriageVerdict,
@@ -246,11 +248,12 @@ public struct MentorScheduler: Equatable, Sendable {
 
   // MARK: Publish gate
 
-  /// The yes-or-no between a finished mentor call and the toast. A
-  /// suggestion made while a talked-to toast is up is held so that toast,
-  /// the recording, the pending answer, and the answer on screen stay as
-  /// they are; when that toast closes it is shown, unless it waited longer
-  /// than `maxObservationAge`, in which case it expires unseen.
+  /// The yes-or-no between a finished mentor call and the toast.
+  ///
+  /// A suggestion made while a talked-to toast is up is held so that toast, the
+  /// recording, the pending answer, and the answer on screen stay as they are;
+  /// when that toast closes it is shown, unless it waited longer than
+  /// `maxObservationAge`, in which case it expires unseen.
   public func publishGate(madeAt: Date, conditions: Conditions, now: Date) -> PublishGate {
     if conditions.talkingBack { return .hold }
     let age = now.timeIntervalSince(madeAt)
@@ -357,9 +360,11 @@ public struct MentorScheduler: Equatable, Sendable {
   }
 
   /// What the latest placement decides for the refresh while contexts are
-  /// enforced. No verdict for the frontmost app, or one reached while the
-  /// switch was off, counts as outside: enforcement fails closed here as it
-  /// does at the mentor gate.
+  /// enforced.
+  ///
+  /// No verdict for the frontmost app, or one reached while the switch was off,
+  /// counts as outside: enforcement fails closed here as it does at the mentor
+  /// gate.
   private func placementHold(_ context: ContextPlacement?) -> RefreshHold? {
     guard settings.onlyMentorInsideContexts else { return nil }
     switch context {
@@ -369,11 +374,12 @@ public struct MentorScheduler: Equatable, Sendable {
     }
   }
 
-  /// When the next refresh call may start if use carries on unbroken: once
-  /// the period has counted a whole interval of active use. Nil before any
-  /// period has begun, and while `mode` counts none, since nothing comes due
-  /// until the user is back. `period` must have been counted whenever the
-  /// mode last changed, as the loop does.
+  /// When the next refresh call may start if use carries on unbroken: once the
+  /// period has counted a whole interval of active use.
+  ///
+  /// Nil before any period has begun, and while `mode` counts none, since
+  /// nothing comes due until the user is back. `period` must have been counted
+  /// whenever the mode last changed, as the loop does.
   public func nextRefreshAllowed(
     after period: RefreshPeriod?,
     mode: SensingMode,
@@ -385,14 +391,17 @@ public struct MentorScheduler: Equatable, Sendable {
   }
 }
 
-/// How far the understanding's refresh interval has run. Only active use
-/// counts: time the Mac is awake in a mode that captures the screen, and so
-/// leaves screens for a refresh to read; never paused, idle, on an excluded
-/// app, waiting for permissions, asleep, or with the app closed. The loop
-/// keeps it in the journal, so a relaunch carries on counting.
+/// How far the understanding's refresh interval has run.
+///
+/// Only active use counts: time the Mac is awake in a mode that captures the
+/// screen, and so leaves screens for a refresh to read; never paused, idle, on
+/// an excluded app, waiting for permissions, asleep, or with the app closed.
+/// The loop keeps it in the journal, so a relaunch carries on counting.
 public struct RefreshPeriod: Equatable, Sendable {
-  /// When the period began: the record's last write, or the first activity
-  /// seen with no record. A refresh reads the screens since then.
+  /// When the period began: the record's last write, or the first activity seen
+  /// with no record.
+  ///
+  /// A refresh reads the screens since then.
   public var startedAt: Date
   /// Active use counted toward the next refresh since the period began, or
   /// since the last refresh attempt when one came after that.
@@ -406,12 +415,14 @@ public struct RefreshPeriod: Equatable, Sendable {
     self.countedAt = countedAt ?? startedAt
   }
 
-  /// The period counted through `now`, with all the time since the last
-  /// count spent in `mode`. `awake` is how long the Mac was awake since that
-  /// count, on a clock that stops while it sleeps, or nil when that is
-  /// unknown, as right after a launch. Only the smaller of it and the
-  /// wall-clock gap counts, so a closed lid counts for nothing even when the
-  /// mode never left one that captures the screen.
+  /// The period counted through `now`, with all the time since the last count
+  /// spent in `mode`.
+  ///
+  /// `awake` is how long the Mac was awake since that count, on a clock that
+  /// stops while it sleeps, or nil when that is unknown, as right after a
+  /// launch. Only the smaller of it and the wall-clock gap counts, so a closed
+  /// lid counts for nothing even when the mode never left one that captures the
+  /// screen.
   public func counted(
     through now: Date,
     awake: TimeInterval?,
@@ -425,8 +436,10 @@ public struct RefreshPeriod: Equatable, Sendable {
     return counted
   }
 
-  /// The same period with its count started over at `now`, as a refresh
-  /// attempt leaves it. Its screens still reach back to `startedAt`.
+  /// The same period with its count started over at `now`, as a refresh attempt
+  /// leaves it.
+  ///
+  /// Its screens still reach back to `startedAt`.
   public func restarted(at now: Date) -> RefreshPeriod {
     RefreshPeriod(startedAt: startedAt, activeUse: 0, countedAt: now)
   }

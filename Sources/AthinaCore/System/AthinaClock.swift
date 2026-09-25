@@ -31,7 +31,9 @@ extension AthinaClock {
 }
 
 /// Real time: `ContinuousClock` for waits, `Date()` for dates, and the system
-/// uptime for time awake. What the app always runs on outside a replay.
+/// uptime for time awake.
+///
+/// What the app always runs on outside a replay.
 public struct SystemClock: AthinaClock {
   public typealias Instant = ContinuousClock.Instant
 
@@ -126,7 +128,7 @@ public final class AdjustableClock: AthinaClock {
     base = nil
   }
 
-  /// A clock that starts at `base`'s date and runs `scale` times faster than it.
+  /// A clock that starts at the date of `base` and runs `scale` times faster than it.
   public init(running base: some AthinaClock, scale: Double) {
     precondition(scale > 0, "a scaled clock must move forward")
     let startInstant = base.now
@@ -177,9 +179,11 @@ public final class AdjustableClock: AthinaClock {
 
   // MARK: Moving ahead
 
-  /// Moves the clock ahead by `duration`. With `awake` false the Mac is taken
-  /// to have slept through it: the date moves and the uptime does not. Every
-  /// sleep whose deadline this reaches ends.
+  /// Moves the clock ahead by `duration`.
+  ///
+  /// With `awake` false the Mac is taken to have slept through it: the date
+  /// moves and the uptime does not. Every sleep whose deadline this reaches
+  /// ends.
   public func advance(by duration: Swift.Duration, awake: Bool = true) {
     precondition(duration >= .zero, "a clock only moves forward")
     let woken = state.withLock { state -> [CheckedContinuation<Void, any Error>] in
@@ -227,9 +231,10 @@ public final class AdjustableClock: AthinaClock {
     }
   }
 
-  /// Returns once at least `count` sleeps are waiting on this clock, so a
-  /// test can advance it knowing the code it drives is already waiting. A
-  /// cancelled wait returns at once, so a test's time limit ends one that
+  /// Returns once at least `count` sleeps are waiting on this clock, so a test
+  /// can advance it knowing the code it drives is already waiting.
+  ///
+  /// A cancelled wait returns at once, so a test's time limit ends one that
   /// would never be satisfied.
   public func waitForSleepers(_ count: Int = 1) async {
     let id = state.withLock { state -> Int in

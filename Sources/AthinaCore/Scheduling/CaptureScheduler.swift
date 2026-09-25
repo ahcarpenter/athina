@@ -29,9 +29,10 @@ public struct CaptureScheduler: Equatable, Sendable {
     self.settings = settings
   }
 
-  /// Activation queues a prompt capture (as if focus changed) so resuming
-  /// or regaining permissions shows something soon. Deactivation clears
-  /// every pending trigger.
+  /// Activation queues a prompt capture (as if focus changed) so resuming or
+  /// regaining permissions shows something soon.
+  ///
+  /// Deactivation clears every pending trigger.
   public mutating func setActive(_ active: Bool, at now: Date) {
     guard active != isActive else { return }
     isActive = active

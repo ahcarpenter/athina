@@ -5,8 +5,10 @@ import SnapshotDiff
 import SwiftUI
 
 /// Developer aid: `Athina --snapshot <dir>` renders every window with sample
-/// data to PNG files (light and dark) and quits. It draws the app's own views,
-/// so it needs no Screen Recording permission and works in CI.
+/// data to PNG files (light and dark) and quits.
+///
+/// It draws the app's own views, so it needs no Screen Recording permission and
+/// works in CI.
 @MainActor
 enum Snapshots {
   static let flag = "--snapshot"
@@ -27,9 +29,10 @@ enum Snapshots {
   /// the clock times read the same on every machine too.
   static let referenceDate = Date(timeIntervalSince1970: 1_789_482_730)
 
-  /// How every window of this run is captured, decided once. The two ways
-  /// draw glass differently, so a run never mixes them, and says which it
-  /// used; renders are compared only with renders made the same way.
+  /// How every window of this run is captured, decided once.
+  ///
+  /// The two ways draw glass differently, so a run never mixes them, and says
+  /// which it used; renders are compared only with renders made the same way.
   private static let capturesWithScreenCaptureKit = CGPreflightScreenCaptureAccess()
 
   static func render(to directory: URL) async throws {
@@ -198,12 +201,14 @@ enum Snapshots {
   }
 
   /// Renders the view in fresh windows until two in a row give the same
-  /// picture, and writes the second. AppKit now and then lays a text field
-  /// out a point off in one window (about one window in a few hundred on the
-  /// runner), so a single window cannot be trusted to give the picture every
-  /// other run gives. The same picture means within `SnapshotComparison`'s
-  /// tolerance, since the window server draws some glass, a dark switch's
-  /// knob among it, one of two ways from one window to the next.
+  /// picture, and writes the second.
+  ///
+  /// AppKit now and then lays a text field out a point off in one window (about
+  /// one window in a few hundred on the runner), so a single window cannot be
+  /// trusted to give the picture every other run gives. The same picture means
+  /// within `SnapshotComparison`'s tolerance, since the window server draws
+  /// some glass, a dark switch's knob among it, one of two ways from one window
+  /// to the next.
   private static func render(
     _ view: some View,
     size: CGSize,
@@ -285,11 +290,13 @@ enum Snapshots {
     return try await settledCapture(window: window, hosting: hosting)
   }
 
-  /// Captures until two captures in a row are the same picture, so a view
-  /// that was still settling (a late layout pass, an image that loads on its
-  /// own) is never what gets kept; nil when no two ever are. A `Bitmap` is in
-  /// sRGB, so what is kept does not depend on the colour profile of the
-  /// display it was captured on, and every viewer shows the file the same way.
+  /// Captures until two captures in a row are the same picture, so a view that
+  /// was still settling (a late layout pass, an image that loads on its own) is
+  /// never what gets kept; nil when no two ever are.
+  ///
+  /// A `Bitmap` is in sRGB, so what is kept does not depend on the colour
+  /// profile of the display it was captured on, and every viewer shows the file
+  /// the same way.
   private static func settledCapture(window: NSWindow, hosting: NSView) async throws -> Bitmap? {
     var previous: Bitmap?
     for _ in 0..<8 {
@@ -305,11 +312,12 @@ enum Snapshots {
     return nil
   }
 
-  /// The window captured the run's one way, or nil when ScreenCaptureKit
-  /// missed it this time: its stream occasionally fails to start when many
-  /// windows are captured back to back, and a new window can be missing from
-  /// the shareable content for a moment. A missed capture is taken again,
-  /// never drawn the other way.
+  /// The window captured the run's one way, or nil when ScreenCaptureKit missed
+  /// it this time: its stream occasionally fails to start when many windows are
+  /// captured back to back, and a new window can be missing from the shareable
+  /// content for a moment.
+  ///
+  /// A missed capture is taken again, never drawn the other way.
   private static func capture(window: NSWindow, hosting: NSView) async throws -> CGImage? {
     guard capturesWithScreenCaptureKit else { return try renderLayerTree(of: hosting) }
     do {
@@ -399,7 +407,9 @@ extension AppState {
   static let samplePid: Int32 = -1
 
   /// Realistic data for snapshots and previews, stamped around `now` (the
-  /// sample's own clock when nil). Nothing here touches the pipeline.
+  /// sample's own clock when nil).
+  ///
+  /// Nothing here touches the pipeline.
   static func sample(
     at now: Date? = nil,
     speechAvailability: SpeechListener.Availability = .available(locale: "English (US)"),

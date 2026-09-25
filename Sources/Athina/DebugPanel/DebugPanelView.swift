@@ -740,7 +740,9 @@ private struct TimelineRow: View {
 // MARK: - Mentor card
 
 /// The debug panel's Mentor section: gate decisions, the last call of each
-/// tier, spend and cadence. The call log lives under the timeline.
+/// tier, spend and cadence.
+///
+/// The call log lives under the timeline.
 private struct MentorCard: View {
   @Environment(AppState.self) private var state
 
@@ -940,11 +942,12 @@ private struct MentorCard: View {
   }
 
   /// Where the declared contexts put the latest activity, and what settled it.
+  ///
   /// A verdict is shown only when it was recorded under the enforcement state
-  /// in force now and for the app in front now. `lastContext` is not
-  /// recomputed when settings or focus change, so any other record describes a
-  /// moment that has passed; the menu says "not yet judged" for those and this
-  /// says the same rather than presenting a stale verdict as current.
+  /// in force now and for the app in front now. `lastContext` is not recomputed
+  /// when settings or focus change, so any other record describes a moment that
+  /// has passed; the menu says "not yet judged" for those and this says the
+  /// same rather than presenting a stale verdict as current.
   private func contextVerdict(now: Date) -> String {
     let mentor = state.settings.mentor
     guard mentor.onlyMentorInsideContexts else {
@@ -1012,8 +1015,9 @@ private struct MentorCard: View {
 }
 
 /// Typed words down the push-to-talk path: a transcript that is one of the
-/// toast's answers answers it, anything else is a follow-up question. For
-/// checking talk-back, and recording a follow-up, without a microphone.
+/// toast's answers answers it, anything else is a follow-up question.
+///
+/// For checking talk-back, and recording a follow-up, without a microphone.
 private struct TalkBackField: View {
   @Environment(AppState.self) private var state
   @State private var text = ""
@@ -1049,9 +1053,11 @@ private struct TalkBackField: View {
   }
 }
 
-/// Moves a replay's clock ahead by what is typed, as if that much time went
-/// by at once: for checking a snooze, a refresh, the spend hour, or a new day
-/// without waiting for it. Only a replay has one.
+/// Moves a replay's clock ahead by what is typed, as if that much time went by
+/// at once: for checking a snooze, a refresh, the spend hour, or a new day
+/// without waiting for it.
+///
+/// Only a replay has one.
 private struct ClockAdvanceField: View {
   @Environment(AppState.self) private var state
   @State private var text = ""

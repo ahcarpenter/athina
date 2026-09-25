@@ -1,16 +1,21 @@
 import Foundation
 
-/// Everything the mentor loop can be tuned with. Persisted inside
-/// `settings.json` under the `mentor` key; missing fields take their defaults.
+/// Everything the mentor loop can be tuned with.
+///
+/// Persisted inside `settings.json` under the `mentor` key; missing fields take
+/// their defaults.
 public struct MentorSettings: Codable, Equatable, Sendable {
   // MARK: Models
 
-  /// Master switch. Off means no model call of any kind.
+  /// Master switch.
+  ///
+  /// Off means no model call of any kind.
   public var enabled = true
   public var triageModel = ModelCatalog.haiku45.id
   public var mentorModel = ModelCatalog.opus5.id
-  /// The model that rewrites the understanding on a periodic refresh. A mentor
-  /// call refreshes it for free, so this one runs only in the gaps.
+  /// The model that rewrites the understanding on a periodic refresh.
+  ///
+  /// A mentor call refreshes it for free, so this one runs only in the gaps.
   public var understandingModel = ModelCatalog.opus5.id
   /// Reasoning depth per tier, sent only to models that accept it.
   public var triageEffort: Effort = .low
@@ -29,9 +34,11 @@ public struct MentorSettings: Codable, Equatable, Sendable {
 
   // MARK: Mentorship contexts
 
-  /// Hard boundary: when on, only activity the triage tier places in one of
-  /// the declared contexts may reach the mentor tier. On with no context
-  /// declared means nowhere is inside, so no tier runs at all.
+  /// Hard boundary: when on, only activity the triage tier places in one of the
+  /// declared contexts may reach the mentor tier.
+  ///
+  /// On with no context declared means nowhere is inside, so no tier runs at
+  /// all.
   public var onlyMentorInsideContexts = false
   /// The kinds of work the user wants mentoring in, in their own words.
   public var contexts: [MentorshipContext] = []
@@ -47,14 +54,17 @@ public struct MentorSettings: Codable, Equatable, Sendable {
 
   // MARK: Understanding
 
-  /// How much active use the understanding may go unrefreshed before a
-  /// refresh call of its own is made. Mentor calls refresh it on the way
-  /// past, so this only fires in a stretch with no mentor call. Raise it to
-  /// spend less.
+  /// How much active use the understanding may go unrefreshed before a refresh
+  /// call of its own is made.
+  ///
+  /// Mentor calls refresh it on the way past, so this only fires in a stretch
+  /// with no mentor call. Raise it to spend less.
   public var understandingRefreshInterval: TimeInterval = 900
-  /// Rough token budget for the whole understanding. It is trimmed to fit,
-  /// oldest first, so it can never grow without bound. Its range keeps the
-  /// record inside both tiers' replies (`understandingTokenBudgetRange`).
+  /// Rough token budget for the whole understanding.
+  ///
+  /// It is trimmed to fit, oldest first, so it can never grow without bound.
+  /// Its range keeps the record inside both tiers' replies
+  /// (`understandingTokenBudgetRange`).
   public var understandingTokenBudget = 1200
   /// The understanding expires after this long with no activity, and always
   /// at a new day, so a new session starts from what is actually happening.
@@ -64,9 +74,10 @@ public struct MentorSettings: Codable, Equatable, Sendable {
 
   /// Suggestions under this confidence are logged but not shown.
   public var minimumConfidence = 0.6
-  /// Seconds a toast stays up without interaction. The countdown pauses
-  /// while the pointer is over the toast, and a suggestion brought back with
-  /// Show Last Suggestion does not expire at all.
+  /// Seconds a toast stays up without interaction.
+  ///
+  /// The countdown pauses while the pointer is over the toast, and a suggestion
+  /// brought back with Show Last Suggestion does not expire at all.
   public var toastTimeout: TimeInterval = 60
   /// How long "Not now" keeps that category quiet for that app.
   public var notNowSnooze: TimeInterval = 3600
@@ -75,12 +86,16 @@ public struct MentorSettings: Codable, Equatable, Sendable {
 
   /// Draw a callout on screen when a suggestion points at one spot.
   public var showCallouts = true
-  /// Held to talk back to the current suggestion. Nil until one is recorded.
+  /// Held to talk back to the current suggestion.
+  ///
+  /// Nil until one is recorded.
   public var pushToTalkHotKey: HotKey?
 
   // MARK: Spend
 
-  /// Dollars per clock hour. Cadence slows as spend approaches it; calls stop at it.
+  /// Dollars per clock hour.
+  ///
+  /// Cadence slows as spend approaches it; calls stop at it.
   public var hourlySpendCap = 1.0
   public var prices = PriceTable.defaults
 
@@ -211,8 +226,10 @@ public struct MentorSettings: Codable, Equatable, Sendable {
   /// Settable range for how long a record survives with no activity.
   public static let idleGapRange: ClosedRange<TimeInterval> = 600...(7 * 86400)
 
-  /// Settable range for the token budget. The top leaves a mentor reply room
-  /// for its thinking and a suggestion beside the record it carries.
+  /// Settable range for the token budget.
+  ///
+  /// The top leaves a mentor reply room for its thinking and a suggestion
+  /// beside the record it carries.
   public static let understandingTokenBudgetRange: ClosedRange<Int> = 200...3000
 
   /// The effort to send for a tier: nil when its model rejects the parameter.

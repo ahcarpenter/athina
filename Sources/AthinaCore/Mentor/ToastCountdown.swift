@@ -27,7 +27,9 @@ public struct ToastCountdown: Equatable, Sendable {
   }
 
   /// Holds a running countdown with what it had left, never less than
-  /// `minimumRemaining`. A held or off countdown stays as it is.
+  /// `minimumRemaining`.
+  ///
+  /// A held or off countdown stays as it is.
   public mutating func hold(at now: Date) {
     guard let deadline else { return }
     held = max(ToastCountdown.minimumRemaining, deadline.timeIntervalSince(now))

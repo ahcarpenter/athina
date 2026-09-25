@@ -139,8 +139,9 @@ import Testing
 
   /// The owl's states are made out of its own parts, so the menu bar asset
   /// depends on the drawing still being four closed subpaths: the body, the
-  /// cutout holding both eyes, and a pupil in each. A re-export that merged
-  /// or split them would change what the states mean.
+  /// cutout holding both eyes, and a pupil in each.
+  ///
+  /// A re-export that merged or split them would change what the states mean.
   ///
   /// Counted the way the generator counts them, over every path element in
   /// the drawing rather than over whichever one comes first, so a re-export
@@ -262,8 +263,9 @@ private struct MasterDrawing {
   struct Shape {
     var group: String?
     var kind: String
-    /// The SVG path commands, in order. Empty for a primitive, which has
-    /// no path data of its own.
+    /// The SVG path commands, in order.
+    ///
+    /// Empty for a primitive, which has no path data of its own.
     var commandLetters: [Character]
   }
 

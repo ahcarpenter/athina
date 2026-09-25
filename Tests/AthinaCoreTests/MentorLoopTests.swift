@@ -4,10 +4,11 @@ import Testing
 @testable import AthinaCore
 
 /// Drives `MentorLoop` end to end with a scripted client: sensing events in,
-/// model calls out, suggestions and journal rows as the result. Everything
-/// runs on a test clock, so nothing here waits on real time: a behavior that
-/// takes minutes or hours is proven by advancing the clock, and every wait
-/// for the loop is a wait for an event it publishes.
+/// model calls out, suggestions and journal rows as the result.
+///
+/// Everything runs on a test clock, so nothing here waits on real time: a
+/// behavior that takes minutes or hours is proven by advancing the clock, and
+/// every wait for the loop is a wait for an event it publishes.
 @Suite(.timeLimit(.minutes(1))) struct MentorLoopTests {
   struct Harness {
     /// Where every harness clock starts: noon, on the UTC calendar the loop
@@ -26,10 +27,12 @@ import Testing
 
     /// `screens`, then `understanding`, when given, are journaled before the
     /// loop starts, so the loop seeds from them exactly as it would after a
-    /// relaunch. The screens get ids 1, 2, and so on, in order. `activeUse`
-    /// is how long the user worked right after the record was written, with
-    /// nothing counted since, as the loop would have kept the count. The
-    /// clock starts at `start`.
+    /// relaunch.
+    ///
+    /// The screens get ids 1, 2, and so on, in order. `activeUse` is how long
+    /// the user worked right after the record was written, with nothing counted
+    /// since, as the loop would have kept the count. The clock starts at
+    /// `start`.
     init(
       settings: MentorSettings = MentorSettings(),
       key: String? = "sk-ant-test",
@@ -94,11 +97,13 @@ import Testing
       await waitUntil { $0.mode == .watching }
     }
 
-    /// Sends an observation and waits until the loop has gated it through
-    /// both the triage and the refresh gate, made the expected number of
-    /// calls, and has nothing in flight. The observation arrives a
-    /// millisecond after whatever came before it, so the refresh gate's
-    /// verdict on it is told apart from the last one by its time.
+    /// Sends an observation and waits until the loop has gated it through both
+    /// the triage and the refresh gate, made the expected number of calls, and
+    /// has nothing in flight.
+    ///
+    /// The observation arrives a millisecond after whatever came before it, so
+    /// the refresh gate's verdict on it is told apart from the last one by its
+    /// time.
     func observe(_ observation: ActivityObservation, expectCalls: Int) async {
       clock.advance(by: .milliseconds(1))
       let sentAt = clock.date
@@ -109,9 +114,10 @@ import Testing
       }
     }
 
-    /// Waits until `condition` holds of the loop's status and at least
-    /// `calls` requests were sent, checking again after every event the
-    /// loop publishes. The suite's time limit ends a wait that never ends.
+    /// Waits until `condition` holds of the loop's status and at least `calls`
+    /// requests were sent, checking again after every event the loop publishes.
+    ///
+    /// The suite's time limit ends a wait that never ends.
     func waitUntil(calls: Int = 0, _ condition: (MentorStatus) -> Bool) async {
       var events = updates.makeAsyncIterator()
       while true {
@@ -140,9 +146,11 @@ import Testing
       return seen
     }
 
-    /// A loop over the same journal, client, and clock, started once
-    /// `closed` has passed on the clock, as the app is opened again after
-    /// sitting closed. Stop this loop first, as quitting does.
+    /// A loop over the same journal, client, and clock, started once `closed`
+    /// has passed on the clock, as the app is opened again after sitting
+    /// closed.
+    ///
+    /// Stop this loop first, as quitting does.
     func relaunched(
       settings: MentorSettings = MentorSettings(),
       after closed: Duration = .zero
@@ -1093,9 +1101,10 @@ import Testing
     #expect(await h.loop.currentUnderstanding()?.revision == 2)
   }
 
-  /// The mentor window also holds screens the record's last write already
-  /// read. When the budget leaves some of those out they are still in the
-  /// record, so only the ones journaled after them are counted as left out.
+  /// The mentor window also holds screens the record's last write already read.
+  ///
+  /// When the budget leaves some of those out they are still in the record, so
+  /// only the ones journaled after them are counted as left out.
   @Test func aMentorCallCountsOnlyTheScreensTheRecordDoesNotCoverAsLeftOut() async throws {
     var settings = MentorSettings()
     settings.understandingRefreshInterval = MentorSettings.refreshIntervalRange.upperBound
@@ -1158,9 +1167,10 @@ import Testing
     return message
   }
 
-  /// A screen whose capture started before a mentor call read the journal,
-  /// but that was journaled after it, is not in that call's window. The
-  /// cursor the call stores stops at what it read, so the next window, here
+  /// A screen whose capture started before a mentor call read the journal, but
+  /// that was journaled after it, is not in that call's window.
+  ///
+  /// The cursor the call stores stops at what it read, so the next window, here
   /// after a relaunch, takes the screen however old its timestamp.
   @Test func aScreenJournaledAfterAMentorCallReadTheJournalIsInTheNextWindow() async throws {
     let h = try await Harness(understanding: Self.existing(age: 60, coveredThrough: 0))
@@ -1349,10 +1359,12 @@ import Testing
     #expect(await h.loop.currentUnderstanding()?.revision == 1)
   }
 
-  /// The record was written an hour ago, the user worked five minutes, then
-  /// was at lunch until now. The hour away is not use, so the first
-  /// observation back triages and buys no refresh over the few screens
-  /// since; it comes due after ten more minutes of work.
+  /// The record was written an hour ago, the user worked five minutes, then was
+  /// at lunch until now.
+  ///
+  /// The hour away is not use, so the first observation back triages and buys
+  /// no refresh over the few screens since; it comes due after ten more minutes
+  /// of work.
   @Test func comingBackFromLunchBuysNoRefreshOverTheScreensSince() async throws {
     let h = try await Harness(understanding: Self.existing(age: 3600), activeUse: 300)
     await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
@@ -1640,7 +1652,9 @@ import Testing
   }
 
   /// The menu's goal line is hidden while nothing can work a goal out: with
-  /// Athina off or without a key. A reached spend cap only delays it.
+  /// Athina off or without a key.
+  ///
+  /// A reached spend cap only delays it.
   @Test func onlyAMentorThatIsOnAndHasAKeyFormsAnUnderstanding() async throws {
     #expect(await (try Harness()).loop.currentStatus().availability.formsUnderstanding)
     #expect(await !(try Harness(key: nil)).loop.currentStatus().availability.formsUnderstanding)
@@ -2386,9 +2400,11 @@ import Testing
     #expect(try await reopened.recentSuggestions(limit: 5).count == 2)
   }
 
-  /// Earlier builds of the understanding wrote a `schema_version` column,
-  /// NOT NULL with no default, that this build no longer fills in. Opening
-  /// such a journal drops it, so its revisions still read and new ones store.
+  /// Earlier builds of the understanding wrote a `schema_version` column, NOT
+  /// NULL with no default, that this build no longer fills in.
+  ///
+  /// Opening such a journal drops it, so its revisions still read and new ones
+  /// store.
   @Test func opensAJournalWhoseUnderstandingTableStillHasASchemaVersion() async throws {
     let url = FileManager.default.temporaryDirectory
       .appendingPathComponent("athina-migration-\(UUID().uuidString).sqlite")
@@ -2432,8 +2448,10 @@ import Testing
   }
 
   /// The size-cap sweep removes the oldest events, which can include the one
-  /// that expired a revision. The revision goes with it, so an expired record
-  /// is never current again after a relaunch.
+  /// that expired a revision.
+  ///
+  /// The revision goes with it, so an expired record is never current again
+  /// after a relaunch.
   @Test func aSizeCapSweepNeverBringsAnExpiredRevisionBack() async throws {
     let journal = try Journal.inMemory()
     let now = Date(timeIntervalSince1970: 1_700_000_000)

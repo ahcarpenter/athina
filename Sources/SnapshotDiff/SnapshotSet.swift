@@ -90,12 +90,13 @@ public struct SnapshotComparison: Sendable {
     }
   }
 
-  /// Channel differences up to 6 of 255 are not change. That covers the
-  /// shading an anti-aliased edge can pick up and the window server's glass,
-  /// which on the CI runner draws a dark switch's knob one of two ways from
-  /// one window to the next, up to 5 of 255 apart in a few dozen pixels. A
-  /// person sees neither, and anything a person would see, a shifted edge, a
-  /// new colour, a moved line, moves some channel much further.
+  /// Channel differences up to 6 of 255 are not change.
+  ///
+  /// That covers the shading an anti-aliased edge can pick up and the window
+  /// server's glass, which on the CI runner draws a dark switch's knob one of
+  /// two ways from one window to the next, up to 5 of 255 apart in a few dozen
+  /// pixels. A person sees neither, and anything a person would see, a shifted
+  /// edge, a new colour, a moved line, moves some channel much further.
   public static let defaultTolerance = 6
 
   public let kind: Kind
@@ -145,8 +146,10 @@ public struct SnapshotComparison: Sendable {
 
   /// Makes the approved set match the render wherever it drifted: a changed,
   /// resized or new snapshot's render becomes its baseline and a removed
-  /// snapshot's baseline is deleted. A snapshot within the tolerance keeps
-  /// its baseline, so approving never churns files nobody changed.
+  /// snapshot's baseline is deleted.
+  ///
+  /// A snapshot within the tolerance keeps its baseline, so approving never
+  /// churns files nobody changed.
   public func approve(baseline: URL, actual: URL) throws {
     let files = FileManager.default
     try files.createDirectory(at: baseline, withIntermediateDirectories: true)

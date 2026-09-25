@@ -93,7 +93,9 @@ import Testing
 }
 
 /// A replay's clock: another clock's time run faster, and moved ahead on
-/// demand. Proven over a test clock, so no real time passes.
+/// demand.
+///
+/// Proven over a test clock, so no real time passes.
 @Suite(.timeLimit(.minutes(1))) struct ScaledClockTests {
   private let t0 = Date(timeIntervalSince1970: 1_789_473_600)
 

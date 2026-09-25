@@ -7,8 +7,10 @@ import Foundation
 // that keeps changing so sensing has something to see.
 
 enum Watchers {
-  /// Every VoiceOver announcement the app posts, with a timestamp. This is
-  /// how a check proves a suggestion was announced without VoiceOver running.
+  /// Every VoiceOver announcement the app posts, with a timestamp.
+  ///
+  /// This is how a check proves a suggestion was announced without VoiceOver
+  /// running.
   static func announcements(pid: Int32) -> Never {
     let app = AXUIElementCreateApplication(pid)
     var observer: AXObserver?
@@ -87,6 +89,7 @@ enum Watchers {
 }
 
 /// The app a window id belongs to, so a logged click names what it landed on.
+///
 /// File scope, not a member: the tap callback is a C function pointer and can
 /// capture nothing at all.
 private func windowOwner(of windowID: Int64) -> String {

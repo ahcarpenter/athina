@@ -170,8 +170,9 @@ import Testing
 
   /// Runs the harness's `ensure_drive` on this test's files `times` times at
   /// once, with no product so each builds, and a stand-in `swift` that exits
-  /// with `status` once every build has started, so the builds always
-  /// overlap. Returns each run's exit status.
+  /// with `status` once every build has started, so the builds always overlap.
+  ///
+  /// Returns each run's exit status.
   private func ensureDrive(times: Int, status: Int32) throws -> [Int32] {
     let started = directory.appendingPathComponent("started", isDirectory: true)
     try FileManager.default.createDirectory(at: started, withIntermediateDirectories: true)
@@ -200,7 +201,9 @@ import Testing
 
   /// Runs scripts/bundle.sh, unsigned, into this test's directory, with a
   /// stand-in `swift` whose build saves `saving` when given and exits with
-  /// `status`. Returns bundle.sh's exit status.
+  /// `status`.
+  ///
+  /// Returns bundle.sh's exit status.
   private func bundle(status: Int32, saving: URL? = nil) throws -> Int32 {
     try make(binary, at: 0)
     let path = try standIn(

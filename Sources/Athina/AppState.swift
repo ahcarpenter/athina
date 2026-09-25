@@ -128,21 +128,26 @@ final class AppState {
   private let dataDirectoryLock: DataDirectoryLock?
   /// Why this launch must not start: a replay was given a `--settings` file
   /// that is not settings, or the files the app kept as Mentor could not be
-  /// moved (`DataMigration.Outcome.stopsLaunch`). The app says so and exits
-  /// rather than running on settings nobody asked for, or on an empty
-  /// journal in place of the owner's.
+  /// moved (`DataMigration.Outcome.stopsLaunch`).
+  ///
+  /// The app says so and exits rather than running on settings nobody asked
+  /// for, or on an empty journal in place of the owner's.
   let startupRefusal: String?
-  /// What this launch found and did about the files the app kept when it
-  /// was called Mentor (`DataMigration`). Shown in Settings and the debug
-  /// panel, because a move that was refused is the owner's to settle; one
-  /// that could not be finished stops the launch (`startupRefusal`).
+  /// What this launch found and did about the files the app kept when it was
+  /// called Mentor (`DataMigration`).
+  ///
+  /// Shown in Settings and the debug panel, because a move that was refused is
+  /// the owner's to settle; one that could not be finished stops the launch
+  /// (`startupRefusal`).
   let dataMigration: DataMigration.Outcome
   /// Why this live launch moves nothing from Mentor at all, for the log:
   /// it runs in the App Sandbox (`DataMigration.skipReason`).
   private let migrationSkipReason: String?
   /// Whether this launch copies the API key saved under the old name
-  /// (`KeyMigration`). Only a launch that reads the keychain at all does:
-  /// never a replay, and never a snapshot render.
+  /// (`KeyMigration`).
+  ///
+  /// Only a launch that reads the keychain at all does: never a replay, and
+  /// never a snapshot render.
   private let copyKeyFromMentor: Bool
 
   // MARK: Model client mode
@@ -163,7 +168,9 @@ final class AppState {
   let clockMode: ClockMode
   /// The one time source everything in the app reads.
   let clock: any AthinaClock
-  /// Moves a replay's clock ahead. Nil outside a replay, so nothing else can.
+  /// Moves a replay's clock ahead.
+  ///
+  /// Nil outside a replay, so nothing else can.
   let clockControl: AdjustableClock?
   /// How far a replay's clock has been moved ahead, for the menu and the
   /// debug panel; the clock itself is not observable.
@@ -186,8 +193,10 @@ final class AppState {
   /// Whether the pointer is over the toast, kept through an exchange so a
   /// countdown given back afterwards does not run under it.
   private var toastHovered = false
-  /// The toast the user has talked to: a transcript was matched to an
-  /// answer or a question was asked. A press that heard nothing does not count.
+  /// The toast the user has talked to: a transcript was matched to an answer or
+  /// a question was asked.
+  ///
+  /// A press that heard nothing does not count.
   private var talkedToSuggestionID: Int64?
   private let toast: ToastController
   private let callouts = CalloutController()
@@ -551,9 +560,10 @@ final class AppState {
   }
 
   /// The Permissions window's button: the system's request when it has not
-  /// asked yet, otherwise the matching System Settings pane. For the two
-  /// permissions granted there, Athina is registered in the pane's list
-  /// first, so it is there to switch on; the system may also show its own
+  /// asked yet, otherwise the matching System Settings pane.
+  ///
+  /// For the two permissions granted there, Athina is registered in the pane's
+  /// list first, so it is there to switch on; the system may also show its own
   /// note pointing at the same pane.
   func perform(_ action: PermissionAction, for permission: Permission) {
     guard !isSample else { return }
@@ -594,8 +604,9 @@ final class AppState {
     }
   }
 
-  /// Forgets what Athina has worked out so far. The next call starts a new
-  /// understanding from what is actually happening.
+  /// Forgets what Athina has worked out so far.
+  ///
+  /// The next call starts a new understanding from what is actually happening.
   func resetUnderstanding() async {
     await mentor?.resetUnderstanding()
     AppState.log.notice("understanding reset")
@@ -618,7 +629,9 @@ final class AppState {
 
   var hasAPIKey: Bool { apiKeyHint != nil }
 
-  /// Saves a new key to the Keychain. Returns false when the text is not usable as a key.
+  /// Saves a new key to the Keychain.
+  ///
+  /// Returns false when the text is not usable as a key.
   @discardableResult
   func saveAPIKey(_ raw: String) -> Bool {
     guard let key = APIKey.normalized(raw) else { return false }
@@ -693,11 +706,13 @@ final class AppState {
   // MARK: Suggestions
 
   /// Records feedback for a suggestion, whether it came from the toast, the
-  /// history window, or a transcript. A non-answer (expiry or closing the
-  /// toast) is recorded once and never overwrites anything: closing a
-  /// re-shown toast just closes it. Tell me more is recorded once too;
-  /// re-expanding a folded toast is only a view change. Returns the task
-  /// that journals the feedback, or nil when nothing was recorded.
+  /// history window, or a transcript.
+  ///
+  /// A non-answer (expiry or closing the toast) is recorded once and never
+  /// overwrites anything: closing a re-shown toast just closes it. Tell me more
+  /// is recorded once too; re-expanding a folded toast is only a view change.
+  /// Returns the task that journals the feedback, or nil when nothing was
+  /// recorded.
   @discardableResult
   func respond(to suggestionID: Int64, with feedback: SuggestionFeedback) -> Task<Void, Never>? {
     let existing = suggestionHistory.first { $0.id == suggestionID }?.feedback
@@ -748,9 +763,11 @@ final class AppState {
     return Task { await mentor?.recordFeedback(suggestionID: suggestionID, feedback: feedback) }
   }
 
-  /// The most recent suggestion that was ever on screen. One that expired
-  /// unseen while another toast was talked to stays in the history but is
-  /// not the last suggestion: the user never saw it and its screen is gone.
+  /// The most recent suggestion that was ever on screen.
+  ///
+  /// One that expired unseen while another toast was talked to stays in the
+  /// history but is not the last suggestion: the user never saw it and its
+  /// screen is gone.
   var lastShownSuggestion: Suggestion? {
     suggestionHistory.first { $0.feedback != .expiredUnseen }
   }
@@ -767,8 +784,10 @@ final class AppState {
   }
 
   /// Brings the most recent suggestion back as a toast, for one that was
-  /// missed. A toast the user asked for stays until answered or closed; its
-  /// callout comes back only when the spot still checks out.
+  /// missed.
+  ///
+  /// A toast the user asked for stays until answered or closed; its callout
+  /// comes back only when the spot still checks out.
   func showLastSuggestion() {
     guard let latest = lastShownSuggestion else { return }
     show(latest, autoExpires: false)
@@ -808,8 +827,10 @@ final class AppState {
   }
 
   /// Everything that goes with the toast goes with it: the callout and a
-  /// recording in progress. If the toast was talked to, this is where the
-  /// exchange ends and a suggestion held meanwhile may be shown.
+  /// recording in progress.
+  ///
+  /// If the toast was talked to, this is where the exchange ends and a
+  /// suggestion held meanwhile may be shown.
   private func takeDown() {
     toast.dismiss()
     callouts.dismiss()
@@ -1172,8 +1193,10 @@ final class AppState {
     }
   }
 
-  /// The key went down: bring up the suggestion to talk to, and listen. A
-  /// question still waiting its turn is withdrawn; the new one takes its place.
+  /// The key went down: bring up the suggestion to talk to, and listen.
+  ///
+  /// A question still waiting its turn is withdrawn; the new one takes its
+  /// place.
   private func pushToTalkPressed() {
     guard talkBack.acceptsAQuestion else { return }
     guard activeSuggestion != nil || lastShownSuggestion != nil else {
@@ -1230,11 +1253,12 @@ final class AppState {
     }
   }
 
-  /// The suggestion a reply is about: the toast that is up, or the most
-  /// recent suggestion brought back as a toast that stays until it is
-  /// closed. An exchange keeps the toast up, like expanding it, so its
-  /// countdown stops; what was left of it is kept in case nothing is heard.
-  /// Nil, with a note, when Athina has not made a suggestion yet.
+  /// The suggestion a reply is about: the toast that is up, or the most recent
+  /// suggestion brought back as a toast that stays until it is closed.
+  ///
+  /// An exchange keeps the toast up, like expanding it, so its countdown stops;
+  /// what was left of it is kept in case nothing is heard. Nil, with a note,
+  /// when Athina has not made a suggestion yet.
   private func suggestionToTalkTo() -> Suggestion? {
     let suggestion: Suggestion
     if let active = activeSuggestion {
@@ -1258,8 +1282,10 @@ final class AppState {
 
   /// The debug panel's Talk back field: typed words take the path a released
   /// key does, from transcript matching to the follow-up call, the answer in
-  /// the toast. It is how the follow-up path is checked, and a
-  /// follow-up fixture recorded, on a Mac without a microphone grant.
+  /// the toast.
+  ///
+  /// It is how the follow-up path is checked, and a follow-up fixture recorded,
+  /// on a Mac without a microphone grant.
   func talkBack(typed text: String) {
     guard canTalkBackTyped, let suggestion = suggestionToTalkTo() else { return }
     AppState.log.notice("typed talk-back for suggestion \(suggestion.id)")
@@ -1285,8 +1311,9 @@ final class AppState {
   }
 
   /// Ends the exchange: the recording is dropped, a transcript still being
-  /// finalized is ignored, and a question waiting its turn is withdrawn. A
-  /// follow-up call already in flight completes and its answer is journaled.
+  /// finalized is ignored, and a question waiting its turn is withdrawn.
+  ///
+  /// A follow-up call already in flight completes and its answer is journaled.
   /// A recording cut short counts as nothing heard.
   private func cancelTalkBack() {
     listeningLimitTask?.cancel()
@@ -1322,10 +1349,12 @@ final class AppState {
   }
 
   /// What a transcript, heard or typed, does: one of the toast's answers, or
-  /// one follow-up question whose answer lands in the toast. Either makes
-  /// the toast a talked-to one that stays up, and holds new suggestions,
-  /// until it is closed. A press that heard nothing is not an exchange: the
-  /// toast gets back whatever countdown it had, and nothing is held for it.
+  /// one follow-up question whose answer lands in the toast.
+  ///
+  /// Either makes the toast a talked-to one that stays up, and holds new
+  /// suggestions, until it is closed. A press that heard nothing is not an
+  /// exchange: the toast gets back whatever countdown it had, and nothing is
+  /// held for it.
   private func act(on text: String?, for suggestion: Suggestion) async {
     let match = text.flatMap(TranscriptMatcher.match)
     setTalkBack(.idle)
@@ -1381,9 +1410,11 @@ final class AppState {
 
   // MARK: Presentation helpers
 
-  /// Which variant of the mark the menu bar draws. The decision itself is a
-  /// pure function in `MenuBarMark`, so it is covered by tests and so
-  /// choosing a different set later changes one table rather than the app.
+  /// Which variant of the mark the menu bar draws.
+  ///
+  /// The decision itself is a pure function in `MenuBarMark`, so it is covered
+  /// by tests and so choosing a different set later changes one table rather
+  /// than the app.
   var menuBarMark: MenuBarMark {
     MenuBarMark.resolve(
       mode: mode,
@@ -1450,10 +1481,12 @@ final class AppState {
     }
   }
 
-  /// Moves a replay's clock ahead by `seconds`, as if that much time went by
-  /// at once with the Mac awake in whatever mode Athina is in: a wait due in
-  /// it ends, and while watching it counts as active use. False, changing
-  /// nothing, outside a replay or for an interval `ClockMode` does not accept.
+  /// Moves a replay's clock ahead by `seconds`, as if that much time went by at
+  /// once with the Mac awake in whatever mode Athina is in: a wait due in it
+  /// ends, and while watching it counts as active use.
+  ///
+  /// False, changing nothing, outside a replay or for an interval `ClockMode`
+  /// does not accept.
   @discardableResult
   func advanceClock(by seconds: TimeInterval) -> Bool {
     guard let clockControl, ClockMode.accepts(advance: seconds) else { return false }
@@ -1467,8 +1500,9 @@ final class AppState {
 
   /// Moves a replay's clock ahead for another process (`ClockRemote`), and
   /// answers the request where it asked, so the script that made it knows it
-  /// was heard rather than assuming so. A request that cannot be answered
-  /// there moves nothing.
+  /// was heard rather than assuming so.
+  ///
+  /// A request that cannot be answered there moves nothing.
   private func advanceClock(
     onRequest request: Result<TimeInterval, ClockRemote.Refusal>,
     answeringAt replyURL: URL?
@@ -1510,8 +1544,9 @@ final class AppState {
   // MARK: Launch files
 
   /// Every launch flag that was refused and has no line of its own, in the
-  /// order they were found: the file flags, then the replay latency. A
-  /// refused clock flag is on the Clock line instead.
+  /// order they were found: the file flags, then the replay latency.
+  ///
+  /// A refused clock flag is on the Clock line instead.
   var launchRefusals: [String] {
     launchFiles.refusals + [replayLatency.refusal].compactMap { $0 }
   }
@@ -1594,11 +1629,13 @@ final class AppState {
     }
   }
 
-  /// One line for the menu saying where the declared contexts put the
-  /// current activity, or nil when contexts have nothing to say: they are
-  /// not being enforced. A verdict is only shown while it is still about the
-  /// frontmost app and was reached under enforcement, because the record is
-  /// rewritten only when triage runs and most observations hold before that.
+  /// One line for the menu saying where the declared contexts put the current
+  /// activity, or nil when contexts have nothing to say: they are not being
+  /// enforced.
+  ///
+  /// A verdict is only shown while it is still about the frontmost app and was
+  /// reached under enforcement, because the record is rewritten only when
+  /// triage runs and most observations hold before that.
   var mentorContextLine: String? {
     let mentor = settings.mentor
     guard mentor.onlyMentorInsideContexts else { return nil }
@@ -1621,9 +1658,10 @@ final class AppState {
   }
 
   /// One line for the menu: what Athina currently thinks the user is working
-  /// toward, so the inference is visible without opening anything. A goal
-  /// sentence can run long and a menu item widens to fit it, so it is cut
-  /// here; the debug panel shows the whole thing. Nil, so the menu shows no
+  /// toward, so the inference is visible without opening anything.
+  ///
+  /// A goal sentence can run long and a menu item widens to fit it, so it is
+  /// cut here; the debug panel shows the whole thing. Nil, so the menu shows no
   /// goal line, while Athina is off or has no key and nothing works one out.
   var understandingLine: String? {
     guard mentorStatus.availability.formsUnderstanding else { return nil }

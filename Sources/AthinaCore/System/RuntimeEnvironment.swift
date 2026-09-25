@@ -47,10 +47,11 @@ public struct RuntimeEnvironment: Equatable, Sendable {
   /// This process, read once.
   public static let current = RuntimeEnvironment.detect()
 
-  /// Reads the process's own entitlement and main bundle. Only a bundle that
-  /// is an app counts: the test runner has a main bundle and an identifier
-  /// of its own, which must never become the preferences domain or the
-  /// keychain service.
+  /// Reads the process's own entitlement and main bundle.
+  ///
+  /// Only a bundle that is an app counts: the test runner has a main bundle and
+  /// an identifier of its own, which must never become the preferences domain
+  /// or the keychain service.
   static func detect(bundle: Bundle = .main) -> RuntimeEnvironment {
     let app = bundle.bundleURL.pathExtension == "app" ? bundle : nil
     let sandboxed = hasEntitlement(sandboxEntitlement)
@@ -71,6 +72,7 @@ public struct RuntimeEnvironment: Equatable, Sendable {
 
   /// Why `flag` may not read `url` in this process, or nil when it may: a
   /// sandboxed process reads only inside its container and its own bundle.
+  ///
   /// Always nil outside the sandbox.
   public func refusal(reading url: URL, for flag: String) -> String? {
     refusal(
@@ -83,9 +85,11 @@ public struct RuntimeEnvironment: Equatable, Sendable {
     )
   }
 
-  /// Why `flag` may not write to `url` in this process, or nil when it may:
-  /// a sandboxed process writes only inside its container, since its bundle
-  /// is sealed by its signature. Always nil outside the sandbox.
+  /// Why `flag` may not write to `url` in this process, or nil when it may: a
+  /// sandboxed process writes only inside its container, since its bundle is
+  /// sealed by its signature.
+  ///
+  /// Always nil outside the sandbox.
   public func refusal(writing url: URL, for flag: String) -> String? {
     refusal(url, for: flag, verb: "write", within: [containerURL.map { ("its container", $0) }])
   }

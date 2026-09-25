@@ -1,8 +1,9 @@
 import AthinaCore
 import Carbon
 
-/// Registers Athina's global hotkeys with Carbon, which needs no permission
-/// and reports both the press and the release of a registered combination.
+/// Registers Athina's global hotkeys with Carbon, which needs no permission and
+/// reports both the press and the release of a registered combination.
+///
 /// The release is what makes push-to-talk possible without Input Monitoring:
 /// Carbon delivers `kEventHotKeyReleased` for a hotkey it registered, so the
 /// app hears the key go up without watching keyboard events at all.
@@ -22,8 +23,10 @@ final class HotKeyCenter {
   private static let signature: OSType = 0x4D4E_5452  // "MNTR"
 
   /// Registers the hotkey for the slot, replacing any previous one; nil
-  /// unregisters it. Returns false when the combination is unusable, not
-  /// set, or another app already holds it.
+  /// unregisters it.
+  ///
+  /// Returns false when the combination is unusable, not set, or another app
+  /// already holds it.
   @discardableResult
   func register(_ hotKey: HotKey?, for slot: Slot) -> Bool {
     unregister(slot)

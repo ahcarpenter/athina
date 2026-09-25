@@ -4,11 +4,12 @@ import Foundation
 import OSLog
 import Speech
 
-/// Captures the microphone while the talk-back key is held and transcribes
-/// it with the system speech recognizer, configured to require on-device
-/// recognition so no audio ever reaches a server. When the current locale
-/// has no on-device recognizer the feature is unavailable rather than
-/// falling back.
+/// Captures the microphone while the talk-back key is held and transcribes it
+/// with the system speech recognizer, configured to require on-device
+/// recognition so no audio ever reaches a server.
+///
+/// When the current locale has no on-device recognizer the feature is
+/// unavailable rather than falling back.
 @MainActor
 final class SpeechListener {
   enum Availability: Equatable {
@@ -37,8 +38,10 @@ final class SpeechListener {
 
   /// A recording is cut off after this long in case the release is missed.
   static let maxDuration: TimeInterval = 30
-  /// Audio is captured for this long after the key comes up. People let go
-  /// as the last word ends, and the recognizer needs the whole word.
+  /// Audio is captured for this long after the key comes up.
+  ///
+  /// People let go as the last word ends, and the recognizer needs the whole
+  /// word.
   static let releaseGrace: TimeInterval = 0.7
   /// How long to wait for the recognizer's final result after the audio ends.
   static let finalResultTimeout: TimeInterval = 3
@@ -136,8 +139,9 @@ final class SpeechListener {
   }
 
   /// Stops capturing and returns the transcript once the recognizer has
-  /// finalized it, or the best partial one after a bounded wait. Nil when
-  /// nothing was recognized.
+  /// finalized it, or the best partial one after a bounded wait.
+  ///
+  /// Nil when nothing was recognized.
   func finish() async -> String? {
     guard isListening, !finishing else { return nil }
     finishing = true

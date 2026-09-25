@@ -74,10 +74,11 @@ struct AthinaApp: App {
   }
 }
 
-/// The menu bar item: the variant of the mark for what Athina is doing. Every
-/// variant is the same size, so the item keeps one width in every mode. While
-/// calls are replayed or recorded, a word beside the mark says so, so a replay
-/// is never mistaken for a live call.
+/// The menu bar item: the variant of the mark for what Athina is doing.
+///
+/// Every variant is the same size, so the item keeps one width in every mode.
+/// While calls are replayed or recorded, a word beside the mark says so, so a
+/// replay is never mistaken for a live call.
 struct MenuBarLabel: View {
   let mark: MenuBarMark
   let badge: String?
@@ -108,9 +109,10 @@ struct MenuBarLabelImage: View {
   }
 }
 
-/// Keeps a window's size and position across launches. SwiftUI saves no frame
-/// for a window scene whose state restoration is off, which Athina's windows
-/// need so they do not reopen at every login.
+/// Keeps a window's size and position across launches.
+///
+/// SwiftUI saves no frame for a window scene whose state restoration is off,
+/// which Athina's windows need so they do not reopen at every login.
 struct WindowFrameAutosave: NSViewRepresentable {
   let name: String
 
@@ -148,20 +150,24 @@ enum WindowID {
   static let history = "history"
 }
 
-/// Developer aids on the command line: `Athina --open debug|settings|permissions|history`
-/// presents that window at launch, the debug panel on a live launch only while
-/// Settings > Advanced turns it on (`DebugPanelAccess`) (for example
-/// `open -n build/Athina.app --args --replay <dir> --open debug`; a plain `open`
-/// brings an already running Athina forward and drops the arguments, and without
-/// `--replay` the new instance is a second live Athina on the live journal, the
-/// live settings and the same bill, which only `scripts/launch.sh` refuses),
-/// `--open settings:models` opens Settings on that pane (`SettingsPane`), `--snapshot <dir>`
-/// is handled by `Snapshots`, `--replay <dir>`, `--allow-stale-fixtures`, and
-/// `--record [<dir>]` choose where model calls go (`ModelClientMode`), and
-/// `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock (`ClockMode`),
+/// Developer aids on the command line.
+///
+/// `Athina --open debug|settings|permissions|history` presents that window at
+/// launch, the debug panel on a live launch only while Settings > Advanced
+/// turns it on (`DebugPanelAccess`) (for example
+/// `open -n build/Athina.app --args --replay <dir> --open debug`; a plain
+/// `open` brings an already running Athina forward and drops the arguments,
+/// and without `--replay` the new instance is a second live Athina on the live
+/// journal, the live settings and the same bill, which only `scripts/launch.sh`
+/// refuses), `--open settings:models` opens Settings on that pane
+/// (`SettingsPane`), `--snapshot <dir>` is handled by `Snapshots`,
+/// `--replay <dir>`, `--allow-stale-fixtures`, and `--record [<dir>]` choose
+/// where model calls go (`ModelClientMode`), and `--time-scale <n>` and
+/// `--advance-clock <interval>` set a replay's clock (`ClockMode`),
 /// `--replay-latency immediate|recorded` sets how long a replayed call takes
 /// (`ReplayLatencyMode`), and `--settings <path>` chooses the settings a replay
 /// starts from (`LaunchFiles`).
+///
 /// Where a replay keeps its files is never an argument: it makes a directory of
 /// its own and says which on the line it writes when it starts.
 enum LaunchArguments {
@@ -262,9 +268,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 }
 
-/// The menu bar extra's menu: what Athina is doing, then its commands, then
-/// its windows, then Quit. Status rows are dimmed text; a status that needs
-/// something from the person is a command that goes there.
+/// The menu bar extra's menu: what Athina is doing, then its commands, then its
+/// windows, then Quit.
+///
+/// Status rows are dimmed text; a status that needs something from the person
+/// is a command that goes there.
 struct MenuBarContent: View {
   @Environment(AppState.self) private var state
   @Environment(\.openWindow) private var openWindow

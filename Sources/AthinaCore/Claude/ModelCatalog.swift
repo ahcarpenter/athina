@@ -14,8 +14,10 @@ public struct ClaudeModel: Equatable, Sendable, Identifiable {
   }
 }
 
-/// The models offered in Settings. Ids and capabilities were checked against
-/// the Anthropic documentation on `PriceTable.defaultCheckedOn`.
+/// The models offered in Settings.
+///
+/// Ids and capabilities were checked against the Anthropic documentation on
+/// `PriceTable.defaultCheckedOn`.
 public enum ModelCatalog {
   public static let haiku45 = ClaudeModel(
     id: "claude-haiku-4-5-20251001",
@@ -44,8 +46,10 @@ public enum ModelCatalog {
   public static let triageChoices: [ClaudeModel] = [haiku45, sonnet5, opus5, fable51]
   /// Models offered for the mentor tier.
   public static let mentorChoices: [ClaudeModel] = [sonnet5, opus5, fable51]
-  /// Models offered for the understanding refresh. Rewriting the record is
-  /// summarising work, so the cheap model is offered here as well.
+  /// Models offered for the understanding refresh.
+  ///
+  /// Rewriting the record is summarising work, so the cheap model is offered
+  /// here as well.
   public static let understandingChoices: [ClaudeModel] = [haiku45, sonnet5, opus5, fable51]
 
   public static func model(id: String) -> ClaudeModel? {

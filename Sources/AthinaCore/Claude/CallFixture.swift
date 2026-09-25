@@ -3,8 +3,10 @@ import Foundation
 /// One recorded model call, as one JSON file: the request exactly as it was
 /// built (system blocks, messages with any image, output format, model), the
 /// response as Athina decodes it or the error, and the call's identity, usage,
-/// latency, and cost. The API key is never part of it, and any key that shows
-/// up in the text is redacted before the file is written.
+/// latency, and cost.
+///
+/// The API key is never part of it, and any key that shows up in the text is
+/// redacted before the file is written.
 ///
 /// `ReplayClaudeClient` serves these without the network; see README,
 /// "Iterating without the network".
@@ -138,10 +140,11 @@ public enum CallFixtureFiles {
   }()
 
   /// The fixture as JSON with `apiKey`, and anything shaped like an Anthropic
-  /// key, replaced by the redaction marker. An em dash, which window titles
-  /// and model text can carry, is written as its JSON escape: it decodes to
-  /// the same text, and the file never holds the character this repository
-  /// does not use.
+  /// key, replaced by the redaction marker.
+  ///
+  /// An em dash, which window titles and model text can carry, is written as
+  /// its JSON escape: it decodes to the same text, and the file never holds the
+  /// character this repository does not use.
   public static func encode(_ fixture: CallFixture, redacting apiKey: String) throws -> Data {
     var text = String(decoding: try encoder.encode(fixture), as: UTF8.self)
     text = redact(text, apiKey: apiKey)
@@ -170,9 +173,10 @@ public enum CallFixtureFiles {
   }
 
   /// A name that sorts by recording time, to the millisecond, then says what
-  /// the call was: `20260914T203102.123Z-triage-1a2b3c4d.json`. Recorded
-  /// calls never share a millisecond (`recordingStamp(at:after:)`), so their
-  /// names sort in the order the calls were made.
+  /// the call was: `20260914T203102.123Z-triage-1a2b3c4d.json`.
+  ///
+  /// Recorded calls never share a millisecond (`recordingStamp(at:after:)`), so
+  /// their names sort in the order the calls were made.
   public static func fileName(
     for fixture: CallFixture,
     suffix: String = String(UUID().uuidString.prefix(8)).lowercased()
@@ -192,12 +196,13 @@ public enum CallFixtureFiles {
       "\(formatter.string(from: Date(timeIntervalSince1970: second))).\(fraction)Z-\(kind)-\(suffix).json"
   }
 
-  /// The stamp for a call made at `now` after a call stamped `previous`:
-  /// `now` when its name shows a later millisecond than `previous`'s, and
-  /// otherwise the next millisecond. A name shows only the millisecond, so
-  /// without this two calls inside one millisecond, or either side of the
-  /// wall clock stepping back, would sort by kind and id instead of in the
-  /// order they were made.
+  /// The stamp for a call made at `now` after a call stamped `previous`.
+  ///
+  /// It is `now` when its name shows a later millisecond than the name of
+  /// `previous` does, and otherwise the next millisecond. A name shows only the
+  /// millisecond, so without this two calls inside one millisecond, or either
+  /// side of the wall clock stepping back, would sort by kind and id instead of
+  /// in the order they were made.
   public static func recordingStamp(at now: Date, after previous: Date?) -> Date {
     guard let previous, millisecond(of: now) <= millisecond(of: previous) else { return now }
     return Date(timeIntervalSince1970: Double(millisecond(of: previous) + 1) / 1000)
@@ -208,9 +213,10 @@ public enum CallFixtureFiles {
     Int((date.timeIntervalSince1970 * 1000).rounded())
   }
 
-  /// Creates `directory` (mode 0700 when missing) and proves a fixture can
-  /// be written there by writing and removing a probe file. Throws when
-  /// either fails.
+  /// Creates `directory` (mode 0700 when missing) and proves a fixture can be
+  /// written there by writing and removing a probe file.
+  ///
+  /// Throws when either fails.
   public static func checkWritable(_ directory: URL) throws {
     let manager = FileManager.default
     try manager.createDirectory(
@@ -223,8 +229,10 @@ public enum CallFixtureFiles {
     try manager.removeItem(at: probe)
   }
 
-  /// Writes one fixture into `directory` (created with mode 0700 when
-  /// missing) as a file only the user can read. Returns its URL.
+  /// Writes one fixture into `directory` (created with mode 0700 when missing)
+  /// as a file only the user can read.
+  ///
+  /// Returns its URL.
   @discardableResult
   public static func write(
     _ fixture: CallFixture,
@@ -245,7 +253,9 @@ public enum CallFixtureFiles {
 
   /// Every `.json` fixture in `directory`, ordered by file name, which is
   /// recording order for recorded files and whatever order a curated set was
-  /// named in. Throws, naming the file, when one cannot be read.
+  /// named in.
+  ///
+  /// Throws, naming the file, when one cannot be read.
   public static func load(from directory: URL) throws -> [(name: String, fixture: CallFixture)] {
     let names: [String]
     do {

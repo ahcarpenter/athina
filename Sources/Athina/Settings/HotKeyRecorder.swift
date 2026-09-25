@@ -2,9 +2,11 @@ import AppKit
 import AthinaCore
 import SwiftUI
 
-/// Click, then press the new combination. Escape cancels. An optional
-/// binding shows a placeholder while unset and offers Clear; a combination
-/// listed in `conflicts` is refused with a note instead of being taken.
+/// Click, then press the new combination.
+///
+/// Escape cancels. An optional binding shows a placeholder while unset and
+/// offers Clear; a combination listed in `conflicts` is refused with a note
+/// instead of being taken.
 struct HotKeyRecorder: View {
   /// What the hotkey is for, which VoiceOver reads as the button's label.
   let title: String

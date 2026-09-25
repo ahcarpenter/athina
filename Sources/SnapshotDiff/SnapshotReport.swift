@@ -6,7 +6,9 @@ import Foundation
 public enum SnapshotReport {
   /// Writes `index.html`, `summary.md`, and a folder per drifted snapshot
   /// holding `before.png`, `after.png` and, when both have one size,
-  /// `diff.png`. Replaces whatever `directory` held.
+  /// `diff.png`.
+  ///
+  /// Replaces whatever `directory` held.
   public static func write(
     _ comparison: SnapshotComparison,
     baseline: URL,
