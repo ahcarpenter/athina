@@ -776,6 +776,59 @@ api() {
 	return "$status"
 }
 
+# --- Scripted sensing ---------------------------------------------------------
+
+# A hermetic run senses only what a scenario scripts through the API's
+# `observe` (README "Scripted sensing"). These script the moments the committed
+# fixtures were recorded at, from the documents in their scenario/ folder,
+# each shown as a TextEdit window of its own.
+
+# Seconds since 1970 to the microsecond, for timing a wait in real time.
+now_seconds() {
+	printf '%s\n' "${EPOCHREALTIME:-$(python3 -c 'import time; print(time.time())')}"
+}
+
+# Shows the fixtures' scenario document $1 as the TextEdit window in front,
+# captured at once. Prints the answer; its `after` is where to wait for what
+# the observation brings.
+observe_document() {
+	local file="$FIXTURES/scenario/$1"
+	[ -f "$file" ] || die "no scenario document $1 in $FIXTURES/scenario"
+	api observe app=TextEdit bundle=com.apple.TextEdit window="$1" text="$(cat "$file")"
+}
+
+# Brings up the replay's first suggestion as the fixtures were recorded:
+# reading-notes.txt in front, whose triage finds nothing worth a look, then a
+# switch to cleanup-script.txt, whose triage finds something and whose mentor
+# call makes the suggestion. The triage gate holds a second triage for its 5
+# second floor, which the replay clock is moved past rather than waited out.
+# Checks that the toast is up within 2 seconds of the second observe, and sets
+# SUGGESTION_ID. Not called in a subshell, since its check has to count.
+SUGGESTION_ID=""
+scripted_toast() {
+	local answer started elapsed
+	answer="$(observe_document reading-notes.txt)" || { log "reading-notes.txt was not observed: $answer"; return 1; }
+	api wait-event name=call tier=triage after="$(json_eval "$answer" 'int(r["after"])')" timeout=10 >/dev/null \
+		|| { log "no triage call came after the first observation"; return 1; }
+	api advance seconds=6 >/dev/null || { log "the replay clock would not move past the triage gate"; return 1; }
+	started="$(now_seconds)"
+	answer="$(observe_document cleanup-script.txt)" || { log "cleanup-script.txt was not observed: $answer"; return 1; }
+	SUGGESTION_ID="$(api wait-event name=suggestion after="$(json_eval "$answer" 'int(r["after"])')" timeout=10 --field event.id)" \
+		|| { log "no suggestion came after the second observation"; return 1; }
+	api wait-window window="Athina suggestion" timeout=2 >/dev/null || { log "suggestion $SUGGESTION_ID showed no toast"; return 1; }
+	elapsed="$(awk -v a="$started" -v b="$(now_seconds)" 'BEGIN { printf "%.2f", b - a }')"
+	log "toast up for suggestion $SUGGESTION_ID ${elapsed}s after the second observe"
+	check "the toast is up within 2 seconds of the second observe" "yes" \
+		"$(awk -v e="$elapsed" 'BEGIN { print (e <= 2 ? "yes" : "no") }')"
+}
+
+# A suggestion's feedback as the app's own journal holds it, `none` when it
+# has none.
+api_feedback() {
+	json_eval "$(api journal query=suggestions)" \
+		'next(("none" if s["feedback"] == "-" else s["feedback"] for s in r["rows"] if s["id"] == a[0]), "missing")' "$1"
+}
+
 # --- The menu bar -------------------------------------------------------------
 
 # Athina's own status item, as one `extra` line of the bar report.

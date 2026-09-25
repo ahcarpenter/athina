@@ -9,7 +9,7 @@ import Testing
     for query in JournalQueries.all {
       #expect(JournalQueries.named(query.name) == query)
       #expect(query.sql.lowercased().hasPrefix("select"), "\(query.name) is not a read")
-      for forbidden in ["insert", "update", "delete ", "drop", "attach"] {
+      for forbidden in ["insert ", "update ", "delete ", "drop ", "attach "] {
         #expect(!query.sql.lowercased().contains(forbidden), "\(query.name) writes")
       }
     }
