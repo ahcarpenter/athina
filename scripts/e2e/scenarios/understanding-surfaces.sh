@@ -56,15 +56,20 @@ field_value() { api find window=Models identifier="$1" --field elements.0.value;
 # Type an amount into a duration row and end the edit with Tab, the way a
 # person moves on to the next field. The field is emptied first from wherever
 # the click put the insertion point. The amount the row is left showing is
-# what it committed.
+# what it committed, which it can take a moment to show once the edit ends
+# on a busy Mac, so it is read until it is the amount expected, `want`, or
+# that moment has passed.
 type_duration() {
-	local field="$1" typed="$2" clear=""
+	local field="$1" typed="$2" want="$3" clear=""
 	for _ in 1 2 3 4 5 6; do clear+=$'\x7f'; done
 	api scroll window=Models identifier="$field" >/dev/null || return 1
 	api click window=Models identifier="$field" >/dev/null || return 1
 	api type window=Models text="$clear$typed"$'\t' >/dev/null || return 1
-	field_value "$field"
+	DURATION_FIELD="$field"
+	settled "$want" duration_field_value
 }
+
+duration_field_value() { field_value "$DURATION_FIELD"; }
 
 # The confirmation's Cancel button, once it is up over the debug panel.
 cancel_button() { api find window="Debug Panel" role=AXButton label=Cancel --field elements.0.label; }
@@ -124,12 +129,12 @@ scenario_run() {
 	# that and moving on leaves the nearest one it allows rather than a figure
 	# validated() would quietly clamp behind the person.
 	check "a refresh below the range settles at the shortest allowed" "5" \
-		"$(type_duration understanding.refreshInterval 1)"
+		"$(type_duration understanding.refreshInterval 1 5)"
 	check "the setting holds the shortest refresh" "300" "$(settled 300 refresh_interval)"
 	check "a refresh above the range settles at the longest allowed" "720" \
-		"$(type_duration understanding.refreshInterval 1000)"
+		"$(type_duration understanding.refreshInterval 1000 720)"
 	check "the setting holds the longest refresh" "43200" "$(settled 43200 refresh_interval)"
-	check "an allowed refresh is left as typed" "20" "$(type_duration understanding.refreshInterval 20)"
+	check "an allowed refresh is left as typed" "20" "$(type_duration understanding.refreshInterval 20 20)"
 	check "the setting holds the refresh typed" "1200" "$(settled 1200 refresh_interval)"
 
 	# The footer names the Journal pane by linking to it, and the link opens it
