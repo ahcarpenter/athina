@@ -8,6 +8,7 @@ import Foundation
 /// a known phrase. "Tell me more about the flag" is therefore a question,
 /// not the Tell me more answer, which is what the user meant.
 public enum TranscriptMatcher {
+  /// What a transcript was read as.
   public enum Match: Equatable, Sendable {
     /// The utterance is one of the toast's buttons, or "close it".
     case answer(SuggestionFeedback)
@@ -122,6 +123,7 @@ public enum TranscriptMatcher {
 /// not yet talked to is not an exchange: the hold ends and the toast gets
 /// back whatever countdown the press interrupted.
 public enum TalkBackPress {
+  /// What the press leaves the toast doing.
   public enum Outcome: Equatable, Sendable {
     /// The toast is talked to: it stays up until closed and new suggestions wait.
     case talkedTo
@@ -211,6 +213,8 @@ public enum ToastClick: Equatable, Sendable {
       }
   }
 
+  /// Returns whether this click closes the toast, given what push-to-talk is
+  /// doing.
   public func dismissesToast(talkBack: TalkBackState) -> Bool {
     switch self {
     case .onToast, .onMenuBarItem: false
@@ -225,16 +229,27 @@ public enum ToastClick: Equatable, Sendable {
 /// The question is the transcript, stored here and nowhere else off this Mac
 /// except in the one follow-up call that carried it.
 public struct FollowUp: Codable, Equatable, Sendable, Identifiable {
+  /// The exchange's journal id, or 0 before it is journaled.
   public var id: Int64
+  /// The journal id of the suggestion it is about.
   public var suggestionID: Int64
+  /// When the user asked.
   public var timestamp: Date
+  /// What the user said, as transcribed, or what was typed into the debug
+  /// panel's Talk back field.
   public var question: String
   /// Nil when the call did not produce one; `error` then says why.
   public var answer: String?
+  /// Why there is no answer: the hold that kept the question from being sent,
+  /// or how the call failed; nil when it was answered.
   public var error: String?
+  /// The model id that answered, or the one the settings named when no reply
+  /// came.
   public var model: String
+  /// `MentorPrompts.version` when the question was asked.
   public var promptVersion: Int
 
+  /// Creates an exchange, with an id of 0 until the journal stores it.
   public init(
     id: Int64 = 0,
     suggestionID: Int64,

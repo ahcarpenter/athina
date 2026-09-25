@@ -15,6 +15,7 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
   case microphone
   case speechRecognition
 
+  /// The raw value, such as `screenRecording`.
   public var id: String { rawValue }
 
   /// Sensing needs these; without both, the pipeline degrades or waits.
@@ -22,6 +23,7 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
   /// Talking back needs these; nothing else does.
   public static let optional: [Permission] = [.microphone, .speechRecognition]
 
+  /// Whether sensing needs this permission, as opposed to talking back.
   public var isRequired: Bool {
     Permission.required.contains(self)
   }
@@ -38,6 +40,8 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
     }
   }
 
+  /// The permission's name as System Settings shows it, such as "Screen
+  /// Recording".
   public var title: String {
     switch self {
     case .screenRecording: "Screen Recording"
@@ -47,6 +51,8 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
     }
   }
 
+  /// What the permission lets Athina do and what stays on this Mac, as the
+  /// Permissions window explains it.
   public var purpose: String {
     switch self {
     case .screenRecording:
@@ -77,12 +83,18 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
   }
 }
 
+/// Which of Athina's permissions are granted.
 public struct PermissionStatus: Equatable, Sendable {
+  /// Whether Screen Recording is granted.
   public var screenRecording: Bool
+  /// Whether Accessibility is granted.
   public var accessibility: Bool
+  /// Whether Microphone is granted.
   public var microphone: Bool
+  /// Whether Speech Recognition is granted.
   public var speechRecognition: Bool
 
+  /// Creates a status; the voice pair defaults to not granted.
   public init(
     screenRecording: Bool,
     accessibility: Bool,
@@ -99,10 +111,13 @@ public struct PermissionStatus: Equatable, Sendable {
   ///
   /// The voice pair is optional and not counted.
   public var allGranted: Bool { screenRecording && accessibility }
+  /// Whether at least one sensing permission is granted, so sensing can run
+  /// in some mode.
   public var anyGranted: Bool { screenRecording || accessibility }
   /// Both voice permissions, which talking back needs.
   public var voiceGranted: Bool { microphone && speechRecognition }
 
+  /// Returns whether `permission` is granted.
   public func isGranted(_ permission: Permission) -> Bool {
     switch permission {
     case .screenRecording: screenRecording
@@ -124,6 +139,15 @@ public enum PermissionAction: Equatable, Sendable {
   /// the matching list and opens that pane.
   case openSystemSettings
 
+  /// Returns the action to offer for a permission.
+  ///
+  /// - Parameters:
+  ///   - permission: The permission the action is for.
+  ///   - granted: Whether it is granted, which needs no action.
+  ///   - undetermined: Whether the system has never asked about it, which
+  ///     only the Microphone and Speech Recognition alerts can be.
+  /// - Returns: Nothing when granted, the Allow alert for an alert-based
+  ///   permission never asked about, and System Settings otherwise.
   public static func `for`(
     _ permission: Permission,
     granted: Bool,
@@ -151,6 +175,7 @@ public enum PermissionProbe {
     }
   }
 
+  /// Returns which permissions are granted right now.
   public static func current() -> PermissionStatus {
     PermissionStatus(
       screenRecording: CGPreflightScreenCaptureAccess(),
@@ -182,6 +207,7 @@ public enum PermissionProbe {
     }
   }
 
+  /// Opens the Privacy & Security pane for `permission` in System Settings.
   @MainActor
   public static func openSystemSettings(for permission: Permission) {
     NSWorkspace.shared.open(permission.settingsURL)

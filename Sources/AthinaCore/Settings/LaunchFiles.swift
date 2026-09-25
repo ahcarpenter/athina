@@ -27,6 +27,7 @@ import Foundation
 /// uses the live files and says why. The flag with no value is refused the
 /// same way, and the replay keeps the live settings.
 public struct LaunchFiles: Equatable, Sendable {
+  /// The flag that names the settings file a replay starts from.
   public static let settingsFlag = "--settings"
   /// Finished per-launch directories a replay launch leaves in place, newest
   /// first, so a check can still read the journal of one that just quit and
@@ -50,6 +51,20 @@ public struct LaunchFiles: Equatable, Sendable {
   /// the one door.
   public private(set) var unusableSettings: String?
 
+  /// Chooses the launch's files from its command line: the support directory
+  /// for a live or recording launch, and a new directory of its own inside
+  /// `AppPaths.replayRoot` for a replay.
+  ///
+  /// Only reads the arguments; nothing is created on disk until `claim`.
+  ///
+  /// - Parameters:
+  ///   - arguments: The process's command line.
+  ///   - clientMode: How the launch answers model calls, which decides
+  ///     whether it gets files of its own.
+  ///   - supportDirectory: The live data directory.
+  ///   - launchName: The name of the replay's per-launch directory.
+  ///   - environment: Whether the process is sandboxed, which decides what
+  ///     a `--settings` path may name.
   public init(
     arguments: [String],
     clientMode: ModelClientMode,
@@ -262,14 +277,17 @@ public struct LaunchFiles: Equatable, Sendable {
 /// The system lets go of it when the process exits, however it exits, so a
 /// crash never leaves a directory held.
 public final class DataDirectoryLock: @unchecked Sendable {
+  /// The name of the lock file inside the directory.
   public static let fileName = "athina.pid"
 
+  /// Why the hold could not be taken.
   public enum Failure: Error, Equatable {
     /// Another process holds it; its pid when the file names one.
     case inUse(pid: Int32?)
     case system(String)
   }
 
+  /// The lock file this process holds.
   public let url: URL
   private let descriptor: Int32
 

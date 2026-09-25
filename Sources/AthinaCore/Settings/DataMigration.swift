@@ -135,10 +135,16 @@ public enum DataMigration {
   ///
   /// The record of a move under way (`pendingName`) holds the same.
   public struct Marker: Codable, Equatable, Sendable {
+    /// The path of the old directory the files were copied from.
     public var from: String
+    /// When the move ran.
     public var at: Date
+    /// The names the move puts in the new directory, in the order they were
+    /// copied.
     public var moved: [String]
 
+    /// Creates a marker for a move from `from`, run at `at`, that put
+    /// `moved` in the new directory.
     public init(from: String, at: Date, moved: [String]) {
       self.from = from
       self.at = at
@@ -494,6 +500,7 @@ public enum PreferencesMigration {
   /// was anything to copy.
   public static let doneKey = "preferencesSettledFromMentor"
 
+  /// What a launch found in the two domains, and did.
   public enum Outcome: Equatable, Sendable {
     /// The old domain holds nothing, which is a fresh install.
     case nothingToMove
@@ -503,6 +510,18 @@ public enum PreferencesMigration {
     case copied([String])
   }
 
+  /// Copies the old domain's keys into the new one and records that it has
+  /// been settled, unless a live launch already has.
+  ///
+  /// A key in both domains takes the old domain's value, since what the new
+  /// one holds before this first run is only what a replay left.
+  ///
+  /// - Parameters:
+  ///   - old: The preferences domain Mentor wrote to.
+  ///   - new: The preferences domain Athina reads.
+  ///   - defaults: Where both domains are read and written; tests pass
+  ///     their own.
+  /// - Returns: What this launch found and did.
   @discardableResult
   public static func run(
     from old: String = AppPaths.legacyBundleIdentifier,

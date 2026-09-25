@@ -35,21 +35,30 @@ extension AthinaClock {
 ///
 /// What the app always runs on outside a replay.
 public struct SystemClock: AthinaClock {
+  /// An instant of `ContinuousClock`, which keeps counting while the Mac
+  /// sleeps.
   public typealias Instant = ContinuousClock.Instant
 
   private let continuous = ContinuousClock()
 
+  /// Creates the real-time clock.
   public init() {}
 
+  /// The current instant of `ContinuousClock`.
   public var now: Instant { continuous.now }
+  /// The resolution of `ContinuousClock`.
   public var minimumResolution: Duration { continuous.minimumResolution }
 
+  /// Sleeps on `ContinuousClock` until `deadline`.
   public func sleep(until deadline: Instant, tolerance: Duration? = nil) async throws {
     try await continuous.sleep(until: deadline, tolerance: tolerance)
   }
 
+  /// The real date now.
   public var date: Date { Date() }
+  /// The system uptime, which stops while the Mac sleeps.
   public var uptime: TimeInterval { ProcessInfo.processInfo.systemUptime }
+  /// Always 1: real seconds are this clock's seconds.
   public var rate: Double { 1 }
 }
 
@@ -65,22 +74,28 @@ public struct SystemClock: AthinaClock {
 /// times faster from the moment it is made, and an advance moves it ahead on
 /// top. That is a replay's clock (`ClockMode`), over the system clock.
 public final class AdjustableClock: AthinaClock {
+  /// A point on this clock, measured from when the clock was made.
   public struct Instant: InstantProtocol {
     /// Time since the clock was made, including any time moved ahead.
     public var offset: Swift.Duration
 
+    /// Creates the instant `offset` after the clock was made.
     public init(offset: Swift.Duration) {
       self.offset = offset
     }
 
+    /// Returns the instant `duration` later.
     public func advanced(by duration: Swift.Duration) -> Instant {
       Instant(offset: offset + duration)
     }
 
+    /// Returns the time from this instant to `other`, negative when `other`
+    /// is earlier.
     public func duration(to other: Instant) -> Swift.Duration {
       other.offset - offset
     }
 
+    /// Whether `lhs` comes before `rhs`.
     public static func < (lhs: Instant, rhs: Instant) -> Bool {
       lhs.offset < rhs.offset
     }
@@ -145,21 +160,30 @@ public final class AdjustableClock: AthinaClock {
 
   // MARK: Reading
 
+  /// The current instant: the base clock's scaled time since this clock was
+  /// made, if it has a base, plus everything moved ahead.
   public var now: Instant {
     state.withLock { offset(in: $0) }
   }
 
+  /// One nanosecond.
   public var minimumResolution: Swift.Duration { .nanoseconds(1) }
 
+  /// The start date plus the time `now` has moved since the clock was made,
+  /// including time moved ahead asleep.
   public var date: Date {
     startDate.addingTimeInterval(now.offset.timeInterval)
   }
 
+  /// The starting uptime plus the base's scaled time awake and the time
+  /// moved ahead awake; time moved ahead asleep does not count.
   public var uptime: TimeInterval {
     let advanced = state.withLock { $0.advanced }
     return startUptime + (base.map { $0.awake() * scale } ?? 0) + advanced.timeInterval
   }
 
+  /// The scale for a clock over a base, and 0 for a test clock, which stands
+  /// still until it is advanced.
   public var rate: Double { base == nil ? 0 : scale }
 
   /// Everything moved ahead on demand, awake or asleep.
@@ -212,6 +236,10 @@ public final class AdjustableClock: AthinaClock {
 
   // MARK: Sleeping
 
+  /// Sleeps until this clock reaches `deadline`, whether by its base running
+  /// on or by an advance; `tolerance` is ignored.
+  ///
+  /// - Throws: `CancellationError` when the task is cancelled.
   public func sleep(until deadline: Instant, tolerance: Swift.Duration? = nil) async throws {
     try Task.checkCancellation()
     guard let base else {

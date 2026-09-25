@@ -29,6 +29,8 @@ public enum FrameImaging {
     return ok ? pixels : nil
   }
 
+  /// Returns the image's perceptual hash, or nil when its luminance grid
+  /// cannot be drawn.
   public static func perceptualHash(of image: CGImage) -> PerceptualHash? {
     luminanceGrid(of: image).map(PerceptualHash.init(luminanceGrid:))
   }

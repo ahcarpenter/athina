@@ -2,19 +2,31 @@ import Foundation
 
 /// A global keyboard shortcut, stored as a virtual key code plus modifiers.
 public struct HotKey: Codable, Equatable, Hashable, Sendable {
+  /// The modifier keys held with the key, in bits of Athina's own that
+  /// `HotKeyCenter` turns into Carbon's flags when it registers the shortcut.
   public struct Modifiers: OptionSet, Codable, Hashable, Sendable {
+    /// The modifier bits, which are what settings.json stores.
     public let rawValue: UInt32
+    /// Creates the set whose bits are `rawValue`.
     public init(rawValue: UInt32) { self.rawValue = rawValue }
 
+    /// The Control key.
     public static let control = Modifiers(rawValue: 1 << 0)
+    /// The Option key.
     public static let option = Modifiers(rawValue: 1 << 1)
+    /// The Shift key.
     public static let shift = Modifiers(rawValue: 1 << 2)
+    /// The Command key.
     public static let command = Modifiers(rawValue: 1 << 3)
   }
 
+  /// The macOS virtual key code of the key, a position on the keyboard
+  /// rather than a character (35 is P on a US layout).
   public var keyCode: UInt32
+  /// The modifier keys held with it.
   public var modifiers: Modifiers
 
+  /// Creates the shortcut that presses `keyCode` with `modifiers` held.
   public init(keyCode: UInt32, modifiers: Modifiers) {
     self.keyCode = keyCode
     self.modifiers = modifiers

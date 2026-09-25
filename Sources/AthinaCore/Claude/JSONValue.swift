@@ -12,6 +12,7 @@ public enum JSONValue: Codable, Equatable, Hashable, Sendable {
   case array([JSONValue])
   case object([String: JSONValue])
 
+  /// Decodes a JSON null, bool, number, string, array, or object.
   public init(from decoder: Decoder) throws {
     let container = try decoder.singleValueContainer()
     if container.decodeNil() {
@@ -34,6 +35,8 @@ public enum JSONValue: Codable, Equatable, Hashable, Sendable {
     }
   }
 
+  /// Encodes the value, writing a whole number below 1e15 in magnitude as an
+  /// integer.
   public func encode(to encoder: Encoder) throws {
     var container = encoder.singleValueContainer()
     switch self {
@@ -57,12 +60,19 @@ extension JSONValue: ExpressibleByStringLiteral, ExpressibleByIntegerLiteral,
   ExpressibleByBooleanLiteral, ExpressibleByNilLiteral, ExpressibleByArrayLiteral,
   ExpressibleByDictionaryLiteral
 {
+  /// Creates a string value.
   public init(stringLiteral value: String) { self = .string(value) }
+  /// Creates a number value from an integer literal.
   public init(integerLiteral value: Int) { self = .number(Double(value)) }
+  /// Creates a number value from a float literal.
   public init(floatLiteral value: Double) { self = .number(value) }
+  /// Creates a bool value.
   public init(booleanLiteral value: Bool) { self = .bool(value) }
+  /// Creates the null value from `nil`.
   public init(nilLiteral: ()) { self = .null }
+  /// Creates an array value.
   public init(arrayLiteral elements: JSONValue...) { self = .array(elements) }
+  /// Creates an object value; a key written twice keeps its last value.
   public init(dictionaryLiteral elements: (String, JSONValue)...) {
     self = .object(Dictionary(elements, uniquingKeysWith: { _, last in last }))
   }

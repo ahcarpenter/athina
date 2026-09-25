@@ -16,9 +16,12 @@ import Foundation
 /// never older than what is held, so a row under an id already here takes the
 /// place of the one held.
 public struct JournalTimeline: Equatable, Sendable {
+  /// The rows held, newest first, at most `limit` of them.
   public private(set) var entries: [JournalEntry] = []
+  /// The most rows held; the oldest beyond it fall off.
   public let limit: Int
 
+  /// Creates a timeline holding up to `limit` rows, merged from `entries`.
   public init(limit: Int, entries: [JournalEntry] = []) {
     self.limit = limit
     merge(entries)
@@ -58,6 +61,7 @@ public struct JournalTimeline: Equatable, Sendable {
     }
   }
 
+  /// Drops every row, as Clear Journal does before the reload.
   public mutating func removeAll() {
     entries.removeAll()
   }

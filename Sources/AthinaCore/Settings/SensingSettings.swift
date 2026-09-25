@@ -5,8 +5,10 @@ public enum OCRLevel: String, Codable, Sendable, CaseIterable, Identifiable {
   case fast
   case accurate
 
+  /// The raw value, which is also what settings.json stores.
   public var id: String { rawValue }
 
+  /// The level's name in the Settings picker, "Fast" or "Accurate".
   public var label: String {
     switch self {
     case .fast: "Fast"
@@ -87,6 +89,7 @@ public struct SensingSettings: Codable, Equatable, Sendable {
   /// whatever this says (`DebugPanelAccess`).
   public var showDebugPanel = false
 
+  /// Creates the default settings.
   public init() {}
 
   // MARK: Codable with per-field defaults
@@ -101,6 +104,8 @@ public struct SensingSettings: Codable, Equatable, Sendable {
     case showDebugPanel
   }
 
+  /// Decodes the settings, giving any field missing from the file its
+  /// default, and validates them.
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     let d = SensingSettings()
@@ -172,6 +177,8 @@ public struct SensingSettings: Codable, Equatable, Sendable {
     Set(excludedBundleIDs.map { $0.lowercased() })
   }
 
+  /// Whether the app with `bundleID` is excluded, matched ignoring case; an
+  /// app without a bundle identifier never is.
   public func isExcluded(bundleID: String?) -> Bool {
     ExcludedApps.matches(bundleID: bundleID, excluded: excludedBundleIDSet)
   }

@@ -1,13 +1,25 @@
 import Foundation
 
+/// A summary of what the journal holds: its counts, size on disk, and the time
+/// span it covers.
 public struct JournalStats: Equatable, Sendable {
+  /// The number of observations stored.
   public var observationCount: Int
+  /// The number of thumbnails stored; fewer than the observations once
+  /// thumbnail retention has run.
   public var thumbnailCount: Int
+  /// The number of events stored.
   public var eventCount: Int
+  /// Bytes in use by the database's live pages, excluding free pages.
   public var usedBytes: Int64
+  /// The timestamp of the oldest observation or event, or nil when there are
+  /// none.
   public var oldest: Date?
+  /// The timestamp of the newest observation or event, or nil when there are
+  /// none.
   public var newest: Date?
 
+  /// Creates a summary from its counts, size, and time span.
   public init(
     observationCount: Int = 0,
     thumbnailCount: Int = 0,
@@ -30,6 +42,7 @@ public struct JournalStats: Equatable, Sendable {
 /// Thumbnails live in their own table so text retention can outlast them and
 /// so timeline queries never load image bytes they do not need.
 public actor Journal {
+  /// The journal's SQLite file.
   public nonisolated let url: URL
   private let db: SQLiteConnection
   private let encoder = JSONEncoder()
@@ -276,6 +289,9 @@ public actor Journal {
     }
   }
 
+  /// Stores an event.
+  ///
+  /// Returns it with its new id.
   @discardableResult
   public func record(_ event: JournalEvent) throws -> JournalEvent {
     try db.run(
@@ -401,6 +417,7 @@ public actor Journal {
     ) { Journal.followUp(from: $0) }
   }
 
+  /// Returns the suggestion with this id, or nil if there is none.
   public func suggestion(id: Int64) throws -> Suggestion? {
     try db.query("SELECT \(Journal.suggestionColumns) FROM suggestions WHERE id = ?", [.int(id)]) {
       Journal.suggestion(from: $0)
@@ -415,6 +432,9 @@ public actor Journal {
     ) { Journal.suggestion(from: $0) }
   }
 
+  /// Stores a model call record.
+  ///
+  /// Returns it with its new id.
   @discardableResult
   public func record(_ call: ModelCallRecord) throws -> ModelCallRecord {
     try db.run(
@@ -614,6 +634,7 @@ public actor Journal {
     ) { try self.observation(from: $0) }
   }
 
+  /// Returns the newest `limit` events, newest first.
   public func recentEvents(limit: Int) throws -> [JournalEvent] {
     try db.query(
       "SELECT id, timestamp, kind, bundle_id, app_name, detail FROM events ORDER BY timestamp DESC, id DESC LIMIT ?",
@@ -638,6 +659,8 @@ public actor Journal {
     ) { try self.observation(from: $0) }
   }
 
+  /// Returns the observation with this id, without thumbnail bytes, or nil if
+  /// there is none.
   public func observation(id: Int64) throws -> ActivityObservation? {
     try db.query(
       "SELECT \(Journal.observationColumns) FROM observations WHERE id = ?",
@@ -645,6 +668,9 @@ public actor Journal {
     ) { try self.observation(from: $0) }.first
   }
 
+  /// Returns the JPEG thumbnail stored with an observation.
+  ///
+  /// Nil when the observation had no thumbnail or retention has deleted it.
   public func thumbnail(observationID: Int64) throws -> Data? {
     try db.query("SELECT jpeg FROM thumbnails WHERE observation_id = ?", [.int(observationID)]) {
       $0.blob(0)
@@ -652,6 +678,8 @@ public actor Journal {
     .first ?? nil
   }
 
+  /// Returns the journal's counts, size, and time span, for Settings and the
+  /// debug panel.
   public func stats() throws -> JournalStats {
     let observationCount = try db.scalarInt("SELECT COUNT(*) FROM observations")
     let thumbnailCount = try db.scalarInt("SELECT COUNT(*) FROM thumbnails")

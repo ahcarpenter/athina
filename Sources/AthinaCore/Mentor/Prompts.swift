@@ -14,10 +14,19 @@ import Foundation
 /// re-recording change rather than with the rename (README, "The committed
 /// fixtures").
 public enum MentorPrompts {
+  /// The version of every prompt and schema here, recorded with each model
+  /// call, suggestion, and fixture.
+  ///
+  /// A committed fixture recorded under another version is stale and fails
+  /// `swift test`.
   public static let version = 10
 
   // MARK: Triage
 
+  /// The triage system prompt before any contexts section.
+  ///
+  /// Sent as it is while the user enforces no mentorship contexts;
+  /// `triageSystem(contexts:)` appends the declared ones to it.
   public static let triageBase = """
     You are the triage stage of Mentor, a macOS app that watches what its user is doing and, rarely, \
     offers a live suggestion the way an expert sitting beside them would. You do not write suggestions. \
@@ -123,6 +132,8 @@ public enum MentorPrompts {
 
   // MARK: Mentor
 
+  /// The mentor tier's system prompt: when to speak, how to write a suggestion,
+  /// and how to keep the understanding.
   public static let mentorSystem = """
     You are Mentor, a live mentor for someone working at their Mac. You see a rolling journal of their \
     recent screens as recognized text, and usually the latest screenshot. You also keep a standing \
@@ -198,6 +209,8 @@ public enum MentorPrompts {
     you stayed silent. When you have enough information to decide, decide; do not narrate alternatives.
     """
 
+  /// The mentor tier's output schema: a reason, a suggestion or null, and the
+  /// updated understanding.
   public static let mentorSchema: JSONValue = [
     "type": "object",
     "properties": [
@@ -316,6 +329,8 @@ public enum MentorPrompts {
     open_concerns}}. The reason is one sentence for the log saying what changed since the last record.
     """
 
+  /// The refresh tier's output schema: a reason and the rewritten
+  /// understanding.
   public static let understandingRefreshSchema: JSONValue = [
     "type": "object",
     "properties": [
@@ -367,6 +382,7 @@ public enum MentorPrompts {
     Reply with JSON only: {"answer": string}.
     """
 
+  /// The follow-up output schema: a single answer string.
   public static let followUpSchema: JSONValue = [
     "type": "object",
     "properties": [
@@ -379,8 +395,10 @@ public enum MentorPrompts {
 
 /// What the mentor tier returns to a follow-up question.
 public struct FollowUpReply: Codable, Equatable, Sendable {
+  /// The answer as the model wrote it, before its dashes are made plain.
   public var answer: String
 
+  /// Creates a reply with its answer.
   public init(answer: String) {
     self.answer = answer
   }
@@ -403,12 +421,15 @@ extension String {
 /// so it is optional: a reply without it names no context, which counts as
 /// outside.
 public struct TriageVerdict: Codable, Equatable, Sendable {
+  /// Whether the mentor tier should look at this moment.
   public var worthALook: Bool
+  /// One sentence for the call log saying why.
   public var reason: String
   /// The declared context this snapshot belongs to, or nil for none of them,
   /// which is also how the model says it is unsure.
   public var context: String?
 
+  /// Creates a verdict, naming no context by default.
   public init(worthALook: Bool, reason: String, context: String? = nil) {
     self.worthALook = worthALook
     self.reason = reason
@@ -424,6 +445,8 @@ public struct TriageVerdict: Codable, Equatable, Sendable {
 
 /// What the mentor tier returns.
 public struct MentorVerdict: Codable, Equatable, Sendable {
+  /// One suggestion as the model wrote it, before the loop checks it against
+  /// the confidence threshold and the suppression rules.
   public struct Payload: Codable, Equatable, Sendable {
     /// The spot the suggestion is about, in the pixels of the frame the model
     /// saw.
@@ -431,12 +454,18 @@ public struct MentorVerdict: Codable, Equatable, Sendable {
     /// Decodes from `"region": null` and from a reply with no region field at
     /// all, so older prompt versions still parse.
     public struct Region: Codable, Equatable, Sendable {
+      /// The left edge, in pixels from the left of the frame.
       public var x: Double
+      /// The top edge, in pixels down from the top of the frame.
       public var y: Double
+      /// The width, in pixels.
       public var width: Double
+      /// The height, in pixels.
       public var height: Double
+      /// The few words, at most eight, to show beside the spot.
       public var note: String
 
+      /// Creates a region from its rectangle and note.
       public init(x: Double, y: Double, width: Double, height: Double, note: String) {
         self.x = x
         self.y = y
@@ -445,18 +474,28 @@ public struct MentorVerdict: Codable, Equatable, Sendable {
         self.note = note
       }
 
+      /// The spot as a rectangle in the frame's pixels, origin top-left.
       public var rect: CGRect {
         CGRect(x: x, y: y, width: width, height: height)
       }
     }
 
+    /// The gist, asked to stay under 60 characters.
     public var title: String
+    /// The concrete recommendation in one or two sentences, asked to stay under
+    /// 220 characters.
     public var body: String
+    /// The full version, in a few short paragraphs.
     public var explanation: String
+    /// The kind of suggestion.
     public var category: SuggestionCategory
+    /// The model's probability, 0 to 1, that the user would find this worth the
+    /// interruption.
     public var confidence: Double
     /// The inferred goal this was judged against, for the goal categories.
     public var judgedGoal: String?
+    /// The spot on screen the suggestion is about, or nil, the usual answer,
+    /// for none.
     public var region: Region?
 
     /// True when the title or the body has no words.
@@ -468,6 +507,7 @@ public struct MentorVerdict: Codable, Equatable, Sendable {
         || body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Creates a payload; the goal and the region default to none.
     public init(
       title: String,
       body: String,
@@ -492,7 +532,10 @@ public struct MentorVerdict: Codable, Equatable, Sendable {
     }
   }
 
+  /// One sentence for the call log: what the model noticed, or why it stayed
+  /// silent.
   public var reason: String
+  /// The suggestion, or nil when the model chose silence.
   public var suggestion: Payload?
   /// The rewritten understanding this call carried, so a mentor call refreshes
   /// the record without a call of its own.
@@ -500,6 +543,7 @@ public struct MentorVerdict: Codable, Equatable, Sendable {
   /// Optional so a reply that omits it still yields its suggestion.
   public var updatedUnderstanding: Understanding?
 
+  /// Creates a verdict, with no updated understanding by default.
   public init(reason: String, suggestion: Payload?, updatedUnderstanding: Understanding? = nil) {
     self.reason = reason
     self.suggestion = suggestion
@@ -525,8 +569,10 @@ public struct MentorVerdict: Codable, Equatable, Sendable {
 public struct UnderstandingVerdict: Codable, Equatable, Sendable {
   /// One line for the call log: what changed since the last record.
   public var reason: String
+  /// The rewritten understanding.
   public var understanding: Understanding
 
+  /// Creates a verdict from its reason and understanding.
   public init(reason: String, understanding: Understanding) {
     self.reason = reason
     self.understanding = understanding

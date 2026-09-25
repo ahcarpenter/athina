@@ -4,11 +4,18 @@ import Foundation
 /// One menu bar element read through accessibility: a status item ("extra") on
 /// the right of the bar, or a menu title ("File", "Edit") on the left.
 public struct BarItem: Equatable, Sendable {
+  /// The localized name of the app that owns the item.
   public let app: String
+  /// The process id of the app that owns the item.
   public let pid: Int32
+  /// The item's accessibility title, or for a status item without one its
+  /// description.
   public let title: String
+  /// The item's frame in global screen points, origin at the top left of the
+  /// main display, as accessibility reports it.
   public let frame: CGRect
 
+  /// Creates an item owned by `app` (process `pid`) with `title` at `frame`.
   public init(app: String, pid: Int32, title: String, frame: CGRect) {
     self.app = app
     self.pid = pid
@@ -45,6 +52,8 @@ public enum BarGeometry {
     }
   }
 
+  /// The leftmost item whose frame contains `point`, or nil when the point
+  /// is on no item.
   public static func item(at point: CGPoint, in items: [BarItem]) -> BarItem? {
     sorted(items).first { $0.frame.contains(point) }
   }

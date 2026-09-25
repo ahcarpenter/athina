@@ -35,8 +35,10 @@ public enum ClockFormat {
 /// The API bills the real count; this only decides how much journal fits in the
 /// window.
 public enum TokenEstimate {
+  /// The bytes of UTF-8 text counted as one token.
   public static let charactersPerToken = 4
 
+  /// Returns the estimated token count of `text`, rounded up.
   public static func tokens(in text: String) -> Int {
     (text.utf8.count + charactersPerToken - 1) / charactersPerToken
   }
@@ -45,17 +47,28 @@ public enum TokenEstimate {
 /// The mentor tier's rolling window: recent observations' text, bounded by a
 /// time window and a token budget, oldest first.
 public enum RollingWindow {
+  /// One observation's text as the rolling window carries it into a prompt.
   public struct Entry: Equatable, Sendable {
+    /// The observation's journal id.
     public var observationID: Int64
+    /// When the observation was captured.
     public var timestamp: Date
+    /// The frontmost app's name at the time.
     public var appName: String
+    /// The frontmost window's title, or nil when it had none.
     public var windowTitle: String?
+    /// The one-paragraph description of the focus: the window, the focused
+    /// element, and its text.
     public var focusSummary: String
+    /// The observation's OCR text, cut to fit the budget when `truncated` is
+    /// true.
     public var text: String
+    /// Why the capture happened.
     public var reason: CaptureReason
     /// True when the text was cut to fit the budget.
     public var truncated: Bool
 
+    /// Creates an entry from an observation and the text kept from it.
     public init(observation: ActivityObservation, text: String, truncated: Bool) {
       observationID = observation.id
       timestamp = observation.timestamp
@@ -157,6 +170,8 @@ public enum PromptBuilder {
   public static let triageTextLimit = 6000
   /// Events older than this are left out of every event summary.
   public static let eventWindow: TimeInterval = 600
+  /// The most events an event summary lists, and the most suggestions a
+  /// suggestion summary lists.
   public static let eventLimit = 12
 
   /// Text only: app and window, accessibility summary, the standing

@@ -4,6 +4,7 @@ import Vision
 
 /// On-device OCR with the Vision framework.
 public struct TextRecognizer: Sendable {
+  /// Creates a recognizer; each call to `recognize` makes its own request.
   public init() {}
 
   /// Recognizes text in the frame and maps each block to global display coordinates.

@@ -8,6 +8,7 @@ import Foundation
 public enum InputActivity {
   private static let anyEventType = CGEventType(rawValue: ~0)!
 
+  /// Returns the real seconds since the last input event of any kind.
   public static func secondsSinceLastInput() -> TimeInterval {
     CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: anyEventType)
   }

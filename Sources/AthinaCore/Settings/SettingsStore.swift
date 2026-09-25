@@ -2,8 +2,11 @@ import Foundation
 
 /// Loads and saves `SensingSettings` as a JSON file.
 public struct SettingsStore: Sendable {
+  /// The settings file this store reads and writes.
   public let url: URL
 
+  /// Creates a store for the settings file at `url`, which need not exist
+  /// yet.
   public init(url: URL) {
     self.url = url
   }
@@ -31,6 +34,8 @@ public struct SettingsStore: Sendable {
     try JSONDecoder().decode(SensingSettings.self, from: Data(contentsOf: url)).validated()
   }
 
+  /// Writes `settings`, validated, to the file atomically as sorted,
+  /// pretty-printed JSON, creating its directory if it is missing.
   public func save(_ settings: SensingSettings) throws {
     let encoder = JSONEncoder()
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -76,6 +81,8 @@ public enum AppPaths {
   /// The service the API key's keychain item is saved under.
   public static var keychainService: String { bundleIdentifier }
 
+  /// The live data directory, `athina` in Application Support (inside its
+  /// container for a sandboxed build), which holds the journal and settings.
   public static func supportDirectory() -> URL {
     applicationSupport().appendingPathComponent(directoryName, isDirectory: true)
   }

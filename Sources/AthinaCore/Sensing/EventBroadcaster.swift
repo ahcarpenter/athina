@@ -8,10 +8,15 @@ public actor EventBroadcaster<Element: Sendable> {
   private var continuations: [UUID: AsyncStream<Element>.Continuation] = [:]
   private let bufferSize: Int
 
+  /// Creates a broadcaster that buffers up to `bufferSize` events for each
+  /// subscriber.
   public init(bufferSize: Int = 256) {
     self.bufferSize = bufferSize
   }
 
+  /// Returns a stream of every event sent from now on.
+  ///
+  /// The subscription ends when the stream is dropped or `finish()` is called.
   public func subscribe() -> AsyncStream<Element> {
     let id = UUID()
     let (stream, continuation) = AsyncStream<Element>.makeStream(
@@ -24,12 +29,14 @@ public actor EventBroadcaster<Element: Sendable> {
     return stream
   }
 
+  /// Delivers an event to every current subscriber.
   public func send(_ element: Element) {
     for continuation in continuations.values {
       continuation.yield(element)
     }
   }
 
+  /// Ends every current subscriber's stream and forgets them.
   public func finish() {
     for continuation in continuations.values {
       continuation.finish()

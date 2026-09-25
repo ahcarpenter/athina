@@ -15,8 +15,11 @@ import Foundation
 public struct MentorScheduler: Equatable, Sendable {
   /// What the loop knows about the world when it asks a gate.
   public struct Conditions: Equatable, Sendable {
+    /// The sensing mode the loop last heard.
     public var mode: SensingMode
+    /// Whether the loop holds a key to call with.
     public var hasAPIKey: Bool
+    /// Whether a model call is in progress.
     public var callInFlight: Bool
     /// A toast the user has talked to is up: from the key going down until
     /// that toast is closed, so its answer can be read.
@@ -28,6 +31,8 @@ public struct MentorScheduler: Equatable, Sendable {
     /// When the spend bucket rolls over.
     public var nextHourStart: Date
 
+    /// Creates conditions; by default nothing is in flight, nobody is
+    /// talking back, nothing is spent, and cadences run at their settings.
     public init(
       mode: SensingMode,
       hasAPIKey: Bool,
@@ -66,6 +71,8 @@ public struct MentorScheduler: Equatable, Sendable {
     case tooSoon(until: Date)
     case nearIdentical(similarity: Double)
 
+    /// A short lowercase phrase for the hold, as the debug panel shows it; a
+    /// held follow-up journals it as its error.
     public var label: String {
       switch self {
       case .disabled: "mentor is off in Settings"
@@ -93,6 +100,8 @@ public struct MentorScheduler: Equatable, Sendable {
   /// they queued behind a long mentor call and describe a screen that is gone.
   public static let maxObservationAge: TimeInterval = 30
 
+  /// The triage gate's answer: run triage on the observation, or hold it
+  /// and why.
   public enum TriageGate: Equatable, Sendable {
     case run
     case hold(Hold)
@@ -106,6 +115,7 @@ public struct MentorScheduler: Equatable, Sendable {
     case tooSoon(until: Date)
     case spendCapReached(until: Date)
 
+    /// A short phrase for the hold, as the debug panel shows it.
     public var label: String {
       switch self {
       case .outOfContext(let exclusion): "outside every declared context (\(exclusion.label))"
@@ -118,6 +128,7 @@ public struct MentorScheduler: Equatable, Sendable {
     }
   }
 
+  /// The mentor gate's answer: run the mentor tier, or hold it and why.
   public enum MentorGate: Equatable, Sendable {
     case run
     case hold(MentorHold)
@@ -143,12 +154,22 @@ public struct MentorScheduler: Equatable, Sendable {
     case hold(Hold)
   }
 
+  /// The settings every gate reads; the loop replaces them when they change.
   public var settings: MentorSettings
+  /// When the last triage call started, or nil before the first; the triage
+  /// cadence counts from it.
   public private(set) var lastTriageAt: Date?
+  /// The window signature of the last observation sent to triage, or nil
+  /// before the first.
   public private(set) var lastTriagedWindow: String?
+  /// The OCR text of the last observation sent to triage, which a new one of
+  /// the same window must differ from enough to be triaged.
   public private(set) var lastTriagedText: String?
+  /// When the last mentor call started, or nil before the first; the mentor
+  /// cadence counts from it.
   public private(set) var lastMentorAt: Date?
 
+  /// Creates a scheduler that has seen no calls yet.
   public init(settings: MentorSettings) {
     self.settings = settings
   }
@@ -207,6 +228,8 @@ public struct MentorScheduler: Equatable, Sendable {
     return .noContextsDeclared
   }
 
+  /// Records that a triage call started on `observation` at `now`, for the
+  /// triage cadence and the near-identical check.
   public mutating func noteTriageStarted(observation: ActivityObservation, now: Date) {
     lastTriageAt = now
     lastTriagedWindow = observation.focus.windowSignature
@@ -242,6 +265,8 @@ public struct MentorScheduler: Equatable, Sendable {
     return .run
   }
 
+  /// Records that a mentor call started at `now`, which the mentor cadence
+  /// counts from.
   public mutating func noteMentorStarted(now: Date) {
     lastMentorAt = now
   }
@@ -272,6 +297,8 @@ public struct MentorScheduler: Equatable, Sendable {
     return .run
   }
 
+  /// Returns when the next mentor call may start, its interval stretched by
+  /// the spend multiplier, or nil when none has run yet.
   public func nextMentorAllowed(multiplier: Double) -> Date? {
     lastMentorAt?.addingTimeInterval(settings.mentorMinInterval * max(1, multiplier))
   }
@@ -297,6 +324,8 @@ public struct MentorScheduler: Equatable, Sendable {
     /// Nothing has been observed yet, so there is nothing to fold in.
     case noNewActivity
 
+    /// A short lowercase phrase for the hold, as the debug panel and the
+    /// understanding card show it.
     public var label: String {
       switch self {
       case .unavailable(let hold): hold.label
@@ -310,6 +339,7 @@ public struct MentorScheduler: Equatable, Sendable {
     }
   }
 
+  /// The refresh gate's answer: refresh now, or hold and why.
   public enum RefreshGate: Equatable, Sendable {
     /// Refresh now, folding in everything since the period began.
     case run(since: Date)
@@ -409,6 +439,8 @@ public struct RefreshPeriod: Equatable, Sendable {
   /// When `activeUse` was last brought up to date.
   public var countedAt: Date
 
+  /// Creates a period begun at `startedAt`, counted through `countedAt`,
+  /// which defaults to the start.
   public init(startedAt: Date, activeUse: TimeInterval = 0, countedAt: Date? = nil) {
     self.startedAt = startedAt
     self.activeUse = activeUse
