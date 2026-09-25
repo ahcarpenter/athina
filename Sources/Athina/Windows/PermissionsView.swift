@@ -38,29 +38,35 @@ struct PermissionsView: View {
         }
       }
 
-      GroupBox {
-        PermissionRows(permissions: Permission.required)
-      } label: {
-        Text("Required to watch")
-          .accessibilityAddTraits(.isHeader)
-      }
-
-      GroupBox {
-        PermissionRows(permissions: Permission.optional)
-      } label: {
-        VStack(alignment: .leading, spacing: 2) {
-          Text("Optional, for talking back")
+      GroupBox(
+        content: {
+          PermissionRows(permissions: Permission.required)
+        },
+        label: {
+          Text("Required to watch")
             .accessibilityAddTraits(.isHeader)
-          Text(
-            """
-            Hold the talk-back shortcut, set in General settings, to answer or ask about a \
-            suggestion by voice. Everything else works without these.
-            """
-          )
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
         }
-      }
+      )
+
+      GroupBox(
+        content: {
+          PermissionRows(permissions: Permission.optional)
+        },
+        label: {
+          VStack(alignment: .leading, spacing: 2) {
+            Text("Optional, for talking back")
+              .accessibilityAddTraits(.isHeader)
+            Text(
+              """
+              Hold the talk-back shortcut, set in General settings, to answer or ask about a \
+              suggestion by voice. Everything else works without these.
+              """
+            )
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      )
 
       Text(
         """

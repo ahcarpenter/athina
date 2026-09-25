@@ -1167,7 +1167,7 @@ struct SampleToastNote: View {
     let model = ToastModel()
     model.note = "Nothing to reply to yet: Athina has not made a suggestion."
     return VStack(spacing: 0) {
-      ToastView(model: model, onAction: { _ in })
+      ToastView(model: model) { _ in }
         .fixedSize(horizontal: false, vertical: true)
       Spacer(minLength: 0)
     }
@@ -1194,7 +1194,7 @@ struct SampleToast: View {
     // The panel sizes itself to the toast's ideal height; a fixed-size
     // snapshot gets the same by letting the toast hug its content.
     return VStack(spacing: 0) {
-      ToastView(model: model, onAction: { _ in })
+      ToastView(model: model) { _ in }
         .fixedSize(horizontal: false, vertical: true)
       Spacer(minLength: 0)
     }

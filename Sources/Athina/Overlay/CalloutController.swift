@@ -134,14 +134,17 @@ struct CalloutView: View {
   }
 
   private var notePill: some View {
-    Label {
-      Text(note)
-        .lineLimit(2)
-        .fixedSize(horizontal: false, vertical: true)
-    } icon: {
-      Image(systemName: "lightbulb.fill")
-        .foregroundStyle(.tint)
-    }
+    Label(
+      title: {
+        Text(note)
+          .lineLimit(2)
+          .fixedSize(horizontal: false, vertical: true)
+      },
+      icon: {
+        Image(systemName: "lightbulb.fill")
+          .foregroundStyle(.tint)
+      }
+    )
     .font(.callout.weight(.medium))
     .padding(.horizontal, 10)
     .padding(.vertical, 6)

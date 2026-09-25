@@ -71,12 +71,15 @@ struct ReplayLoopTests {
       clock.advance(by: .milliseconds(1))
       let sentAt = clock.date
       input.yield(.observation(observation))
-      await waitUntil { status in
-        status.lastGate?.observationID == observation.id && status.inFlight == nil
-          && MentorLoopTests.Harness.refreshGateRan(status, since: sentAt)
-      } calls: {
-        await calls() >= expectCalls
-      }
+      await waitUntil(
+        { status in
+          status.lastGate?.observationID == observation.id && status.inFlight == nil
+            && MentorLoopTests.Harness.refreshGateRan(status, since: sentAt)
+        },
+        calls: {
+          await calls() >= expectCalls
+        }
+      )
     }
 
     /// Waits until `condition` holds of the loop's status and `calls`

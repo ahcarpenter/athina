@@ -26,16 +26,20 @@ struct AthinaApp: App {
     // A snapshot run renders the label itself, off screen, and a hermetic
     // run keeps out of the menu bar every other app shares; neither puts an
     // item there.
-    MenuBarExtra(isInserted: .constant(!Snapshots.isActive && !state.controlMode.isHermetic)) {
-      MenuBarContent()
-        .environment(state)
-    } label: {
-      MenuBarLabel(
-        mark: state.menuBarMark,
-        badge: state.clientModeBadge,
-        statusLine: state.statusLine
-      )
-    }
+    MenuBarExtra(
+      isInserted: .constant(!Snapshots.isActive && !state.controlMode.isHermetic),
+      content: {
+        MenuBarContent()
+          .environment(state)
+      },
+      label: {
+        MenuBarLabel(
+          mark: state.menuBarMark,
+          badge: state.clientModeBadge,
+          statusLine: state.statusLine
+        )
+      }
+    )
     .menuBarExtraStyle(.menu)
 
     Window("Debug Panel", id: WindowID.debug) {
