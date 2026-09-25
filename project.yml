@@ -8,9 +8,9 @@
 # still defines every target, and `make build`, `make test`, scripts/bundle.sh
 # and `make release` never read this file. The App Store app target compiles
 # the package's app sources, Sources/Athina, against the package's AthinaCore
-# library, and is signed with the App Sandbox entitlements, which is what App
-# Store provisioning, archiving and uploading need and the package build does
-# not give.
+# and SnapshotDiff libraries, and is signed with the App Sandbox entitlements,
+# which is what App Store provisioning, archiving and uploading need and the
+# package build does not give.
 name: Athina
 options:
   deploymentTarget:
@@ -56,6 +56,8 @@ targets:
     dependencies:
       - package: Athina
         product: AthinaCore
+      - package: Athina
+        product: SnapshotDiff
       - sdk: Carbon.framework
       - sdk: AVFoundation.framework
       - sdk: Speech.framework

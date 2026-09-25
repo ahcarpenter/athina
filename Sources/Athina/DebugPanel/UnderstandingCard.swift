@@ -20,7 +20,7 @@ struct UnderstandingCard: View {
 
     var body: some View {
         Card(title: "Understanding") {
-            TimelineView(.periodic(from: .now, by: 1)) { _ in
+            EverySecond {
                 let now = state.clock.date
                 VStack(alignment: .leading, spacing: 8) {
                     if let record {
