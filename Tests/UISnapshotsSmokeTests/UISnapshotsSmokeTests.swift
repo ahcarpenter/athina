@@ -215,7 +215,7 @@
     /// shows much of what sits on Liquid Glass, which the content view drawn on
     /// its own leaves out. Drawn in process, a view is drawn as its layers
     /// stand, so the first capture needs no wait.
-    private static let capture = Snapshots.Capture(firstCaptureDelay: .zero, backingScale: 1) {
+    private static let capture = Snapshots.Capture(waitsForDisplay: false, backingScale: 1) {
       window,
       hosting in
       let frameView = window.contentView?.superview ?? hosting

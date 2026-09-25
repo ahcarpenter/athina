@@ -42,7 +42,9 @@ window_texts() {
 
 has_text() { grep -qF -- "$2" "$RUN_DIR/$1" && echo yes || echo no; }
 
-checkpoint() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no checkpoint of $1"; }
+# Pictures kept as evidence: these windows show what changes from run to run
+# or move on their own, so they are not checkpoints (README "Checkpoints").
+picture() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no picture of $1"; }
 
 # The x a duration row's amount field starts at in the Models pane. Two rows
 # in one section are in line only when their fields start at the same x,
@@ -92,7 +94,7 @@ scenario_run() {
 	# The card sits under the Mentor loop card in the Now pane, below the fold.
 	api scroll window="Debug Panel" identifier=understanding.reset >/dev/null || log "the card could not be scrolled to"
 	window_texts "Debug Panel" card
-	checkpoint "Debug Panel" card
+	picture "Debug Panel" card
 	check "the card shows the goal" "yes" "$(has_text card-texts.txt "$goal")"
 	check "the card names the refresh interval" "yes" "$(has_text card-texts.txt "of active use")"
 	check "the card offers Reset Understanding" "yes" "$(has_text card-texts.txt "Reset Understanding…")"
@@ -102,7 +104,7 @@ scenario_run() {
 	check "a click on the Models toolbar item lands" "true" "$(api click window=General label=Models --field ok)"
 	api wait-window window=Models timeout=5 >/dev/null || { log "the Models pane never showed"; return 1; }
 	window_texts Models settings
-	checkpoint Models models
+	picture Models models
 	check "Settings shows the current goal" "yes" "$(has_text settings-texts.txt "$goal")"
 
 	# The section's two duration rows show different unit words, minutes beside
@@ -136,7 +138,7 @@ scenario_run() {
 		"$(api open-link window=Models identifier=athina-settings:journal --field url)"
 	check "the footer link opens the Journal pane in place" "yes" \
 		"$(api wait-window window=Journal timeout=5 >/dev/null && echo yes || echo no)"
-	checkpoint Journal journal-pane
+	picture Journal journal-pane
 	api click window=Journal subrole=AXCloseButton >/dev/null
 	api wait-window window=Journal present=false timeout=5 >/dev/null || log "Settings would not close"
 
@@ -149,7 +151,7 @@ scenario_run() {
 		"$(api press window="Debug Panel" identifier=understanding.reset --field ok)"
 	check "the confirmation comes up" "Cancel" "$(settled Cancel cancel_button)"
 	window_texts "Debug Panel" confirmation
-	checkpoint "Debug Panel" confirmation
+	picture "Debug Panel" confirmation
 	check "the confirmation asks before resetting" "yes" "$(has_text confirmation-texts.txt "Reset the understanding?")"
 	check "the confirmation says it cannot be undone" "yes" "$(has_text confirmation-texts.txt "You can't undo this action.")"
 	check "a click on Cancel lands" "true" "$(api click window="Debug Panel" role=AXButton label=Cancel --field ok)"
@@ -165,7 +167,7 @@ scenario_run() {
 	check "Reset Understanding forgets every revision" "0" "$(revisions)"
 	check "the reset is journaled once" "1" "$(reset_events)"
 	window_texts "Debug Panel" card-after-reset
-	checkpoint "Debug Panel" card-after-reset
+	picture "Debug Panel" card-after-reset
 	check "the card says there is no understanding yet" "yes" "$(has_text card-after-reset-texts.txt "No understanding yet.")"
 
 	menu_titles after-reset

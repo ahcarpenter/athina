@@ -31,19 +31,21 @@ rules_for_textedit() {
 	json_eval "$(api settings key="$1")" 'sum(1 for rule in r["value"] if rule.get("appName") == "TextEdit")'
 }
 
-checkpoint() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no checkpoint of $1"; }
+# Pictures kept as evidence: these windows show what changes from run to run
+# or move on their own, so they are not checkpoints (README "Checkpoints").
+picture() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no picture of $1"; }
 
 scenario_run() {
 	scripted_toast || return 1
 	local suggestion="$SUGGESTION_ID"
-	checkpoint "Athina suggestion" toast
+	picture "Athina suggestion" toast
 
 	check "a click on Tell Me More lands" "true" "$(press toast.tellMeMore)"
 	check "Tell Me More is recorded" "tellMeMore" \
 		"$(api wait-event name=feedback id="$suggestion" feedback=tellMeMore --field event.feedback)"
 	check "the toast stays up to show the explanation" "yes" "$(toast_up true)"
 	check "the button now folds it" "Show Less" "$(settled "Show Less" more_label)"
-	checkpoint "Athina suggestion" told-more
+	picture "Athina suggestion" told-more
 
 	check "a click on Show Less lands" "true" "$(press toast.tellMeMore)"
 	check "the toast folds and stays up" "Tell Me More" "$(settled "Tell Me More" more_label)"
