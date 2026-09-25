@@ -307,7 +307,7 @@ import Testing
     holder.terminate()
     holder.waitUntilExit()
     try waitFor("the run to give the lock back") {
-      says(output, "giving it back until the Mac is quiet again")
+      says(output, "gave it back until the Mac is quiet again")
     }
     // Given back: another run takes it while this one waits for quiet.
     #expect(try run("lock_acquire SCREEN_LOCK 'run other' 0").status == 0)

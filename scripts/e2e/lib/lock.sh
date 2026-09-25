@@ -308,8 +308,8 @@ lock_acquire_when_idle() {
 		if [ "${seconds:-0}" -ge "$need" ] || [ "$(lock_var "$lock" _STATE)" != 1 ]; then
 			return 0
 		fi
-		lock_say "input came back while this run waited for the $label (idle ${seconds}s); giving it back until the Mac is quiet again"
 		lock_release "$lock"
+		lock_say "input came back while this run waited for the $label (idle ${seconds}s); gave it back until the Mac is quiet again"
 	done
 }
 

@@ -180,9 +180,14 @@ cmd_warm() {
 	# Keep the caches, drop everything the session wrote about itself.
 	rm -rf "$building/Library/Application Support/athina"
 	date '+%Y-%m-%d %H:%M:%S' >"$building/.athina-e2e-warm"
-	rm -rf "$WARM_HOME"
 	mkdir -p "$(dirname "$WARM_HOME")"
+	# Swapped in by rename, so the warm home is missing for no longer than two
+	# renames take.
+	local old="$CACHE_ROOT/warm-home.old"
+	rm -rf "$old"
+	[ ! -e "$WARM_HOME" ] || mv "$WARM_HOME" "$old"
 	mv "$building" "$WARM_HOME"
+	rm -rf "$old"
 	HOME_DIR=""
 	rm -rf "$CACHE_ROOT/warm-home.building"
 	log "warm home ready at $WARM_HOME (cold first capture took ${elapsed}s; clones pay none of it)"
@@ -436,7 +441,7 @@ cmd_clean() {
 		tccutil reset Accessibility "$E2E_BUNDLE_ID" >/dev/null 2>&1 && log "reset $E2E_BUNDLE_ID's Accessibility entry"
 	fi
 	if [ "${1:-}" = "--warm" ]; then
-		rm -rf "$WARM_HOME" "$CACHE_ROOT/warm-home.building"
+		rm -rf "$WARM_HOME" "$CACHE_ROOT/warm-home.building" "$CACHE_ROOT/warm-home.old"
 		log "removed $WARM_HOME"
 	fi
 }

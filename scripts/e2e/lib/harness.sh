@@ -845,32 +845,6 @@ api_feedback() {
 		'next(("none" if s["feedback"] == "-" else s["feedback"] for s in r["rows"] if s["id"] == a[0]), "missing")' "$1"
 }
 
-# --- The menu bar -------------------------------------------------------------
-
-# Athina's own status item, as one `extra` line of the bar report.
-athina_extra() { "$DRIVE" bar | grep "^extra .*pid=$ATHINA_PID " || true; }
-
-athina_item_width() { athina_extra | sed -n 's/.* w=\([0-9.]*\) .*/\1/p'; }
-
-# The item's accessibility name, which is also how a scenario reads the mode.
-athina_item_title() { athina_extra | sed -n 's/.*title="\([^"]*\)".*/\1/p'; }
-
-# The mode out of that name, without the app's own name or the replay badge.
-# The badge carries the clock's speed under --time-scale ("Replay 4.0x"), so a
-# check on the mode has to read past it.
-athina_item_mode() { athina_item_title | sed -E 's/^Athina, (Recording, |Replay[^,]*, )?//'; }
-
-# The item's name lags an app switch by a few seconds, so a measurement taken
-# right after one can still be of the mode before it.
-wait_item_title() {
-	local want="$1" limit="${2:-30}" i
-	for i in $(seq 1 "$limit"); do
-		case "$(athina_item_title)" in *"$want"*) return 0 ;; esac
-		sleep 1
-	done
-	return 1
-}
-
 # --- Watchers -----------------------------------------------------------------
 
 # A hermetic run shows nothing, and this is what says so: from the moment the
