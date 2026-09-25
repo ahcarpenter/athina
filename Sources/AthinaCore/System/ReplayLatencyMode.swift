@@ -18,33 +18,42 @@ import Foundation
 /// is treated as a replay. A value that is neither is refused and said the
 /// same way, and the replay keeps the recorded latency.
 public struct ReplayLatencyMode: Equatable, Sendable {
-    /// What the replay client waits out on each call.
-    public var latency: ReplayClaudeClient.Latency
-    /// Why the flag was not accepted, or nil when it was or was not given.
-    public var refusal: String?
+  /// What the replay client waits out on each call.
+  public var latency: ReplayClaudeClient.Latency
+  /// Why the flag was not accepted, or nil when it was or was not given.
+  public var refusal: String?
 
-    public static let flag = "--replay-latency"
+  /// The command-line flag that chooses the latency.
+  public static let flag = "--replay-latency"
 
-    public init(latency: ReplayClaudeClient.Latency = .recorded, refusal: String? = nil) {
-        self.latency = latency
-        self.refusal = refusal
+  /// Creates a mode with this latency and refusal; the defaults are the
+  /// recorded latency and no refusal.
+  public init(latency: ReplayClaudeClient.Latency = .recorded, refusal: String? = nil) {
+    self.latency = latency
+    self.refusal = refusal
+  }
+
+  /// Reads the latency flag from the launch's command-line arguments.
+  ///
+  /// - Parameters:
+  ///   - arguments: The launch's command-line arguments.
+  ///   - clientMode: The launch's model client mode; the flag is honored only
+  ///     in a replay, including one that could not start.
+  public init(arguments: [String], clientMode: ModelClientMode) {
+    guard let index = arguments.firstIndex(of: ReplayLatencyMode.flag) else {
+      self.init()
+      return
     }
-
-    public init(arguments: [String], clientMode: ModelClientMode) {
-        guard let index = arguments.firstIndex(of: ReplayLatencyMode.flag) else {
-            self.init()
-            return
-        }
-        guard clientMode.isOffline else {
-            self.init(refusal: "\(ReplayLatencyMode.flag) applies only to \(ModelClientMode.replayFlag)")
-            return
-        }
-        let value = index + 1 < arguments.count ? arguments[index + 1] : ""
-        guard let latency = ReplayClaudeClient.Latency(rawValue: value) else {
-            let choices = ReplayClaudeClient.Latency.allCases.map(\.rawValue).joined(separator: " or ")
-            self.init(refusal: "\(ReplayLatencyMode.flag) needs \(choices)")
-            return
-        }
-        self.init(latency: latency)
+    guard clientMode.isOffline else {
+      self.init(refusal: "\(ReplayLatencyMode.flag) applies only to \(ModelClientMode.replayFlag)")
+      return
     }
+    let value = index + 1 < arguments.count ? arguments[index + 1] : ""
+    guard let latency = ReplayClaudeClient.Latency(rawValue: value) else {
+      let choices = ReplayClaudeClient.Latency.allCases.map(\.rawValue).joined(separator: " or ")
+      self.init(refusal: "\(ReplayLatencyMode.flag) needs \(choices)")
+      return
+    }
+    self.init(latency: latency)
+  }
 }

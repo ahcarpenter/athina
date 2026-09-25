@@ -1,0 +1,15 @@
+# Commits that only restyle, changing no behavior, which git blame skips:
+# GitHub reads this file itself, and locally `git config blame.ignoreRevsFile
+# .git-blame-ignore-revs` turns it on (README "Code style"). The reformat stays
+# first: the README's rebase recipe takes the first commit named here.
+
+# style(athina): format all Swift to Google's Swift style
+1f4c77892bfffc154599a136a59f412eeb34c951
+# style(athina): put each parameterized attribute on its own line
+2cfa232af28e2bc989d5d2ad534b67e3893823cb
+# style(athina): lay out each wrapped list one element to a line
+920e73b8d4e2070a0a1ec087232664c7c51d39e0
+# style(athina): wrap every line at 100 columns
+b52d7a6acc58bbadd660996452f81a3b652a99e3
+# style(athina): pass closure arguments the way Google's Swift style asks
+b580b4347287f557723162f8163dc8dfd601ff3f
