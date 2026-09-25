@@ -5,10 +5,11 @@ import SnapshotDiff
 // renders of one build agree, and approves a drift (README "UI snapshot
 // baselines"). scripts/snapshots.sh is how CI and a person call it.
 //
-//   snapshot-diff compare <baseline> <render> [--report <dir>]
-//   snapshot-diff agree <first render> <second render> [--report <dir>]
+//   snapshot-diff compare <baseline> <render> [--report <dir>] [--shard <k>/<n>]
+//   snapshot-diff agree <first render> <second render> [--report <dir>] [--shard <k>/<n>]
 //   snapshot-diff approve <baseline> <render>
 //
+// --shard compares only the snapshots CI shard k of n renders (SnapshotShard).
 // compare and agree exit 0 when every snapshot matches, 1 when any differs,
 // and 2 when they cannot run.
 
@@ -28,18 +29,26 @@ var arguments = Array(CommandLine.arguments.dropFirst())
 }
 
 let report = take("--report")
+var shard: SnapshotShard?
+if let text = take("--shard") {
+    guard let parsed = SnapshotShard(parsing: text) else { fail("--shard takes k/\(SnapshotShard.count), not \(text)") }
+    shard = parsed
+}
 
 guard arguments.count == 3, ["compare", "agree", "approve"].contains(arguments[0]) else {
-    fail("usage: snapshot-diff compare|agree|approve <baseline or first render> <render> [--report <dir>]")
+    fail("usage: snapshot-diff compare|agree|approve <baseline or first render> <render> [--report <dir>] [--shard <k>/<n>]")
 }
 let command = arguments[0]
+if command == "approve", shard != nil {
+    fail("approve takes every shard's renders together, never one shard")
+}
 let baseline = URL(fileURLWithPath: arguments[1], isDirectory: true)
 let actual = URL(fileURLWithPath: arguments[2], isDirectory: true)
 guard FileManager.default.fileExists(atPath: actual.path) else { fail("no render at \(actual.path)") }
 
 let comparison: SnapshotComparison
 do {
-    comparison = try SnapshotComparison.compare(baseline: baseline, actual: actual, kind: command == "agree" ? .renders : .baselines)
+    comparison = try SnapshotComparison.compare(baseline: baseline, actual: actual, kind: command == "agree" ? .renders : .baselines, shard: shard)
 } catch {
     fail("\(error)")
 }

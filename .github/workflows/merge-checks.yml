@@ -1,17 +1,18 @@
 name: Merge checks
 
-# The slow check, kept out of ci.yml so it does not hold up every pull request.
-# It runs on every push to main and, for a pull request, only while the
-# pull request carries the merge-checks label: adding the label runs it, and so
-# does every push, or any other label added, while it is on. The main ruleset requires it at the
-# pull request's head (.github/rulesets/main.json, README "Continuous
+# The slow UI snapshot gate, kept out of ci.yml so it does not hold up every
+# pull request, and split across four runners. It runs on every push to main
+# and, for a pull request, only while the pull request carries the
+# merge-checks label: adding the label runs it, and so does every push, or any
+# other label added, while it is on. The main ruleset requires ui-snapshots at
+# the pull request's head (.github/rulesets/main.json, README "Continuous
 # integration").
 #
 # A job that an `if` skips still reports a check run, and a skipped check
-# counts as passed for a required one, so a skipped run takes another name and
-# the required ui-snapshots check stays expected until the job really runs.
-# A dispatched run would not do either: its check runs are on the commit, but
-# a pull request's required checks ignore them.
+# counts as passed for a required one, so a skipped ui-snapshots takes another
+# name and the required check stays expected until the job really runs. A
+# dispatched run would not do either: its check runs are on the commit, but a
+# pull request's required checks ignore them.
 on:
   push:
     branches: [main]
@@ -19,12 +20,20 @@ on:
     types: [opened, synchronize, reopened, labeled]
 
 jobs:
-  ui-snapshots:
-    name: ${{ (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'merge-checks')) && 'ui-snapshots' || 'ui-snapshots (add the merge-checks label to run)' }}
+  ui-snapshots-shard:
+    # One of four runners, each rendering and comparing the quarter of the
+    # snapshots SnapshotShard (Sources/SnapshotDiff) gives it. The approved
+    # renders in Tests/Snapshots were made on this image with its newest
+    # Xcode, so a change to either is a deliberate baseline refresh (README
+    # "UI snapshot baselines"). This condition, the one on ui-snapshots and
+    # the one in its name are the same and change together.
+    name: ui-snapshots shard ${{ matrix.shard }}
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'merge-checks')
-    # The approved renders in Tests/Snapshots were made on this image with its
-    # newest Xcode, so a change to either is a deliberate baseline refresh
-    # (README "UI snapshot baselines").
+    strategy:
+      # Every shard runs to the end, so one drift never hides another's.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -38,11 +47,13 @@ jobs:
       - name: Build app bundle
         run: scripts/bundle.sh release
       - name: Render twice and compare with the approved baselines
-        # Renders every snapshot twice and fails unless the two are the same
-        # picture, then fails on any drift from Tests/Snapshots beyond the
-        # tolerance for anti-aliasing and glass (README "UI snapshot baselines").
+        # Renders this shard's snapshots twice and fails unless the two are
+        # the same picture, then fails on any drift from their baselines
+        # beyond the tolerance for anti-aliasing and glass (README "UI
+        # snapshot baselines"). The matrix size goes with the shard, so a
+        # matrix that no longer matches SnapshotShard.count fails every shard.
         timeout-minutes: 20
-        run: scripts/snapshots.sh gate
+        run: scripts/snapshots.sh gate "${{ matrix.shard }}/${{ strategy.job-total }}"
       - name: Summarize
         if: always()
         run: |
@@ -54,7 +65,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-snapshots
+          name: ui-snapshots-shard-${{ matrix.shard }}
           path: build/snapshots/render
           if-no-files-found: ignore
       - name: Upload the drift report
@@ -63,8 +74,21 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-snapshot-report
+          name: ui-snapshot-report-shard-${{ matrix.shard }}
           path: |
             build/snapshots/report
             build/snapshots/determinism
           if-no-files-found: ignore
+
+  ui-snapshots:
+    # The one check the main ruleset requires: passes only when every shard
+    # ran and passed.
+    name: ${{ (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'merge-checks')) && 'ui-snapshots' || 'ui-snapshots (add the merge-checks label to run)' }}
+    needs: ui-snapshots-shard
+    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'merge-checks'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every shard passed
+        run: |
+          echo "The shards: ${{ needs.ui-snapshots-shard.result }}"
+          [ "${{ needs.ui-snapshots-shard.result }}" = success ]

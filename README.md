@@ -1727,8 +1727,8 @@ CI runs two jobs on GitHub's `macos-26` runner, which ships Xcode 26 and the
 macOS 26 SDK this package targets: `build-and-test` runs `swift test` and the
 bundle script, and `ui-snapshots` renders every snapshot with `Athina
 --snapshot`, replay-mode renders on a scaled clock included, compares the
-renders with the approved baselines, and uploads them as the `ui-snapshots`
-artifact (see UI snapshot baselines). The Xcode project's archive check is out
+renders with the approved baselines, and uploads them, split across four
+runners that each take a quarter of the snapshots (see UI snapshot baselines). The Xcode project's archive check is out
 of CI until the App Store release flow brings it back as part of that flow
 (see The Xcode project).
 
@@ -1802,9 +1802,17 @@ replay puts beside it, and enlarged.
 
 `Tests/Snapshots` holds the approved render of every snapshot, light and dark,
 rendered on the CI runner, which is the one reference environment. The
-`ui-snapshots` job (`scripts/snapshots.sh gate`) builds the app, renders every
-snapshot twice and fails unless the two renders are the same picture, then
-compares each render with its baseline and fails on any drift. A pixel counts
+`ui-snapshots` check runs on four runners at once, the `ui-snapshots shard 1`
+to `4` jobs, and passes only when all four do. Each (`scripts/snapshots.sh
+gate <k>/4`) builds the app, renders its own snapshots twice and fails unless
+the two renders are the same picture, then compares each render with its
+baseline and fails on any drift. Which shard renders a snapshot is fixed in
+`SnapshotShard.assignment` (`Sources/SnapshotDiff`), which keeps the four even:
+a new snapshot needs a line there, since a render fails while any snapshot has
+no shard or any line names a snapshot that is gone, and a baseline whose
+snapshot has no shard is compared by the first, so a removed snapshot is still
+caught. `scripts/snapshots.sh gate` with no shard renders and compares them
+all. A pixel counts
 as changed when any of its channels moves by more than 6 of 255: that covers
 the shading an anti-aliased edge can pick up and the window server's glass,
 which on the runner draws a dark switch's knob one of two ways from one window
@@ -1812,8 +1820,8 @@ to the next (a few dozen pixels, up to 5 of 255 apart), and nothing a person
 would see, since a shifted edge, a new colour or a moved line moves some
 channel much further. A new snapshot fails until its baseline is approved, and
 a baseline the renderer no longer produces fails until it is deleted. For
-every drifted snapshot the job lists what changed in its summary and uploads
-the `ui-snapshot-report` artifact: the approved image, the new render and the
+every drifted snapshot the shard lists what changed in its summary and uploads
+the `ui-snapshot-report-shard-<k>` artifact: the approved image, the new render and the
 difference (changed pixels in red over a faded copy), one folder each, with an
 `index.html` that shows them side by side at real size. The comparison is
 `snapshot-diff` (`Sources/SnapshotDiff`, with unit tests), and the renderer
@@ -1848,13 +1856,15 @@ where it was made:
 **Approving an intended change.** Push the change, with the `merge-checks`
 label on its pull request (see Continuous integration), and let `ui-snapshots`
 fail on the drift, look at the report, then run `make snapshots-approve` (or
-`scripts/snapshots.sh approve`), which downloads the renders from HEAD's
-newest merge-checks run and makes `Tests/Snapshots` match them: a changed or new
+`scripts/snapshots.sh approve`), which downloads the renders of all four
+shards of HEAD's newest merge-checks run, the `ui-snapshots-shard-<k>`
+artifacts, and makes `Tests/Snapshots` match them: a changed or new
 snapshot's render replaces its baseline, a removed snapshot's baseline is
 deleted, and every other file is left alone. `RUN=<id>` names another CI run.
-A run publishes its renders only once both renders finished and agree, so a
-run that failed, timed out or was cancelled before then has nothing to
-approve, and the renders name the source tree they were made from, which
+A shard publishes its renders only once both its renders finished and agree,
+and approve refuses a run unless every shard did, since a missing shard's
+snapshots would read as removed; so a run that failed, timed out or was
+cancelled before then has nothing to approve, and the renders name the source tree they were made from, which
 approve refuses unless it is HEAD's own. A pull request's run renders the
 branch merged with main, so once main has moved on since the branch, merge or
 rebase onto main and push before approving. Commit the images with the change
