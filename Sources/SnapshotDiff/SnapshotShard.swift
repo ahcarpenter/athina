@@ -1,10 +1,11 @@
 import Foundation
 
-/// One of the CI runners the UI snapshot gate is split across: each renders
-/// and compares only the snapshots `assignment` gives it, and the gate passes
-/// only when every shard does (README "UI snapshot baselines").
+/// One of the CI runners each UI snapshot gate, `ui-snapshots` and
+/// `ui-snapshots-smoke`, is split across: each renders and compares only the
+/// snapshots `assignment` gives it, and a gate passes only when every shard
+/// does (README "UI snapshot baselines" and "UI snapshot smoke test").
 public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
-    /// How many runners the gate is split across. The workflow passes its
+    /// How many runners each gate is split across. Each workflow passes its
     /// matrix size with each shard, so a matrix of another size fails every
     /// shard rather than leaving some snapshots unchecked.
     public static let count = 4
