@@ -10,7 +10,7 @@
   The drawing is one path: the body, one cutout through it holding both eyes
   and the beak notch, and a pupil filled back into each eye. The states the
   menu bar shows are made from those parts, so the silhouette never changes
-  and the item keeps one width in every mode.
+  and the item keeps one width in every mode. See scripts/mark-assets.swift.
 
   The file the captain supplied carried a C2PA content-credentials manifest.
   It has been stripped here: it is provenance for the artwork, not drawing,

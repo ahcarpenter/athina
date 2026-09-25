@@ -8,8 +8,8 @@ import Testing
 /// The committed assets against the mark they are built from.
 ///
 /// The app icon is generated from `Resources/Mark/AthinaMark.svg` and the menu
-/// bar mark from `Resources/Mark/AthinaOwl.svg`, by a generator kept outside
-/// the repository, and both are committed as built, so a plain build needs
+/// bar mark from `Resources/Mark/AthinaOwl.svg`, both by
+/// `scripts/mark-assets.swift` and both committed, so a plain build needs
 /// nothing but the repository. That makes them the one thing in the build that
 /// can silently fall out of step with the code: a variant added to
 /// `MenuBarMark` with no file behind it would show the menu bar nothing, and a
@@ -37,7 +37,7 @@ import Testing
         for mark in MenuBarMark.allCases {
             let url = markDirectory.appendingPathComponent("MenuBarMark-\(mark.rawValue).pdf")
             #expect(FileManager.default.fileExists(atPath: url.path),
-                    "no menu bar file for \(mark.rawValue); generate the assets again")
+                    "no menu bar file for \(mark.rawValue); run `make mark`")
         }
     }
 
@@ -68,28 +68,32 @@ import Testing
         let files = try FileManager.default.contentsOfDirectory(atPath: markDirectory.path)
             .filter { $0.hasPrefix("MenuBarMark-") }
         let expected = Set(MenuBarMark.allCases.map { "MenuBarMark-\($0.rawValue).pdf" })
-        #expect(Set(files) == expected, "generate the assets again after changing the set")
+        #expect(Set(files) == expected, "run `make mark` after changing the set")
     }
 
-    /// The check that catches the one mistake that matters: a master was
-    /// edited and the assets were not generated again, so the icon and the
-    /// mark in the bundle are of an older drawing.
+    /// The check that catches the one mistake that matters: a master or the
+    /// script that draws it was edited and `make mark` was not run, so the icon
+    /// and the mark in the bundle are of an older drawing.
     ///
     /// It compares what the assets were built from rather than rebuilding
     /// them, because Core Graphics stamps the running macOS version into every
     /// PDF it writes, so two machines cannot produce the same bytes.
     @Test func theAssetsWereBuiltFromTheSourcesThatAreHereNow() throws {
         let record = try String(contentsOf: markDirectory.appendingPathComponent("built-from.txt"), encoding: .utf8)
-        // The Athena drawing behind the app icon and the owl behind the menu bar.
+        // The Athena drawing behind the app icon, the owl behind the menu bar,
+        // and the script that carries the rest of the drawing: the inset, the
+        // eye treatments, the z's and the per-size thickening are constants
+        // there, not in either master.
         let sources = [
             markDirectory.appendingPathComponent("AthinaMark.svg"),
             markDirectory.appendingPathComponent("AthinaOwl.svg"),
+            root.appendingPathComponent("scripts/mark-assets.swift"),
         ]
         for url in sources {
             let data = try Data(contentsOf: url)
             let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
             #expect(record.contains("\(url.lastPathComponent) \(digest)"),
-                    "\(url.lastPathComponent) has changed since the assets were built; generate them again")
+                    "\(url.lastPathComponent) has changed since the assets were built; run `make mark`")
         }
         // And the set it was built for is the set the code can ask for.
         let variants = record.split(separator: "\n")
@@ -98,7 +102,7 @@ import Testing
             .split(separator: " ")
             .map(String.init) ?? []
         #expect(Set(variants) == Set(MenuBarMark.allCases.map(\.rawValue)),
-                "the variant set has changed since the assets were built; generate them again")
+                "the variant set has changed since the assets were built; run `make mark`")
     }
 
     /// The cream layer and the drawing are two independent groups, which is
@@ -140,8 +144,8 @@ import Testing
         #expect(drawing.attributeNames.allSatisfy { !$0.localizedCaseInsensitiveContains("c2pa") })
     }
 
-    /// The README's pictures, today the icon at its top, are generated with the
-    /// app's assets and committed beside them: the README shows
+    /// The README's pictures, today the icon at its top, are drawn by the same
+    /// script as the app's assets and committed beside them: the README shows
     /// every one of them, points at none that is missing, and nothing drawn
     /// for the README is left lying unused.
     @Test func theReadmeShowsEveryPictureDrawnForIt() throws {
@@ -159,7 +163,7 @@ import Testing
         let url = markDirectory.appendingPathComponent("ReadmeIcon.png")
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-            Issue.record("cannot read ReadmeIcon.png; generate the assets again")
+            Issue.record("cannot read ReadmeIcon.png; run `make mark`")
             return
         }
         #expect(image.width == 1024 && image.height == 1024, "ReadmeIcon.png is \(image.width) x \(image.height)")
@@ -189,7 +193,7 @@ import Testing
     /// resample one from another and show a soft icon.
     @Test func theAppIconCarriesEverySize() {
         let url = root.appendingPathComponent("Resources/AppIcon.icns")
-        #expect(FileManager.default.fileExists(atPath: url.path), "no app icon; generate the assets again")
+        #expect(FileManager.default.fileExists(atPath: url.path), "no app icon; run `make mark`")
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             Issue.record("cannot read AppIcon.icns")
             return
@@ -204,7 +208,7 @@ import Testing
     }
 }
 
-/// A master read the way the asset generator reads it: the drawable
+/// A master read the way `scripts/mark-assets.swift` reads it: the drawable
 /// elements in document order, each with the group it belongs to and, for a
 /// path, the command letters its data is made of.
 ///

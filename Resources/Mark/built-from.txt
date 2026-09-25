@@ -1,6 +1,8 @@
 # What Resources/AppIcon.icns, the MenuBarMark PDFs and the README icon
-# were built from: both masters and the variant set. Written by the asset
-# generator, which is kept outside the repository; never edit this by hand.
+# were built from: both masters and the script that drew them. Written by
+# scripts/mark-assets.swift; run `make mark` after changing a master, the
+# script or the variant set, never edit this by hand.
 AthinaMark.svg 02dc7f7b960525ffe50cce980c37640aa7311ee36da5e9c025451d904706fb79
-AthinaOwl.svg 312701f0f36f34c4d40bbf4bffe3276bac19edf958e59c8062bb65e22ec7cdd4
+AthinaOwl.svg e227bce988b0923c2caffc967581fd748de147d9258106d52ae7ae3808de9aa5
+mark-assets.swift 96f2bf8f804c77665e88e6069d40644a614bd0024183c97c4acc78a9a7846a40
 variants watching idle paused excluded needsSomething held
