@@ -57,8 +57,14 @@ enum Accessibility {
       // row whose parts are combined into one element, which is how
       // VoiceOver reads most of Athina's rows.
       let interesting = [
-        "AXStaticText", "AXButton", "AXCheckBox", "AXTextField", "AXTextArea", "AXMenuItem",
-        "AXMenuBarItem", "AXUnknown",
+        "AXStaticText",
+        "AXButton",
+        "AXCheckBox",
+        "AXTextField",
+        "AXTextArea",
+        "AXMenuItem",
+        "AXMenuBarItem",
+        "AXUnknown",
       ]
       for root in roots() {
         var found: [AXUIElement] = []

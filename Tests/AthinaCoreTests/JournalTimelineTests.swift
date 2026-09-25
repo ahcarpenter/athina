@@ -124,7 +124,9 @@ import Testing
     timeline.insert(observation(1, at: 3602))
     #expect(
       timeline.entries == [
-        observation(1, at: 3602), event(2, .idleEnd, at: 3601), event(1, .retention, at: 3600),
+        observation(1, at: 3602),
+        event(2, .idleEnd, at: 3601),
+        event(1, .retention, at: 3600),
         event(3, .permissionsChanged),
       ]
     )

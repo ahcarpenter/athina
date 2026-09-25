@@ -39,9 +39,14 @@ public struct JournalDatabase: Sendable {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
     process.arguments = [
-      "-readonly", "-noheader",
-      "-separator", Self.fieldSeparator, "-newline", Self.rowSeparator,
-      path, sql,
+      "-readonly",
+      "-noheader",
+      "-separator",
+      Self.fieldSeparator,
+      "-newline",
+      Self.rowSeparator,
+      path,
+      sql,
     ]
     let output = Pipe()
     let errors = Pipe()

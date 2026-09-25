@@ -456,7 +456,8 @@ struct ReplayInterventionTests {
       for block in message.content {
         guard case .text(let text) = block,
           let match = text.firstMatch(of: /latest screen, (\d+) by (\d+) pixels/),
-          let width = Int(match.1), let height = Int(match.2)
+          let width = Int(match.1),
+          let height = Int(match.2)
         else { continue }
         return (width, height)
       }
@@ -488,7 +489,8 @@ struct ReplayInterventionTests {
     for entry in entries where entry.fixture.identity.kind == ModelTier.mentor.rawValue {
       guard let response = try? entry.fixture.result.get(),
         let verdict = MentorLoop.decode(MentorVerdict.self, from: response),
-        let payload = verdict.suggestion, payload.confidence >= MentorSettings().minimumConfidence,
+        let payload = verdict.suggestion,
+        payload.confidence >= MentorSettings().minimumConfidence,
         let region = payload.region,
         let frame = recordedFrameSize(of: entry.fixture.request)
       else { continue }

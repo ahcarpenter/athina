@@ -61,8 +61,11 @@ func value(_ element: AXUIElement) -> String { text(attr(element, kAXValueAttrib
 /// a match has to look at every name-bearing attribute.
 func names(_ element: AXUIElement) -> [String] {
   [
-    title(element), describe(element), value(element),
-    text(attr(element, kAXHelpAttribute)), text(attr(element, kAXIdentifierAttribute)),
+    title(element),
+    describe(element),
+    value(element),
+    text(attr(element, kAXHelpAttribute)),
+    text(attr(element, kAXIdentifierAttribute)),
   ]
 }
 

@@ -74,7 +74,8 @@ struct VoiceSection: View {
         )
       } label: {
         Text("Talk-back shortcut")
-        if state.isRunning, state.settings.mentor.pushToTalkHotKey != nil,
+        if state.isRunning,
+          state.settings.mentor.pushToTalkHotKey != nil,
           !state.pushToTalkRegistered
         {
           StatusLabel("Another app uses this combination. Choose another.", kind: .warning)

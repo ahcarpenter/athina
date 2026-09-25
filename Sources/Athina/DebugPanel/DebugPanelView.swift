@@ -48,7 +48,8 @@ struct DebugPanelView: View {
       await state.refreshJournalStats()
     }
     .task(id: selectedEntryID) {
-      guard let selectedEntryID, selectedEntryID.hasPrefix("o"),
+      guard let selectedEntryID,
+        selectedEntryID.hasPrefix("o"),
         let id = Int64(selectedEntryID.dropFirst())
       else {
         selected = nil

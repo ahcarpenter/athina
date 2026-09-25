@@ -172,7 +172,8 @@ public enum CalloutAnchor {
     guard let capturedWindow = observation.focus.windowFrame else {
       return .failure(.noWindowFrame)
     }
-    guard live.frontmostPID == observation.focus.pid, let focus = live.focus,
+    guard live.frontmostPID == observation.focus.pid,
+      let focus = live.focus,
       focus.pid == observation.focus.pid
     else {
       return .failure(.windowNotFrontmost)
@@ -208,7 +209,8 @@ public enum CalloutAnchor {
   ) -> Bool {
     guard latest.id != original.id,
       latest.focus.windowSignature == original.focus.windowSignature,
-      latest.frame.width == original.frame.width, latest.frame.height == original.frame.height
+      latest.frame.width == original.frame.width,
+      latest.frame.height == original.frame.height
     else { return true }
     let framed = original.textBlocks.filter { block in
       region.intersection(block.imageRect).area >= 0.5 * block.imageRect.area

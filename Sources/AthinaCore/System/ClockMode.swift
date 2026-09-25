@@ -82,7 +82,8 @@ public enum ClockMode: Equatable, Sendable {
     }
     var ahead: TimeInterval = 0
     if let advanceValue {
-      guard let text = advanceValue, let parsed = ClockInterval.seconds(from: text),
+      guard let text = advanceValue,
+        let parsed = ClockInterval.seconds(from: text),
         ClockMode.accepts(advance: parsed)
       else {
         self = .replay(

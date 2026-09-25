@@ -104,17 +104,21 @@ import Testing
     let baseline = try directory(
       "baseline",
       [
-        "same-light.png": Self.grey, "tolerated-light.png": Self.grey,
+        "same-light.png": Self.grey,
+        "tolerated-light.png": Self.grey,
         "changed-light.png": Self.grey,
-        "resized-light.png": Self.grey, "removed-light.png": Self.grey,
+        "resized-light.png": Self.grey,
+        "removed-light.png": Self.grey,
       ]
     )
     let actual = try directory(
       "actual",
       [
-        "same-light.png": Self.grey, "tolerated-light.png": Self.nearlyGrey,
+        "same-light.png": Self.grey,
+        "tolerated-light.png": Self.nearlyGrey,
         "changed-light.png": Self.darker,
-        "resized-light.png": Self.wide, "added-light.png": Self.grey,
+        "resized-light.png": Self.wide,
+        "added-light.png": Self.grey,
       ]
     )
     let comparison = try SnapshotComparison.compare(
@@ -169,14 +173,16 @@ import Testing
     let baseline = try directory(
       "baseline",
       [
-        "tolerated-light.png": Self.grey, "changed-light.png": Self.grey,
+        "tolerated-light.png": Self.grey,
+        "changed-light.png": Self.grey,
         "removed-light.png": Self.grey,
       ]
     )
     let actual = try directory(
       "actual",
       [
-        "tolerated-light.png": Self.nearlyGrey, "changed-light.png": Self.darker,
+        "tolerated-light.png": Self.nearlyGrey,
+        "changed-light.png": Self.darker,
         "added-light.png": Self.wide,
       ]
     )
