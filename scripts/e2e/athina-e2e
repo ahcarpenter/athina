@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The Athina end-to-end harness: one entry point that prepares a warm replay
-# home, runs named scenarios against the real app on the real screen, and
-# prints a machine-readable result with the evidence each one produced.
+# home, runs named scenarios against the real app, hermetically through its
+# control API or on the real screen, and prints a machine-readable result with
+# the evidence each one produced.
 #
 #   scripts/e2e/athina-e2e warm          prepare the warm fixture home (once)
 #   scripts/e2e/athina-e2e list          the scenarios and what each proves
@@ -48,14 +49,19 @@ options:
   --out <dir>        where evidence goes (default: a dated directory per run)
   --keep-home        keep the scratch home after a run, to look inside it
   --time-scale <n>   run the replay clock n times faster (see README)
+  --jobs <n>         run up to n API-tier scenarios at once, beside the
+                     real-screen ones (default 1: one scenario at a time)
+  --show-windows     leave an API-tier run's windows on screen to watch it,
+                     taking the screen lock as a real-screen run does
   --lock-timeout <s> give up after s seconds when another run holds the
                      screen or this checkout (default: wait for as long as
                      it takes)
 
 run and warm first take this checkout's lock, so only one of them runs from a
-checkout at a time, then build, then take one machine-wide lock, as clean does,
-so only one run is on the screen at a time across every checkout (README
-"End-to-end harness").
+checkout at a time, then build. An API-tier scenario is hermetic and takes no
+other lock. A real-screen scenario takes one machine-wide lock for as long as
+it runs, as warm and clean do for theirs, so only one run is on the screen at a
+time across every checkout (README "End-to-end harness").
 TEXT
 }
 
@@ -72,6 +78,13 @@ scenario_summary_of() {
 	sed -n 's/^SCENARIO_SUMMARY="\(.*\)"$/\1/p' "$SCENARIO_DIR/$1.sh" | head -1
 }
 
+# The tier a scenario names, read the same way; screen when it names none.
+scenario_tier_of() {
+	local tier
+	tier="$(sed -n 's/^SCENARIO_TIER=\([a-z]*\)$/\1/p' "$SCENARIO_DIR/$1.sh" 2>/dev/null | head -1)"
+	printf '%s\n' "${tier:-screen}"
+}
+
 cmd_list() {
 	local name
 	for name in $(scenario_names); do
@@ -84,6 +97,7 @@ cmd_doctor() {
 	ensure_drive
 	printf 'repository       %s\n' "$ROOT"
 	printf 'app bundle       %s\n' "$([ -x "$APP_BINARY" ] && echo "$APP" || echo "missing (run make build)")"
+	printf 'hermetic copy    %s\n' "$([ -x "$E2E_BINARY" ] && echo "$E2E_APP ($E2E_BUNDLE_ID)" || echo "not made yet: the first API-tier run makes it")"
 	printf 'drive tool       %s\n' "$([ -x "$DRIVE" ] && echo "$DRIVE" || echo "missing")"
 	printf 'fixtures         %s\n' "$([ -d "$FIXTURES" ] && echo "$FIXTURES" || echo "missing")"
 	printf 'warm home        %s\n' "$(have_warm_home && echo "$WARM_HOME (warmed $(warm_home_stamp))" || echo "not prepared: run athina-e2e warm")"
@@ -172,25 +186,86 @@ cmd_warm() {
 SCENARIO_SKIPPED=77
 
 cmd_run() {
-	local names=("$@") name status=0 outcome passed=0 failed=0 skipped=0
-	[ ${#names[@]} -gt 0 ] || { usage; exit 64; }
-	if [ "${names[0]}" = "all" ]; then
+	local names=() name
+	[ $# -gt 0 ] || { usage; exit 64; }
+	if [ "$1" = "all" ]; then
 		mapfile -t names < <(scenario_names)
+	else
+		names=("$@")
 	fi
+	for name in "${names[@]}"; do
+		[ -f "$SCENARIO_DIR/$name.sh" ] || die "no scenario named $name"
+	done
 	ensure_app
 	ensure_drive
-	have_warm_home || die "no warm home yet: run scripts/e2e/athina-e2e warm first"
+	local api=() screen=()
 	for name in "${names[@]}"; do
-		outcome=0
-		run_scenario "$name" || outcome=$?
+		if [ "$(scenario_tier_of "$name")" = api ]; then api+=("$name"); else screen+=("$name"); fi
+	done
+	# The API tier captures nothing, so only the real-screen tier needs the
+	# warm home.
+	if [ ${#screen[@]} -gt 0 ]; then
+		have_warm_home || die "no warm home yet: run scripts/e2e/athina-e2e warm first"
+	fi
+	OUTCOMES="$(mktemp -d "${TMPDIR:-/tmp}/athina-e2e-outcomes.XXXXXX")"
+	if [ "$JOBS" -le 1 ]; then
+		for name in "${names[@]}"; do run_one "$name"; done
+	else
+		# The real-screen tier one at a time beside the pool, each scenario
+		# taking the screen lock for itself, and the API tier up to $JOBS at a
+		# time, taking none.
+		(for name in ${screen[@]+"${screen[@]}"}; do run_one "$name"; done) 8>&- &
+		local pool=() alive pid
+		for name in ${api[@]+"${api[@]}"}; do
+			while :; do
+				alive=0
+				for pid in ${pool[@]+"${pool[@]}"}; do kill -0 "$pid" 2>/dev/null && alive=$((alive + 1)); done
+				[ "$alive" -lt "$JOBS" ] && break
+				sleep 0.2
+			done
+			run_one "$name" 8>&- &
+			pool+=($!)
+		done
+		wait
+	fi
+	tally
+}
+
+# One scenario, its outcome kept where tally finds it.
+run_one() {
+	local outcome=0
+	run_scenario "$1" || outcome=$?
+	printf '%s\n' "$outcome" >"$(mktemp "$OUTCOMES/outcome.XXXXXX")"
+}
+
+tally() {
+	local passed=0 failed=0 skipped=0 outcome file
+	for file in "$OUTCOMES"/outcome.*; do
+		[ -e "$file" ] || continue
+		outcome="$(cat "$file")"
 		case "$outcome" in
 		0) passed=$((passed + 1)) ;;
 		"$SCENARIO_SKIPPED") skipped=$((skipped + 1)) ;;
-		*) failed=$((failed + 1)); status=1 ;;
+		*) failed=$((failed + 1)) ;;
 		esac
 	done
+	rm -rf "$OUTCOMES"
 	log "$passed passed, $failed failed, $skipped skipped"
-	return $status
+	[ "$failed" = 0 ]
+}
+
+# A new evidence directory for a scenario: its name and the time, with a
+# number after it when a copy of the same scenario started in the same second.
+make_run_dir() {
+	local base n=1 dir
+	base="${OUT_ROOT:-$RUNS_ROOT}/$1-$(date '+%Y%m%d-%H%M%S')"
+	mkdir -p "$(dirname "$base")"
+	dir="$base"
+	until mkdir "$dir" 2>/dev/null; do
+		n=$((n + 1))
+		dir="$base-$n"
+	done
+	printf '%s\n' "$dir"
 }
 
 run_scenario() (
@@ -224,15 +299,30 @@ run_scenario() (
 		exit "$SCENARIO_SKIPPED"
 	fi
 
-	RUN_DIR="${OUT_ROOT:-$RUNS_ROOT}/$name-$(date '+%Y%m%d-%H%M%S')"
-	mkdir -p "$RUN_DIR"
-	lock_note SCREEN_LOCK "run $name"
+	[ "$JOBS" -gt 1 ] && LOG_TAG="[$name] "
+	# A real-screen run is on the screen, and so is an API-tier one whose
+	# windows are left there to watch: each takes the machine-wide lock for as
+	# long as it runs, so other checkouts' runs interleave with this one's.
+	if [ "$SCENARIO_TIER" = screen ] || [ "$SHOW_WINDOWS" = 1 ]; then
+		local status=0
+		lock_acquire SCREEN_LOCK "run $name" "$LOCK_TIMEOUT" || status=$?
+		if [ "$status" != 0 ]; then
+			result_line "$name" fail 0 "could not take the screen lock"
+			exit "$status"
+		fi
+	fi
+
+	RUN_DIR="$(make_run_dir "$name")"
+	# While this is here, clean leaves the run alone.
+	printf '%s\n' "$BASHPID" >"$RUN_DIR/.running"
 	log "=== $name ($SCENARIO_TIER tier): $SCENARIO_SUMMARY"
 	log "evidence: $RUN_DIR"
 
 	trap cleanup EXIT
 	record_build_provenance
-	prefs_save
+	# A hermetic run has preferences of its own (ensure_e2e_app), so it never
+	# touches the owner's and has nothing to save.
+	[ "$SCENARIO_TIER" = api ] || prefs_save
 	HOME_DIR="$RUN_DIR/home"
 	new_home "$HOME_DIR"
 	seed_settings "$HOME_DIR" "$SCENARIO_SETTINGS"
@@ -246,7 +336,9 @@ run_scenario() (
 	scenario_stage
 	if [ "$SCENARIO_TIER" = api ]; then
 		control_prepare
-		args+=(--control "$CONTROL_DIR")
+		# Hermetic (README "Hermetic runs"), which --control alone is not.
+		args+=(--control "$CONTROL_DIR" --hermetic)
+		[ "$SHOW_WINDOWS" = 1 ] && args+=(--show-windows)
 		launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
 		control_wait
 	else
@@ -257,7 +349,10 @@ run_scenario() (
 	fi
 
 	detail=""
-	if scenario_run; then
+	local ran=0
+	scenario_run || ran=$?
+	[ "$SCENARIO_TIER" = api ] && hermetic_checks
+	if [ "$ran" = 0 ]; then
 		if [ "$CHECKS_FAILED" = 0 ]; then
 			result=pass
 		else
@@ -295,8 +390,26 @@ cmd_journal() {
 }
 
 cmd_clean() {
-	rm -rf "$RUNS_ROOT"
-	log "removed $RUNS_ROOT"
+	# An API-tier run takes no lock that clean waits on, so one of another
+	# checkout's may be running now; its evidence stays.
+	local dir pid kept=0
+	for dir in "$RUNS_ROOT"/*; do
+		[ -e "$dir" ] || continue
+		pid="$(cat "$dir/.running" 2>/dev/null || true)"
+		if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+			kept=$((kept + 1))
+			continue
+		fi
+		rm -rf "$dir"
+	done
+	log "removed the runs in $RUNS_ROOT$([ "$kept" = 0 ] || echo ", except $kept still running")"
+	# What the hermetic copy leaves behind outside the runs: its preferences
+	# domain, and the Accessibility row macOS writes, denied, the first time an
+	# app it has not seen asks whether it is trusted (README "Hermetic runs").
+	if [ "$kept" = 0 ]; then
+		defaults delete "$E2E_BUNDLE_ID" >/dev/null 2>&1 && log "removed the $E2E_BUNDLE_ID preferences"
+		tccutil reset Accessibility "$E2E_BUNDLE_ID" >/dev/null 2>&1 && log "reset $E2E_BUNDLE_ID's Accessibility entry"
+	fi
 	if [ "${1:-}" = "--warm" ]; then
 		rm -rf "$WARM_HOME" "$CACHE_ROOT/warm-home.building"
 		log "removed $WARM_HOME"
@@ -313,6 +426,10 @@ main() {
 		--keep-home) KEEP_HOME=1; shift ;;
 		--time-scale) TIME_SCALE="$2"; shift 2 ;;
 		--lock-timeout) LOCK_TIMEOUT="$2"; shift 2 ;;
+		--jobs)
+			[[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || { echo "--jobs takes a whole number of scenarios, 1 or more" >&2; exit 64; }
+			JOBS="$2"; shift 2 ;;
+		--show-windows) SHOW_WINDOWS=1; shift ;;
 		--home) rest+=("$2"); shift 2 ;;
 		*) rest+=("$1"); shift ;;
 		esac

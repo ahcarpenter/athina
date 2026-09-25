@@ -21,6 +21,15 @@ final class SpeechListener {
         }
     }
 
+    /// What a recording hears.
+    enum Hearing {
+        /// The microphone, through the on-device recognizer.
+        case microphone
+        /// Only the words `hear` gives it: a hermetic run's, which opens no
+        /// microphone and so never asks for one.
+        case script
+    }
+
     enum Failure: Error, CustomStringConvertible {
         case unavailable
         case noInput
@@ -72,14 +81,30 @@ final class SpeechListener {
     private var partials = 0
     private var waiters: [CheckedContinuation<String?, Never>] = []
 
-    init(clock: any AthinaClock) {
+    private let hearing: Hearing
+    /// Where a scripted recording reports the words `hear` gives it.
+    private var scriptedPartial: (@MainActor (String) -> Void)?
+
+    init(clock: any AthinaClock, hears hearing: Hearing = .microphone) {
         self.clock = clock
+        self.hearing = hearing
     }
 
     /// Starts capturing and transcribing. `onPartial` receives the transcript
     /// as it grows, on the main actor.
     func start(onPartial: @escaping @MainActor (String) -> Void) throws {
         guard !isListening else { throw Failure.alreadyListening }
+        if hearing == .script {
+            cancel()
+            session += 1
+            latest = ""
+            finished = false
+            finishing = false
+            partials = 0
+            scriptedPartial = onPartial
+            isListening = true
+            return
+        }
         guard let recognizer = SFSpeechRecognizer(locale: .current), recognizer.supportsOnDeviceRecognition else {
             throw Failure.unavailable
         }
@@ -125,6 +150,17 @@ final class SpeechListener {
         isListening = true
     }
 
+    /// What a scripted recording hears, as the recognizer's latest result;
+    /// false, hearing nothing, when it is not scripted or not recording.
+    @discardableResult
+    func hear(_ words: String) -> Bool {
+        guard hearing == .script, isListening, !finishing else { return false }
+        partials += 1
+        latest = words
+        scriptedPartial?(words)
+        return true
+    }
+
     /// Stops capturing and returns the transcript once the recognizer has
     /// finalized it, or the best partial one after a bounded wait. Nil when
     /// nothing was recognized.
@@ -137,6 +173,10 @@ final class SpeechListener {
         try? await clock.sleep(for: .seconds(SpeechListener.releaseGrace))
         guard session == self.session else { return nil }
         stopAudio()
+        if hearing == .script {
+            complete()
+            return transcript
+        }
         request?.endAudio()
         SpeechListener.log.notice("audio ended after \(self.partials) partial results, \(self.latest.split(separator: " ").count) words so far")
         if finished { return transcript }
@@ -201,6 +241,7 @@ final class SpeechListener {
         task?.cancel()
         task = nil
         request = nil
+        scriptedPartial = nil
         let result = transcript
         let pending = waiters
         waiters.removeAll()

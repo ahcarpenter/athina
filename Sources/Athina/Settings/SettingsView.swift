@@ -45,8 +45,33 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     }
 
     /// Makes this the pane the Settings window shows, now or when it next opens.
+    @MainActor
     func select() {
-        UserDefaults.standard.set(rawValue, forKey: SettingsPane.storageKey)
+        SettingsPaneSelection.shared.pane = self
+    }
+}
+
+/// The pane the Settings window shows, remembered across launches in the
+/// preferences. A hermetic run keeps it to itself instead: every such run
+/// shares one preferences domain (README "Hermetic runs"), which would carry
+/// one run's choice of pane into every other run's open Settings window.
+@MainActor
+@Observable
+final class SettingsPaneSelection {
+    static let shared = SettingsPaneSelection(remembers: !AppState.shared.controlMode.isHermetic)
+
+    private let remembers: Bool
+
+    var pane: SettingsPane {
+        didSet {
+            if remembers { UserDefaults.standard.set(pane.rawValue, forKey: SettingsPane.storageKey) }
+        }
+    }
+
+    init(remembers: Bool) {
+        self.remembers = remembers
+        let saved = remembers ? UserDefaults.standard.string(forKey: SettingsPane.storageKey) : nil
+        pane = saved.flatMap(SettingsPane.init(rawValue:)) ?? .general
     }
 }
 
@@ -56,10 +81,10 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 struct SettingsView: View {
     static let paneWidth: CGFloat = 600
 
-    @AppStorage(SettingsPane.storageKey) private var pane = SettingsPane.general
+    @Bindable private var selection = SettingsPaneSelection.shared
 
     var body: some View {
-        TabView(selection: $pane) {
+        TabView(selection: $selection.pane) {
             Tab(SettingsPane.general.title, systemImage: SettingsPane.general.symbol, value: .general) {
                 GeneralSettings().settingsPane(height: 640)
             }

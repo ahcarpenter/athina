@@ -23,6 +23,16 @@ import Foundation
 ///
 /// A refusal shows in the menu, the debug panel's Mentor card, and the log, as
 /// the clock flags' do.
+///
+/// A launch that serves the API is otherwise a replay like any other, on the
+/// screen, in the menu bar, and sensing, so a real-screen check can drive it
+/// too. With `--hermetic` as well it is a hermetic run (README "Hermetic
+/// runs"): it takes nothing from the real world and leaves nothing in it, so
+/// any number can run beside each other and beside whoever is at the Mac. It
+/// senses nothing, listens to no global input, never activates itself, keeps
+/// its item out of the menu bar, and parks every window it opens below the
+/// desktop picture, or, with `--show-windows` too, leaves them where a person
+/// can watch.
 public enum ControlMode: Equatable, Sendable {
     /// No `--control` on the command line.
     case off
@@ -32,6 +42,12 @@ public enum ControlMode: Equatable, Sendable {
     case refused(String)
 
     public static let flag = "--control"
+    /// Makes a served launch a hermetic run. Read only with `flag`.
+    public static let hermeticFlag = "--hermetic"
+    /// Leaves a hermetic run's windows on screen rather than parking them, to
+    /// watch what a scenario does or to compare its checkpoints with a parked
+    /// run's. Read only with `hermeticFlag`.
+    public static let showWindowsFlag = "--show-windows"
     /// The socket the app makes inside the directory.
     public static let socketName = "control.sock"
     /// The file inside the directory that holds the run's secret.
@@ -93,7 +109,11 @@ public enum ControlMode: Equatable, Sendable {
             )
             return
         }
-        self = .on(ControlChannel(directory: directory, secret: secret))
+        let hermetic = arguments.contains(ControlMode.hermeticFlag)
+        self = .on(ControlChannel(
+            directory: directory, secret: secret, isHermetic: hermetic,
+            parksWindows: hermetic && !arguments.contains(ControlMode.showWindowsFlag)
+        ))
     }
 
     /// Why `--control` was not served, or nil when it was or was not asked for.
@@ -101,16 +121,36 @@ public enum ControlMode: Equatable, Sendable {
         if case .refused(let reason) = self { return reason }
         return nil
     }
+
+    /// Whether this launch is a hermetic run: only one that serves the API
+    /// and was asked to be, so a refused `--control` leaves a launch as it
+    /// would be without it.
+    public var isHermetic: Bool {
+        if case .on(let channel) = self { return channel.isHermetic }
+        return false
+    }
+
+    /// Whether a hermetic run parks its windows below the desktop picture.
+    public var parksWindows: Bool {
+        if case .on(let channel) = self { return channel.parksWindows }
+        return false
+    }
 }
 
 /// Where the control API listens and the secret every request must carry.
 public struct ControlChannel: Equatable, Sendable {
     public var directory: URL
     public var secret: String
+    /// Whether the launch is a hermetic run (`--hermetic`).
+    public var isHermetic: Bool
+    /// Whether a hermetic run parks its windows: not under `--show-windows`.
+    public var parksWindows: Bool
 
-    public init(directory: URL, secret: String) {
+    public init(directory: URL, secret: String, isHermetic: Bool = false, parksWindows: Bool = false) {
         self.directory = directory
         self.secret = secret
+        self.isHermetic = isHermetic
+        self.parksWindows = parksWindows
     }
 
     public var socketPath: String {

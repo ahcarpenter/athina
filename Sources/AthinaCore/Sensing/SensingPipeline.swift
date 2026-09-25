@@ -1,12 +1,26 @@
 import CoreGraphics
 import Foundation
 
+/// Where the pipeline's senses come from.
+public enum SensingSource: Sendable {
+    /// The Mac itself: focus, input, permissions, and the screen.
+    case system
+    /// Nothing real, for a hermetic run (`ControlMode.isHermetic`): no focus
+    /// tracking, no read of input or permissions, and no capture, so the run
+    /// journals nothing of the screen of whoever is at the Mac and never asks
+    /// macOS for a permission. Every permission reads as granted and input as
+    /// recent, so the pipeline is in the mode a person using the app sees,
+    /// watching, until it is paused.
+    case hermetic
+}
+
 /// Orchestrates focus tracking, input polling, screen capture, frame diffing,
 /// OCR, and journaling, and publishes `SensingEvent`s to subscribers.
 public actor SensingPipeline {
     public private(set) var settings: SensingSettings
     private let journal: Journal
     private let tracker: FocusTracker
+    private let source: SensingSource
     private let capturer = ScreenCapturer()
     private let recognizer = TextRecognizer()
     private let broadcaster = EventBroadcaster<SensingEvent>()
@@ -30,10 +44,16 @@ public actor SensingPipeline {
     private var lastPublishedCadence: Date = .distantPast
     private var lastPublishedSnapshot: CadenceStatus?
 
-    public init(settings: SensingSettings, journal: Journal, tracker: FocusTracker, clock: any AthinaClock) {
+    public init(
+        settings: SensingSettings, journal: Journal, tracker: FocusTracker, clock: any AthinaClock, source: SensingSource = .system
+    ) {
         self.settings = settings
         self.journal = journal
         self.tracker = tracker
+        self.source = source
+        if source == .hermetic {
+            permissions = PermissionStatus(screenRecording: true, accessibility: true, microphone: true, speechRecognition: true)
+        }
         self.clock = clock
         signal = AsyncSignal(clock: clock)
         self.scheduler = CaptureScheduler(settings: settings)
@@ -50,12 +70,14 @@ public actor SensingPipeline {
 
     public func start() async {
         guard loopTask == nil else { return }
-        await tracker.updateExcluded(settings.excludedBundleIDSet)
-        await tracker.setOnChange { [weak self] change in
-            guard let self else { return }
-            Task { await self.focusDidChange(change) }
+        if source == .system {
+            await tracker.updateExcluded(settings.excludedBundleIDSet)
+            await tracker.setOnChange { [weak self] change in
+                guard let self else { return }
+                Task { await self.focusDidChange(change) }
+            }
+            await tracker.start()
         }
-        await tracker.start()
         await journalEvent(JournalEvent(timestamp: clock.date, kind: .started))
         loopTask = Task { [weak self] in
             await self?.runLoop()
@@ -154,8 +176,15 @@ public actor SensingPipeline {
     private func runLoop() async {
         while !Task.isCancelled {
             let now = clock.date
-            refreshPermissionsIfDue(now: now)
             await runRetentionIfDue(now: now)
+            if source == .hermetic {
+                // Only the person's own choices move a hermetic pipeline:
+                // pausing, and the settings.
+                setMode(computeMode())
+                await signal.wait(for: .seconds(settings.idlePollInterval))
+                continue
+            }
+            refreshPermissionsIfDue(now: now)
 
             // The system counts real seconds since the last event, so a new event is told
             // apart in real time, which a replay's faster or moved clock does not change.

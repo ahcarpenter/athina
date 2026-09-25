@@ -18,12 +18,17 @@
 # already holds, such as a hand-held lockf, takes it only if it is free.
 #
 # Each lock is a flock(2) on one file, taken with /usr/bin/lockf on a file
-# descriptor this shell keeps open, so it lasts exactly as long as the harness
-# process does: a pass, a failure, an interrupt, and a kill -9 all give it back,
+# descriptor this shell keeps open, so it lasts exactly as long as the process
+# holding it does: a pass, a failure, an interrupt, and a kill -9 all give it back,
 # and a holder that died leaves nothing stale behind. The screen lock is the
 # file lanes wrap runs in by hand
 # (`lockf -k "$HOME/Library/Caches/athina-e2e/screen.lock" ...`), so a
 # hand-wrapped run and a harness run exclude each other too.
+#
+# The process holding a lock is ${BASHPID:-$$}: the subshell a scenario runs
+# in when it takes the screen lock for itself (bash keeps its pid in BASHPID,
+# while $$ stays the harness's), or the harness. Bash 3, which the tests may
+# use, has no BASHPID and takes no lock in a subshell.
 #
 # A lock is named by the prefix of its variables, SCREEN_LOCK or CHECKOUT_LOCK:
 # the file, then _HOLDER, _FD, _LABEL, _STATE, and _OWNER, read through
@@ -65,11 +70,13 @@ lock_var() {
 
 lock_set() { printf -v "$1$2" '%s' "$3"; }
 
-# The commands that launch the app, drive input, or change the shared warm
-# home. list, doctor, and journal touch none of them and never wait.
+# The commands that take the screen lock for all they do: they launch the app
+# on the screen or change the shared warm home. run takes it for each
+# real-screen scenario instead, and no API-tier one takes it at all (README
+# "Hermetic runs"); list, doctor, and journal never wait.
 screen_lock_needed() {
 	case "$1" in
-	run | warm | clean) return 0 ;;
+	warm | clean) return 0 ;;
 	*) return 1 ;;
 	esac
 }
@@ -197,7 +204,7 @@ lock_note() {
 	tmp="$holder.$$"
 	{
 		printf 'owner=%s\n' "$(lock_var "$lock" _OWNER)"
-		printf 'pid=%s\n' "$$"
+		printf 'pid=%s\n' "${BASHPID:-$$}"
 		printf 'checkout=%s\n' "${ROOT:-$PWD}"
 		printf 'what=%s\n' "$what"
 		printf 'since=%s\n' "$(date '+%Y-%m-%d %H:%M:%S')"
@@ -217,7 +224,8 @@ lock_acquire() {
 	fi
 	mkdir -p "$(dirname "$file")"
 	openers="$(lock_openers "$lock")"
-	if ancestor="$(first_holding_ancestor "$(process_ancestry $$)" "$openers")"; then
+	local self="${BASHPID:-$$}"
+	if ancestor="$(first_holding_ancestor "$(process_ancestry "$self")" "$openers")"; then
 		lock_set "$lock" _STATE 2
 		lock_set "$lock" _OWNER "$ancestor"
 		lock_say "the $label is already held by pid $ancestor, which started this run"
@@ -260,7 +268,7 @@ lock_acquire() {
 		lock_say "took the $label, which was free"
 	fi
 	lock_set "$lock" _STATE 1
-	lock_set "$lock" _OWNER "$$"
+	lock_set "$lock" _OWNER "$self"
 	lock_note "$lock" "$what"
 	return 0
 }
@@ -285,7 +293,7 @@ lock_release() {
 	[ "$(lock_var "$lock" _STATE)" = 1 ] || return 0
 	holder="$(lock_var "$lock" _HOLDER)"
 	fd="$(lock_var "$lock" _FD)"
-	[ "$(lock_holder_field "$holder" pid)" = "$$" ] && rm -f "$holder"
+	[ "$(lock_holder_field "$holder" pid)" = "${BASHPID:-$$}" ] && rm -f "$holder"
 	eval "exec $fd>&-"
 	lock_set "$lock" _STATE 0
 	return 0

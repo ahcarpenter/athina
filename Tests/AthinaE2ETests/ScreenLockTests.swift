@@ -87,9 +87,15 @@ import Testing
 
     // MARK: Which commands lock
 
-    @Test(arguments: ["run", "warm", "clean"])
+    @Test(arguments: ["warm", "clean"])
     func commandsOnTheScreenOrTheWarmHomeTakeTheLock(command: String) throws {
         #expect(try run("screen_lock_needed \"$1\"", arguments: [command]).status == 0)
+    }
+
+    /// `run` takes it for each real-screen scenario instead, so its API-tier
+    /// scenarios, which are hermetic, never wait on the screen.
+    @Test func runTakesItOnlyForEachRealScreenScenario() throws {
+        #expect(try run("screen_lock_needed run").status == 1)
     }
 
     @Test(arguments: ["list", "doctor", "journal", "help", ""])

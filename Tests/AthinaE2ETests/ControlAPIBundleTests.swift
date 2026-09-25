@@ -69,6 +69,10 @@ import Testing
             set -euo pipefail
             source '\(Self.library)'
             RUN_DIR= ROOT='\(root.path)' APP='\(app.path)' APP_BINARY='\(binary.path)' APP_BUILT='\(stamp.path)'
+            E2E_APP='\(root.path)/build/e2e/Athina.app' E2E_BINARY='\(root.path)/build/e2e/Athina.app/Contents/MacOS/Athina'
+            # Which bundle runs is what is tested here, not the hermetic copy
+            # made from it, which needs a bundle codesign takes.
+            ensure_e2e_app() { :; }
             ensure_app
             printf '%s' "$CONTROL_API"
             """,

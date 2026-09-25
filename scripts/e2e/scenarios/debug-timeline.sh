@@ -11,13 +11,11 @@
 # which is where a person saw it.
 #
 # On the API tier, reading the Timeline through Athina's own accessibility
-# tree; TextEdit is staged in front all the same, since the startup switch to
-# it is one of the rows counted.
+# tree. The run is hermetic, so it senses nothing: Started is the startup row
+# counted, and the rows of a real app switch or capture are not there to be.
 SCENARIO_SUMMARY="the debug panel's Timeline shows each startup row once"
 SCENARIO_ARGS=(--open debug)
 SCENARIO_TIER=api
-
-scenario_stage() { stage_text_document; }
 
 # Every row the Timeline can show: observations and events together.
 journal_rows() {
@@ -25,11 +23,9 @@ journal_rows() {
 }
 
 # Events of one kind with no detail, the rows the Timeline shows as the label
-# alone, and for one app when a second argument names it. Only the startup app
-# switch has no detail, since every later one names the app it came from.
+# alone.
 journal_events() {
-	sqlite3 -readonly "$JOURNAL" \
-		"select count(*) from events where kind = '$1' and detail is null and ('${2:-}' = '' or app_name = '${2:-}')" 2>/dev/null || echo 0
+	sqlite3 -readonly "$JOURNAL" "select count(*) from events where kind = '$1' and detail is null" 2>/dev/null || echo 0
 }
 
 # The count the Timeline's header shows, "7 entries", as a number.
@@ -44,12 +40,16 @@ rows_named() {
 }
 
 scenario_run() {
-	local before after shown="" startup i
+	local before after shown="" started i
 	api wait-window window="Debug Panel" timeout=20 >/dev/null || { log "the debug panel never opened"; return 1; }
-	wait_first_observation || return 1
-	# Sensing keeps journaling, so the header is compared with a journal that
-	# held still across the read; a row can reach the panel a moment after the
-	# journal, so a few reads are allowed before the two are compared.
+	for i in $(seq 1 50); do
+		[ "$(journal_events started)" -ge 1 ] && break
+		sleep 0.1
+	done
+	# The journal can still gain a row, so the header is compared with a
+	# journal that held still across the read; a row can reach the panel a
+	# moment after the journal, so a few reads are allowed before the two are
+	# compared.
 	for i in $(seq 1 10); do
 		before="$(journal_rows)"
 		shown="$(header_count)"
@@ -60,14 +60,12 @@ scenario_run() {
 	done
 	api snapshot window="Debug Panel" path="$RUN_DIR/timeline.png" >/dev/null || true
 	[ -n "$shown" ] || { log "the Debug Panel showed no Timeline header to read"; return 1; }
-	# No startup switch to TextEdit would match no row of it, so a launch with
-	# something else in front is a scenario failure rather than a check that
-	# passes by saying nothing.
-	startup="$(journal_events appSwitch TextEdit)"
-	[ "$startup" -ge 1 ] || { log "TextEdit was not in front at launch, so there is no startup app switch to count"; return 1; }
+	# No Started row would match no row of it, so a launch that journaled none
+	# is a scenario failure rather than a check that passes by saying nothing.
+	started="$(journal_events started)"
+	[ "$started" -ge 1 ] || { log "the launch journaled no Started row to count"; return 1; }
 
 	check "the Timeline lists each journaled row once" "$after" "$shown"
-	check "Started is listed once for each launch journaled" "$(journal_events started)" "$(rows_named Started)"
-	check "the startup app switch is listed once" "$startup" "$(rows_named "App switch · TextEdit")"
+	check "Started is listed once for each launch journaled" "$started" "$(rows_named Started)"
 	return 0
 }

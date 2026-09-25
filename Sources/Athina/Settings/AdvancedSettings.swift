@@ -24,7 +24,7 @@ struct AdvancedSettings: View {
                 HStack {
                     Spacer()
                     Button("Open Debug Panel") {
-                        NSApp.activate()
+                        AppActivation.request()
                         openWindow(id: WindowID.debug)
                     }
                     .disabled(!state.settings.showDebugPanel)
