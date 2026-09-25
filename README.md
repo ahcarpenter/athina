@@ -1725,7 +1725,7 @@ GitHub updates either, the renders change with no change to the app; approve
 them from a CI run of an unchanged commit, in a commit of their own that names
 the new image or Xcode, so a real UI change is never approved under it.
 
-**Size.** The set is 76 PNGs, about 7 MB, rendered at the
+**Size.** The set is a few megabytes of PNGs, rendered at the
 runner's 1x scale, and an approval adds only the images that changed to the
 history, so the repository keeps them as ordinary files rather than in Git LFS,
 which would add a download quota and an extra step to every checkout.
