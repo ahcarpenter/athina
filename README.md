@@ -35,6 +35,12 @@ suppression are later phases.
 
 - macOS 26 or later (developed and measured on macOS 27, Apple Silicon)
 - Xcode 26 or later with its command line tools (`swift`, `codesign`)
+- For development: bash 4 or newer first on `PATH` (macOS ships 3.2; `brew
+  install bash`) and python3, which the end-to-end harness runs on; `gh`,
+  signed in, which the approve targets download CI's renders with; and, for
+  the end-to-end harness's real-screen tier, Screen Recording and
+  Accessibility granted to the terminal that runs it (see Permissions).
+  `make doctor` names whatever is missing
 - The app has no third-party dependencies: SwiftUI, ScreenCaptureKit, Vision, the
   accessibility API, Carbon hotkeys, AVFoundation and Speech for talking
   back, and the system SQLite
@@ -47,32 +53,34 @@ suppression are later phases.
 ## Build, run, test
 
 ```sh
-make build            # builds build/Athina.app from the SwiftPM binary
-make mark             # rebuilds the app icon and this README's copy of it from AthinaMark.svg, and the menu bar mark from AthinaOwl.svg (their outputs are committed, so a plain build never needs it)
-make run              # builds and launches the app, replacing only the copy this checkout's run or record launched
-make run-replay       # the same, answering every model call from recorded fixtures: no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
-make record           # the same, live, writing every model call to a fixture file (spends API credits)
-make clear-recordings # deletes the app's own recordings directory
-make fixture-status   # checks that the committed fixtures are current (fails when not), with no network
-make test             # runs the unit tests (swift test), the loop included, with no network
-make snapshots-approve # makes the baselines match the renders CI made of HEAD, after an intended UI change
-make ui-snapshots-smoke # the UI smoke test: every snapshot drawn in process with swift-snapshot-testing and compared with the runner's references
-make ui-snapshots-smoke-local # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported, as local validation runs it
-make snapshots-smoke-approve # makes the smoke test's references match the set CI made of HEAD, after an intended UI change
+make                  # lists every command and variable, grouped Everyday and Occasional
+make build            # builds build/Athina.app, the development bundle
+make run              # builds and launches a replay: recorded fixtures, no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
+make test             # runs swift test, the replayed loop and the fixture freshness check included (FILTER=<name> for some)
+make check            # lint, test and ui-snapshots-smoke-local: what local validation runs before a push
+make lint             # checks every Swift file against the style without changing it, as CI does
 make format           # formats every Swift file in place to Google's Swift style (see Code style)
-make lint             # checks every Swift file against that style without changing it, as CI does
+make e2e              # runs the end-to-end scenarios, replays only (SCENARIO=<name>, JOBS=<n>; see End-to-end harness)
+make doctor           # names what this Mac is missing: Xcode, bash 4, python3, gh, the grants, the warm e2e home
+make ui-snapshots-smoke-local # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported
+
+make run-live         # builds and launches the live app, replacing only the copy this checkout's run-live or record launched (spends API credits)
+make record           # the same, writing every model call to a fixture file (spends API credits)
+make snapshots-approve # makes the baselines match the renders CI made of HEAD, after an intended UI change
+make snapshots-smoke-approve # makes the smoke test's references match the set CI made of HEAD, after an intended UI change
+make ui-snapshots-smoke # the UI smoke test as CI runs it, compared with the runner's references
+make mark             # rebuilds the app icon and this README's copy of it from AthinaMark.svg, and the menu bar mark from AthinaOwl.svg (their outputs are committed, so a plain build never needs it)
 make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 make release          # builds, signs, notarizes, and packages a direct-download release into build/release (see Releasing)
 make xcodeproj        # generates Athina.xcodeproj, the Xcode project for the App Store route, from project.yml (see The Xcode project)
-make xcode-build      # generates it and builds its sandboxed App Store target into build/xcode
-make xcode-archive    # generates it and archives that target into build/xcode/Athina.xcarchive
+make clean            # removes every build product and the generated Xcode project
 ```
 
 None of the launch targets quits an Athina it did not start: each one stops
 only the copy its own lane launched earlier from this checkout, by the pid
 `scripts/launch.sh` wrote to `build/<lane>.pid`, so other checkouts, other
-replays, and an Athina started any other way keep running. `make run` and
-`make record` share the lane `live`; `make run-replay` uses `replay`, or
+replays, and an Athina started any other way keep running. `make run-live`
+and `make record` share the lane `live`; `make run` uses `replay`, or
 `LANE=<name>` (see Replays side by side). Because two live Athinas would share
 one journal, one settings file, and one API bill, a live launch refuses to
 start while another live Athina runs and names it; a build from before the
@@ -104,8 +112,8 @@ this way whatever Settings > Advanced says; a live launch opens it only while
 the switch there is on (see Debug panel). Keep the `--replay`: a bare `open -n`
 goes round `scripts/launch.sh`, so nothing stops it starting a second live
 Athina on the live journal, the live settings and the same API bill. The live
-app's own windows open from its menu bar item, on the copy `make run` already
-started; the debug panel opens there and from Settings > Advanced only once it
+app's own windows open from its menu bar item, on the copy `make run-live`
+already started; the debug panel opens there and from Settings > Advanced only once it
 is turned on in that pane. `--record [<dir>]` chooses where model calls go,
 `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock,
 `--replay-latency immediate` answers a replay's calls at once,
@@ -220,8 +228,8 @@ in one place. That id is set only in `project.yml`, and is the development id
 `com.ahcarpenter.athina.appstore.dev` until the permanent App Store id is
 chosen, which can never change once a build is uploaded. Signing is automatic
 and `DEVELOPMENT_TEAM` is left empty: until a team id is filled in there, the
-target signs to run locally, which is how `make xcode-build` and `make
-xcode-archive` build it; with one, Xcode signs with that
+target signs to run locally, as `xcodebuild` or Xcode builds and archives it;
+with one, Xcode signs with that
 team's Apple Development certificate and Product > Archive feeds the
 Organizer's App Store Connect upload. The built app is sandboxed, so it keeps
 its files in its own container and runs as A sandboxed build describes. The
@@ -243,11 +251,11 @@ change makes it stale, and the separate live check of the models' answers.
 ### Replay
 
 ```sh
-make run-replay                                   # the committed fixtures
-make run-replay REPLAY_DIR=~/Library/Application\ Support/athina/recordings
-make run-replay ALLOW_STALE=1                     # also serve stale fixtures, see below
-make run-replay TIME_SCALE=60                     # on a clock 60 times real time, see A faster clock
-make run-replay SETTINGS=check.json LANE=a         # its own settings, in a lane of its own, see Replays side by side
+make run                            # the committed fixtures
+make run REPLAY_DIR=~/Library/Application\ Support/athina/recordings
+make run ALLOW_STALE=1              # also serve stale fixtures, see below
+make run TIME_SCALE=60              # on a clock 60 times real time, see A faster clock
+make run SETTINGS=check.json LANE=a # its own settings, in a lane of its own, see Replays side by side
 open -n build/Athina.app --args --replay <dir> --open debug
 ```
 
@@ -266,7 +274,7 @@ live ones. Test Connection replays the recorded test call.
 at once instead, for a scripted check that waits on what the calls bring: the
 mentor call that raises the first toast in the committed set was recorded at
 41 seconds, which the end-to-end harness has no use for (see End-to-end
-harness). `recorded`, the default, names the usual, so `make run-replay` still
+harness). `recorded`, the default, names the usual, so `make run` still
 looks like a live session. The flag on a live or recording launch is refused,
 like the clock flags: nothing there is replayed, and the menu's Refused line,
 the Mentor card, and the log say why. A value other than `immediate` or
@@ -311,7 +319,7 @@ on its turn the app refuses it with a message naming the file and both
 versions, and the call is logged as an error. The tests replay the committed
 set just as strictly and fail on a stale fixture, so a change that bumps the
 prompt version re-records the committed set live in the same change (see The
-committed fixtures). `--allow-stale-fixtures` (`make run-replay ALLOW_STALE=1`)
+committed fixtures). `--allow-stale-fixtures` (`make run ALLOW_STALE=1`)
 serves stale fixtures anyway, and is only for replaying locally while
 iterating on prompts.
 
@@ -330,7 +338,7 @@ live run is exactly what it was. A replay runs on a clock of its own that a
 scripted check can compress:
 
 ```sh
-make run-replay TIME_SCALE=60
+make run TIME_SCALE=60
 open -n build/Athina.app --args --replay <dir> --time-scale 60 --advance-clock 1d --open debug
 ```
 
@@ -416,7 +424,7 @@ of them disturbs another or the live app:
   already using. A launch says where it put its files on the line it writes as
   it starts, `Athina started: pid <pid> in <directory>`, and everything past
   the first ` in ` is the path, so a script reads it without quoting however
-  the path is spelled. `make run-replay` prints it, the debug panel's Athina
+  the path is spelled. `make run` prints it, the debug panel's Athina
   card shows it, and the log at launch records it. A replay holds its directory
   for as long as it runs, with a lock on `athina.pid` inside it that holds its
   pid, which is what keeps a later launch's sweep off a directory still in use.
@@ -434,7 +442,7 @@ of them disturbs another or the live app:
   longer. The sweep takes the directory's lock before it removes anything, so
   it never touches one a running replay holds, and it never touches a
   directory whose name is not a launch's own.
-- **`--settings <path>`** (`make run-replay SETTINGS=<path>`) starts the
+- **`--settings <path>`** (`make run SETTINGS=<path>`) starts the
   replay from that settings file instead of the live one. It is read and never
   written, so a scripted check keeps its settings in a file of its own and
   never has to swap the live settings. A file that is there but is not
@@ -448,7 +456,7 @@ of them disturbs another or the live app:
 - **`--settings` applies only to a replay.** On a live or recording launch it
   is refused, like the clock flags: the app uses the live files, and the menu,
   the Mentor card, and the log say why. The live app's files never move.
-- **Launching never quits another Athina.** `make run-replay` replaces only the
+- **Launching never quits another Athina.** `make run` replaces only the
   replay its lane (`LANE`, default `replay`) launched from this checkout, and
   finds that instance exactly: the launch carries a unique `--launch-token`,
   an argument the app ignores, so two launches from one checkout that overlap
@@ -471,8 +479,8 @@ of them disturbs another or the live app:
   side by side:
 
 ```sh
-make run-replay LANE=a SETTINGS=/tmp/a/settings.json TIME_SCALE=60
-make run-replay LANE=b SETTINGS=/tmp/b/settings.json
+make run LANE=a SETTINGS=/tmp/a/settings.json TIME_SCALE=60
+make run LANE=b SETTINGS=/tmp/b/settings.json
 cat build/a.pid                                   # lane a's pid
 scripts/advance-clock.sh "$(cat build/a.pid)" 2h  # moves only lane a's clock, and fails if it was not heard
 ```
@@ -509,8 +517,8 @@ that fails, every call is refused with the reason, which shows in the menu,
 the Mentor card, and the call log, so a recording that could write nothing
 never spends anything. Those refused calls are journaled as live errors that
 cost nothing, not as replays. The menu bar shows **Recording** beside the mark
-while it runs. `make clear-recordings` deletes the app's own recordings
-directory, `~/Library/Application Support/athina/recordings`.
+while it runs. Deleting the app's own recordings directory,
+`~/Library/Application Support/athina/recordings`, deletes every recording.
 
 A file's name starts with the time its call started, to the millisecond, and
 each call is stamped in a later millisecond than the one before, even when two
@@ -545,7 +553,8 @@ They also fail when the set is not current: a fixture recorded with another
 prompt version than `MentorPrompts.version`, or a tier with no fixture, fails
 `swift test` with a message naming each stale fixture with both versions and
 each tier with no fixture. The loop replay is strict, as the app's is.
-`make fixture-status` runs that check on its own, with no network.
+`make test FILTER=theCommittedFixturesAreCurrent` runs that check on its own,
+with no network.
 
 So when a prompt or schema change bumps the prompt version, or a new call kind
 is added, re-record the committed set live in the same change so the tests
@@ -574,8 +583,7 @@ scenario and an empty journal:
 4. Read every file, text and screenshot, and every reply for quality (a model
    can fill a required field with an empty string), replace the fixture directory's
    recordings with the ones you keep, update its README, delete the rest, put
-   the journal and settings back, and run `make fixture-status` and
-   `swift test`.
+   the journal and settings back, and run `make test`.
 
 `ScriptedClaudeClient` stays for unit tests that need one exact hand-written
 answer, such as a refusal, an unparseable reply, or a slow call.
@@ -1146,8 +1154,9 @@ but missing, fails before anything is built.
 A released copy is the same app as a development build: bundle identifier
 `com.ahcarpenter.athina`, no sandbox, so the same
 `~/Library/Application Support/athina`, the same preferences and the same
-keychain item. It shares the live journal, settings and bill with `make run`,
-so do not run both: `make run` refuses to start while a live Athina runs,
+keychain item. It shares the live journal, settings and bill with `make
+run-live`, so do not run both: `make run-live` refuses to start while a live
+Athina runs,
 wherever it was installed.
 
 - **Coming from Mentor.** The move of `~/Library/Application Support/mentor`,
@@ -1721,7 +1730,7 @@ counted (see Iterating without the network).
   (`~/Library/Application Support/athina/recordings` unless another directory is
   given, mode 0700, files 0600). The API key is never written, and any
   Anthropic key visible in the screen text is redacted, though not inside the
-  screenshot. `make clear-recordings` deletes them; Clear Journal does not. A
+  screenshot. Deleting that directory deletes them; Clear Journal does not. A
   replay (`--replay`) sends nothing anywhere, keeps its own journal and
   settings, and starts from the live settings (or a `--settings` file it never
   writes), so excluded apps stay excluded while replaying.
@@ -1771,7 +1780,7 @@ itself; which launches may open it at launch is one pure rule,
 The builder's paths reach it without changing the owner's setting:
 
 - **A replay**: `open -n build/Athina.app --args --replay <dir> --open debug`
-  opens it whatever the switch says. `make run-replay` passes no `--open`, so
+  opens it whatever the switch says. `make run` passes no `--open`, so
   there it opens from the replay's own Settings > Advanced, or from its menu
   while the switch is on: the switch starts where the live one is (or where
   `--settings` puts it), and turning it on there is saved only to the replay's

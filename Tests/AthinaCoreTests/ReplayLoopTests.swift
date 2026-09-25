@@ -501,7 +501,7 @@ struct ReplayLoopTests {
     return false
   }
 
-  /// What `make fixture-status` runs.
+  /// What `make test FILTER=theCommittedFixturesAreCurrent` runs on its own.
   ///
   /// When a prompt or schema change bumps the prompt version, or a call kind is
   /// added, the committed set is recorded again live in the same change, so

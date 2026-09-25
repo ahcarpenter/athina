@@ -8,8 +8,8 @@ commands:
 # test.instructions steers the agent-driven evidence pass that follows it.
 test:
   instructions: |
-    Hard rule: never run the Xcode project steps (make xcodeproj, make
-    xcode-build, make xcode-archive, or xcodebuild on the generated project),
+    Hard rule: never run the Xcode project steps (make xcodeproj, or
+    xcodebuild on the generated project),
     the full ui-snapshots gate (scripts/snapshots.sh gate, `Athina
     --snapshot`), or either approve command (make snapshots-approve, make
     snapshots-smoke-approve, which change the references) in this
@@ -26,7 +26,8 @@ test:
     "Iterating without the network"):
     - Use the development build (`make build`, build/Athina.app).
     - Replays only: never a live launch and never a live model call, which
-      spends the owner's API credits. Never `make run` or `make record`.
+      spends the owner's API credits. Never `make run-live` or `make
+      record`; `make run` is a replay.
     - Drive it with the e2e harness, `scripts/e2e/athina-e2e run <scenario>`
       (`list` names them), preferring API-tier scenarios. Screen-tier
       scenarios take the shared screen lock per run and wait for idle input,

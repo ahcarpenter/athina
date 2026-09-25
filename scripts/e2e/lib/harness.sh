@@ -333,7 +333,7 @@ PY
 # seconds for the mentor call that raises a toast, which a check has no use for
 # and which is time for a click by whoever is at the Mac to dismiss the toast.
 #
-# Never `make run-replay` and never `pkill -x Athina`: the first stops the lane
+# Never `make run` and never `pkill -x Athina`: the first stops the lane
 # it launched before, and the second stops every Athina on the Mac, including
 # other lanes' and the owner's own.
 #
