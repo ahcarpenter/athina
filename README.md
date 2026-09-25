@@ -59,6 +59,7 @@ make snapshots-approve # makes the baselines match the renders CI made of HEAD, 
 make ui-snapshots-smoke # the UI smoke test: every snapshot drawn in process with swift-snapshot-testing and compared with the runner's references
 make ui-snapshots-smoke-local # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported, as local validation runs it
 make snapshots-smoke-approve # makes the smoke test's references match the set CI made of HEAD, after an intended UI change
+make checkpoints-approve # makes the e2e checkpoint baselines match the checkpoints CI took of HEAD, after an intended UI change (see Checkpoints)
 make format           # formats every Swift file in place to Google's Swift style (see Code style)
 make lint             # checks every Swift file against that style without changing it, as CI does
 make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
@@ -2185,8 +2186,9 @@ runs five macOS jobs at once. Pushes to main are never cancelled; each keeps
 its own run.
 
 Local validation, the no-mistakes pipeline a change goes through before its
-pull request, never runs the Xcode project steps, the full `ui-snapshots` gate
-or either approve command, which only CI proves, and compares the UI smoke set
+pull request, never runs the Xcode project steps, the full `ui-snapshots` gate,
+the checkpoint gate (`scripts/snapshots.sh checkpoints`) or any approve
+command, which only CI proves, and compares the UI smoke set
 with main's on the Mac itself (see UI snapshot smoke test);
 `test.instructions` in `.no-mistakes.yaml` carries that rule to its test step.
 

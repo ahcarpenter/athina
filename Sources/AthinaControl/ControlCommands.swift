@@ -635,8 +635,11 @@ enum PostedClicks {
 }
 
 /// Waits until every event queued before it has been dispatched, by queuing
-/// one more of its own and waiting for it to come round, so a click's answer
-/// comes back only once AppKit has handled its mouse-down and mouse-up.
+/// one more of its own and waiting for it to come round, so a command's answer
+/// comes back only once AppKit has handled the events it set going.
+///
+/// A click waits on `PostedClicks` instead, since a control's tracking loop
+/// can take this event off the queue.
 @MainActor
 enum EventFlush {
   private static let subtype: Int16 = 0x4154
