@@ -90,18 +90,15 @@ import Testing
     @Test(arguments: ["warm", "clean"])
     func commandsOnTheWarmHomeTakeTheLockForTheWholeCommand(command: String) throws {
         #expect(try run("screen_lock_needed \"$1\"", arguments: [command]).status == 0)
-        #expect(try run("screen_lock_per_scenario \"$1\"", arguments: [command]).status == 1)
     }
 
-    @Test func runTakesTheLockForEachScenarioAndNotForTheWholeCommand() throws {
+    @Test func runDoesNotTakeTheLockForTheWholeCommand() throws {
         #expect(try run("screen_lock_needed run").status == 1)
-        #expect(try run("screen_lock_per_scenario run").status == 0)
     }
 
     @Test(arguments: ["list", "doctor", "journal", "help", ""])
     func commandsThatTouchNeitherNeverWait(command: String) throws {
         #expect(try run("screen_lock_needed \"$1\"", arguments: [command]).status == 1)
-        #expect(try run("screen_lock_per_scenario \"$1\"", arguments: [command]).status == 1)
     }
 
     @Test(arguments: ["run", "warm"])
@@ -267,10 +264,12 @@ import Testing
 
     @Test func inputThatComesBackDuringTheLockWaitGivesTheLockBack() throws {
         let reader = try idleReader(20)
-        let holder = try startHolder("run menubar-keyboard", seconds: 1.5)
+        let holder = try startHolder("run menubar-keyboard", seconds: 60)
+        defer { holder.terminate() }
         let (waiter, output) = try process(whenIdle(reader), checkout: "/checkouts/two")
         try waitFor("the run to queue for the lock") { says(output, "waiting for the screen lock") }
         try setIdle(0, in: reader.file)
+        holder.terminate()
         holder.waitUntilExit()
         try waitFor("the run to give the lock back") {
             says(output, "giving it back until the Mac is quiet again")

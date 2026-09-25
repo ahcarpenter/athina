@@ -29,12 +29,13 @@
 #     click the app simulates in its own window, so only a real click proves it;
 #     that each shows as a link is settings-pane-text's, on the API tier.
 #
-# The harness took the screen only once the keyboard and mouse had been quiet
-# for 15 seconds, so the steps run straight on: each pointer step or change of
+# SCENARIO_IDLE_FIRST has the harness take the screen only once the keyboard
+# and mouse have been quiet for 15 seconds, so the steps run straight on: each pointer step or change of
 # the front app waits only for a short quiet moment after the run's own input,
 # and every click aborts if the pointer is moved off its target.
 SCENARIO_SUMMARY="what only macOS routing proves, in one launch: the item keeps the toast on an accessibility press and a real click and draws the menu the app built, Tell Me More by hover, real clicks on empty bar space and in another app dismiss it, the item keeps one width across modes, and Settings footer links change the pane in place"
 SCENARIO_CONTROL=yes
+SCENARIO_IDLE_FIRST=yes
 
 # The watched app goes in front before Athina starts: the terminal a run is
 # started from is excluded, so sensing would capture nothing and the toast
