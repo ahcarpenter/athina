@@ -183,6 +183,23 @@ import Testing
         }
     }
 
+    @Test func aShardComparesOnlyItsOwnSnapshotsAndTheUnassigned() throws {
+        // toast is shard 1's, callout shard 2's, and gone has no shard, so it
+        // falls to the first: a removed snapshot's baseline is still reported.
+        let baseline = try directory("baseline", [
+            "toast-light.png": Self.grey, "callout-light.png": Self.grey, "gone-dark.png": Self.grey,
+        ])
+        let actual = try directory("actual", ["toast-light.png": Self.grey, "callout-light.png": Self.darker])
+        let first = try SnapshotComparison.compare(baseline: baseline, actual: actual, shard: SnapshotShard(index: 1))
+        #expect(first.results.map(\.name) == ["gone-dark", "toast-light"])
+        #expect(first.drift.map(\.status) == [.removed])
+        let second = try SnapshotComparison.compare(baseline: baseline, actual: actual, shard: SnapshotShard(index: 2))
+        #expect(second.results.map(\.name) == ["callout-light"])
+        #expect(!second.matches)
+        let third = try SnapshotComparison.compare(baseline: baseline, actual: actual, shard: SnapshotShard(index: 3))
+        #expect(third.results.isEmpty)
+    }
+
     @Test func aMatchingSetSaysSo() throws {
         let baseline = try directory("baseline", ["toast-dark.png": Self.grey])
         let comparison = try SnapshotComparison.compare(baseline: baseline, actual: baseline)
@@ -190,5 +207,57 @@ import Testing
         #expect(SnapshotReport.markdown(comparison).contains("All 1 snapshots match their baselines"))
         let renders = try SnapshotComparison.compare(baseline: baseline, actual: baseline, kind: .renders)
         #expect(SnapshotReport.markdown(renders).contains("All 1 snapshots are the same picture in both renders"))
+    }
+}
+
+@Suite struct SnapshotShardTests {
+    /// The approved baselines, one per snapshot and appearance.
+    private static let baselines = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Snapshots", isDirectory: true)
+
+    @Test func theTableNamesExactlyTheSnapshotsThatHaveBaselines() throws {
+        let files = try SnapshotComparison.pngs(in: Self.baselines)
+        #expect(!files.isEmpty)
+        let names = Set(files.map(SnapshotShard.snapshotName(ofFile:)))
+        #expect(SnapshotShard.mismatch(with: names.sorted()) == nil)
+    }
+
+    @Test func everyFileIsComparedByExactlyOneShard() throws {
+        let files = try SnapshotComparison.pngs(in: Self.baselines) + ["removed-long-ago-light.png"]
+        let shards = (1...SnapshotShard.count).compactMap(SnapshotShard.init(index:))
+        #expect(shards.count == SnapshotShard.count)
+        for file in files {
+            #expect(shards.filter { $0.compares(file: file) }.count == 1, "\(file)")
+        }
+    }
+
+    @Test func theShardsStayEven() {
+        let sizes = Dictionary(grouping: SnapshotShard.assignment.values, by: { $0 }).mapValues(\.count)
+        #expect(Set(sizes.keys) == Set(1...SnapshotShard.count))
+        #expect(sizes.values.max()! - sizes.values.min()! <= 1)
+    }
+
+    @Test func aShardIsReadAsKOfTheRunnerCount() {
+        #expect(SnapshotShard(parsing: "1/4") == SnapshotShard(index: 1))
+        #expect(SnapshotShard(parsing: "4/4")?.description == "4/4")
+        for text in ["0/4", "5/4", "2/3", "2/5", "2", "2/", "/4", "a/4", "1/4/4"] {
+            #expect(SnapshotShard(parsing: text) == nil, "\(text)")
+        }
+    }
+
+    @Test func aFileIsNamedForItsSnapshotWithoutTheAppearance() {
+        #expect(SnapshotShard.snapshotName(ofFile: "settings-general-light.png") == "settings-general")
+        #expect(SnapshotShard.snapshotName(ofFile: "debug-panel-calls-replay-dark.png") == "debug-panel-calls-replay")
+        #expect(SnapshotShard.snapshotName(ofFile: "menu-bar-marks.png") == "menu-bar-marks")
+    }
+
+    @Test func aSnapshotWithoutAShardAndAShardWithoutASnapshotBothFail() {
+        var names = Array(SnapshotShard.assignment.keys)
+        #expect(SnapshotShard.mismatch(with: names) == nil)
+        names.removeAll { $0 == "toast" }
+        names.append("toast-brand-new")
+        let mismatch = SnapshotShard.mismatch(with: names)
+        #expect(mismatch?.contains("no shard for toast-brand-new") == true)
+        #expect(mismatch?.contains("names toast, which no snapshot renders") == true)
     }
 }
