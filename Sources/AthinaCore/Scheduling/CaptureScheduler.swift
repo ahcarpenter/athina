@@ -61,8 +61,8 @@ public struct CaptureScheduler: Equatable, Sendable {
     }
   }
 
-  /// Notes that the frontmost app, window, or focused element changed, which
-  /// schedules a capture once focus has settled.
+  /// Notes that the frontmost app or window changed, which schedules a
+  /// capture once focus has settled.
   public mutating func noteFocusChange(at now: Date) {
     pendingFocusChangeAt = now
   }

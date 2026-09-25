@@ -40,16 +40,15 @@ public struct MentorshipContext: Codable, Equatable, Sendable, Identifiable {
 
 /// Where an activity sits relative to the declared contexts.
 ///
-/// The mentor gate turns this into a yes or no; the menu and the debug panel
-/// show its label.
+/// The mentor gate turns this into a yes or no; the debug panel shows its
+/// label and the menu a line of its own.
 public enum ContextPlacement: Equatable, Sendable {
   /// "Only mentor inside these contexts" is off, so contexts gate nothing.
   case notEnforced
   case inside(ContextMatch)
   case outside(ContextExclusion)
 
-  /// A short phrase for the placement, as the menu and the debug panel show
-  /// it.
+  /// A short phrase for the placement, as the debug panel shows it.
   public var label: String {
     switch self {
     case .notEnforced: "not enforced"
@@ -109,8 +108,8 @@ public enum ContextExclusion: Equatable, Sendable {
   /// it is unsure.
   case noMatch(reason: String)
 
-  /// A short phrase for why the activity is outside: triage's own reason
-  /// when it gave one.
+  /// A short phrase for why the activity is outside, naming what triage
+  /// answered when it gave a name that is not declared.
   public var label: String {
     switch self {
     case .noContextsDeclared: "no context is declared"

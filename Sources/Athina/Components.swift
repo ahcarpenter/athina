@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 /// A one-line status message: a multicolor system symbol carries the kind,
@@ -58,8 +59,9 @@ struct StatusLabel: View {
 
 /// A short status word in a capsule, such as Granted or Replay.
 ///
-/// The tint only colors the capsule; the word stays in the primary label color,
-/// and Increase Contrast adds an outline so the capsule keeps its edge.
+/// The tint colors the capsule and the symbol, if any; the word stays in the
+/// primary label color, and Increase Contrast adds an outline so the capsule
+/// keeps its edge.
 struct StatusBadge: View {
   @Environment(\.colorSchemeContrast)
   private var contrast

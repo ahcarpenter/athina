@@ -284,8 +284,10 @@ public enum ToastClick: Equatable, Sendable {
 /// One thing the user said about a suggestion while holding the talk-back key,
 /// and what the mentor tier answered.
 ///
-/// The question is the transcript, stored here and nowhere else off this Mac
-/// except in the one follow-up call that carried it.
+/// The question is the transcript. It leaves this Mac in the follow-up call
+/// that carried it and in later follow-ups on the same suggestion, and, as a
+/// talk-back event, for up to ten minutes in the recent events that triage,
+/// mentor and understanding calls are sent.
 public struct FollowUp: Codable, Equatable, Sendable, Identifiable {
   /// The exchange's journal id, or 0 before it is journaled.
   public var id: Int64

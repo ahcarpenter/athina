@@ -46,10 +46,12 @@ public actor ScreenCapturer {
   /// - Parameters:
   ///   - windowFrame: The focused window's frame in global display
   ///     coordinates, or nil when it is not known.
-  ///   - maxDimension: The longest edge of the captured image, in pixels.
+  ///   - maxDimension: The most pixels the captured image's longest edge
+  ///     may have.
   /// - Returns: The downscaled frame and the display it came from.
   /// - Throws: `ScreenCaptureError` when there is no display or the capture
-  ///   fails.
+  ///   fails, and ScreenCaptureKit's own error when the list of displays
+  ///   cannot be fetched.
   public func capture(windowFrame: CGRect?, maxDimension: Int) async throws -> CapturedFrame {
     let content = try await shareableContent()
     guard let display = ScreenCapturer.display(for: windowFrame, in: content.displays) else {

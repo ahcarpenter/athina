@@ -376,10 +376,11 @@ public enum LaunchReport: Equatable, Sendable {
 
   /// The line itself, newline included.
   ///
-  /// The started line ends in the data directory this launch made, and nothing
-  /// follows it, so a reader takes everything past the first ` in ` and needs
-  /// no quoting however the path is spelled. That is how a script learns where
-  /// the journal is now that nothing can name it beforehand.
+  /// The started line ends in the launch's data directory, which a replay made
+  /// for itself, and nothing follows it, so a reader takes everything past
+  /// the first ` in ` and needs no quoting however the path is spelled. That
+  /// is how a script learns where the journal is now that nothing can name it
+  /// beforehand.
   public var line: String {
     switch self {
     case .started(let pid, let directory): "Athina started: pid \(pid) in \(directory.path)\n"

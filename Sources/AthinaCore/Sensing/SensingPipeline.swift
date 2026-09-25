@@ -16,8 +16,8 @@ public enum SensingSource: Sendable {
 /// Orchestrates focus tracking, input polling, screen capture, frame diffing,
 /// OCR, and journaling, and publishes `SensingEvent`s to subscribers.
 public actor SensingPipeline {
-  /// The validated sensing settings in effect, replaced by
-  /// `updateSettings(_:)`.
+  /// The sensing settings in effect: those it was created with, until
+  /// `updateSettings(_:)` replaces them with validated ones.
   public private(set) var settings: SensingSettings
   private let journal: Journal
   private let tracker: FocusTracker

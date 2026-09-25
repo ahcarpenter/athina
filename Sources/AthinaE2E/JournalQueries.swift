@@ -26,8 +26,10 @@ public struct JournalQuery: Sendable, Equatable {
   }
 }
 
-/// Every named journal query the harness offers, and how their results are
+/// The named journal queries that are plain SQL, and how their results are
 /// printed.
+///
+/// `capture-race`, worked out in Swift, is `JournalDatabase`'s.
 public enum JournalQueries {
   /// Local wall-clock time of a journal's REAL seconds-since-1970 column,
   /// to the millisecond, so a transcript lines up with a log or a tap.
@@ -53,8 +55,8 @@ public enum JournalQueries {
       """
   )
 
-  /// Every model call, with its tier, outcome, cost, latency, and whether a
-  /// fixture answered it.
+  /// Every model call, with its tier, outcome, cost, latency, and whether it
+  /// was replayed, which a replay's calls are even when no fixture answered.
   public static let calls = JournalQuery(
     name: "calls",
     summary: "every model call, its tier, outcome, and whether it was replayed",
@@ -105,8 +107,8 @@ public enum JournalQueries {
       """
   )
 
-  /// One row of each table's row count, the cheapest way to poll a run's
-  /// progress.
+  /// One row of row counts, one column per table that tracks a run's
+  /// progress, the cheapest way to poll it.
   public static let counts = JournalQuery(
     name: "counts",
     summary: "one row of row counts, the cheapest way to poll a run's progress",

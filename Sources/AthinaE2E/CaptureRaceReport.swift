@@ -3,7 +3,7 @@ import Foundation
 /// Reads a replay journal's switch events and captures and says, for each
 /// change moment, whether a focus-change capture followed it.
 ///
-/// The journal records when a capture finished, not when it started, so the
+/// The journal records when a capture started, not when it finished, so the
 /// harness judges a change moment from the outside, the way a person would:
 /// a switch is honoured when the next capture after it says it happened
 /// because focus changed. When a capture in flight swallows the switch, the
@@ -33,7 +33,7 @@ public enum CaptureRaceReport {
   public struct Capture: Equatable, Sendable {
     /// The observation's row id in the journal.
     public let id: Int
-    /// When the capture finished, as the observation's timestamp records it.
+    /// When the capture started, as the observation's timestamp records it.
     public let at: Date
     /// Why the capture was taken, the observation's `reason` column
     /// (`focusChange` for one a switch asked for).

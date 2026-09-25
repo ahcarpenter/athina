@@ -17,7 +17,8 @@ private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self
 
 /// A thin, non-Sendable wrapper over the system SQLite C API.
 ///
-/// Owned by `Journal`.
+/// Owned by `Journal`; `DataMigration` opens its own to lock and check a
+/// journal it moves.
 final class SQLiteConnection {
   private var db: OpaquePointer?
 

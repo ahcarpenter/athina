@@ -13,7 +13,8 @@ import Foundation
 public actor ReplayClaudeClient: ClaudeClient {
   /// One fixture and the name it is reported under.
   public struct Entry: Equatable, Sendable {
-    /// The fixture's file name, which the log and a stale refusal report.
+    /// The fixture's file name, which `served` records and a stale refusal
+    /// names.
     public var name: String
     /// The recorded call.
     public var fixture: CallFixture
@@ -36,7 +37,7 @@ public actor ReplayClaudeClient: ClaudeClient {
     case recorded
   }
 
-  /// One call that was answered or refused, for tests and the log.
+  /// One call that was answered or refused, as tests read it.
   public struct Served: Equatable, Sendable {
     /// The identity the call was made with.
     public var call: CallIdentity
