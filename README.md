@@ -76,7 +76,9 @@ binary in an app bundle with `Resources/Info.plist` and
 `Resources/Athina.entitlements`, then signs it. `swift build` and `swift test`
 work directly too. The one Xcode project, for the Mac App Store route, wraps
 this package rather than replacing it, and nothing above uses it (see The
-Xcode project).
+Xcode project). The bundle `make build` makes is a development one: it carries
+the end-to-end harness's control API (the `ControlAPI` package trait, see The
+control API), which a release never does.
 
 `Athina --snapshot <dir>` renders every window with sample data to PNG files
 (light and dark) without starting the pipeline or calling any model. It is how
@@ -98,9 +100,10 @@ app's own windows open from its menu bar item, on the copy `make run` already
 started; the debug panel opens there and from Settings > Advanced only once it
 is turned on in that pane. `--record [<dir>]` chooses where model calls go,
 `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock,
-`--replay-latency immediate` answers a replay's calls at once, and
-`--settings <path>` chooses the settings a replay starts from; see Iterating
-without the network.
+`--replay-latency immediate` answers a replay's calls at once,
+`--settings <path>` chooses the settings a replay starts from (see Iterating
+without the network), and `--control <dir>` serves the end-to-end harness's
+control API (see The control API).
 Where a replay keeps its own files is not an argument: it makes a directory for
 itself and says which on the line it writes as it starts.
 
@@ -172,6 +175,8 @@ differs in three ways:
   own bundle, and `--record`, `--snapshot` and a clock request's reply
   (`scripts/advance-clock.sh`) only one inside its container. Anything else is
   refused with one line naming the path and where it could have been.
+- `--control` is refused whatever it names: a sandboxed Athina never serves
+  the control API, even one built from the development bundle.
 
 ### The Xcode project
 
@@ -194,8 +199,9 @@ The project has one target, `Athina App Store`, and a scheme of the same name
 whose Archive action builds Release. It compiles `Sources/Athina` against the
 package's `AthinaCore` and `SnapshotDiff`, linking the frameworks the package's
 `Athina` target does (a dependency or framework added to one goes in the other
-too), bundles the same icon and menu bar marks `scripts/bundle.sh` does, and
-signs with
+too, except the `ControlAPI`-conditional `AthinaControl`, which the App Store
+build never carries; see The control API), bundles the same icon and menu bar
+marks `scripts/bundle.sh` does, and signs with
 `Resources/Athina.app-store.entitlements` (the App Sandbox, `network.client`,
 and the microphone keys of both the hardened runtime, `device.audio-input`,
 and the sandbox, `device.microphone`). Its Info.plist is `Resources/Info.plist`
@@ -589,7 +595,13 @@ the sandbox, and nothing is billed. It needs a display, so it never runs in
 CI; CI runs the harness's unit tests with the rest of the suite.
 `ATHINA_E2E_APP=<bundle>` runs the scenarios against another bundle than
 `build/Athina.app`, such as the hardened release build (see Releasing), which
-the harness then checks as it is rather than rebuilding.
+the harness then checks as it is rather than rebuilding. A bundle without the
+control API, as every release build is (`scripts/check-no-control-api.sh`
+decides), cannot run the API tier, so each API-tier scenario reports `skip`
+with that reason, neither passed nor failed, and the run's tally counts it
+apart. Only such a bundle skips: `build/Athina.app` is the development bundle,
+so when it carries no control API, as after `scripts/bundle.sh --no-control`,
+the harness rebuilds it with the trait, or stops when something runs from it.
 
 Runs are serialized machine-wide: `run`, `warm`, and `clean` first take one
 exclusive lock, `~/Library/Caches/athina-e2e/screen.lock`, so only one
@@ -614,25 +626,47 @@ such a run takes its checkout's lock only if it is free, and otherwise stops
 at once naming the run that holds it, rather than wait on a run that waits on
 it.
 
+Scenarios come in two tiers, which each scenario names in `SCENARIO_TIER`:
+
+- **API** (`api`): the harness drives Athina through its control API (see The
+  control API). The app finds a control in its own accessibility tree and
+  clicks or types into it through its own event path, so the check still
+  proves the control can be hit and is wired, with no real pointer and no wait
+  for the keyboard and mouse to go quiet, and it presses no Shift to keep
+  sensing awake unless the scenario needs a capture, as `debug-timeline` does.
+  It stages nothing unless the scenario asks.
+- **Real screen** (`screen`, the default): real HID clicks and presses through
+  accessibility from outside, for what only macOS's own routing can prove: the
+  menu bar item and the menu the system runs for it, clicks in other apps that
+  reach Athina only through a system-wide listener, and the item's width in
+  the real menu bar.
+
+Both tiers still take the screen lock for now, since an API-tier run's windows
+are on screen too.
+
 ### Scenarios
 
-| name | what it proves |
-| --- | --- |
-| `menubar-item-click` | a real pointer click on Athina's menu bar item opens the menu and leaves the suggestion up, and Answer Suggestion > Tell Me More is recorded |
-| `menubar-empty-click` | a real click on empty menu bar space beside the item dismisses the suggestion, attributed to a real mouse-down by a session tap |
-| `other-app-click` | a real click inside a staged TextEdit window dismisses the suggestion |
-| `menubar-keyboard` | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one menu bar scenario that needs no idle input |
-| `menubar-width` | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
-| `menubar-mark` | Athina's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
-| `capture-race` | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
-| `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
-| `debug-panel-access` | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed; turned on, the menu gains Debug Panel in a group of its own after Settings…, and it and the button each open the panel; turned off again, the panel closes and the command leaves the menu |
-| `settings-pane-links` | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link rather than Markdown, and a real click on it changes the Settings window's pane in place rather than handing the link to the system |
-| `debug-timeline` | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started and App switch rows appear once each rather than once from the journal load and again from the live stream |
+| name | tier | what it proves |
+| --- | --- | --- |
+| `menubar-item-click` | screen | a real pointer click on Athina's menu bar item opens the menu and leaves the suggestion up, and Answer Suggestion > Tell Me More is recorded |
+| `menubar-empty-click` | screen | a real click on empty menu bar space beside the item dismisses the suggestion, attributed to a real mouse-down by a session tap |
+| `other-app-click` | screen | a real click inside a staged TextEdit window dismisses the suggestion |
+| `menubar-keyboard` | screen | pressing the item through accessibility, with no pointer, keeps the suggestion up, and Not Now is recorded; the one menu bar scenario that needs no idle input |
+| `menubar-width` | screen | the item is the same width watching and in the excluded mode, so no menu bar extra beside it moves when an excluded app comes forward |
+| `menubar-mark` | screen | Athina's item keeps one width in the real menu bar as its mode changes, read through accessibility rather than from the asset; strips of the real bar and the About panel are kept as evidence of what is drawn |
+| `capture-race` | screen | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock") |
+| `understanding-surfaces` | screen | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
+| `debug-panel-access` | api | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed, a click on it is refused, and one forced onto it opens nothing; turned on, the menu gains Debug Panel in a group of its own after Settings…, and it and the button each open the panel; turned off again, the panel closes and the command leaves the menu |
+| `settings-pane-text` | api | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link to that pane rather than Markdown, and a click on the one below the fold is refused until the pane is scrolled to it |
+| `settings-pane-links` | screen | a real click on each of those links changes the Settings window's pane in place rather than handing the link to the system |
+| `settings-sheet` | api | Settings > Contexts' Add Context… brings up the New Context sheet; while it is up, a click on Add Context… under it is refused as covered, a name typed into the sheet's Name field lands there, and the sheet's own Cancel lands in the sheet and takes it down, adding no context |
+| `debug-timeline` | api | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started and App switch rows appear once each rather than once from the journal load and again from the live stream |
 
-A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
-every check it made, and the directory holding its evidence (transcript,
-screenshots, event taps, announcements, and the journal as TSV and as a copy).
+A scenario prints one JSON line: its name, `pass`, `fail` or `skip`, how long
+it took, every check it made, and the directory holding its evidence (transcript,
+screenshots, event taps, announcements, and the journal as TSV and as a copy;
+for an API-tier run, every request and answer in `api.log` and the checkpoint
+PNGs it took of Athina's windows).
 
 ### The warm fixture home
 
@@ -672,12 +706,81 @@ only and never looks an app up by name.
 | `journal <db> <query>` | a named read-only query over a journal (`journal - queries` lists them), including `capture-race` |
 | `key <keycode>` | post a key press, with `--cmd` and `--shift` as modifiers |
 | `shot <window <id> \| region <x> <y> <w> <h>> <out.png>` | capture a window by id or a screen region |
+| `api <command> [key=value ...]` | one request to a replay's control API, in `ATHINA_CONTROL_DIR` (the harness sets it); prints the answer, or one field of it with `--field <path>` such as `elements.0.enabled`; exit 0 when the answer is ok, 1 when not, 2 when no app answered |
 
 The maths and parsing behind them are a plain library (`Sources/AthinaE2E`)
 with unit tests: the journal queries, the menu bar geometry, the capture-race
 report, and the drive tool's argument handling. The queries are run against a
 journal `Journal` itself creates, so a column renamed in the app fails the
 suite rather than every scenario.
+
+### The control API
+
+An API-tier scenario drives Athina through a control API the app serves on a
+Unix socket: `athina-drive api <command> [key=value ...]` sends one request
+and prints the answer. Each value goes as its parameter takes it: `true` or
+`false` for `force` and `present`, a number for `timeout`, JSON for `equals`
+(`equals=true`, `equals=3`, and `equals='"30"'` for the text 30), and the text
+as written for every other, so `text=30` types 30. The app answers a value of
+the wrong type with an error naming its parameter, never carrying on without
+it.
+
+| command | what it does |
+| --- | --- |
+| `ping` | the protocol, the app's pid, and whether it is the active app |
+| `windows` | Athina's open windows: title, number, frame, level, key and main |
+| `find` | controls in `window=<title>` (every window when it is left out) by `identifier=`, or by `role=`, `subrole=` and `label=` (a control's description or title, whole, ignoring case), read from Athina's own accessibility tree: role, label, identifier, value, enabled, frame |
+| `click` | a left click on the first such control, posted to the app's own event queue and dispatched by AppKit as a real click is after the window server; the answer comes once it has been handled. Refused as `disabled` when the control is dimmed, `offscreen` when a scroll area has it out of sight or it is outside its part of the window (the content, or the whole window for the toolbar and title bar), and `covered` when a sheet is up over its window or the window's own hit test at its centre lands on something else. A control inside a sheet is found under the title of the window the sheet covers, and judged against and clicked in the sheet. `force=true` clicks anyway, for proving a refusal |
+| `type` | `text=` as key presses to the first responder of `window=`, or of the sheet up over it, such as the field a click just focused |
+| `scroll` | the scroll view holding a control scrolls it into view |
+| `menu` | the menu bar extra's menu as the app builds it, without showing it; `press="<title>"`, or `press="<submenu> > <title>"`, runs that item's own action, refused as `missing` or `disabled`, naming the step, when an item or submenu on the way is not there or is dimmed |
+| `settings` | the live settings, or one of them with `key=<path>` |
+| `wait-setting` | waits until `key=<path>` reads `equals=<value>` |
+| `wait-window` | waits until a window titled `window=` is open, or with `present=false` gone |
+| `snapshot` | a checkpoint PNG of one of Athina's windows at `path=`, taken as `--snapshot` takes one once macOS has finished animating the window open (up to two seconds); never over an existing file |
+
+The waits take `timeout=<seconds>`, 10 unless given, and poll the app's own
+state at a fixed real-time pace; the replay's clock is not involved.
+
+The controls a scenario reaches carry accessibility identifiers
+(`advanced.enableDebugPanel`, `debugPanel.timelineRow`; a link in Settings text
+carries its URL, `athina-settings:journal`), which no one sees or hears and
+which survive a change of wording. The exceptions are the controls the system
+draws, which carry none a scenario can give them: the Settings window's toolbar
+tabs, since SwiftUI does not carry a `Tab`'s identifier through to them, are
+found by label (`label=Models`), and a window's title-bar buttons by subrole
+(`subrole=AXCloseButton`). What a click cannot drive: a link
+inside a SwiftUI Text follows neither a click the app simulates nor
+accessibility's press, so following one stays a real-screen check
+(`settings-pane-links`).
+
+**Who can use it.** The API lets a program click Athina's controls, type into
+it, and read its state, so it must never reach anyone's own copy of the app.
+It is served only when all of these hold, and otherwise refused with the
+reason, which the menu, the debug panel's Mentor card and the log show as they
+show a refused clock flag, and which the app also writes to stderr for the
+harness (`ControlMode`):
+
+- **The build carries it.** The server is its own target, `AthinaControl`,
+  linked into the app only under the `ControlAPI` package trait.
+  `scripts/bundle.sh` turns the trait on for the development bundle; the
+  release build (`scripts/bundle.sh --no-control`, which `make release` uses)
+  and the App Store build leave it off, and `scripts/check-no-control-api.sh`,
+  which `make release` and CI run, fails a binary that carries it.
+- **The launch is a replay**, which reads no key, keeps its own files, and
+  bills nothing; a live or recording launch refuses `--control`.
+- **The process is not sandboxed**, so a sandboxed build made from the
+  development bundle refuses it too.
+- **The directory is the harness's own for the run**: absolute, a real
+  directory owned by you with mode 0700 exactly, holding the run's
+  secret in `secret`, a file closed to everyone else, and short enough for the
+  socket's path (103 bytes). The harness makes it with `mktemp` inside your
+  per-user temporary directory, not the run's home, whose path is too long.
+
+The app makes its socket, `control.sock`, inside that directory, open to you
+alone. It answers a connection only from your own user (`getpeereid`), and a
+request only when it carries the run's secret, compared in constant time; no
+answer ever repeats a request, so the secret never comes back out.
 
 ### What the harness already handles, so a scenario need not
 
@@ -692,18 +795,21 @@ suite rather than every scenario.
   launch. While it waits for the first capture, the harness brings the staged
   TextEdit forward with each Shift press, since sensing captures nothing while
   an excluded app, such as the terminal of whoever is at the Mac, is in front.
-- **Idle input.** Every pointer step waits for a quiet keyboard and mouse
-  first, and a click aborts if the pointer moves off the target, because the
-  Mac may have someone at it. A click by that person during the wait dismisses
-  the toast through its global listener, which is them using their Mac rather
-  than a failure, so `keep_toast_up` relaunches Athina for a new toast (the
-  earlier launch's journal and watcher logs are kept as
-  `journal-launch<n>.sqlite` and `<log>-launch<n>.log`, and the watchers start
-  again on fresh logs, so the checks read only what the new launch saw) and
-  waits again, up to three times. It relaunches rather than use Show Last
-  Suggestion, which brings the toast back with the dismissal already in the
-  journal, so the checks after it could not tell their answer from the one
-  before.
+- **Idle input.** Every pointer step of a real-screen scenario waits for a
+  quiet keyboard and mouse first, and a click aborts if the pointer moves off
+  the target, because the Mac may have someone at it. A click by that person
+  during the wait dismisses the toast through its global listener, which is
+  them using their Mac rather than a failure, so `keep_toast_up` relaunches
+  Athina for a new toast (the earlier launch's journal and watcher logs are
+  kept as `journal-launch<n>.sqlite` and `<log>-launch<n>.log`, and the
+  watchers start again on fresh logs, so the checks read only what the new
+  launch saw) and waits again, up to three times. It relaunches rather than
+  use Show Last Suggestion, which brings the toast back with the dismissal
+  already in the journal, so the checks after it could not tell their answer
+  from the one before. An API-tier scenario makes no pointer step, so it waits
+  for none; unless it needs a capture, as `debug-timeline` does, it posts no
+  input at all, and then only the Shift presses that keep sensing awake, which
+  type nothing.
 - **The owner's apps are excluded** in the scratch settings from the start.
   Replay serves fixtures in order whatever is on screen, so a replayed callout
   would otherwise land over the work of whoever is using the Mac.
@@ -842,7 +948,9 @@ The first releases go out directly, as a download from outside the App Store:
 signed with a Developer ID, notarized by Apple, with no App Sandbox and no App
 Review. `make release` (`scripts/release.sh`) does all of it:
 
-1. Builds the Release configuration for Apple silicon and Intel in one binary.
+1. Builds the Release configuration for Apple silicon and Intel in one binary,
+   without the end-to-end harness's control API, and fails if the binary
+   carries any of it (`scripts/check-no-control-api.sh`, see The control API).
 2. Signs it under the hardened runtime, which notarization requires, with a
    secure timestamp and `Resources/Athina.entitlements`, whose comments say
    why each entitlement is there (only `device.audio-input` today, for the
@@ -917,6 +1025,10 @@ create goes in the repository.
    the last release's.
 3. Check the release build itself end to end, in replay as always:
    `ATHINA_E2E_APP=build/release/Athina.app scripts/e2e/athina-e2e run all`.
+   That covers the real-screen tier; step 1's check proves the build carries
+   no control API, so each API-tier scenario reports `skip`, and the API tier
+   runs on the development build of the same commit
+   (`scripts/e2e/athina-e2e run all` without `ATHINA_E2E_APP`).
 4. Publish the disk image (and the zip, for anyone who prefers it) with
    `Athina-<version>-notes.md` as its notes, and tag the commit:
    `git tag v0.2.0 && git push origin v0.2.0`. The tag is what the next
@@ -1004,7 +1116,8 @@ Sources/AthinaCore            library, fully testable
                               ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
                               and ClockRemote (moving a replay's clock from a script), RuntimeEnvironment
-                              (whether the process is sandboxed, and which app bundle it runs from)
+                              (whether the process is sandboxed, and which app bundle it runs from),
+                              ControlMode (whether a launch serves the control API, see The control API)
 Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swift cannot make (it is variadic),
                               so `DataMigration` can read the old journal without altering it
 Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
@@ -1573,13 +1686,15 @@ The builder's paths reach it without changing the owner's setting:
   panel's Talk back field (see The committed fixtures).
 - **The end-to-end harness**: a scenario that needs the panel puts
   `--open debug` in its `SCENARIO_ARGS` (`understanding-surfaces` does), and
-  `athina-drive ax ... --scope "Debug Panel"` reaches its controls. Capture Now
-  is the menu's own command, not the panel's.
+  `athina-drive ax ... --scope "Debug Panel"` reaches its controls, or on the
+  API tier `athina-drive api ... window="Debug Panel"` (`debug-timeline`).
+  Capture Now is the menu's own command, not the panel's.
 - **Snapshots**: `--snapshot` draws the panel's view directly
   (`debug-panel*`) and the Advanced pane with the switch off and on
   (`settings-advanced`, `settings-advanced-on`). A menu opens only on screen,
-  so the `debug-panel-access` scenario screenshots the real menu without and
-  with the Debug Panel command.
+  so `--snapshot` draws none; the `debug-panel-access` scenario reads the
+  menu's items as the app builds them, without and with the Debug Panel
+  command, through the control API (see The control API).
 - **A live launch** given `--open debug` opens the panel only while the switch
   is on.
 
@@ -1724,8 +1839,10 @@ particular to this app:
 ## Continuous integration
 
 CI runs two jobs on GitHub's `macos-26` runner, which ships Xcode 26 and the
-macOS 26 SDK this package targets: `build-and-test` runs `swift test` and the
-bundle script, and `ui-snapshots` renders every snapshot with `Athina
+macOS 26 SDK this package targets: `build-and-test` runs `swift test`, the
+bundle script, and `scripts/check-no-control-api.sh` (which must find the
+control API in the development bundle and none in a build without the
+`ControlAPI` trait), and `ui-snapshots` renders every snapshot with `Athina
 --snapshot`, replay-mode renders on a scaled clock included, compares the
 renders with the approved baselines, and uploads them, split across four
 runners that each take a quarter of the snapshots (see UI snapshot baselines). The Xcode project's archive check is out

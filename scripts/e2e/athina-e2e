@@ -168,8 +168,11 @@ cmd_warm() {
 	printf '{"warm_home": "%s", "cold_first_capture_seconds": %d}\n' "$WARM_HOME" "$elapsed"
 }
 
+# How run_scenario says a scenario was skipped, neither passed nor failed.
+SCENARIO_SKIPPED=77
+
 cmd_run() {
-	local names=("$@") name status=0
+	local names=("$@") name status=0 outcome passed=0 failed=0 skipped=0
 	[ ${#names[@]} -gt 0 ] || { usage; exit 64; }
 	if [ "${names[0]}" = "all" ]; then
 		mapfile -t names < <(scenario_names)
@@ -178,8 +181,15 @@ cmd_run() {
 	ensure_drive
 	have_warm_home || die "no warm home yet: run scripts/e2e/athina-e2e warm first"
 	for name in "${names[@]}"; do
-		run_scenario "$name" || status=1
+		outcome=0
+		run_scenario "$name" || outcome=$?
+		case "$outcome" in
+		0) passed=$((passed + 1)) ;;
+		"$SCENARIO_SKIPPED") skipped=$((skipped + 1)) ;;
+		*) failed=$((failed + 1)); status=1 ;;
+		esac
 	done
+	log "$passed passed, $failed failed, $skipped skipped"
 	return $status
 }
 
@@ -193,14 +203,31 @@ run_scenario() (
 	SCENARIO_SUMMARY=""
 	SCENARIO_ARGS=()
 	SCENARIO_SETTINGS='{}'
-	scenario_stage() { stage_text_document; }
+	# screen: driven from outside, with the real pointer and accessibility;
+	# api: driven through the app's control API (README "The control API").
+	SCENARIO_TIER=screen
+	# A screen-tier run watches a staged TextEdit window; an API-tier one
+	# stages nothing unless its scenario says so.
+	scenario_stage() { [ "$SCENARIO_TIER" = api ] || stage_text_document; }
 	# shellcheck disable=SC1090
 	source "$file"
+	case "$SCENARIO_TIER" in
+	screen | api) ;;
+	*) die "$name: SCENARIO_TIER is screen or api, not $SCENARIO_TIER" ;;
+	esac
+	# A release build carries no control API, so it can run only the real-screen
+	# tier; the API tier runs on the development build of the same commit.
+	if [ "$SCENARIO_TIER" = api ] && [ "$CONTROL_API" = no ]; then
+		local reason="$APP carries no control API, which the API tier drives; run it on the development build of the same commit"
+		log "=== $name: skipped, $reason"
+		result_line "$name" skip 0 "$reason"
+		exit "$SCENARIO_SKIPPED"
+	fi
 
 	RUN_DIR="${OUT_ROOT:-$RUNS_ROOT}/$name-$(date '+%Y%m%d-%H%M%S')"
 	mkdir -p "$RUN_DIR"
 	lock_note SCREEN_LOCK "run $name"
-	log "=== $name: $SCENARIO_SUMMARY"
+	log "=== $name ($SCENARIO_TIER tier): $SCENARIO_SUMMARY"
 	log "evidence: $RUN_DIR"
 
 	trap cleanup EXIT
@@ -217,10 +244,17 @@ run_scenario() (
 	started=$(date +%s)
 
 	scenario_stage
-	launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
-	watch_announcements
-	watch_clicks
-	wait_first_observation 90 || log "WARNING: no capture yet; the home may not be warm"
+	if [ "$SCENARIO_TIER" = api ]; then
+		control_prepare
+		args+=(--control "$CONTROL_DIR")
+		launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
+		control_wait
+	else
+		launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
+		watch_announcements
+		watch_clicks
+		wait_first_observation 90 || log "WARNING: no capture yet; the home may not be warm"
+	fi
 
 	detail=""
 	if scenario_run; then
