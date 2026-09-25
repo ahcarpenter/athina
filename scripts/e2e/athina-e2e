@@ -32,6 +32,7 @@ KEEP_HOME=0
 OUT_ROOT=""
 TIME_SCALE=""
 LOCK_TIMEOUT=""
+TIER=""
 
 usage() {
 	cat <<'TEXT'
@@ -51,8 +52,14 @@ options:
   --time-scale <n>   run the replay clock n times faster (see README)
   --jobs <n>         run up to n API-tier scenarios at once, beside the
                      real-screen ones (default 1: one scenario at a time)
+  --tier <api|screen> run only the scenarios of that tier
   --show-windows     leave an API-tier run's windows on screen to watch it,
                      taking the screen lock as a real-screen run does
+  --checkpoints <dir> put the API tier's checkpoints in <dir>/<scenario>/
+                     rather than in each run's evidence
+  --launch open      launch the API tier's app through LaunchServices rather
+                     than sandbox-exec, as CI does; refused on a Mac with
+                     Athina data of its own (README "Checkpoints")
   --lock-timeout <s> give up after s seconds when another run holds the
                      screen or this checkout (default: wait for as long as
                      it takes)
@@ -196,6 +203,14 @@ cmd_run() {
 	for name in "${names[@]}"; do
 		[ -f "$SCENARIO_DIR/$name.sh" ] || die "no scenario named $name"
 	done
+	if [ -n "$TIER" ]; then
+		local chosen=()
+		for name in "${names[@]}"; do
+			[ "$(scenario_tier_of "$name")" = "$TIER" ] && chosen+=("$name")
+		done
+		[ ${#chosen[@]} -gt 0 ] || die "none of those scenarios is on the $TIER tier"
+		names=("${chosen[@]}")
+	fi
 	ensure_app
 	ensure_drive
 	local api=() screen=()
@@ -275,6 +290,9 @@ run_scenario() (
 	local file="$SCENARIO_DIR/$name.sh"
 	[ -f "$file" ] || die "no scenario named $name"
 
+	# Read by the harness's checkpoint.
+	# shellcheck disable=SC2034
+	SCENARIO_NAME="$name"
 	SCENARIO_SUMMARY=""
 	SCENARIO_ARGS=()
 	SCENARIO_SETTINGS='{}'
@@ -430,6 +448,15 @@ main() {
 			[[ "${2:-}" =~ ^[1-9][0-9]*$ ]] || { echo "--jobs takes a whole number of scenarios, 1 or more" >&2; exit 64; }
 			JOBS="$2"; shift 2 ;;
 		--show-windows) SHOW_WINDOWS=1; shift ;;
+		--tier)
+			case "${2:-}" in api | screen) TIER="$2" ;; *) echo "--tier is api or screen" >&2; exit 64 ;; esac
+			shift 2 ;;
+		--checkpoints)
+			[ -n "${2:-}" ] || { echo "--checkpoints takes a directory" >&2; exit 64; }
+			mkdir -p "$2" && CHECKPOINTS_ROOT="$(cd "$2" && pwd)"; shift 2 ;;
+		--launch)
+			case "${2:-}" in open | sandbox) LAUNCH_WITH="$2" ;; *) echo "--launch is open or sandbox" >&2; exit 64 ;; esac
+			shift 2 ;;
 		--home) rest+=("$2"); shift 2 ;;
 		*) rest+=("$1"); shift ;;
 		esac

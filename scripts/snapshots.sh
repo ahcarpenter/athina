@@ -25,6 +25,15 @@
 #                   origin/main) and report every screen that changed, was
 #                   added or was removed; fails only when a snapshot could not
 #                   be drawn
+#   checkpoints [<athina-e2e option> ...]
+#                   what CI's e2e-api job runs: every API-tier scenario of the
+#                   end-to-end harness, twice, failing unless both runs pass and
+#                   their checkpoints are the same pictures, then on any drift of
+#                   a checkpoint from its baseline in Tests/Checkpoints; the
+#                   options go to `athina-e2e run`, as CI's --launch open does
+#   checkpoints-approve [<run>]
+#                   make Tests/Checkpoints match the checkpoints CI run <run>
+#                   took, by default the newest CI run of HEAD
 #
 # Output lands in build/snapshots: render-first/ and render-again/ hold the two
 # renders; render/ holds the first once both finished and agree, with
@@ -32,6 +41,11 @@
 # for approve, with shard naming the shard it holds when there is one;
 # report/index.html shows each drifted snapshot before, after, and
 # where it changed, and determinism/ the same for two renders that did not match.
+#
+# The checkpoints' output lands in build/checkpoints, laid out as the
+# snapshots' is: render-first/ and render-again/, render/ (with source-tree)
+# once both runs passed and agree, report/ and determinism/, and runs/ holding
+# each run's evidence.
 #
 # The smoke test's output lands in build/snapshots-smoke: references/ holds the
 # set approving takes, every matching snapshot's reference and every other
@@ -56,6 +70,8 @@ BASELINES="$ROOT/Tests/Snapshots"
 OUT="$ROOT/build/snapshots"
 SMOKE_REFERENCES="$ROOT/Tests/UISnapshotsSmokeTests/__Snapshots__/UISnapshotsSmokeTests"
 SMOKE_OUT="$ROOT/build/snapshots-smoke"
+CHECKPOINT_BASELINES="$ROOT/Tests/Checkpoints"
+CHECKPOINTS_OUT="$ROOT/build/checkpoints"
 APP="${ATHINA_APP:-$ROOT/build/Athina.app}"
 
 SMOKE_LOCAL_OUT="$ROOT/build/snapshots-smoke-local"
@@ -174,6 +190,51 @@ case "$command" in
     [ "$extra" -eq "$count" ] || die "CI run $run has renders from $extra shards, not $count"
     diff_tool approve "$BASELINES" "$OUT/approved-run"
     echo "snapshots: review the changed images (git status Tests/Snapshots), then commit them with the change that caused them"
+    ;;
+
+  checkpoints)
+    shift
+    rm -rf "$CHECKPOINTS_OUT"
+    # Each run takes every API-tier scenario four at a time, and a scenario that
+    # fails fails the gate: its checkpoints may be missing or of another state.
+    for pass in first again; do
+      "$ROOT/scripts/e2e/athina-e2e" run --tier api --jobs 4 --out "$CHECKPOINTS_OUT/runs/$pass" \
+        --checkpoints "$CHECKPOINTS_OUT/render-$pass" "$@" all \
+        || { echo "snapshots: an API-tier scenario failed (see build/checkpoints/runs/$pass), so its checkpoints are not compared" >&2; exit 1; }
+    done
+    status=0
+    diff_tool agree "$CHECKPOINTS_OUT/render-first" "$CHECKPOINTS_OUT/render-again" --report "$CHECKPOINTS_OUT/determinism" || status=$?
+    if [ "$status" -eq 1 ]; then
+      echo "snapshots: two runs of the same build took different checkpoints (see build/checkpoints/determinism)" >&2
+    fi
+    [ "$status" -eq 0 ] || exit "$status"
+    rm -rf "$CHECKPOINTS_OUT/determinism"
+    git -C "$ROOT" rev-parse 'HEAD^{tree}' > "$CHECKPOINTS_OUT/render-first/source-tree"
+    mv "$CHECKPOINTS_OUT/render-first" "$CHECKPOINTS_OUT/render"
+    diff_tool compare "$CHECKPOINT_BASELINES" "$CHECKPOINTS_OUT/render" --report "$CHECKPOINTS_OUT/report"
+    ;;
+
+  checkpoints-approve)
+    [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh checkpoints-approve [<run id>]"
+    command -v gh >/dev/null || die "approving needs the GitHub CLI (gh) to fetch the runner's checkpoints"
+    run="${2:-}"
+    head="$(git -C "$ROOT" rev-parse HEAD)"
+    tree="$(git -C "$ROOT" rev-parse 'HEAD^{tree}')"
+    if [ -z "$run" ]; then
+      run="$(gh run list --workflow ci.yml --commit "$head" --status completed --limit 1 --json databaseId --jq '.[0].databaseId // empty')" \
+        || die "could not list the CI runs of HEAD ($head)"
+      [ -n "$run" ] || die "no finished CI run of HEAD ($head); push it and let CI finish, or name a run"
+    fi
+    rm -rf "$CHECKPOINTS_OUT/approved-run"
+    # The job publishes its checkpoints only once both runs passed and agree.
+    gh run download "$run" --name checkpoints --dir "$CHECKPOINTS_OUT/approved-run" \
+      || die "CI run $run has no checkpoints to approve; its e2e-api job publishes them only once both runs of the API tier passed and took the same pictures"
+    run_tree="$(cat "$CHECKPOINTS_OUT/approved-run/source-tree" 2>/dev/null)" \
+      || die "CI run $run does not name the source tree its checkpoints were taken from, so they cannot be matched to HEAD"
+    [ "$run_tree" = "$tree" ] \
+      || die "CI run $run took its checkpoints of source tree $run_tree, not HEAD's ($tree), and approving them would bake another tree's UI into the baselines; a pull request's run tests the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
+    diff_tool approve "$CHECKPOINT_BASELINES" "$CHECKPOINTS_OUT/approved-run"
+    echo "snapshots: review the changed images (git status Tests/Checkpoints), then commit them with the change that caused them"
     ;;
 
   smoke)
@@ -357,6 +418,6 @@ case "$command" in
     ;;
 
   *)
-    die "usage: scripts/snapshots.sh gate [<k>/<n>] | approve [<run id>] | smoke [<k>/<n>] | smoke-approve [<run id>] | smoke-local [<base commit>]"
+    die "usage: scripts/snapshots.sh gate [<k>/<n>] | approve [<run id>] | checkpoints [<athina-e2e option> ...] | checkpoints-approve [<run id>] | smoke [<k>/<n>] | smoke-approve [<run id>] | smoke-local [<base commit>]"
     ;;
 esac

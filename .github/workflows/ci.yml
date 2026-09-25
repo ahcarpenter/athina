@@ -75,6 +75,72 @@ jobs:
         timeout-minutes: 10
         run: make lint
 
+  e2e-api:
+    # Every API-tier scenario of the end-to-end harness, run hermetically
+    # through the app's control API, twice, then their checkpoints compared
+    # with the approved baselines in Tests/Checkpoints as ui-snapshots
+    # compares a snapshot (README "Checkpoints"). The app is launched through
+    # LaunchServices (--launch open): exec'd from this job's shell, which the
+    # runner image grants Accessibility, it would inherit the grant, and the
+    # run could never catch a change that made the API tier need one.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode on the runner
+        run: |
+          latest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n1)"
+          echo "Using $latest"
+          sudo xcode-select -s "$latest"
+          sw_vers
+          swift --version
+      - name: Install bash 4 or newer
+        # The harness needs it, and macOS ships 3.2 as /bin/bash.
+        run: brew install bash
+      - name: Hide the Dock
+        # The runner's display is 1024 by 768, and with the Dock showing, the
+        # tallest Settings panes are taller than the room left, so macOS cuts
+        # the window off above their end and their last rows cannot be
+        # scrolled into view.
+        run: |
+          defaults write com.apple.dock autohide -bool true
+          killall Dock
+      - name: Let the hermetic copy record its own windows
+        # Screen Recording for the API tier's copy of the app, which the
+        # harness makes under this identifier, so a checkpoint is captured
+        # with ScreenCaptureKit, glass, title bar and toolbar included, as
+        # ui-snapshots captures a snapshot. Only Screen Recording: an
+        # Accessibility grant is what the launch through open keeps away.
+        run: |
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
+            "insert or replace into access (service, client, client_type, auth_value, auth_reason, auth_version, flags) values ('kTCCServiceScreenCapture', 'com.ahcarpenter.athina.e2e', 0, 2, 4, 1, 0)"
+      - name: Run the API tier twice and compare its checkpoints with their baselines
+        timeout-minutes: 20
+        run: scripts/snapshots.sh checkpoints --launch open
+      - name: Summarize
+        if: always()
+        run: |
+          for summary in build/checkpoints/determinism/summary.md build/checkpoints/report/summary.md; do
+            if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
+          done
+      - name: Upload the checkpoints
+        # What `make checkpoints-approve` fetches to approve a drift.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkpoints
+          path: build/checkpoints/render
+          if-no-files-found: ignore
+      - name: Upload the drift report and the runs' evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkpoints-report
+          path: |
+            build/checkpoints/report
+            build/checkpoints/determinism
+            build/checkpoints/runs
+          if-no-files-found: ignore
+
   ui-snapshots-smoke-shard:
     # The fast UI check, split across four runners like ui-snapshots and by
     # the same SnapshotShard table: each draws its quarter of the snapshots in

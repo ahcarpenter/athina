@@ -28,17 +28,17 @@ enum ControlAvailability {
       return value
     }
 
-    /// Taken the way this run's `--snapshot` takes a window, and again while
-    /// ScreenCaptureKit misses it.
+    /// Settled as `--snapshot` settles a window, and captured this run's one
+    /// way.
     func controlCapture(_ window: NSWindow) async throws -> CGImage {
-      let hosting = window.contentView ?? NSView()
-      for _ in 0..<8 {
-        if let image = try await Snapshots.capture(window: window, hosting: hosting) {
-          return image
-        }
-        try await Task.sleep(for: .milliseconds(150))
+      guard let bitmap = try await Snapshots.settledCapture(of: window) else {
+        throw ControlCaptureError(window: window.title)
       }
-      throw ControlCaptureError(window: window.title)
+      return try bitmap.cgImage()
+    }
+
+    var controlCaptureMethod: String {
+      Snapshots.capturesWithScreenCaptureKit ? "ScreenCaptureKit" : "layer tree"
     }
 
     var controlMenu: MenuModel { menuModel }
@@ -78,9 +78,12 @@ enum ControlAvailability {
     }
   }
 
-  /// ScreenCaptureKit missed the window every time it was asked for it.
+  /// No two captures of the window in a row were the same picture: it kept
+  /// changing, or ScreenCaptureKit kept missing it.
   struct ControlCaptureError: LocalizedError {
     let window: String
-    var errorDescription: String? { "ScreenCaptureKit kept missing the window \"\(window)\"" }
+    var errorDescription: String? {
+      "the window \"\(window)\" never gave the same picture twice in a row: it kept changing, or ScreenCaptureKit kept missing it"
+    }
   }
 #endif
