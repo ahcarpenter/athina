@@ -52,6 +52,7 @@ LAUNCH_ARGS=()
 LAUNCHED_AT=0
 RELAUNCHES=0
 EXCLUDED_PID=""
+CONTROL_DIR=""
 HELPER_PIDS=()
 # The watchers of the launch now running, whose logs the checks read.
 WATCHER_PIDS=()
@@ -128,7 +129,7 @@ build_when() {
 }
 
 ensure_drive() {
-	sources_newer_than_build "$DRIVE" "$DRIVE_BUILT" "$ROOT/Sources/AthinaDrive" "$ROOT/Sources/AthinaE2E" || return 0
+	sources_newer_than_build "$DRIVE" "$DRIVE_BUILT" "$ROOT/Sources/AthinaDrive" "$ROOT/Sources/AthinaE2E" "$ROOT/Sources/AthinaControlProtocol" || return 0
 	log "building athina-drive $(build_when)"
 	# Stamped when the build starts, so a source saved during it is still newer.
 	mkdir -p "$(dirname "$DRIVE_BUILT")"
@@ -140,22 +141,38 @@ ensure_drive() {
 
 # A check of a stale bundle proves nothing, so the app is rebuilt when a source
 # file was saved after its last build started, which scripts/bundle.sh stamps
-# for every build, `make build` included. Never while something is running
-# from it, though: scripts/bundle.sh deletes the bundle first, and another
-# lane, or the owner, may be using this one.
+# for every build, `make build` included. The harness's own bundle is the
+# development one, so it is rebuilt too when it carries no control API, as
+# after `scripts/bundle.sh --no-control`, rather than skip the API tier. Never
+# while something is running from it, though: scripts/bundle.sh deletes the
+# bundle first, and another lane, or the owner, may be using this one.
+#
+# Sets CONTROL_API to whether the API tier runs: always on the harness's own
+# bundle, and on an ATHINA_E2E_APP bundle only when it carries the control API,
+# which no release build does, so there each API-tier scenario is skipped.
+# CONTROL_API is read by the entry point.
+# shellcheck disable=SC2034
 ensure_app() {
+	CONTROL_API=yes
 	if [ -n "${ATHINA_E2E_APP:-}" ]; then
 		[ -x "$APP_BINARY" ] || die "ATHINA_E2E_APP names $APP, which holds no Athina executable"
 		sources_newer_than "$APP_BINARY" "$ROOT/Sources" && log "WARNING: a source file is newer than $APP, which is checked as it is"
+		bundle_has_control_api || CONTROL_API=no
 		return 0
 	fi
+	local why
 	if sources_newer_than_build "$APP_BINARY" "$APP_BUILT" "$ROOT/Sources"; then
-		if pgrep -f "$APP_BINARY" >/dev/null 2>&1; then
-			die "$APP may be out of date and something is running from it; rebuild it when nothing is"
-		fi
-		log "building $APP $(build_when)"
-		(cd "$ROOT" && scripts/bundle.sh release >/dev/null 2>&1) || die "could not build the app bundle"
+		why="may be out of date"
+	elif ! bundle_has_control_api; then
+		why="is the development bundle but carries no control API"
+	else
+		return 0
 	fi
+	if pgrep -f "$APP_BINARY" >/dev/null 2>&1; then
+		die "$APP $why and something is running from it; rebuild it when nothing is"
+	fi
+	log "building $APP $(build_when), since it $why"
+	(cd "$ROOT" && scripts/bundle.sh release >/dev/null 2>&1) || die "could not build the app bundle"
 }
 
 # What was run, for whoever reads the evidence later.
@@ -296,7 +313,9 @@ launch_athina() {
 		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited during launch; see $RUN_DIR/app.log"
 		if "$DRIVE" ready "$ATHINA_PID" 2>/dev/null | grep -q READY; then
 			log "Athina ready after $((i / 2))s"
-			wake_input
+			# An API-tier run posts no input of its own unless a scenario that
+			# needs sensing asks for it (wait_first_observation does).
+			[ "${SCENARIO_TIER:-screen}" = api ] || wake_input
 			return 0
 		fi
 		# A macOS consent prompt can stall a launch silently; say so rather than
@@ -361,6 +380,7 @@ cleanup() {
 	for pid in ${HELPER_PIDS[@]+"${HELPER_PIDS[@]}"} ${WATCHER_PIDS[@]+"${WATCHER_PIDS[@]}"}; do stop_pid "$pid"; done
 	for pid in ${STAGED_PIDS[@]+"${STAGED_PIDS[@]}"}; do stop_pid "$pid"; done
 	stop_pid "$ATHINA_PID"
+	[ -n "${CONTROL_DIR:-}" ] && rm -rf "$CONTROL_DIR"
 	prefs_restore
 	if [ -n "$HOME_DIR" ] && [ "${KEEP_HOME:-0}" != 1 ]; then
 		rm -rf "$HOME_DIR"
@@ -608,6 +628,87 @@ raise_window() {
 window_id() {
 	"$DRIVE" windows "$ATHINA_PID" \
 		| awk -v want="$1" 'index($0, "name=\"" want) {sub("id=", "", $1); print $1; exit}' || echo ""
+}
+
+# --- The control API ----------------------------------------------------------
+
+# An API-tier scenario (SCENARIO_TIER=api) drives Athina through its control
+# API (README "The control API") rather than the pointer and accessibility from
+# outside: the app finds its own controls and clicks them through its own event
+# path, so no step waits for idle input.
+
+# Whether the bundle under test carries the control API, as the release check
+# (scripts/check-no-control-api.sh) finds it: a release build carries none.
+bundle_has_control_api() {
+	local status=0
+	"$ROOT/scripts/check-no-control-api.sh" "$APP_BINARY" >/dev/null 2>&1 || status=$?
+	case "$status" in
+	0) return 1 ;;
+	1) return 0 ;;
+	*) die "could not tell whether $APP carries the control API" ;;
+	esac
+}
+
+# The run's control directory: 0700, inside the per-user temporary directory
+# (itself closed to everyone else) rather than the run's home, whose path is
+# too long for a Unix socket, and holding the run's secret. The app makes its
+# socket there; athina-drive api finds both through ATHINA_CONTROL_DIR.
+control_prepare() {
+	local temporary
+	temporary="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)"
+	[ -n "$temporary" ] || temporary="${TMPDIR:-/tmp}"
+	CONTROL_DIR="$(mktemp -d "${temporary%/}/athina-ctl.XXXXXX")" || die "could not make a control directory"
+	chmod 700 "$CONTROL_DIR"
+	(umask 077 && head -c 32 /dev/urandom | xxd -p -c 64 >"$CONTROL_DIR/secret") || die "could not write the control secret"
+	export ATHINA_CONTROL_DIR="$CONTROL_DIR"
+	log "control directory $CONTROL_DIR"
+}
+
+# Waits until the app answers on its control socket. The app says on stderr
+# why when it will not serve one, which ends the run with that reason.
+control_wait() {
+	local i refusal
+	for i in $(seq 1 100); do
+		if "$DRIVE" api ping >>"$RUN_DIR/api.log" 2>&1; then
+			log "control API answering after $((i / 10)).$((i % 10))s"
+			return 0
+		fi
+		refusal="$(grep -m 1 -E '^control API (refused|failed): ' "$RUN_DIR/app.log" 2>/dev/null || true)"
+		[ -n "$refusal" ] && die "$refusal"
+		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited before its control API answered; see $RUN_DIR/app.log"
+		sleep 0.1
+	done
+	die "the control API never answered; see $RUN_DIR/app.log and $RUN_DIR/api.log"
+}
+
+# Reads $2 (a function) until it prints $1, for up to two seconds, and prints
+# the last read: SwiftUI redraws a control a moment after the click that
+# changed it has been handled.
+settled() {
+	local want="$1" read="$2" got="" i
+	for i in $(seq 1 20); do
+		got="$("$read")"
+		[ "$got" = "$want" ] && break
+		sleep 0.1
+	done
+	printf '%s\n' "$got"
+}
+
+# A Python expression over a JSON answer, bound to `r`, printed: for checks
+# that count or search what an answer holds. Arguments after the expression
+# are `a[0]`, `a[1]`, and so on.
+json_eval() {
+	python3 -c 'import json, re, sys; r = json.loads(sys.argv[1]); a = sys.argv[3:]; print(eval(sys.argv[2]))' "$@" 2>>"$RUN_DIR/api.log"
+}
+
+# One request to the app; the answer goes to api.log and, with --field, the
+# field alone to stdout. Returns non-zero when the answer is not ok.
+api() {
+	local status=0 answer
+	answer="$("$DRIVE" api "$@" 2>>"$RUN_DIR/api.log")" || status=$?
+	printf '%s %s\n    %s\n' "$(date '+%H:%M:%S')" "$*" "$answer" >>"$RUN_DIR/api.log"
+	printf '%s\n' "$answer"
+	return "$status"
 }
 
 # --- The menu bar -------------------------------------------------------------

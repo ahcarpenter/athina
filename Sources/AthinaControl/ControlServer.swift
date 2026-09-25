@@ -1,0 +1,34 @@
+import AppKit
+import AthinaControlProtocol
+import AthinaCore
+
+// The end-to-end harness's control API (README "The control API"), compiled
+// into the app only under the ControlAPI package trait and started only on a
+// channel `ControlMode` accepted: a replay, unsandboxed, in a directory the
+// harness made for the run and holding its secret.
+
+/// What the API needs from the app beyond its windows.
+@MainActor
+public protocol ControlHost: AnyObject {
+    /// The live settings, encoded as the settings file is.
+    var controlSettings: ControlValue { get }
+    /// A picture of one of the app's windows, taken the way `--snapshot` takes one.
+    func controlCapture(_ window: NSWindow) async throws -> CGImage
+}
+
+@MainActor
+public enum ControlServer {
+    /// Listens on the channel until the app quits. Throws when the socket
+    /// cannot be made, which the app reports as it reports a refusal.
+    public static func start(_ channel: ControlChannel, host: ControlHost) throws {
+        let commands = ControlCommands(host: host)
+        let listener = try ControlListener(channel: channel) { request in
+            await commands.handle(request)
+        }
+        listener.run()
+        running = (listener, commands)
+    }
+
+    /// Kept for as long as the app runs.
+    private static var running: (ControlListener, ControlCommands)?
+}

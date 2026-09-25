@@ -14,6 +14,13 @@ let package = Package(
         // Compares UI snapshot renders with the approved baselines (scripts/snapshots.sh, see README "UI snapshot baselines").
         .executable(name: "snapshot-diff", targets: ["SnapshotDiffTool"]),
     ],
+    // The end-to-end harness's in-app control API (README "The control API"),
+    // off by default: scripts/bundle.sh turns it on for the development bundle,
+    // and the release and App Store builds never do, so their binaries carry
+    // none of it.
+    traits: [
+        .trait(name: "ControlAPI", description: "The in-app control API the end-to-end harness drives a replay through; development builds only"),
+    ],
     targets: [
         // The one SQLite call Swift cannot make for itself (see the header).
         .target(name: "AthinaSQLiteShim", linkerSettings: [.linkedLibrary("sqlite3")]),
@@ -30,22 +37,37 @@ let package = Package(
             ]
         ),
         // project.yml's App Store target compiles these same sources against
-        // AthinaCore and SnapshotDiff: a dependency or framework added here goes there too.
+        // AthinaCore and SnapshotDiff: a dependency or framework added here goes
+        // there too, except the ControlAPI-conditional AthinaControl, which the
+        // App Store build never carries.
         .executableTarget(
             name: "Athina",
             // SnapshotDiff so `--snapshot` judges two captures the same picture
             // by the rule the baseline comparison uses.
-            dependencies: ["AthinaCore", "SnapshotDiff"],
+            dependencies: [
+                "AthinaCore",
+                "SnapshotDiff",
+                .target(name: "AthinaControl", condition: .when(traits: ["ControlAPI"])),
+            ],
             linkerSettings: [
                 .linkedFramework("Carbon"),
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("Speech"),
             ]
         ),
+        // What the control API's requests and answers are, shared by the app's
+        // server and athina-drive's client.
+        .target(name: "AthinaControlProtocol"),
+        // The server itself, linked into the app only under the ControlAPI trait.
+        .target(
+            name: "AthinaControl",
+            dependencies: ["AthinaCore", "AthinaControlProtocol"],
+            linkerSettings: [.linkedFramework("ApplicationServices")]
+        ),
         .target(name: "AthinaE2E"),
         .executableTarget(
             name: "AthinaDrive",
-            dependencies: ["AthinaE2E"],
+            dependencies: ["AthinaE2E", "AthinaControlProtocol"],
             linkerSettings: [.linkedFramework("ApplicationServices")]
         ),
         .target(name: "SnapshotDiff"),
@@ -53,9 +75,14 @@ let package = Package(
         .testTarget(name: "SnapshotDiffTests", dependencies: ["SnapshotDiff"]),
         .testTarget(
             // AthinaCore so the harness's journal queries are checked against a
-            // journal the app itself just created, not a hand-written schema.
+            // journal the app itself just created, not a hand-written schema;
+            // AthinaControlProtocol for the name a bundle with the control API carries.
             name: "AthinaE2ETests",
-            dependencies: ["AthinaE2E", "AthinaCore"]
+            dependencies: ["AthinaE2E", "AthinaCore", "AthinaControlProtocol"]
+        ),
+        .testTarget(
+            name: "AthinaControlTests",
+            dependencies: ["AthinaControl", "AthinaControlProtocol"]
         ),
         .testTarget(
             name: "AthinaCoreTests",

@@ -2,13 +2,15 @@
 # SCENARIO_* below are read by scripts/e2e/athina-e2e, which sources this file.
 # shellcheck disable=SC2034
 # Settings text names another pane by linking to it: the Contexts footer to
-# Privacy, and the Understanding footer in Models to Journal. Each link has to
-# be shown as a link rather than as the Markdown it is built from, and a click
-# on it has to change the Settings window's pane in place rather than hand the
+# Privacy, and the Understanding footer in Models to Journal. A click on each
+# link has to change the Settings window's pane in place rather than hand the
 # link to the system, which knows no app for it and opens nothing.
 #
-# A link inside a Text offers accessibility nothing to press, so each click is
-# a real pointer click at the link's place in the live accessibility tree.
+# A link inside a Text follows neither accessibility's press nor a click the
+# app simulates in its own window, so this stays on the real-screen tier: each
+# click is a real pointer click at the link's place in the live accessibility
+# tree. That the links show as links rather than Markdown is checked on the API
+# tier, by settings-pane-text.
 SCENARIO_SUMMARY="a link in one Settings pane's text opens the pane it names, in place"
 SCENARIO_ARGS=(--open settings:contexts)
 
@@ -31,10 +33,6 @@ element_centre() {
 			exit
 		}
 	' "$RUN_DIR/$1"
-}
-
-has_text() {
-	grep -qF "$2" "$RUN_DIR/$1" && echo yes || echo no
 }
 
 # Whether the point $2,$3 is inside the window a dump is of, the dump's first line.
@@ -76,8 +74,6 @@ follow_link() {
 	"$DRIVE" ax "$ATHINA_PID" texts --scope "$pane" >"$RUN_DIR/$tag-texts.txt" 2>&1 || true
 	id="$(window_id "$pane")"
 	[ -n "$id" ] && "$DRIVE" shot window "$id" "$RUN_DIR/$tag-before.png" >/dev/null 2>&1
-	# Markdown that did not parse would show its brackets and the scheme.
-	check "the $pane footer shows no raw link Markdown" "no" "$(has_text "$tag-texts.txt" "](athina-settings:")"
 	check "the $pane footer shows $name as a link" "yes" "$([ -n "$link" ] && echo yes || echo no)"
 	[ -n "$link" ] || { log "the $pane footer showed no $name link to aim at"; return 1; }
 	# shellcheck disable=SC2086

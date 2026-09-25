@@ -20,6 +20,7 @@ struct AdvancedSettings: View {
                     Text("Enable debug panel")
                     Text("A window for troubleshooting Athina: the latest capture and the text read from it, each model call and why it was made, and what Athina understands you to be working toward.")
                 }
+                .accessibilityIdentifier("advanced.enableDebugPanel")
                 HStack {
                     Spacer()
                     Button("Open Debug Panel") {
@@ -27,6 +28,7 @@ struct AdvancedSettings: View {
                         openWindow(id: WindowID.debug)
                     }
                     .disabled(!state.settings.showDebugPanel)
+                    .accessibilityIdentifier("advanced.openDebugPanel")
                 }
             } header: {
                 Text("Troubleshooting")

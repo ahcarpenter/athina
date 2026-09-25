@@ -220,8 +220,9 @@ enum Snapshots {
     /// missed it this time: its stream occasionally fails to start when many
     /// windows are captured back to back, and a new window can be missing from
     /// the shareable content for a moment. A missed capture is taken again,
-    /// never drawn the other way.
-    private static func capture(window: NSWindow, hosting: NSView) async throws -> CGImage? {
+    /// never drawn the other way. The control API's `snapshot` takes an open
+    /// window this way too (`ControlHosting.swift`).
+    static func capture(window: NSWindow, hosting: NSView) async throws -> CGImage? {
         guard capturesWithScreenCaptureKit else { return try renderLayerTree(of: hosting) }
         do {
             if let image = try await captureOwnWindow(window) { return image }
