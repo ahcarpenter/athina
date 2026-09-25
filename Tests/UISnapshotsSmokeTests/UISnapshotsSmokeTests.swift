@@ -56,7 +56,9 @@
     private static let references =
       against?.first
       ?? testsDirectory.appending(
-        path: "__Snapshots__/UISnapshotsSmokeTests", directoryHint: .isDirectory)
+        path: "__Snapshots__/UISnapshotsSmokeTests",
+        directoryHint: .isDirectory
+      )
 
     private static let output =
       ProcessInfo.processInfo.environment["UI_SNAPSHOTS_SMOKE_OUTPUT"]
@@ -97,13 +99,17 @@
       // Scroll bars always shown, as `scripts/snapshots.sh` has `--snapshot` show them and the
       // runner, with no trackpad, shows them, whatever this Mac is set to.
       UserDefaults.standard.setVolatileDomain(
-        ["AppleShowScrollBars": "Always"], forName: UserDefaults.argumentDomain)
+        ["AppleShowScrollBars": "Always"],
+        forName: UserDefaults.argumentDomain
+      )
       // An app that owns windows, with no Dock icon, as the app itself is.
       NSApplication.shared.setActivationPolicy(.accessory)
       // A test process's bundle is the test runner's, so the marks come from the folder the app
       // bundle copies them from.
       MenuBarMarkImage.directory = Self.root.appending(
-        path: "Resources/Mark", directoryHint: .isDirectory)
+        path: "Resources/Mark",
+        directoryHint: .isDirectory
+      )
     }
 
     @Test func everySnapshotMatchesItsReference() async throws {
@@ -134,26 +140,38 @@
           let file = "\(Self.testName).\(name).png"
           if let only = Self.only, !only.contains(name) { continue }
           let bitmap = try await Snapshots.settledPicture(
-            of: spec, in: appearance, capture: Self.capture)
+            of: spec,
+            in: appearance,
+            capture: Self.capture
+          )
           if Self.isBlank(bitmap) {
             Issue.record("\(name) drew nothing: every pixel is the same colour")
           }
           let image = NSImage(cgImage: try bitmap.cgImage(), size: .zero)
           let failures = (Self.against ?? [Self.references]).map { set in
             verifySnapshot(
-              of: image, as: Self.strategy, named: name, snapshotDirectory: set.path,
-              testName: Self.testName)
+              of: image,
+              as: Self.strategy,
+              named: name,
+              snapshotDirectory: set.path,
+              testName: Self.testName
+            )
           }
           let failure = failures.contains { $0 == nil } ? nil : failures.first ?? nil
           guard let failure else {
             try fileManager.copyItem(
-              at: Self.references.appending(path: file), to: partial.appending(path: file))
+              at: Self.references.appending(path: file),
+              to: partial.appending(path: file)
+            )
             continue
           }
           if Self.against == nil { Issue.record(Comment(rawValue: failure)) }
           try Self.strategy.diffing.toData(image).write(to: partial.appending(path: file))
           try Self.writeDrift(
-            of: image, from: Self.references.appending(path: file), to: drift.appending(path: name))
+            of: image,
+            from: Self.references.appending(path: file),
+            to: drift.appending(path: name)
+          )
         }
       }
       try fileManager.moveItem(at: partial, to: approvable)
@@ -172,7 +190,8 @@
         .filter { !$0.hasPrefix(".") }
         .filter { file in
           shard?.compares(
-            file: file.hasPrefix(prefix) ? String(file.dropFirst(prefix.count)) : file)
+            file: file.hasPrefix(prefix) ? String(file.dropFirst(prefix.count)) : file
+          )
             ?? true
         }
       for file in present.sorted() where !expected.contains(file) {
@@ -187,7 +206,8 @@
     /// its own leaves out. Drawn in process, a view is drawn as its layers stand, so the first
     /// capture needs no wait.
     private static let capture = Snapshots.Capture(firstCaptureDelay: .zero, backingScale: 1) {
-      window, hosting in
+      window,
+      hosting in
       let frameView = window.contentView?.superview ?? hosting
       let image = await withCheckedContinuation { continuation in
         Snapshotting<NSView, NSImage>.image.snapshot(frameView).run {
