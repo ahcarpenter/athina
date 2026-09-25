@@ -1983,7 +1983,7 @@ changes conflict:
 ```sh
 git fetch origin
 reformat=$(git show origin/main:.git-blame-ignore-revs | grep -v '^#' | grep . | head -n1)
-# 0. Stop unless main holds that very commit: an empty $reformat stops steps 1-3.
+# 0. Stop unless main holds that very commit: an empty $reformat stops every step.
 git merge-base --is-ancestor "$reformat" origin/main || {
   echo "Stop: origin/main does not contain the reformat commit $reformat." >&2
   reformat=
@@ -1996,8 +1996,8 @@ git rebase --exec 'make format && git commit -a --amend --no-edit --allow-empty'
 #    formatting the branch already has right: -X theirs keeps the branch's side.
 git rebase -X theirs "${reformat:?}"
 # 4. Carry on to the tip of main, resolving real conflicts as usual.
-git rebase origin/main
-make lint
+: "${reformat:?}" && git rebase origin/main
+: "${reformat:?}" && make lint
 ```
 
 The reformat keeps its id on `main` only because the change that brought it
