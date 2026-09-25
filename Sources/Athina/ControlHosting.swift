@@ -70,6 +70,30 @@ extension AppState: ControlHost {
     func controlHear(_ words: String) -> Bool {
         hear(words)
     }
+
+    func controlObserve(_ scripted: ScriptedObservation) async -> ScriptedOutcome {
+        await observe(scripted)
+    }
+
+    func controlSetIdle(_ idle: Bool) async -> Bool {
+        await setScriptedIdle(idle)
+    }
+
+    func controlJournalRows(_ sql: String) async throws -> [[String]] {
+        try await journalRows(sql)
+    }
+
+    func controlAdvanceClock(by seconds: TimeInterval) -> String? {
+        if let refusal = advanceRefusal(by: seconds) { return refusal }
+        advanceClock(by: seconds)
+        return nil
+    }
+
+    var controlClock: (now: Date, movedAhead: TimeInterval) { (clock.date, clockMovedAhead) }
+
+    func controlOpenLink(_ url: URL) -> Bool {
+        SettingsPane.open(link: url)
+    }
 }
 
 /// ScreenCaptureKit missed the window every time it was asked for it.

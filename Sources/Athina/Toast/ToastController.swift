@@ -228,7 +228,9 @@ final class ToastController {
         panel.hasShadow = true
         panel.becomesKeyOnlyIfNeeded = true
         panel.isMovableByWindowBackground = true
-        panel.setAccessibilityTitle("Athina suggestion")
+        // The title a person never sees, since the panel has no title bar;
+        // VoiceOver reads it, and the control API finds the panel by it.
+        panel.title = "Athina suggestion"
         panel.setAccessibilitySubrole(.floatingWindow)
 
         let view = ToastView(model: model, onAction: { [weak self] feedback in
@@ -430,6 +432,7 @@ struct ToastContent: View {
                     .buttonBorderShape(.circle)
                     .controlSize(.small)
                     .help("Close")
+                    .accessibilityIdentifier("toast.close")
                 }
                 Text(suggestion.body)
                     .font(.callout)
@@ -488,10 +491,13 @@ struct ToastContent: View {
             HStack(spacing: 8) {
                 Button(expanded ? "Show Less" : "Tell Me More", action: onToggle)
                     .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("toast.tellMeMore")
                 Button("Not Now") { onAction(.notNow) }
                     .help("Hide \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName) for a while")
+                    .accessibilityIdentifier("toast.notNow")
                 Button("Never for This") { onAction(.never) }
                     .help("Stop \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName)")
+                    .accessibilityIdentifier("toast.never")
                 Spacer(minLength: 4)
                 if let talkBackKey {
                     Label(talkBackKey, systemImage: "mic")

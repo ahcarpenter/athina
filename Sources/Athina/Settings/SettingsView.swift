@@ -44,6 +44,18 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Opens the pane a `linkScheme` link names, as a click on the link does;
+    /// false, doing nothing, for any other link.
+    @MainActor
+    static func open(link url: URL) -> Bool {
+        guard url.scheme == linkScheme,
+              let pane = SettingsPane(rawValue: url.absoluteString.replacingOccurrences(of: "\(linkScheme):", with: "")) else {
+            return false
+        }
+        pane.select()
+        return true
+    }
+
     /// Makes this the pane the Settings window shows, now or when it next opens.
     @MainActor
     func select() {
@@ -137,11 +149,7 @@ extension View {
     /// linking to it.
     func settingsPaneLinks() -> some View {
         environment(\.openURL, OpenURLAction { url in
-            guard url.scheme == SettingsPane.linkScheme, let pane = SettingsPane(rawValue: url.absoluteString.replacingOccurrences(of: "\(SettingsPane.linkScheme):", with: "")) else {
-                return .systemAction
-            }
-            pane.select()
-            return .handled
+            SettingsPane.open(link: url) ? .handled : .systemAction
         })
     }
 }
@@ -669,6 +677,9 @@ struct DurationRow: View {
     /// duration `MentorSettings.validated()` would clamp away.
     let range: ClosedRange<TimeInterval>?
     var help: String?
+    /// The amount field's accessibility identifier, for the end-to-end
+    /// harness (README "The control API").
+    var identifier: String?
 
     private enum Unit: String, CaseIterable, Identifiable {
         case minutes, hours, days
@@ -699,11 +710,15 @@ struct DurationRow: View {
     @State private var unit: Unit = .hours
     @FocusState private var editing: Bool
 
-    init(_ title: String, value: Binding<TimeInterval>, range: ClosedRange<TimeInterval>? = nil, help: String? = nil) {
+    init(
+        _ title: String, value: Binding<TimeInterval>, range: ClosedRange<TimeInterval>? = nil, help: String? = nil,
+        identifier: String? = nil
+    ) {
         self.title = title
         _value = value
         self.range = range
         self.help = help
+        self.identifier = identifier
     }
 
     /// The whole amounts of `unit` the range allows, or the unbounded row's
@@ -725,6 +740,7 @@ struct DurationRow: View {
                     .labelsHidden()
                     .multilineTextAlignment(.trailing)
                     .frame(width: 72)
+                    .accessibilityIdentifier(identifier ?? "")
                     .focused($editing)
                     .onSubmit(push)
                     // A field writes the setting when its editing ends, however

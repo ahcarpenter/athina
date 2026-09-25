@@ -30,6 +30,23 @@ public protocol ControlHost: AnyObject {
     /// Words for talking back to hear while its key is down; false when
     /// nothing was listening.
     func controlHear(_ words: String) -> Bool
+    /// What a hermetic run's sensing is shown next (`SensingPipeline.observe`).
+    func controlObserve(_ scripted: ScriptedObservation) async -> ScriptedOutcome
+    /// Input going idle, or coming back, in a hermetic run; false when the
+    /// run senses the real Mac.
+    func controlSetIdle(_ idle: Bool) async -> Bool
+    /// The events the app has handled so far, for `wait-event`.
+    var controlEvents: ControlEventLog { get }
+    /// The rows of a query that changes nothing, from the app's own journal.
+    func controlJournalRows(_ sql: String) async throws -> [[String]]
+    /// Moves a replay's clock ahead, as the debug panel's Advance field does:
+    /// nil when it moved, otherwise why not.
+    func controlAdvanceClock(by seconds: TimeInterval) -> String?
+    /// The replay clock's time now, and how far it has been moved ahead.
+    var controlClock: (now: Date, movedAhead: TimeInterval) { get }
+    /// Opens a link in the app's own text through the handler a click on it
+    /// runs; false when the app has no handler for it.
+    func controlOpenLink(_ url: URL) -> Bool
 }
 
 /// The hot keys a person sets in Settings > General.

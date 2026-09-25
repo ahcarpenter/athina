@@ -89,6 +89,17 @@ public enum JournalQueries {
         """
     )
 
+    public static let understanding = JournalQuery(
+        name: "understanding",
+        summary: "every revision of the standing understanding and the goal it puts first",
+        columns: ["id", "at", "revision", "source", "goal"],
+        sql: """
+        select id, \(localTime("updated_at")) as at, revision, source,
+               coalesce(json_extract(content_json, '$.goals[0].goal'), '-') as goal
+        from understanding order by id
+        """
+    )
+
     public static let counts = JournalQuery(
         name: "counts",
         summary: "one row of row counts, the cheapest way to poll a run's progress",
@@ -104,7 +115,7 @@ public enum JournalQueries {
     )
 
     public static let all: [JournalQuery] = [
-        suggestions, calls, followUps, events, observations, counts,
+        suggestions, calls, followUps, events, observations, understanding, counts,
     ]
 
     public static func named(_ name: String) -> JournalQuery? {

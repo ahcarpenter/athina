@@ -575,6 +575,14 @@ public actor Journal {
             .first ?? nil
     }
 
+    /// Every row of `sql`, a query that changes nothing, each column as text:
+    /// how the control API answers the end-to-end harness's named journal
+    /// queries from the app's own connection (README "The control API"). A
+    /// statement that would write is refused rather than run.
+    public func readOnlyRows(_ sql: String) throws -> [[String]] {
+        try db.readOnlyRows(sql)
+    }
+
     public func stats() throws -> JournalStats {
         let observationCount = try db.scalarInt("SELECT COUNT(*) FROM observations")
         let thumbnailCount = try db.scalarInt("SELECT COUNT(*) FROM thumbnails")

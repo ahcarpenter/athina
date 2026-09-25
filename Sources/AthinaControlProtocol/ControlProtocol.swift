@@ -30,6 +30,7 @@ public enum ControlProtocol {
     /// takes; every other one is text.
     public static let kinds: [String: Kind] = [
         "force": .bool, "present": .bool, "timeout": .number, "equals": .json, "x": .number, "y": .number,
+        "after": .number, "seconds": .number, "idle": .bool,
     ]
 }
 

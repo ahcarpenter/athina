@@ -10,7 +10,9 @@ public enum SensingSource: Sendable {
     /// journals nothing of the screen of whoever is at the Mac and never asks
     /// macOS for a permission. Every permission reads as granted and input as
     /// recent, so the pipeline is in the mode a person using the app sees,
-    /// watching, until it is paused.
+    /// watching, until it is paused. What it senses is only what is scripted:
+    /// the window in front and what it shows (`observe(_:)`), and whether
+    /// input has gone idle (`setScriptedIdle(_:)`).
     case hermetic
 }
 
@@ -113,6 +115,55 @@ public actor SensingPipeline {
     public func captureNow() async {
         scheduler.requestManualCapture(at: clock.date)
         await signal.signal()
+    }
+
+    /// Senses `scripted` as the window in front, in a hermetic pipeline, the
+    /// way the live one senses a real window: an app or window switch is
+    /// journaled as one, an excluded app is read no further than its name, and
+    /// a capture is taken at once, as one after a switch or after typing is,
+    /// and kept or dropped as a capture of the screen is. `.notScripted` when
+    /// the pipeline senses the real Mac.
+    public func observe(_ scripted: ScriptedObservation) async -> ScriptedOutcome {
+        guard source == .hermetic else { return .notScripted }
+        let now = clock.date
+        let focus = scripted.focus(at: now, excluded: settings.isExcluded(bundleID: scripted.bundleID))
+        let previous = lastFocus
+        if previous?.bundleID != focus.bundleID {
+            await focusDidChange(FocusChange(kind: .application, context: focus))
+        } else if previous?.windowSignature != focus.windowSignature {
+            await focusDidChange(FocusChange(kind: .window, context: focus))
+        } else {
+            lastFocus = focus
+            await broadcaster.send(.focusChanged(focus))
+        }
+        let mode = computeMode()
+        setMode(mode)
+        guard mode.capturesFrames else { return .notKept("sensing is \(mode.rawValue), which captures nothing") }
+        let reason: CaptureReason = lastKept?.windowSignature == focus.windowSignature ? .inputSettled : .focusChange
+        guard let (image, blocks) = scripted.frame(maxDimension: settings.maxFrameDimension),
+              let hash = FrameImaging.perceptualHash(of: image) else {
+            cadence.lastError = "capture: could not draw the scripted frame"
+            return .notKept("the scripted frame could not be drawn")
+        }
+        let verdict = keepVerdict(hash: hash, focus: focus)
+        defer { publishCadence(now: clock.date) }
+        guard verdict.keep else {
+            cadence.droppedCount += 1
+            cadence.lastDropDistance = verdict.distance
+            return .notKept(verdict.reason)
+        }
+        let frame = CapturedFrame(image: image, displayID: 0, screenRect: ScriptedObservation.display)
+        return .kept(await journalCapture(frame, hash: hash, blocks: blocks, focus: focus, reason: reason, at: now))
+    }
+
+    /// Senses input going idle, or coming back, in a hermetic pipeline, as the
+    /// live one does once no input has come for the idle threshold. False when
+    /// the pipeline senses the real Mac.
+    public func setScriptedIdle(_ idle: Bool) async -> Bool {
+        guard source == .hermetic else { return false }
+        await setIdle(idle, detail: idle ? "no input (scripted)" : nil)
+        setMode(computeMode())
+        return true
     }
 
     /// Call when the permissions window sees a change so the loop reacts at once.
@@ -261,13 +312,13 @@ public actor SensingPipeline {
 
     private func updateIdle(secondsSinceInput: TimeInterval) async {
         let nowIdle = secondsSinceInput >= settings.idleThreshold
+        await setIdle(nowIdle, detail: nowIdle ? "no input for \(Int(secondsSinceInput))s" : nil)
+    }
+
+    private func setIdle(_ nowIdle: Bool, detail: String?) async {
         guard nowIdle != isIdle else { return }
         isIdle = nowIdle
-        await journalEvent(JournalEvent(
-            timestamp: clock.date,
-            kind: nowIdle ? .idleStart : .idleEnd,
-            detail: nowIdle ? "no input for \(Int(secondsSinceInput))s" : nil
-        ))
+        await journalEvent(JournalEvent(timestamp: clock.date, kind: nowIdle ? .idleStart : .idleEnd, detail: detail))
     }
 
     private func computeMode() -> SensingMode {
@@ -335,12 +386,7 @@ public actor SensingPipeline {
             cadence.lastError = "capture: could not hash frame"
             return
         }
-        let verdict = FrameKeepPolicy.decide(
-            distance: lastKept.map { $0.hash.distance(to: hash) },
-            threshold: settings.hashDistanceThreshold,
-            windowChanged: lastKept.map { $0.windowSignature != focus.windowSignature } ?? true,
-            textChanged: lastKept.map { $0.textSignature != focus.textSignature } ?? true
-        )
+        let verdict = keepVerdict(hash: hash, focus: focus)
         guard verdict.keep else {
             cadence.droppedCount += 1
             cadence.lastDropDistance = verdict.distance
@@ -356,6 +402,25 @@ public actor SensingPipeline {
         // Checked again here: OCR can take hundreds of milliseconds, and this is
         // the last point before the frame and its text become durable.
         guard lastFocus?.isExcluded != true, await frontmostIsStill(focus) else { return }
+        await journalCapture(frame, hash: hash, blocks: blocks, focus: focus, reason: reason, at: startedAt)
+    }
+
+    /// Whether a frame with `hash` of `focus` is kept, against the frame kept last.
+    private func keepVerdict(hash: PerceptualHash, focus: FocusContext) -> FrameKeepPolicy.Verdict {
+        FrameKeepPolicy.decide(
+            distance: lastKept.map { $0.hash.distance(to: hash) },
+            threshold: settings.hashDistanceThreshold,
+            windowChanged: lastKept.map { $0.windowSignature != focus.windowSignature } ?? true,
+            textChanged: lastKept.map { $0.textSignature != focus.textSignature } ?? true
+        )
+    }
+
+    /// Journals a kept frame and the text read from it, and publishes it.
+    @discardableResult
+    private func journalCapture(
+        _ frame: CapturedFrame, hash: PerceptualHash, blocks: [TextBlock], focus: FocusContext, reason: CaptureReason,
+        at startedAt: Date
+    ) async -> ActivityObservation {
         let jpeg = FrameImaging.jpegData(from: frame.image, quality: settings.thumbnailJPEGQuality)
         let info = FrameInfo(
             hash: hash,
@@ -376,6 +441,7 @@ public actor SensingPipeline {
         cadence.lastCaptureAt = startedAt
         cadence.lastCaptureReason = reason
         await broadcaster.send(.observation(observation))
+        return observation
     }
 
     private func frontmostIsStill(_ focus: FocusContext) async -> Bool {

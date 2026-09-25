@@ -71,9 +71,10 @@ let package = Package(
         // server and athina-drive's client.
         .target(name: "AthinaControlProtocol"),
         // The server itself, linked into the app only under the ControlAPI trait.
+        // AthinaE2E for the harness's named journal queries, which it answers.
         .target(
             name: "AthinaControl",
-            dependencies: ["AthinaCore", "AthinaControlProtocol"],
+            dependencies: ["AthinaCore", "AthinaControlProtocol", "AthinaE2E"],
             linkerSettings: [.linkedFramework("ApplicationServices")]
         ),
         .target(name: "AthinaE2E"),

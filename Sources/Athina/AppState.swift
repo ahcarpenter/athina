@@ -177,6 +177,9 @@ final class AppState {
     /// Why the control API could not start listening although it was allowed,
     /// set once at launch.
     var controlFailure: String?
+    /// The events handled so far, for the control API's `wait-event`; kept
+    /// only while it is served.
+    @ObservationIgnored private(set) var controlEvents = ControlEventLog()
 
     private let store: SettingsStore
     private let keyStore: any KeyStore
@@ -526,6 +529,25 @@ final class AppState {
     /// which opens no microphone; false when it is not listening.
     func hear(_ words: String) -> Bool {
         listener.hear(words)
+    }
+
+    /// What a hermetic run's sensing is shown next, in place of the screen
+    /// (the control API's `observe`).
+    func observe(_ scripted: ScriptedObservation) async -> ScriptedOutcome {
+        guard let pipeline else { return .notKept("sensing has not started: \(journalError ?? "the journal is not open yet")") }
+        return await pipeline.observe(scripted)
+    }
+
+    /// Input going idle, or coming back, in a hermetic run; false when the
+    /// run senses the real Mac or sensing has not started.
+    func setScriptedIdle(_ idle: Bool) async -> Bool {
+        await pipeline?.setScriptedIdle(idle) ?? false
+    }
+
+    /// The rows of a query that changes nothing, from this launch's journal.
+    func journalRows(_ sql: String) async throws -> [[String]] {
+        guard let journal else { throw JournalUnavailable(reason: journalError ?? "the journal is not open yet") }
+        return try await journal.readOnlyRows(sql)
     }
 
     func togglePause() {
@@ -910,6 +932,12 @@ final class AppState {
         guard let region = suggestion.region else { return }
         guard settings.mentor.showCallouts else {
             lastCallout = CalloutRecord(at: clock.date, suggestionID: suggestion.id, region: region, status: .notShown, reason: "callouts are off in Settings")
+            return
+        }
+        // A hermetic run's windows are scripted (`ScriptedObservation`), so
+        // there is no real window on screen for a callout to point at.
+        guard !controlMode.isHermetic else {
+            lastCallout = CalloutRecord(at: clock.date, suggestionID: suggestion.id, region: region, status: .notShown, reason: "a hermetic run draws no callout")
             return
         }
         calloutTask = Task { [weak self] in
@@ -1435,6 +1463,16 @@ final class AppState {
         return true
     }
 
+    /// Why `advanceClock(by:)` would change nothing, or nil when it would move
+    /// the clock.
+    func advanceRefusal(by seconds: TimeInterval) -> String? {
+        guard clockControl != nil else { return "this launch has no replay clock" }
+        guard ClockMode.accepts(advance: seconds) else {
+            return "the clock moves ahead by more than nothing and up to \(ClockInterval.description(of: ClockMode.maxAdvance))"
+        }
+        return nil
+    }
+
     /// Moves a replay's clock ahead for another process (`ClockRemote`), and
     /// answers the request where it asked, so the script that made it knows it
     /// was heard rather than assuming so. A request that cannot be answered
@@ -1615,6 +1653,7 @@ final class AppState {
             noteCadence(status)
             if status != cadence { cadence = status }
         }
+        if case .on = controlMode { controlEvents.append(event) }
     }
 
     private func handle(_ event: MentorEvent) {
@@ -1644,6 +1683,7 @@ final class AppState {
         case .event(let journalEvent):
             timeline.insert(.event(journalEvent))
         }
+        if case .on = controlMode { controlEvents.append(event) }
     }
 
     private func loadInitialTimeline(from journal: Journal) async {
@@ -1662,4 +1702,10 @@ final class AppState {
             try? store.save(settings)
         }
     }
+}
+
+/// The journal could not be read, since it never opened.
+struct JournalUnavailable: Error, CustomStringConvertible {
+    let reason: String
+    var description: String { reason }
 }

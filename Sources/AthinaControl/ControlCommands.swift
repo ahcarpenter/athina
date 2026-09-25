@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import AthinaControlProtocol
 import AthinaCore
 
@@ -16,15 +17,15 @@ import AthinaCore
 /// polling does, never the replay's clock (README "A faster clock").
 @MainActor
 final class ControlCommands {
-    private let host: ControlHost
+    let host: ControlHost
 
     init(host: ControlHost) {
         self.host = host
     }
 
     static let commands = [
-        "ping", "windows", "find", "click", "type", "scroll", "menu", "settings", "wait-setting", "wait-window", "snapshot",
-        "outside-click", "hotkey",
+        "ping", "windows", "find", "click", "press", "type", "scroll", "menu", "settings", "wait-setting", "wait-window", "snapshot",
+        "outside-click", "hotkey", "observe", "wait-event", "journal", "advance", "open-link",
     ]
 
     /// Answers a request; a parameter of the wrong type is answered with an
@@ -36,6 +37,7 @@ final class ControlCommands {
             case "windows": return windows()
             case "find": return try find(request)
             case "click": return try await click(request)
+            case "press": return try await press(request)
             case "type": return try type(request)
             case "scroll": return try scroll(request)
             case "menu": return try await menu(request)
@@ -45,6 +47,11 @@ final class ControlCommands {
             case "snapshot": return try await snapshot(request)
             case "outside-click": return try await outsideClick(request)
             case "hotkey": return try await hotKey(request)
+            case "observe": return try await observe(request)
+            case "wait-event": return try await waitEvent(request)
+            case "journal": return try await journal(request)
+            case "advance": return try advance(request)
+            case "open-link": return try await openLink(request)
             default: return .error("no command \"\(request.command)\"; the commands are \(Self.commands.joined(separator: ", "))")
             }
         } catch {
@@ -88,14 +95,14 @@ final class ControlCommands {
         return .ok(["elements": .array(nodes.map { $0.summary })])
     }
 
-    private enum Lookup {
+    enum Lookup {
         case found(AppAccessibility.Node)
         case answer(ControlReply)
     }
 
     /// The first control, in tree order, a request names, or the answer
     /// saying why there is none.
-    private func control(_ request: ControlRequest) throws -> Lookup {
+    func control(_ request: ControlRequest) throws -> Lookup {
         let query = try AppAccessibility.Query(request)
         guard query.namesAControl else {
             return .answer(.error("\(request.command) needs identifier=, role=, subrole=, or label= naming a control"))
@@ -144,6 +151,27 @@ final class ControlCommands {
         return .ok(details.merging(["dispatched": .bool(dispatched)]) { _, new in new })
     }
 
+    /// An accessibility press on the first control a request names, as
+    /// VoiceOver or Full Keyboard Access presses it: the control's own action,
+    /// with no pointer. For a control a click the app simulates cannot drive:
+    /// AppKit does not let a destructive button act on the click that first
+    /// brings its window forward, and a hermetic run's windows never come
+    /// forward. Refused as `disabled` when the control is dimmed, and as
+    /// `unsupported` when it offers no press.
+    private func press(_ request: ControlRequest) async throws -> ControlReply {
+        let node: AppAccessibility.Node
+        switch try control(request) {
+        case .found(let found): node = found
+        case .answer(let answer): return answer
+        }
+        guard node.enabled else { return .refused("disabled", "the control is dimmed", ["target": node.summary]) }
+        let result = AXUIElementPerformAction(node.element, kAXPressAction as CFString)
+        guard result == .success else {
+            return .refused("unsupported", "the control offers no press (\(result.rawValue))", ["target": node.summary])
+        }
+        return .ok(["target": node.summary, "dispatched": .bool(await EventFlush.flush())])
+    }
+
     private func message(for refusal: ClickRule.Refusal) -> String {
         switch refusal {
         case .disabled: "the control is dimmed"
@@ -176,7 +204,8 @@ final class ControlCommands {
         guard let text = try request.string("text") else { return .error("type needs text=<what to type>") }
         // Keys go where a person's would: to the sheet up over the window.
         while let sheet = window.attachedSheet { window = sheet }
-        let codes: [Character: UInt16] = ["\r": 36, "\n": 36, "\t": 48, "\u{7f}": 51, "\u{1b}": 53]
+        // Return, Tab, Delete, Escape, and Forward Delete (AppKit's function-key character for it).
+        let codes: [Character: UInt16] = ["\r": 36, "\n": 36, "\t": 48, "\u{7f}": 51, "\u{1b}": 53, "\u{F728}": 117]
         let now = ProcessInfo.processInfo.systemUptime
         for character in text {
             let string = String(character)
@@ -324,7 +353,7 @@ final class ControlCommands {
 
     /// Checks `condition` every 20 ms until it holds or `timeout` seconds
     /// (10 unless the request says) have passed.
-    private func poll(_ request: ControlRequest, until condition: () -> Bool) async throws -> Bool {
+    func poll(_ request: ControlRequest, until condition: () -> Bool) async throws -> Bool {
         let clock = ContinuousClock()
         let deadline = clock.now + .milliseconds(Int((try request.number("timeout") ?? 10) * 1000))
         while true {
