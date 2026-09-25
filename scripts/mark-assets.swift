@@ -352,6 +352,8 @@ func iconTuning(for size: Int) -> (fraction: Double, thicken: Double) {
 
 func drawIcon(size: Int) -> CGImage {
   let tuned = iconTuning(for: size)
+  // 8-bit sRGB with premultiplied alpha is a format bitmap contexts support,
+  // and every size drawn is positive, so neither this nor the sRGB space fails.
   let context = CGContext(
     data: nil,
     width: size,
@@ -388,6 +390,7 @@ func drawIcon(size: Int) -> CGImage {
       context.strokePath()
     }
   }
+  // A bitmap context always has an image to make.
   return context.makeImage()!
 }
 
@@ -411,6 +414,7 @@ func writeIcon() throws {
   ]
   for (name, pixels) in sizes {
     let rep = NSBitmapImageRep(cgImage: drawIcon(size: pixels))
+    // A bitmap made from a CGImage always encodes as PNG.
     try rep.representation(using: .png, properties: [:])!.write(
       to: iconset.appendingPathComponent("\(name).png")
     )
@@ -467,6 +471,7 @@ struct Owl {
   var bounds: CGRect
 
   static func read(_ document: SVG.Document) throws -> Owl {
+    // Copying a path, done below as each subpath closes, cannot fail.
     var subpaths: [CGPath] = []
     var current = CGMutablePath()
     for element in document.elements {
@@ -847,6 +852,7 @@ func writeReadmeIcon() throws {
       "macOS did not render the Athina icon for the bundle; nothing was written"
     )
   }
+  // A bitmap `readmeBitmap` drew always encodes as PNG.
   try rep.representation(using: .png, properties: [:])!
     .write(to: markDirectory.appendingPathComponent("ReadmeIcon.png"))
   print(
@@ -888,6 +894,7 @@ func readmeBitmap(of icon: NSImage) throws -> NSBitmapImageRep {
 /// The generic icon matches itself in every pixel, and the Athina icon matches
 /// it in about a third, the clear margin both share.
 func samePicture(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep) -> Bool {
+  // `readmeBitmap` makes each rep with its own buffer, so both have data.
   let pa = a.bitmapData!
   let pb = b.bitmapData!
   var matching = 0
