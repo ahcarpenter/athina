@@ -6,8 +6,8 @@ import AthinaCore
 /// Each variant is a PDF, so one file serves every display scale, and each is
 /// a template image, so macOS tints it with the menu bar's own foreground
 /// colour like every other extra rather than drawing it in a colour of its
-/// own. They are built from `Resources/Mark/AthinaOwl.svg` by
-/// `scripts/mark-assets.swift` (`make mark`).
+/// own. They are generated from `Resources/Mark/AthinaOwl.svg` outside the
+/// repository and committed as built.
 @MainActor
 enum MenuBarMarkImage {
     private static var loaded: [MenuBarMark: NSImage] = [:]

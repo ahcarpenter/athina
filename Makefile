@@ -16,7 +16,7 @@ PID ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
-.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release
+.PHONY: build run run-replay record clear-recordings fixture-status test clean measure release
 
 ## Build the .app bundle into build/Athina.app
 build:
@@ -33,13 +33,6 @@ build:
 ## fails, since that build is not one to distribute.
 release:
 	scripts/release.sh
-
-## Rebuild the app icon and the README's copy of it from Resources/Mark/AthinaMark.svg,
-## and the menu bar mark from Resources/Mark/AthinaOwl.svg. Its
-## outputs are committed, so a plain `make build` never needs this; run it after
-## changing either master or the variant set (see scripts/mark-assets.swift).
-mark:
-	swift scripts/mark-assets.swift .
 
 ## Build and launch the app, replacing only the copy this checkout's `make run`
 ## or `make record` launched before (scripts/launch.sh); every other Athina keeps
