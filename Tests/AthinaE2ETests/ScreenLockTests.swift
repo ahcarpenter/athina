@@ -299,10 +299,12 @@ import Testing
 
   @Test func inputThatComesBackDuringTheLockWaitGivesTheLockBack() throws {
     let reader = try idleReader(20)
-    let holder = try startHolder("run menubar-keyboard", seconds: 1.5)
+    let holder = try startHolder("run menubar-keyboard", seconds: 60)
+    defer { holder.terminate() }
     let (waiter, output) = try process(whenIdle(reader), checkout: "/checkouts/two")
     try waitFor("the run to queue for the lock") { says(output, "waiting for the screen lock") }
     try setIdle(0, in: reader.file)
+    holder.terminate()
     holder.waitUntilExit()
     try waitFor("the run to give the lock back") {
       says(output, "giving it back until the Mac is quiet again")
