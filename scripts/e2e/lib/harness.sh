@@ -91,7 +91,7 @@ log() {
 }
 
 die() {
-	log "ERROR: $*"
+	if [ -n "$STEP" ]; then log "ERROR: step $STEP: $*"; else log "ERROR: $*"; fi
 	exit 1
 }
 
