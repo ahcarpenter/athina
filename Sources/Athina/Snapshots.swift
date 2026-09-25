@@ -109,7 +109,10 @@ enum Snapshots {
     private static func render(_ view: some View, size: CGSize, appearance: NSAppearance.Name, to url: URL) async throws {
         var previous: Bitmap?
         for _ in 0..<5 {
-            let bitmap = try await renderInWindow(view, size: size, appearance: appearance)
+            guard let bitmap = try await renderInWindow(view, size: size, appearance: appearance) else {
+                previous = nil
+                continue
+            }
             if let previous, samePicture(previous, bitmap) {
                 try bitmap.writePNG(to: url)
                 return
@@ -123,7 +126,8 @@ enum Snapshots {
         a.size == b.size && PixelDiff.compare(a, b, tolerance: SnapshotComparison.defaultTolerance).matches
     }
 
-    private static func renderInWindow(_ view: some View, size: CGSize, appearance: NSAppearance.Name) async throws -> Bitmap {
+    /// The view's settled picture in a new window, or nil when it never settled there.
+    private static func renderInWindow(_ view: some View, size: CGSize, appearance: NSAppearance.Name) async throws -> Bitmap? {
         // No SwiftUI animation runs and nothing pulses, so a view shows its
         // final state at once and the same state on every run.
         let still = view
@@ -150,11 +154,12 @@ enum Snapshots {
         // never whatever happens to be behind the window. Dark mode's wallpaper
         // tinting still reads the desktop picture, which the CI runner never
         // changes; on another Mac it tints the dark forms a little, one reason
-        // a comparison there is only advisory.
+        // baselines come only from the runner.
         window.isOpaque = true
         window.backgroundColor = .windowBackgroundColor
         window.contentView = hosting
         window.isReleasedWhenClosed = false
+        defer { window.close() }
         window.orderFrontRegardless()
         hosting.frame = CGRect(origin: .zero, size: size)
         hosting.layoutSubtreeIfNeeded()
@@ -166,17 +171,15 @@ enum Snapshots {
         // resting state on every run rather than wherever it was at capture.
         hosting.layer?.speed = 0
         hosting.layer?.timeOffset = 0
-        let image = try await settledCapture(window: window, hosting: hosting)
-        window.close()
-        return image
+        return try await settledCapture(window: window, hosting: hosting)
     }
 
     /// Captures until two captures in a row are the same picture, so a view
     /// that was still settling (a late layout pass, an image that loads on its
-    /// own) is never what gets kept. A `Bitmap` is in sRGB, so what is kept
-    /// does not depend on the colour profile of the display it was captured
-    /// on, and every viewer shows the file the same way.
-    private static func settledCapture(window: NSWindow, hosting: NSView) async throws -> Bitmap {
+    /// own) is never what gets kept; nil when no two ever are. A `Bitmap` is in
+    /// sRGB, so what is kept does not depend on the colour profile of the
+    /// display it was captured on, and every viewer shows the file the same way.
+    private static func settledCapture(window: NSWindow, hosting: NSView) async throws -> Bitmap? {
         var previous: Bitmap?
         for _ in 0..<8 {
             hosting.layoutSubtreeIfNeeded()
@@ -186,7 +189,7 @@ enum Snapshots {
             previous = bitmap
             try await Task.sleep(for: .milliseconds(150))
         }
-        throw SnapshotError.neverSettled(nil)
+        return nil
     }
 
     /// ScreenCaptureKit gives the truest picture, but its stream occasionally
@@ -251,9 +254,10 @@ enum Snapshots {
 
     enum SnapshotError: Error {
         case noBitmap
-        /// No two captures, or no two windows, in a row matched: something in
-        /// the view keeps moving, or it lays out differently every time.
-        case neverSettled(String?)
+        /// No two windows in a row gave the same settled picture of the named
+        /// file: something in the view keeps moving, or it lays out
+        /// differently every time.
+        case neverSettled(String)
     }
 }
 

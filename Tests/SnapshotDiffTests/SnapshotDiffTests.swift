@@ -163,30 +163,6 @@ import Testing
         #expect(markdown.contains("| `removed-light` | no longer rendered, baseline still committed |"))
     }
 
-    @Test func downsamplingAveragesEachSquare() {
-        var retina = Bitmap(width: 4, height: 2, fill: (0, 0, 0, 255))
-        retina[0, 0] = (255, 255, 255, 255)
-        retina[1, 1] = (255, 255, 255, 255)
-        let small = retina.downsampled(by: 2)
-        #expect(small.size == PixelSize(width: 2, height: 1))
-        #expect(small[0, 0] == (128, 128, 128, 255))
-        #expect(small[1, 0] == (0, 0, 0, 255))
-        #expect(retina.scaleFactor(over: PixelSize(width: 2, height: 1)) == 2)
-        #expect(retina.scaleFactor(over: PixelSize(width: 3, height: 1)) == nil)
-        #expect(retina.scaleFactor(over: PixelSize(width: 2, height: 2)) == nil)
-    }
-
-    @Test func aRetinaRenderComparesWithItsBaselineOnlyWhenAskedTo() throws {
-        let retina = Bitmap(width: 6, height: 4, fill: (128, 128, 128, 255))
-        let baseline = try directory("baseline", ["toast-light.png": Self.grey])
-        let actual = try directory("actual", ["toast-light.png": retina])
-        #expect(try SnapshotComparison.compare(baseline: baseline, actual: actual).drift.first?.status
-            == .resized(from: PixelSize(width: 3, height: 2), to: PixelSize(width: 6, height: 4)))
-        let scaled = try SnapshotComparison.compare(baseline: baseline, actual: actual, matchingScale: true)
-        #expect(scaled.matches)
-        #expect(scaled.matchesScale)
-    }
-
     @Test func aMatchingSetSaysSo() throws {
         let baseline = try directory("baseline", ["toast-dark.png": Self.grey])
         let comparison = try SnapshotComparison.compare(baseline: baseline, actual: baseline)

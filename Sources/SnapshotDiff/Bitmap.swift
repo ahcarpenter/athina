@@ -47,36 +47,6 @@ public struct Bitmap: Equatable, Sendable {
         }
     }
 
-    /// The bitmap `factor` times smaller each way, each pixel the average of
-    /// the square it replaces, as a Retina render looks at 1x.
-    public func downsampled(by factor: Int) -> Bitmap {
-        precondition(factor >= 1 && width % factor == 0 && height % factor == 0, "only a whole multiple downsamples")
-        guard factor > 1 else { return self }
-        let outWidth = width / factor, outHeight = height / factor, area = factor * factor
-        var out = [UInt8](repeating: 0, count: outWidth * outHeight * 4)
-        for y in 0..<outHeight {
-            for x in 0..<outWidth {
-                for channel in 0..<4 {
-                    var sum = 0
-                    for dy in 0..<factor {
-                        let row = ((y * factor + dy) * width + x * factor) * 4 + channel
-                        for dx in 0..<factor { sum += Int(pixels[row + dx * 4]) }
-                    }
-                    out[(y * outWidth + x) * 4 + channel] = UInt8((sum + area / 2) / area)
-                }
-            }
-        }
-        return Bitmap(width: outWidth, height: outHeight, pixels: out)
-    }
-
-    /// The whole factor this bitmap is larger than `size` by, the same each
-    /// way, or nil when it is not a whole multiple.
-    public func scaleFactor(over size: PixelSize) -> Int? {
-        guard size.width > 0, size.height > 0, width % size.width == 0, height % size.height == 0 else { return nil }
-        let factor = width / size.width
-        return factor >= 1 && height / size.height == factor ? factor : nil
-    }
-
     private static let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
     private static let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
 

@@ -52,7 +52,6 @@ make record           # the same, live, writing every model call to a fixture fi
 make clear-recordings # deletes the app's own recordings directory
 make fixture-status   # checks that the committed fixtures are current (fails when not), with no network
 make test             # runs the unit tests (swift test), the loop included, with no network
-make snapshots        # renders every UI snapshot here and compares it with the approved baselines (advisory; CI gates)
 make snapshots-approve # makes the baselines match the renders CI made of HEAD, after an intended UI change
 make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 make release          # builds, signs, notarizes, and packages a direct-download release into build/release (see Releasing)
@@ -1803,17 +1802,21 @@ where it was made:
 
 **Approving an intended change.** Push the change and let CI fail on the
 drift, look at the report, then run `make snapshots-approve` (or
-`scripts/snapshots.sh approve`), which downloads the renders CI made of HEAD
-and makes `Tests/Snapshots` match them: a changed or new snapshot's render
-replaces its baseline, a removed snapshot's baseline is deleted, and every
-other file is left alone. `RUN=<id>` names another CI run of HEAD. Commit the
-images with the change that caused them; the pull request then shows each one
-before and after, and CI passes. Baselines never come from a developer's Mac:
-a Mac on another macOS, at another display scale, renders differently. `make
-snapshots` renders on this Mac and runs the same comparison as an advisory
-check, writing the report to `build/snapshots/report/index.html`; a Retina
-render is scaled down to the runner's 1x first, and text edges and glass still
-differ everywhere, so read it for layout and content, not as a verdict.
+`scripts/snapshots.sh approve`), which downloads the renders from HEAD's
+newest CI run and makes `Tests/Snapshots` match them: a changed or new
+snapshot's render replaces its baseline, a removed snapshot's baseline is
+deleted, and every other file is left alone. `RUN=<id>` names another CI run.
+A run publishes its renders only once both renders finished and agree, so a
+run that failed, timed out or was cancelled before then has nothing to
+approve, and the renders name the source tree they were made from, which
+approve refuses unless it is HEAD's own. A pull request's run renders the
+branch merged with main, so once main has moved on since the branch, merge or
+rebase onto main and push before approving. Commit the images with the change
+that caused them; the pull request then shows each one before and after, and
+CI passes. Baselines never come from a developer's Mac, and there is no local
+comparison: a Mac on another macOS, at another display scale, renders text
+edges and glass differently everywhere, so only the runner's renders are
+compared or approved.
 
 **A runner change is a deliberate refresh.** The baselines depend on the
 runner's macOS image and the newest Xcode on it, which `ci.yml` selects. When
