@@ -1,4 +1,6 @@
 import AthinaCore
+import CoreGraphics
+import Foundation
 import SwiftUI
 
 /// The debug panel's view of the standing understanding: what Athina currently

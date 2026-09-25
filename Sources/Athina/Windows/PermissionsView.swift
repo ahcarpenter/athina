@@ -1,5 +1,6 @@
 import AppKit
 import AthinaCore
+import Foundation
 import SwiftUI
 
 /// The first-run and permissions window.

@@ -1,4 +1,5 @@
 import AthinaCore
+import CoreGraphics
 import Foundation
 import SwiftUI
 

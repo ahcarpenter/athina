@@ -1,5 +1,6 @@
 import AppKit
 import AthinaCore
+import CoreGraphics
 import SwiftUI
 
 /// Owns the callout overlay: a transparent, click-through, non-activating panel

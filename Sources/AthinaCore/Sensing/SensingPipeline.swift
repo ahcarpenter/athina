@@ -1,4 +1,3 @@
-import CoreGraphics
 import Foundation
 
 /// Orchestrates focus tracking, input polling, screen capture, frame diffing,
