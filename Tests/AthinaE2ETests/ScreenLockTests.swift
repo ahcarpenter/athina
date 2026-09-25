@@ -178,11 +178,8 @@ import Testing
     let waiting = try #require(
       waiter.output.split(separator: "\n").first { $0.contains("waiting for the screen lock") }
     )
-    #expect(
-      waiting.contains(
-        "held by /checkouts/one running \"run menubar-keyboard\" (pid \(holder.processIdentifier)) since "
-      )
-    )
+    let holderLine = "held by /checkouts/one running \"run menubar-keyboard\" "
+    #expect(waiting.contains(holderLine + "(pid \(holder.processIdentifier)) since "))
     #expect(waiter.output.split(separator: "\n").filter { $0.contains("waiting") }.count == 1)
     #expect(waiter.output.contains("took the screen lock after "))
   }
@@ -293,7 +290,8 @@ import Testing
     let finished = try run(
       """
       lock_acquire CHECKOUT_LOCK 'run all' || exit 1
-      /bin/bash -c "source '\(Self.library)'; lock_acquire CHECKOUT_LOCK 'run menubar-mark' 2 && echo nested-acquired"
+      /bin/bash -c "source '\(Self.library)'; lock_acquire CHECKOUT_LOCK 'run menubar-mark' 2 \
+      && echo nested-acquired"
       """,
       checkout: one
     )
@@ -416,7 +414,10 @@ import Testing
     let waiter = try run("lock_acquire SCREEN_LOCK 'run all' 1")
     #expect(waiter.status == 75)
     let named =
-      "held outside the harness (pid \(hand.processIdentifier): /usr/bin/lockf -k \(lock) /bin/sh -c touch"
+      """
+      held outside the harness (pid \(hand.processIdentifier): /usr/bin/lockf -k \(lock) \
+      /bin/sh -c touch
+      """
     #expect(waiter.output.contains(named))
     #expect(!waiter.output.contains("pid \(queued.processIdentifier)"))
     #expect(!waiter.output.contains("run gone"))
@@ -428,7 +429,10 @@ import Testing
     let hand = Process()
     hand.executableURL = URL(fileURLWithPath: "/usr/bin/lockf")
     let script =
-      "source '\(Self.library)'; lock_acquire SCREEN_LOCK 'run all' 2 && echo acquired && cat \"$SCREEN_LOCK_HOLDER\""
+      """
+      source '\(Self.library)'; lock_acquire SCREEN_LOCK 'run all' 2 && echo acquired && cat \
+      \"$SCREEN_LOCK_HOLDER\"
+      """
     hand.arguments = ["-k", lock, "/bin/bash", "-c", script]
     var environment = ProcessInfo.processInfo.environment
     environment["ATHINA_E2E_SCREEN_LOCK"] = lock
@@ -454,7 +458,8 @@ import Testing
     let finished = try run(
       """
       lock_acquire SCREEN_LOCK 'run all' || exit 1
-      /bin/bash -c "source '\(Self.library)'; lock_acquire SCREEN_LOCK 'run menubar-mark' 2 && echo nested-acquired"
+      /bin/bash -c "source '\(Self.library)'; lock_acquire SCREEN_LOCK 'run menubar-mark' 2 && \
+      echo nested-acquired"
       """
     )
     #expect(finished.status == 0)

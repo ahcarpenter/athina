@@ -27,7 +27,11 @@ struct PermissionsView: View {
             .font(.title2.weight(.semibold))
             .accessibilityAddTraits(.isHeader)
           Text(
-            "Athina watches what you are doing so it can understand your work. What it senses stays on this Mac, in a journal you control. It connects only to api.anthropic.com, and only after you save an API key."
+            """
+            Athina watches what you are doing so it can understand your work. What it senses \
+            stays on this Mac, in a journal you control. It connects only to \
+            api.anthropic.com, and only after you save an API key.
+            """
           )
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
@@ -48,7 +52,10 @@ struct PermissionsView: View {
           Text("Optional, for talking back")
             .accessibilityAddTraits(.isHeader)
           Text(
-            "Hold the talk-back shortcut, set in General settings, to answer or ask about a suggestion by voice. Everything else works without these."
+            """
+            Hold the talk-back shortcut, set in General settings, to answer or ask about a \
+            suggestion by voice. Everything else works without these.
+            """
           )
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
@@ -56,7 +63,10 @@ struct PermissionsView: View {
       }
 
       Text(
-        "Idle detection needs no permission. If a permission you turned on in System Settings still shows as not granted after a few seconds, quit and reopen Athina."
+        """
+        Idle detection needs no permission. If a permission you turned on in System Settings \
+        still shows as not granted after a few seconds, quit and reopen Athina.
+        """
       )
       .font(.callout)
       .foregroundStyle(.secondary)
@@ -75,7 +85,11 @@ struct PermissionsView: View {
     .task {
       guard !Snapshots.isActive else { return }
       AppState.log.notice(
-        "permissions window opened, granted: screen \(state.permissions.screenRecording) accessibility \(state.permissions.accessibility) microphone \(state.permissions.microphone) speech \(state.permissions.speechRecognition)"
+        """
+        permissions window opened, granted: screen \(state.permissions.screenRecording) \
+        accessibility \(state.permissions.accessibility) microphone \
+        \(state.permissions.microphone) speech \(state.permissions.speechRecognition)
+        """
       )
       // Grants made in System Settings do not notify apps; poll while visible.
       while !Task.isCancelled {

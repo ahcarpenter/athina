@@ -113,7 +113,10 @@ enum Accessibility {
       case "press", "pressx":
         let status = AXUIElementPerformAction(element, kAXPressAction as CFString)
         say(
-          "press \(role(element)) \"\(title(element))\" desc=\"\(describe(element))\" -> \(status.rawValue)"
+          """
+          press \(role(element)) \"\(title(element))\" desc=\"\(describe(element))\" -> \
+          \(status.rawValue)
+          """
         )
         if status != .success { exit(2) }
       case "focus":
@@ -139,7 +142,10 @@ enum Accessibility {
         let status = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, payload)
         if status != .success {
           fail(
-            "ax set: \(role(element)) refused \"\(newValue)\" -> \(status.rawValue), value still \"\(value(element).prefix(200))\"",
+            """
+            ax set: \(role(element)) refused \"\(newValue)\" -> \(status.rawValue), value \
+            still \"\(value(element).prefix(200))\"
+            """,
             code: 2
           )
         }
@@ -150,7 +156,10 @@ enum Accessibility {
 
     default:
       fail(
-        "ax: unknown command \"\(command)\"\n\n\(DriveArguments.usage(for: DriveArguments.command(named: "ax")))",
+        """
+        ax: unknown command \
+        \"\(command)\"\n\n\(DriveArguments.usage(for: DriveArguments.command(named: "ax")))
+        """,
         code: 64
       )
     }

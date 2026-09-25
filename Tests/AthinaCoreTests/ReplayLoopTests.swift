@@ -137,7 +137,11 @@ struct ReplayLoopTests {
     ),
     fixture(
       "mentor",
-      #"{"reason": "Manual renames", "suggestion": {"title": "Rename them in one go", "body": "Finder renames a selection at once.", "explanation": "Select the files, then File > Rename.", "category": "tool", "confidence": 0.9}}"#,
+      #"""
+      {"reason": "Manual renames", "suggestion": {"title": "Rename them in one go", "body": \#
+      "Finder renames a selection at once.", "explanation": "Select the files, then File > \#
+      Rename.", "category": "tool", "confidence": 0.9}}
+      """#,
       model: "claude-sonnet-5"
     ),
   ]
@@ -261,13 +265,18 @@ struct ReplayLoopTests {
       """
       CREATE TABLE model_calls (
           id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, tier TEXT NOT NULL, model TEXT NOT NULL,
-          prompt_version INTEGER NOT NULL, prompt_chars INTEGER NOT NULL, image_bytes INTEGER NOT NULL,
-          input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cache_write_tokens INTEGER NOT NULL,
-          cache_read_tokens INTEGER NOT NULL, cost REAL NOT NULL, latency REAL NOT NULL, outcome TEXT NOT NULL, detail TEXT
+          prompt_version INTEGER NOT NULL, prompt_chars INTEGER NOT NULL, image_bytes INTEGER \
+      NOT NULL,
+          input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, cache_write_tokens \
+      INTEGER NOT NULL,
+          cache_read_tokens INTEGER NOT NULL, cost REAL NOT NULL, latency REAL NOT NULL, \
+      outcome TEXT NOT NULL, detail TEXT
       );
-      INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars, image_bytes, input_tokens,
+      INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars, \
+      image_bytes, input_tokens,
           output_tokens, cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail)
-      VALUES (1789000000, 'triage', 'claude-haiku-4-5-20251001', 4, 10, 0, 1, 1, 0, 0, 0.01, 1, 'quiet', 'old');
+      VALUES (1789000000, 'triage', 'claude-haiku-4-5-20251001', 4, 10, 0, 1, 1, 0, 0, 0.01, \
+      1, 'quiet', 'old');
       """
     )
     let journal = try Journal(url: url)
@@ -468,7 +477,10 @@ struct ReplayLoopTests {
     current: Int = MentorPrompts.version
   ) -> Bool {
     let stale = loaded.filter { $0.fixture.identity.promptVersion != current }.map { entry in
-      "\(entry.name) is stale: recorded with prompt version \(entry.fixture.identity.promptVersion), the current prompt version is \(current)"
+      """
+      \(entry.name) is stale: recorded with prompt version \
+      \(entry.fixture.identity.promptVersion), the current prompt version is \(current)
+      """
     }
     let kinds = Set(loaded.map(\.fixture.identity.kind))
     let uncovered = ModelTier.allCases.map(\.rawValue).filter { !kinds.contains($0) }.map {
@@ -478,7 +490,10 @@ struct ReplayLoopTests {
     guard !findings.isEmpty else { return true }
     let report =
       [
-        "The committed fixtures are not current. Re-record them live with make record in this same change, as README.md, The committed fixtures, describes:"
+        """
+        The committed fixtures are not current. Re-record them live with make record in this \
+        same change, as README.md, The committed fixtures, describes:
+        """
       ] + findings.map { "- \($0)" }
     Issue.record(Comment(rawValue: report.joined(separator: "\n")))
     return false
@@ -493,7 +508,11 @@ struct ReplayLoopTests {
     let loaded = try CallFixtureFiles.load(from: try Self.committedFixturesDirectory())
     if Self.expectCurrent(loaded) {
       print(
-        "The committed fixtures are current: \(Plural.count(loaded.count, "fixture", "fixtures")) recorded with prompt version \(MentorPrompts.version), and every tier has one."
+        """
+        The committed fixtures are current: \
+        \(Plural.count(loaded.count, "fixture", "fixtures")) recorded with prompt version \
+        \(MentorPrompts.version), and every tier has one.
+        """
       )
     }
   }
@@ -530,7 +549,10 @@ struct ReplayLoopTests {
     } matching: { issue in
       let text = issue.comments.map(\.rawValue).joined(separator: "\n")
       return text.contains(
-        "- \(staleName) is stale: recorded with prompt version \(MentorPrompts.version - 1), the current prompt version is \(MentorPrompts.version)"
+        """
+        - \(staleName) is stale: recorded with prompt version \(MentorPrompts.version - 1), \
+        the current prompt version is \(MentorPrompts.version)
+        """
       )
         && text.contains("- tier \(ModelTier.test.rawValue) has no fixture")
         && !text.contains("tier \(ModelTier.mentor.rawValue) has no fixture")

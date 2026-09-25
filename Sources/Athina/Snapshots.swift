@@ -1079,7 +1079,10 @@ struct StatusMessagesPreview: View {
           )
         }
         StatusLabel(
-          "Another app uses this combination, or it lacks Control, Option, or Command. Choose another.",
+          """
+          Another app uses this combination, or it lacks Control, Option, or Command. Choose \
+          another.
+          """,
           kind: .warning
         )
       }
@@ -1241,7 +1244,10 @@ enum SampleSuggestions {
     MentorshipContext(
       name: "writing Swift",
       detail:
-        "Building the Athina app itself: Swift, SwiftUI, and the tests and build commands around them."
+        """
+        Building the Athina app itself: Swift, SwiftUI, and the tests and build commands \
+        around them.
+        """
     ),
     MentorshipContext(
       name: "reading API documentation",
@@ -1265,7 +1271,10 @@ enum SampleSuggestions {
           Understanding.Goal(
             goal: "Get Athina's capture path fast enough to leave running all day",
             evidence:
-              "Two hours in SensingPipeline.swift and CaptureScheduler.swift, repeated make measure runs, and a comment about the 250 ms AX timeout.",
+              """
+              Two hours in SensingPipeline.swift and CaptureScheduler.swift, repeated make \
+              measure runs, and a comment about the 250 ms AX timeout.
+              """,
             confidence: 0.84
           ),
           Understanding.Goal(
@@ -1305,9 +1314,22 @@ enum SampleSuggestions {
         category: .unwantedSideEffect,
         title: "tccutil reset will drop both grants, not just the stale one",
         body:
-          "Resetting ScreenCapture clears the grant for every build of this bundle id, so the app will ask again from scratch and the running copy stops capturing until you re-grant.",
+          """
+          Resetting ScreenCapture clears the grant for every build of this bundle id, so the \
+          app will ask again from scratch and the running copy stops capturing until you \
+          re-grant.
+          """,
         explanation:
-          "tccutil reset ScreenCapture com.ahcarpenter.athina removes the TCC record for that service and bundle identifier outright. That does fix a grant bound to an old code requirement, which is what you are after, but it also means the currently running Athina loses Screen Recording immediately and falls back to accessibility-only mode until you approve it again in System Settings.\n\nIf the goal is only to re-bind the requirement, quit Athina first, run the reset, then launch the freshly signed build so the new grant is made against the bundle-identifier requirement that scripts/bundle.sh writes.",
+          """
+          tccutil reset ScreenCapture com.ahcarpenter.athina removes the TCC record for that \
+          service and bundle identifier outright. That does fix a grant bound to an old code \
+          requirement, which is what you are after, but it also means the currently running \
+          Athina loses Screen Recording immediately and falls back to accessibility-only \
+          mode until you approve it again in System Settings.\n\nIf the goal is only to \
+          re-bind the requirement, quit Athina first, run the reset, then launch the freshly \
+          signed build so the new grant is made against the bundle-identifier requirement \
+          that scripts/bundle.sh writes.
+          """,
         confidence: 0.78,
         judgedGoal: "Get Athina's capture path fast enough to leave running all day",
         observationID: 128,
@@ -1323,9 +1345,22 @@ enum SampleSuggestions {
         category: .approach,
         title: "Read focus once per capture, not per step",
         body:
-          "performCapture reads the AX context, then re-checks the frontmost app twice more. One read up front plus a pid compare is cheaper and avoids the 250 ms AX timeout on hung apps.",
+          """
+          performCapture reads the AX context, then re-checks the frontmost app twice more. \
+          One read up front plus a pid compare is cheaper and avoids the 250 ms AX timeout \
+          on hung apps.
+          """,
         explanation:
-          "Each AXUIElementCopyAttributeValue call can block up to the messaging timeout you set (250 ms) when the target app is busy, and performCapture currently does that work three times: once in readCurrent() and twice in frontmostIsStill().\n\nNSWorkspace.shared.frontmostApplication is a cheap, non-blocking read, so keep the two late checks but compare only the pid, and drop the bundle-id lookup from the second check since the pid already proves it is the same process.\n\nIf you want to keep the exclusion re-check, look the bundle id up from the pid once and cache it for the duration of the capture.",
+          """
+          Each AXUIElementCopyAttributeValue call can block up to the messaging timeout you \
+          set (250 ms) when the target app is busy, and performCapture currently does that \
+          work three times: once in readCurrent() and twice in \
+          frontmostIsStill().\n\nNSWorkspace.shared.frontmostApplication is a cheap, \
+          non-blocking read, so keep the two late checks but compare only the pid, and drop \
+          the bundle-id lookup from the second check since the pid already proves it is the \
+          same process.\n\nIf you want to keep the exclusion re-check, look the bundle id up \
+          from the pid once and cache it for the duration of the capture.
+          """,
         confidence: 0.82,
         observationID: 128,
         model: "claude-fable-5-1",
@@ -1340,9 +1375,18 @@ enum SampleSuggestions {
         category: .shortcut,
         title: "swift test --filter runs one suite",
         body:
-          "You have run the full test suite four times while editing CaptureSchedulerTests. swift test --filter CaptureSchedulerTests runs just that suite in a few seconds.",
+          """
+          You have run the full test suite four times while editing CaptureSchedulerTests. \
+          swift test --filter CaptureSchedulerTests runs just that suite in a few seconds.
+          """,
         explanation:
-          "SwiftPM accepts a regular expression after --filter and matches it against \"Suite.test\" names, so `swift test --filter CaptureSchedulerTests` runs every test in that suite and `swift test --filter CaptureSchedulerTests/floorFires` runs one test.\n\nWith Swift Testing you can also mark one test with `.tags` and filter on the tag. The full run is still worth doing before you commit.",
+          """
+          SwiftPM accepts a regular expression after --filter and matches it against \
+          \"Suite.test\" names, so `swift test --filter CaptureSchedulerTests` runs every \
+          test in that suite and `swift test --filter CaptureSchedulerTests/floorFires` runs \
+          one test.\n\nWith Swift Testing you can also mark one test with `.tags` and filter \
+          on the tag. The full run is still worth doing before you commit.
+          """,
         confidence: 0.9,
         observationID: 104,
         model: "claude-fable-5-1",
@@ -1359,9 +1403,20 @@ enum SampleSuggestions {
         category: .tool,
         title: "SCScreenshotManager has a captureImage(in:) variant",
         body:
-          "The page you are on documents captureImage(contentFilter:configuration:), but the newer captureImage(in: CGRect) skips the filter setup when you only need a display region.",
+          """
+          The page you are on documents captureImage(contentFilter:configuration:), but the \
+          newer captureImage(in: CGRect) skips the filter setup when you only need a display \
+          region.
+          """,
         explanation:
-          "SCScreenshotManager.captureImage(in:) takes a rectangle in screen coordinates and captures whatever is on screen there, without building an SCContentFilter first. It is a good fit for a region capture, and it still respects the Screen Recording grant.\n\nThe filter-based call remains the right one when you need to exclude your own windows, which your pipeline does, so this may not apply to the main capture path.",
+          """
+          SCScreenshotManager.captureImage(in:) takes a rectangle in screen coordinates and \
+          captures whatever is on screen there, without building an SCContentFilter first. \
+          It is a good fit for a region capture, and it still respects the Screen Recording \
+          grant.\n\nThe filter-based call remains the right one when you need to exclude \
+          your own windows, which your pipeline does, so this may not apply to the main \
+          capture path.
+          """,
         confidence: 0.64,
         observationID: 71,
         model: "claude-fable-5-1",
@@ -1378,9 +1433,21 @@ enum SampleSuggestions {
         category: .correctness,
         title: "Retention deletes text before checking the size cap",
         body:
-          "applyRetention runs the age deletes and then the size sweep, so a tiny cap can delete today's text while yesterday's thumbnails survive. Consider sweeping thumbnails first in both passes.",
+          """
+          applyRetention runs the age deletes and then the size sweep, so a tiny cap can \
+          delete today's text while yesterday's thumbnails survive. Consider sweeping \
+          thumbnails first in both passes.
+          """,
         explanation:
-          "The age pass deletes thumbnails older than the thumbnail cutoff, then observations older than the text cutoff. The size pass then deletes the oldest thumbnails, then the oldest observations and events. If the size cap is small enough, the second loop can remove observations from today while thumbnails from earlier today remain, because the thumbnail loop only ran until the target was met.\n\nRunning the thumbnail sweep to exhaustion before touching observations keeps the invariant that text outlives thumbnails.",
+          """
+          The age pass deletes thumbnails older than the thumbnail cutoff, then observations \
+          older than the text cutoff. The size pass then deletes the oldest thumbnails, then \
+          the oldest observations and events. If the size cap is small enough, the second \
+          loop can remove observations from today while thumbnails from earlier today \
+          remain, because the thumbnail loop only ran until the target was met.\n\nRunning \
+          the thumbnail sweep to exhaustion before touching observations keeps the invariant \
+          that text outlives thumbnails.
+          """,
         confidence: 0.71,
         observationID: 12,
         model: "claude-opus-5",
@@ -1402,7 +1469,11 @@ enum SampleSuggestions {
           timestamp: now.addingTimeInterval(-20),
           question: "does that work with tags as well",
           answer:
-            "Yes. Tag the tests you care about with a Tag you declare once, then run swift test --filter with the tag name in the same way; the suite name filter and the tag filter both narrow the run to seconds.",
+            """
+            Yes. Tag the tests you care about with a Tag you declare once, then run swift \
+            test --filter with the tag name in the same way; the suite name filter and the \
+            tag filter both narrow the run to seconds.
+            """,
           model: "claude-fable-5-1",
           promptVersion: MentorPrompts.version
         )
@@ -1415,7 +1486,11 @@ enum SampleSuggestions {
           timestamp: now.addingTimeInterval(-1480),
           question: "which file is that in",
           answer:
-            "The four full runs were in the terminal window titled zsh - mentor; the suite you were editing is Tests/AthinaCoreTests/CaptureSchedulerTests.swift, so swift test --filter CaptureSchedulerTests is the command.",
+            """
+            The four full runs were in the terminal window titled zsh - mentor; the suite \
+            you were editing is Tests/AthinaCoreTests/CaptureSchedulerTests.swift, so swift \
+            test --filter CaptureSchedulerTests is the command.
+            """,
           model: "claude-fable-5-1",
           promptVersion: MentorPrompts.version
         ),
@@ -1455,7 +1530,10 @@ enum SampleSuggestions {
         latency: 4.1,
         outcome: .answered,
         detail:
-          "Yes. Tag the tests you care about with a Tag you declare once, then run swift test --filter with the tag name"
+          """
+          Yes. Tag the tests you care about with a Tag you declare once, then run swift test \
+          --filter with the tag name
+          """
       ),
       ModelCallRecord(
         id: 62,

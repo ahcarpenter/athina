@@ -11,7 +11,11 @@ struct InterventionLoopTests {
   private static let no = #"{"worth_a_look": false, "reason": "Reading docs"}"#
 
   private static func suggestion(region: String) -> String {
-    #"{"reason": "Saw it", "suggestion": {"title": "Use --filter", "body": "Run one suite.", "explanation": "swift test --filter Name", "category": "shortcut", "confidence": 0.9, "region": \#(region)}}"#
+    #"""
+    {"reason": "Saw it", "suggestion": {"title": "Use --filter", "body": "Run one suite.", \#
+    "explanation": "swift test --filter Name", "category": "shortcut", "confidence": 0.9, \#
+    "region": \#(region)}}
+    """#
   }
 
   private let t0 = Date(timeIntervalSince1970: 1_700_000_000)
@@ -411,7 +415,10 @@ struct InterventionLoopTests {
     await h.client.enqueue(json: Self.yes)
     await h.client.enqueue(
       json:
-        #"{"reason": "rm -rf on an empty variable", "suggestion": {"title": "", "body": " ", "explanation": "", "category": "risk", "confidence": 0.9, "region": null}}"#
+        #"""
+        {"reason": "rm -rf on an empty variable", "suggestion": {"title": "", "body": " ", \#
+        "explanation": "", "category": "risk", "confidence": 0.9, "region": null}}
+        """#
     )
     await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
     let status = await h.loop.currentStatus()
@@ -504,7 +511,10 @@ struct ReplayInterventionTests {
     }
     throw MissingFixture(
       description:
-        "a shown mentor recording must carry a region, recorded from a request that states its frame size"
+        """
+        a shown mentor recording must carry a region, recorded from a request that states \
+        its frame size
+        """
     )
   }
 

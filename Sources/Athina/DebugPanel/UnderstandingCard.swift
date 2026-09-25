@@ -56,12 +56,18 @@ struct UnderstandingCard: View {
               Field(
                 label: "Size",
                 value:
-                  "\(Formatting.tokens(record.content.estimatedTokens)) of \(Formatting.tokens(state.settings.mentor.understandingTokenBudget)) tokens"
+                  """
+                  \(Formatting.tokens(record.content.estimatedTokens)) of \
+                  \(Formatting.tokens(state.settings.mentor.understandingTokenBudget)) tokens
+                  """
               )
               Field(
                 label: "Cost",
                 value:
-                  "\(Formatting.dollars(record.cumulativeCost)) in refresh calls since \(Formatting.clockTime(record.startedAt))",
+                  """
+                  \(Formatting.dollars(record.cumulativeCost)) in refresh calls since \
+                  \(Formatting.clockTime(record.startedAt))
+                  """,
                 lineLimit: 2
               )
             }
@@ -191,7 +197,11 @@ struct UnderstandingCard: View {
     }
     let slowed = ClockInterval.description(of: set * status.cadenceMultiplier)
     return
-      "every \(slowed) of active use, slowed \(Formatting.multiplier(status.cadenceMultiplier)) from \(ClockInterval.description(of: set))"
+      """
+      every \(slowed) of active use, slowed \
+      \(Formatting.multiplier(status.cadenceMultiplier)) from \
+      \(ClockInterval.description(of: set))
+      """
   }
 
   private func nextRefresh(now: Date) -> String {
@@ -228,12 +238,14 @@ struct UnderstandingCard: View {
       return record == nil ? "none yet" : "none yet, mentor calls have kept it current"
     }
     let model = ModelCatalog.displayName(for: call.model)
-    var text =
-      "\(call.outcome.label) \(Formatting.age(call.timestamp, now: now)), \(call.replayed ? "replay of \(model)" : model), "
-    text +=
-      "\(Formatting.tokens(call.usage.totalInputTokens)) in, \(Formatting.tokens(call.usage.outputTokens)) out, "
-    text +=
-      "\(call.replayed ? Formatting.unbroken("not billed") : Formatting.dollars(call.cost)), \(Formatting.seconds(call.latency))"
+    var text = """
+      \(call.outcome.label) \(Formatting.age(call.timestamp, now: now)), \
+      \(call.replayed ? "replay of \(model)" : model), \
+      \(Formatting.tokens(call.usage.totalInputTokens)) in, \
+      \(Formatting.tokens(call.usage.outputTokens)) out, \
+      \(call.replayed ? Formatting.unbroken("not billed") : Formatting.dollars(call.cost)), \
+      \(Formatting.seconds(call.latency))
+      """
     if let detail = call.detail, !detail.isEmpty { text += "\n\(detail)" }
     return text
   }

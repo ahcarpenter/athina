@@ -138,7 +138,10 @@ private func unsandboxed(in root: URL) -> RuntimeEnvironment {
     let read = try #require(environment.refusal(reading: outside, for: "--settings"))
     #expect(
       read
-        == "--settings: a sandboxed Athina can read only inside its container and its own bundle, not \(outside.path)"
+        == """
+        --settings: a sandboxed Athina can read only inside its container and its own \
+        bundle, not \(outside.path)
+        """
     )
     #expect(environment.refusal(writing: outside, for: "--snapshot") != nil)
   }
@@ -207,7 +210,10 @@ private func unsandboxed(in root: URL) -> RuntimeEnvironment {
     }
     #expect(
       reason
-        == "--replay: a sandboxed Athina can read only inside its container and its own bundle, not \(outside.path)"
+        == """
+        --replay: a sandboxed Athina can read only inside its container and its own bundle, \
+        not \(outside.path)
+        """
     )
     #expect(mode.isOffline)
 
@@ -311,7 +317,10 @@ private func unsandboxed(in root: URL) -> RuntimeEnvironment {
     #expect(!files.settingsGiven)
     #expect(files.settingsSource == SettingsStore.defaultURL(in: support))
     let reason =
-      "--settings: a sandboxed Athina can read only inside its container and its own bundle, not \(outside.path)"
+      """
+      --settings: a sandboxed Athina can read only inside its container and its own bundle, \
+      not \(outside.path)
+      """
     #expect(files.refusals == [reason])
     _ = files.loadSettings(supportDirectory: support)
     guard
@@ -378,7 +387,10 @@ private func unsandboxed(in root: URL) -> RuntimeEnvironment {
     #expect(
       throws: ClockRemote.Refusal(
         reason:
-          "the clock request: a sandboxed Athina can write only inside its container, not \(outside.path)"
+          """
+          the clock request: a sandboxed Athina can write only inside its container, not \
+          \(outside.path)
+          """
       )
     ) {
       try ClockRemote.answer(

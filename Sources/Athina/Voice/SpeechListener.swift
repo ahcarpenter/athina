@@ -193,7 +193,10 @@ final class SpeechListener {
     }
     request?.endAudio()
     SpeechListener.log.notice(
-      "audio ended after \(self.partials) partial results, \(self.latest.split(separator: " ").count) words so far"
+      """
+      audio ended after \(self.partials) partial results, \
+      \(self.latest.split(separator: " ").count) words so far
+      """
     )
     if finished { return transcript }
     return await withCheckedContinuation { continuation in
@@ -240,11 +243,17 @@ final class SpeechListener {
       // The words themselves stay out of the log; their count and the
       // recognizer's error say enough about what went wrong.
       SpeechListener.log.notice(
-        "recognizer stopped with \(failure, privacy: .public) after \(self.partials) partial results"
+        """
+        recognizer stopped with \(failure, privacy: .public) after \(self.partials) partial \
+        results
+        """
       )
     } else if isFinal {
       SpeechListener.log.notice(
-        "final result after \(self.partials) partial results, \(self.latest.split(separator: " ").count) words"
+        """
+        final result after \(self.partials) partial results, \
+        \(self.latest.split(separator: " ").count) words
+        """
       )
     }
     if isFinal || failure != nil {

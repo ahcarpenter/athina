@@ -53,8 +53,11 @@ import Testing
 
   @Test func missingKeysTakeDefaultsAndBadModelsFallBack() throws {
     let data = Data(
-      #"{"mentor": {"mentorModel": "claude-haiku-4-5-20251001", "triageMinInterval": 1, "hourlySpendCap": 5000}}"#
-        .utf8
+      #"""
+      {"mentor": {"mentorModel": "claude-haiku-4-5-20251001", "triageMinInterval": 1, \#
+      "hourlySpendCap": 5000}}
+      """#
+      .utf8
     )
     let decoded = try JSONDecoder().decode(SensingSettings.self, from: data)
     #expect(decoded.mentor.mentorModel == "claude-opus-5")

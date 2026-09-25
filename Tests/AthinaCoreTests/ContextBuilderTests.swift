@@ -176,7 +176,10 @@ import Testing
     )
     #expect(
       message.contains(
-        "The attached image is the latest screen, 1280 by 800 pixels; a region, if you give one, is in those pixels."
+        """
+        The attached image is the latest screen, 1280 by 800 pixels; a region, if you give \
+        one, is in those pixels.
+        """
       )
     )
     #expect(message.contains("| \"a.swift\" | focus change\n"))
@@ -295,7 +298,10 @@ import Testing
     )
     #expect(
       with.contains(
-        "Standing understanding: The user appears to be working toward: green build before the release"
+        """
+        Standing understanding: The user appears to be working toward: green build before \
+        the release
+        """
       )
     )
     #expect(with.contains("the flaky snapshot test"))

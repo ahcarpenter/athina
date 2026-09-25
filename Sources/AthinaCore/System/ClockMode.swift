@@ -62,7 +62,10 @@ public enum ClockMode: Equatable, Sendable {
         given.isEmpty
         ? .system
         : .refused(
-          "\(given.joined(separator: " and ")) \(given.count == 1 ? "applies" : "apply") only to \(ModelClientMode.replayFlag)"
+          """
+          \(given.joined(separator: " and ")) \(given.count == 1 ? "applies" : "apply") only \
+          to \(ModelClientMode.replayFlag)
+          """
         )
       return
     }
@@ -74,7 +77,10 @@ public enum ClockMode: Equatable, Sendable {
           scale: 1,
           ahead: 0,
           refusal:
-            "\(ClockMode.scaleFlag) needs a number from \(Int(ClockMode.scaleRange.lowerBound)) to \(Int(ClockMode.scaleRange.upperBound))"
+            """
+            \(ClockMode.scaleFlag) needs a number from \
+            \(Int(ClockMode.scaleRange.lowerBound)) to \(Int(ClockMode.scaleRange.upperBound))
+            """
         )
         return
       }
@@ -90,7 +96,10 @@ public enum ClockMode: Equatable, Sendable {
           scale: 1,
           ahead: 0,
           refusal:
-            "\(ClockMode.advanceFlag) needs an interval such as 15m, 2h, or 1d, up to \(ClockInterval.description(of: ClockMode.maxAdvance))"
+            """
+            \(ClockMode.advanceFlag) needs an interval such as 15m, 2h, or 1d, up to \
+            \(ClockInterval.description(of: ClockMode.maxAdvance))
+            """
         )
         return
       }
@@ -223,7 +232,10 @@ public enum ClockRemote {
       return .failure(
         Refusal(
           reason:
-            "\"\(text)\" is not an interval such as 15m, 2h, or 1d, up to \(ClockInterval.description(of: ClockMode.maxAdvance))"
+            """
+            \"\(text)\" is not an interval such as 15m, 2h, or 1d, up to \
+            \(ClockInterval.description(of: ClockMode.maxAdvance))
+            """
         )
       )
     }
@@ -357,7 +369,10 @@ public enum ClockRemote {
     else {
       throw Refusal(
         reason:
-          "\(target.path) is not somewhere a clock request may be answered: it must be inside \(temporaryDirectory.path) and outside \(supportDirectory.path)"
+          """
+          \(target.path) is not somewhere a clock request may be answered: it must be inside \
+          \(temporaryDirectory.path) and outside \(supportDirectory.path)
+          """
       )
     }
     let descriptor = open(target.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o666)

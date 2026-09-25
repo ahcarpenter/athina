@@ -127,7 +127,8 @@ import Testing
 
   @Test func mentorVerdictDecodesASuggestion() throws {
     let json = """
-      {"reason": "Manual copy between windows", "suggestion": {"title": "Use a snippet", "body": "b", "explanation": "e", "category": "shortcut", "confidence": 0.8}}
+      {"reason": "Manual copy between windows", "suggestion": {"title": "Use a snippet", \
+      "body": "b", "explanation": "e", "category": "shortcut", "confidence": 0.8}}
       """
     let verdict = try JSONDecoder().decode(MentorVerdict.self, from: Data(json.utf8))
     #expect(verdict.suggestion?.category == .shortcut)

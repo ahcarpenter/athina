@@ -429,7 +429,10 @@ func writeIcon() throws {
   guard process.terminationStatus == 0 else { throw Failure.iconutil }
   try FileManager.default.removeItem(at: iconset)
   print(
-    "  Resources/AppIcon.icns  (\(sizes.count) sizes, drawing at \(iconHeightFraction) of the canvas)"
+    """
+      Resources/AppIcon.icns  (\(sizes.count) sizes, drawing at \(iconHeightFraction) of the \
+    canvas)
+    """
   )
 }
 
@@ -847,7 +850,10 @@ func writeReadmeIcon() throws {
   try rep.representation(using: .png, properties: [:])!
     .write(to: markDirectory.appendingPathComponent("ReadmeIcon.png"))
   print(
-    "  Resources/Mark/ReadmeIcon.png  (the icon as this Mac's Finder draws it, \(readmeIconSize) px)"
+    """
+      Resources/Mark/ReadmeIcon.png  (the icon as this Mac's Finder draws it, \
+    \(readmeIconSize) px)
+    """
   )
 }
 

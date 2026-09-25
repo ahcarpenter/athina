@@ -39,7 +39,11 @@ struct GeneralSettings: View {
         Toggle(isOn: $state.settings.mentor.showCallouts) {
           Text("Show callouts on screen")
           Text(
-            "When a suggestion is about one spot on screen, a box and a short note mark it. The callout goes away with the suggestion, and whenever its window moves or loses focus."
+            """
+            When a suggestion is about one spot on screen, a box and a short note mark it. \
+            The callout goes away with the suggestion, and whenever its window moves or \
+            loses focus.
+            """
           )
         }
       } header: {
@@ -110,7 +114,12 @@ struct VoiceSection: View {
       Text("Talk back")
     } footer: {
       Text(
-        "Hold the shortcut and say \"tell me more,\" \"not now,\" or \"never for this\" to answer a suggestion, or ask a question about it and the answer appears in the suggestion. Audio and transcripts stay on this Mac. Only your question, the suggestion, and the text of the screen it was made from go to the mentor model."
+        """
+        Hold the shortcut and say \"tell me more,\" \"not now,\" or \"never for this\" to \
+        answer a suggestion, or ask a question about it and the answer appears in the \
+        suggestion. Audio and transcripts stay on this Mac. Only your question, the \
+        suggestion, and the text of the screen it was made from go to the mentor model.
+        """
       )
     }
   }
@@ -128,7 +137,10 @@ struct NeverRulesSection: View {
     Section {
       if state.settings.mentor.neverRules.isEmpty {
         Text(
-          "None yet. Choose Never for This on a suggestion to stop that kind of suggestion in that app."
+          """
+          None yet. Choose Never for This on a suggestion to stop that kind of suggestion in \
+          that app.
+          """
         )
         .foregroundStyle(.secondary)
       } else {

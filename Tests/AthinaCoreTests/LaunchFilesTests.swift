@@ -259,7 +259,8 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
       try FileManager.default.attributesOfItem(atPath: directory.path)[.posixPermissions]
       as? NSNumber
     #expect(mode?.int16Value == 0o700)
-    // flock holds per open file, so a second open in this process is refused like another process would be.
+    // flock holds per open file, so a second open in this process is refused like another
+    // process would be.
     #expect(throws: DataDirectoryLock.Failure.inUse(pid: 4242)) {
       try DataDirectoryLock.acquire(in: directory, pid: 99)
     }
@@ -478,7 +479,10 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
     // spelling, including one the launcher would no longer recognize.
     #expect(
       failed.line
-        == "Athina did not start: Could not open the journal at /lanes/a/journal.sqlite: disk I/O error\n"
+        == """
+        Athina did not start: Could not open the journal at /lanes/a/journal.sqlite: disk \
+        I/O error\n
+        """
     )
     #expect(failed.line.hasPrefix(LaunchReport.didNotStartMarker))
 

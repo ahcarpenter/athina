@@ -40,7 +40,13 @@ struct ModelSettings: View {
         Text("Models")
       } footer: {
         Text(
-          "The triage model takes a quick look whenever what you are doing changes and decides whether the mentor model should look closer. The understanding model rewrites what Athina believes you are working toward, only when no mentor call has done so recently. Effort sets how much a model thinks before answering and is sent only to models that accept it."
+          """
+          The triage model takes a quick look whenever what you are doing changes and \
+          decides whether the mentor model should look closer. The understanding model \
+          rewrites what Athina believes you are working toward, only when no mentor call has \
+          done so recently. Effort sets how much a model thinks before answering and is sent \
+          only to models that accept it.
+          """
         )
       }
 
@@ -68,7 +74,10 @@ struct ModelSettings: View {
           range: 0.5...1,
           step: 0.05,
           help:
-            "Triage is skipped when this much of a window's text matches the last time it was triaged."
+            """
+            Triage is skipped when this much of a window's text matches the last time it was \
+            triaged.
+            """
         )
       } header: {
         Text("How often")
@@ -95,7 +104,11 @@ struct ModelSettings: View {
         Text("What the mentor model sees")
       } footer: {
         Text(
-          "The triage model receives text only: the app and window, the focused element, the latest screen's recognized text, and a short summary of recent events. Excluded apps and secure text fields are never captured, so they never reach either model."
+          """
+          The triage model receives text only: the app and window, the focused element, the \
+          latest screen's recognized text, and a short summary of recent events. Excluded \
+          apps and secure text fields are never captured, so they never reach either model.
+          """
         )
       }
 
@@ -133,7 +146,10 @@ private struct TierRows: View {
       Text("\(tier) effort")
       if !supportsEffort {
         Text(
-          "\(ModelCatalog.displayName(for: model)) does not accept an effort setting, so none is sent."
+          """
+          \(ModelCatalog.displayName(for: model)) does not accept an effort setting, so none \
+          is sent.
+          """
         )
       }
     }
@@ -197,7 +213,11 @@ private struct APIKeySection: View {
       Text("Anthropic")
     } footer: {
       Text(
-        "The key stays in your login keychain and is never written to the journal, the logs, or the debug panel. Athina connects only to api.anthropic.com, and only while a key is saved."
+        """
+        The key stays in your login keychain and is never written to the journal, the logs, \
+        or the debug panel. Athina connects only to api.anthropic.com, and only while a key \
+        is saved.
+        """
       )
     }
   }
@@ -248,7 +268,11 @@ private struct ReplayConnectionSection: View {
       Text("Anthropic")
     } footer: {
       Text(
-        "Athina was launched to replay recorded calls, so every call is answered from fixture files. No key is read, nothing is sent to api.anthropic.com, and nothing is billed. Launch Athina without --replay to use the saved key."
+        """
+        Athina was launched to replay recorded calls, so every call is answered from fixture \
+        files. No key is read, nothing is sent to api.anthropic.com, and nothing is billed. \
+        Launch Athina without --replay to use the saved key.
+        """
       )
     }
   }
@@ -306,7 +330,10 @@ private struct SpendSection: View {
         range: 0.05...1000,
         step: 0.25,
         help:
-          "Calls slow down as the hour's estimated spend nears this amount and stop at it until the next hour begins."
+          """
+          Calls slow down as the hour's estimated spend nears this amount and stop at it \
+          until the next hour begins.
+          """
       )
       LabeledContent("This hour") {
         if state.clientMode.isOffline {
@@ -314,7 +341,10 @@ private struct SpendSection: View {
         } else {
           let status = state.mentorStatus
           let spend =
-            "\(Formatting.dollars(status.spendThisHour)) over \(Plural.count(status.callsThisHour, "call", "calls"))"
+            """
+            \(Formatting.dollars(status.spendThisHour)) over \
+            \(Plural.count(status.callsThisHour, "call", "calls"))
+            """
           Text(
             status.isCadenceSlowed
               ? "\(spend), calls slowed \(Formatting.multiplier(status.cadenceMultiplier))" : spend
@@ -327,7 +357,10 @@ private struct SpendSection: View {
       Text("Spend per hour")
     } footer: {
       Text(
-        "Cost is estimated from the tokens each response reports and these prices, in dollars per million tokens. Update them when Anthropic's pricing changes."
+        """
+        Cost is estimated from the tokens each response reports and these prices, in dollars \
+        per million tokens. Update them when Anthropic's pricing changes.
+        """
       )
     }
   }

@@ -613,7 +613,10 @@ public actor MentorLoop {
             // that they say anything; a toast with no words is noise.
             record.outcome = .error
             record.detail =
-              "the mentor reply had a \(payload.category.rawValue) suggestion with an empty title or body"
+              """
+              the mentor reply had a \(payload.category.rawValue) suggestion with an empty \
+              title or body
+              """
           } else if payload.confidence < settings.minimumConfidence {
             record.outcome = .belowConfidence
             record.detail = "\(title) (confidence \(Int((payload.confidence * 100).rounded()))%)"
@@ -637,7 +640,10 @@ public actor MentorLoop {
             )
             if payload.region != nil, region == nil {
               MentorLoop.log.notice(
-                "region dropped: \(jpeg == nil ? "no image was sent" : "outside the frame", privacy: .public)"
+                """
+                region dropped: \
+                \(jpeg == nil ? "no image was sent" : "outside the frame", privacy: .public)
+                """
               )
             }
             toShow = Suggestion(
@@ -934,7 +940,10 @@ public actor MentorLoop {
     understanding = record
     await setPeriod(RefreshPeriod(startedAt: record.updatedAt))
     MentorLoop.log.notice(
-      "understanding revision \(record.revision) by \(source.rawValue, privacy: .public), \(record.content.goals.count) goals, \(record.content.estimatedTokens) tokens"
+      """
+      understanding revision \(record.revision) by \(source.rawValue, privacy: .public), \
+      \(record.content.goals.count) goals, \(record.content.estimatedTokens) tokens
+      """
     )
     return true
   }
@@ -1244,7 +1253,14 @@ public actor MentorLoop {
       spend.record(cost: record.cost, at: record.timestamp)
     }
     MentorLoop.log.notice(
-      "\(record.tier.rawValue, privacy: .public) \(record.model, privacy: .public) \(record.outcome.rawValue, privacy: .public)\(record.replayed ? " replayed" : "", privacy: .public) in=\(record.usage.totalInputTokens) cached=\(record.usage.cacheReadInputTokens) out=\(record.usage.outputTokens) cost=\(record.cost, format: .fixed(precision: 4)) latency=\(record.latency, format: .fixed(precision: 2))s"
+      """
+      \(record.tier.rawValue, privacy: .public) \(record.model, privacy: .public) \
+      \(record.outcome.rawValue, privacy: .public)\
+      \(record.replayed ? " replayed" : "", privacy: .public) \
+      in=\(record.usage.totalInputTokens) cached=\(record.usage.cacheReadInputTokens) \
+      out=\(record.usage.outputTokens) cost=\(record.cost, format: .fixed(precision: 4)) \
+      latency=\(record.latency, format: .fixed(precision: 2))s
+      """
     )
     await broadcaster.send(.call(stored))
     return stored

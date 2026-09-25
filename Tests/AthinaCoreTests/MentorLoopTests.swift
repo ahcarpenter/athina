@@ -180,16 +180,25 @@ struct MentorLoopTests {
   ) -> String {
     let goal = judgedGoal.map { "\"\($0)\"" } ?? "null"
     return
-      #"{"reason": "Saw it", "suggestion": {"title": "Use --filter", "body": "Run one suite.", "explanation": "swift test --filter Name", "category": "\#(category)", "confidence": \#(confidence), "judged_goal": \#(goal)}, "updated_understanding": \#(understanding)}"#
+      #"""
+      {"reason": "Saw it", "suggestion": {"title": "Use --filter", "body": "Run one suite.", \#
+      "explanation": "swift test --filter Name", "category": "\#(category)", "confidence": \#
+      \#(confidence), "judged_goal": \#(goal)}, "updated_understanding": \#(understanding)}
+      """#
   }
 
   private static let understandingJSON = """
-    {"goals": [{"goal": "ship the mentor loop", "evidence": "two hours in the same files", "confidence": 0.8}], \
-    "timeline": ["opened the editor"], "mentor_history": ["said use --filter"], "open_concerns": ["no tests yet"]}
+    {"goals": [{"goal": "ship the mentor loop", "evidence": "two hours in the same files", \
+    "confidence": 0.8}], \
+    "timeline": ["opened the editor"], "mentor_history": ["said use --filter"], \
+    "open_concerns": ["no tests yet"]}
     """
 
   private static let silence =
-    #"{"reason": "Nothing stands out", "suggestion": null, "updated_understanding": \#(Self.understandingJSON)}"#
+    #"""
+    {"reason": "Nothing stands out", "suggestion": null, "updated_understanding": \#
+    \#(Self.understandingJSON)}
+    """#
 
   /// A mentor reply that carries no understanding at all, as an older prompt
   /// version or a stubborn model might.
@@ -975,7 +984,11 @@ struct MentorLoopTests {
     await h.client.enqueue(json: Self.yes, model: "claude-haiku-4-5-20251001")
     await h.client.enqueue(
       json:
-        #"{"reason": "r", "suggestion": {"title": "Use --filter", "body": "b", "explanation": "e", "category": "shortcut", "confidence": 0.9, "judged_goal": null}, "updated_understanding": "not an object"}"#,
+        #"""
+        {"reason": "r", "suggestion": {"title": "Use --filter", "body": "b", "explanation": \#
+        "e", "category": "shortcut", "confidence": 0.9, "judged_goal": null}, \#
+        "updated_understanding": "not an object"}
+        """#,
       model: "claude-opus-5"
     )
     await h.observe(
@@ -1321,7 +1334,10 @@ struct MentorLoopTests {
     await h.client.enqueue(json: Self.no, model: "claude-haiku-4-5-20251001")
     await h.client.enqueue(
       json:
-        #"{"reason": "Nothing known", "understanding": {"goals": [], "timeline": [], "mentor_history": [], "open_concerns": []}}"#,
+        #"""
+        {"reason": "Nothing known", "understanding": {"goals": [], "timeline": [], \#
+        "mentor_history": [], "open_concerns": []}}
+        """#,
       model: "claude-opus-5"
     )
     await h.observe(Fixtures.observation(at: h.clock.date), expectCalls: 2)
@@ -2370,7 +2386,8 @@ struct MentorLoopTests {
           explanation TEXT NOT NULL, confidence REAL NOT NULL, observation_id INTEGER,
           model TEXT NOT NULL, prompt_version INTEGER NOT NULL, feedback TEXT, feedback_at REAL
       );
-      INSERT INTO suggestions (timestamp, app_name, category, title, body, explanation, confidence, model, prompt_version)
+      INSERT INTO suggestions (timestamp, app_name, category, title, body, explanation, \
+      confidence, model, prompt_version)
       VALUES (1700000000, 'Xcode', 'shortcut', 'old one', 'b', 'e', 0.9, 'm', 3);
       """
     )
@@ -2424,14 +2441,18 @@ struct MentorLoopTests {
       """
       CREATE TABLE understanding (
           id INTEGER PRIMARY KEY, updated_at REAL NOT NULL, started_at REAL NOT NULL,
-          revision INTEGER NOT NULL, schema_version INTEGER NOT NULL, prompt_version INTEGER NOT NULL,
-          model TEXT NOT NULL, source TEXT NOT NULL, cost REAL NOT NULL, cumulative_cost REAL NOT NULL,
+          revision INTEGER NOT NULL, schema_version INTEGER NOT NULL, prompt_version INTEGER \
+      NOT NULL,
+          model TEXT NOT NULL, source TEXT NOT NULL, cost REAL NOT NULL, cumulative_cost REAL \
+      NOT NULL,
           content_json TEXT NOT NULL, covered_through_observation_id INTEGER
       );
       CREATE INDEX understanding_updated_at ON understanding(updated_at);
-      INSERT INTO understanding (updated_at, started_at, revision, schema_version, prompt_version, model,
+      INSERT INTO understanding (updated_at, started_at, revision, schema_version, \
+      prompt_version, model,
           source, cost, cumulative_cost, content_json, covered_through_observation_id)
-      VALUES (1700000000, 1700000000, 1, 1, 8, 'm', 'periodic', 0.02, 0.02, '{"goals": [], "timeline": ["old"]}', 7);
+      VALUES (1700000000, 1700000000, 1, 1, 8, 'm', 'periodic', 0.02, 0.02, '{"goals": [], \
+      "timeline": ["old"]}', 7);
       """
     )
 

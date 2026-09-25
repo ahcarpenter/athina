@@ -19,7 +19,10 @@ struct UnderstandingSection: View {
           Text("Current goal")
           Text(goal.goal)
           Text(
-            "\(Formatting.tokens(record.content.estimatedTokens)) tokens, \(Formatting.dollars(record.cumulativeCost)) in refresh calls"
+            """
+            \(Formatting.tokens(record.content.estimatedTokens)) tokens, \
+            \(Formatting.dollars(record.cumulativeCost)) in refresh calls
+            """
           )
         }
         .accessibilityElement(children: .combine)
@@ -34,7 +37,11 @@ struct UnderstandingSection: View {
         value: $state.settings.mentor.understandingRefreshInterval,
         range: MentorSettings.refreshIntervalRange,
         help:
-          "Every mentor call also rewrites the understanding, at no extra cost. After at least this much active use with no mentor call, Athina makes a refresh call of its own."
+          """
+          Every mentor call also rewrites the understanding, at no extra cost. After at \
+          least this much active use with no mentor call, Athina makes a refresh call of its \
+          own.
+          """
       )
       IntRow(
         "Size limit",
@@ -43,7 +50,10 @@ struct UnderstandingSection: View {
         step: 100,
         unit: .tokens,
         help:
-          "When the understanding grows past this, its oldest entries are dropped first and its strongest goal is always kept."
+          """
+          When the understanding grows past this, its oldest entries are dropped first and \
+          its strongest goal is always kept.
+          """
       )
       DurationRow(
         "Forget after no activity for",
@@ -61,7 +71,14 @@ struct UnderstandingSection: View {
       // The link opens the Journal pane in place rather than describing where it is.
       Text(
         settingsMarkdown:
-          "Athina keeps a short written record of what you appear to be working toward and what has happened so far, so it can judge what you do against that goal rather than recent screens alone. The model writes it, and once it is forgotten Athina starts a fresh one. Its revisions stay in the journal on this Mac until they are reset here, or age out or are cleared with the rest of the journal in \(SettingsPane.journal.link("Journal settings"))."
+          """
+          Athina keeps a short written record of what you appear to be working toward and \
+          what has happened so far, so it can judge what you do against that goal rather \
+          than recent screens alone. The model writes it, and once it is forgotten Athina \
+          starts a fresh one. Its revisions stay in the journal on this Mac until they are \
+          reset here, or age out or are cleared with the rest of the journal in \
+          \(SettingsPane.journal.link("Journal settings")).
+          """
       )
       .settingsPaneLinks()
     }
@@ -101,7 +118,10 @@ struct ResetUnderstandingButton: View {
       Button("Cancel", role: .cancel) {}
     } message: {
       Text(
-        "Athina forgets the goals, history, and concerns it has worked out, and starts a new understanding from what you do next. You can't undo this action."
+        """
+        Athina forgets the goals, history, and concerns it has worked out, and starts a new \
+        understanding from what you do next. You can't undo this action.
+        """
       )
     }
   }

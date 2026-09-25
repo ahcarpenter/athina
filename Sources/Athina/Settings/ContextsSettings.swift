@@ -70,7 +70,11 @@ struct MentorshipContextsSection: View {
       // The link opens the Privacy pane in place rather than describing where it is.
       Text(
         settingsMarkdown:
-          "Triage places each moment in one of your contexts as part of the judgment it already makes, so contexts cost no extra call. To keep an app from being looked at at all, exclude it in \(SettingsPane.privacy.link("Privacy settings"))."
+          """
+          Triage places each moment in one of your contexts as part of the judgment it \
+          already makes, so contexts cost no extra call. To keep an app from being looked at \
+          at all, exclude it in \(SettingsPane.privacy.link("Privacy settings")).
+          """
       )
       .settingsPaneLinks()
     }
@@ -205,7 +209,10 @@ struct ContextEditor: View {
             .foregroundStyle(.primary)
         } footer: {
           Text(
-            "A short name in your own words, and optionally a sentence saying what counts. Both go to the triage model, which answers with this name when it places you here."
+            """
+            A short name in your own words, and optionally a sentence saying what counts. \
+            Both go to the triage model, which answers with this name when it places you here.
+            """
           )
         }
       }

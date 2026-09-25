@@ -32,7 +32,10 @@ struct HistoryView: View {
             "No Suggestions Yet",
             systemImage: "lightbulb",
             description: Text(
-              "When Athina notices a more helpful way to do something, the suggestion appears here with your answer to it."
+              """
+              When Athina notices a more helpful way to do something, the suggestion appears \
+              here with your answer to it.
+              """
             )
           )
         }
@@ -202,7 +205,10 @@ private struct SuggestionDetail: View {
           detailRow("Confidence", String(format: "%.0f%%", suggestion.confidence * 100))
           detailRow(
             "Model",
-            "\(ModelCatalog.displayName(for: suggestion.model)), prompt v\(suggestion.promptVersion)"
+            """
+            \(ModelCatalog.displayName(for: suggestion.model)), prompt \
+            v\(suggestion.promptVersion)
+            """
           )
           if let feedback = suggestion.feedback {
             detailRow(
@@ -214,7 +220,10 @@ private struct SuggestionDetail: View {
           if let region = suggestion.region {
             detailRow(
               "Callout",
-              "\(suggestion.calloutShown ? "Shown" : "Not shown"): \"\(region.note)\" at \(Formatting.rect(region.rect)) px of the frame"
+              """
+              \(suggestion.calloutShown ? "Shown" : "Not shown"): \"\(region.note)\" at \
+              \(Formatting.rect(region.rect)) px of the frame
+              """
             )
           } else {
             detailRow("Callout", "None: the suggestion did not point at one spot")
@@ -246,11 +255,17 @@ private struct SuggestionDetail: View {
           HStack(spacing: 8) {
             Button("Not Now") { state.respond(to: suggestion.id, with: .notNow) }
               .help(
-                "Hide \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName) for a while"
+                """
+                Hide \(suggestion.category.label.lowercased()) suggestions in \
+                \(suggestion.appName) for a while
+                """
               )
             Button("Never for This") { state.respond(to: suggestion.id, with: .never) }
               .help(
-                "Stop \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName)"
+                """
+                Stop \(suggestion.category.label.lowercased()) suggestions in \
+                \(suggestion.appName)
+                """
               )
           }
         }

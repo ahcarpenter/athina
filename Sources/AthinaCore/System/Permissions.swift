@@ -56,13 +56,26 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
   public var purpose: String {
     switch self {
     case .screenRecording:
-      "Lets Athina capture the display you are working on when what you are doing changes, and read its text on this Mac. Frames stay in the local journal. Only the latest screenshot goes to the mentor model, and Models settings can turn that off."
+      """
+      Lets Athina capture the display you are working on when what you are doing changes, \
+      and read its text on this Mac. Frames stay in the local journal. Only the latest \
+      screenshot goes to the mentor model, and Models settings can turn that off.
+      """
     case .accessibility:
-      "Lets Athina read the app, window title, and focused element you are using, so it knows what you are working on without guessing from pixels."
+      """
+      Lets Athina read the app, window title, and focused element you are using, so it knows \
+      what you are working on without guessing from pixels.
+      """
     case .microphone:
-      "Lets Athina hear you while you hold the talk-back shortcut, and only then. Audio never leaves this Mac, and Athina does not store it."
+      """
+      Lets Athina hear you while you hold the talk-back shortcut, and only then. Audio never \
+      leaves this Mac, and Athina does not store it.
+      """
     case .speechRecognition:
-      "Lets Athina turn what you say into text on this Mac, with Apple's on-device recognizer and never its servers. When you ask a question, those words go to the mentor model."
+      """
+      Lets Athina turn what you say into text on this Mac, with Apple's on-device recognizer \
+      and never its servers. When you ask a question, those words go to the mentor model.
+      """
     }
   }
 

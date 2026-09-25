@@ -141,7 +141,10 @@ public struct LaunchFiles: Equatable, Sendable {
       return try SettingsStore(url: settingsSource).loadStrictly()
     } catch {
       let reason =
-        "\(LaunchFiles.settingsFlag) could not use \(settingsSource.path): \(error.localizedDescription)"
+        """
+        \(LaunchFiles.settingsFlag) could not use \(settingsSource.path): \
+        \(error.localizedDescription)
+        """
       refusals.append(reason)
       if FileManager.default.fileExists(atPath: settingsSource.path) {
         unusableSettings = reason

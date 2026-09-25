@@ -260,7 +260,10 @@ enum Clicker {
     say("AX under point: role=\(role(hit)) title=\"\(title(hit))\" pid=\(hitPid)")
     guard hitPid == pid, role(hit) == "AXMenuItem", title(hit) == itemTitle else {
       fail(
-        "NOT CLICKING: \(target) is \(role(hit)) \"\(title(hit))\" of pid \(hitPid), not \(pid)'s \"\(itemTitle)\"",
+        """
+        NOT CLICKING: \(target) is \(role(hit)) \"\(title(hit))\" of pid \(hitPid), not \
+        \(pid)'s \"\(itemTitle)\"
+        """,
         code: ClickExit.wrongTarget.rawValue
       )
     }

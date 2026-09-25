@@ -164,7 +164,10 @@ public enum KeyMigration {
       switch self {
       case .nothingToMove, .alreadyThere: nil
       case .copied:
-        "Copied the API key saved under \(KeychainKeyStore.legacyService) to \(KeychainKeyStore.service); the old item is untouched."
+        """
+        Copied the API key saved under \(KeychainKeyStore.legacyService) to \
+        \(KeychainKeyStore.service); the old item is untouched.
+        """
       case .failed(let reason): reason
       }
     }
@@ -193,14 +196,22 @@ public enum KeyMigration {
       try new.save(key)
       guard try new.load() == key else {
         return .failed(
-          "The API key did not read back from \(KeychainKeyStore.service). The key saved under \(KeychainKeyStore.legacyService) is untouched; paste it into Settings > Models."
+          """
+          The API key did not read back from \(KeychainKeyStore.service). The key saved \
+          under \(KeychainKeyStore.legacyService) is untouched; paste it into Settings > \
+          Models.
+          """
         )
       }
       defaults.set(true, forKey: doneKey)
       return .copied
     } catch {
       return .failed(
-        "Could not copy the API key from \(KeychainKeyStore.legacyService) to \(KeychainKeyStore.service): \(DataMigration.sentence(String(describing: error))) The old item is untouched."
+        """
+        Could not copy the API key from \(KeychainKeyStore.legacyService) to \
+        \(KeychainKeyStore.service): \(DataMigration.sentence(String(describing: error))) \
+        The old item is untouched.
+        """
       )
     }
   }

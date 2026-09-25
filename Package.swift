@@ -11,7 +11,8 @@ let package = Package(
     .library(name: "SnapshotDiff", targets: ["SnapshotDiff"]),
     // The end-to-end harness's drive tool (scripts/e2e, see README "End-to-end harness").
     .executable(name: "athina-drive", targets: ["AthinaDrive"]),
-    // Compares UI snapshot renders with the approved baselines (scripts/snapshots.sh, see README "UI snapshot baselines").
+    // Compares UI snapshot renders with the approved baselines (scripts/snapshots.sh, see
+    // README "UI snapshot baselines").
     .executable(name: "snapshot-diff", targets: ["SnapshotDiffTool"]),
   ],
   traits: [

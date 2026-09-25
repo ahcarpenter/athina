@@ -288,12 +288,18 @@ import Testing
     #expect(message.contains("You pointed at a spot on screen with the note \"this command\"."))
     #expect(
       message.contains(
-        "Recognized text of the screen the suggestion was made from (top to bottom):\n$ swift test\nall 145 passed"
+        """
+        Recognized text of the screen the suggestion was made from (top to bottom):\n$ swift \
+        test\nall 145 passed
+        """
       )
     )
     #expect(
       message.contains(
-        "Earlier in this exchange:\nUser: which suite\nYou: CaptureSchedulerTests.\nUser: and one test\nYou: (no answer: paused)"
+        """
+        Earlier in this exchange:\nUser: which suite\nYou: CaptureSchedulerTests.\nUser: and \
+        one test\nYou: (no answer: paused)
+        """
       )
     )
     #expect(
@@ -414,7 +420,10 @@ import Testing
     #expect(settings.validated().mentor.pushToTalkHotKey == nil)
     #expect(settings.validated().pauseHotKey == HotKey.defaultPause)
     let json =
-      #"{"pauseHotKey": {"keyCode": 17, "modifiers": 9}, "mentor": {"pushToTalkHotKey": {"keyCode": 17, "modifiers": 9}}}"#
+      #"""
+      {"pauseHotKey": {"keyCode": 17, "modifiers": 9}, "mentor": {"pushToTalkHotKey": \#
+      {"keyCode": 17, "modifiers": 9}}}
+      """#
     let decoded = try JSONDecoder().decode(SensingSettings.self, from: Data(json.utf8))
     #expect(decoded.pauseHotKey == HotKey(keyCode: 17, modifiers: [.control, .command]))
     #expect(decoded.mentor.pushToTalkHotKey == nil)
@@ -427,7 +436,8 @@ import Testing
       MentorVerdict.self,
       from: Data(
         #"""
-        {"reason": "r", "suggestion": {"title": "T", "body": "B", "explanation": "E", "category": "tool", "confidence": 0.7,
+        {"reason": "r", "suggestion": {"title": "T", "body": "B", "explanation": "E", \#
+        "category": "tool", "confidence": 0.7,
          "region": {"x": 12.5, "y": 40, "width": 300, "height": 22, "note": "this flag"}}}
         """#.utf8
       )
@@ -442,7 +452,8 @@ import Testing
       MentorVerdict.self,
       from: Data(
         #"""
-        {"reason": "r", "suggestion": {"title": "T", "body": "B", "explanation": "E", "category": "tool", "confidence": 0.7, "region": null}}
+        {"reason": "r", "suggestion": {"title": "T", "body": "B", "explanation": "E", \#
+        "category": "tool", "confidence": 0.7, "region": null}}
         """#.utf8
       )
     )
@@ -453,7 +464,8 @@ import Testing
       MentorVerdict.self,
       from: Data(
         #"""
-        {"reason": "r", "suggestion": {"title": "T", "body": "B", "explanation": "E", "category": "tool", "confidence": 0.7}}
+        {"reason": "r", "suggestion": {"title": "T", "body": "B", "explanation": "E", \#
+        "category": "tool", "confidence": 0.7}}
         """#.utf8
       )
     )
@@ -621,12 +633,16 @@ import Testing
       try db.execute(
         """
         CREATE TABLE suggestions (
-            id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, bundle_id TEXT, app_name TEXT NOT NULL, window_title TEXT,
-            category TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, explanation TEXT NOT NULL,
-            confidence REAL NOT NULL, observation_id INTEGER, model TEXT NOT NULL, prompt_version INTEGER NOT NULL,
+            id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, bundle_id TEXT, app_name TEXT NOT \
+        NULL, window_title TEXT,
+            category TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL, explanation TEXT \
+        NOT NULL,
+            confidence REAL NOT NULL, observation_id INTEGER, model TEXT NOT NULL, \
+        prompt_version INTEGER NOT NULL,
             feedback TEXT, feedback_at REAL
         );
-        INSERT INTO suggestions (timestamp, app_name, category, title, body, explanation, confidence, model, prompt_version)
+        INSERT INTO suggestions (timestamp, app_name, category, title, body, explanation, \
+        confidence, model, prompt_version)
         VALUES (1700000000, 'A', 'tool', 'old', 'b', 'e', 0.5, 'm', 4);
         """
       )
