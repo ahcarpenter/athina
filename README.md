@@ -108,7 +108,8 @@ is turned on in that pane. `--record [<dir>]` chooses where model calls go,
 `--replay-latency immediate` answers a replay's calls at once,
 `--settings <path>` chooses the settings a replay starts from (see Iterating
 without the network), and `--control <dir>` serves the end-to-end harness's
-control API (see The control API).
+control API (see The control API), with `--hermetic` and `--show-windows`
+shaping such a launch (see Hermetic runs).
 Where a replay keeps its own files is not an argument: it makes a directory for
 itself and says which on the line it writes as it starts.
 

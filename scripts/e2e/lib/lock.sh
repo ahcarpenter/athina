@@ -18,8 +18,8 @@
 # already holds, such as a hand-held lockf, takes it only if it is free.
 #
 # Each lock is a flock(2) on one file, taken with /usr/bin/lockf on a file
-# descriptor this shell keeps open, so it lasts exactly as long as the harness
-# process does: a pass, a failure, an interrupt, and a kill -9 all give it back,
+# descriptor this shell keeps open, so it lasts exactly as long as the process
+# holding it does: a pass, a failure, an interrupt, and a kill -9 all give it back,
 # and a holder that died leaves nothing stale behind. The screen lock is the
 # file lanes wrap runs in by hand
 # (`lockf -k "$HOME/Library/Caches/athina-e2e/screen.lock" ...`), so a
@@ -60,7 +60,6 @@ CHECKOUT_LOCK_STATE=0
 CHECKOUT_LOCK_OWNER=""
 
 lock_say() { printf '%s %s\n' "$(date '+%H:%M:%S')" "$*" >&2; }
-
 
 # One of a lock's variables: `lock_var SCREEN_LOCK _FD`, or the file itself
 # with no suffix.
