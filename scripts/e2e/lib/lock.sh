@@ -14,6 +14,8 @@
 # them. A second run from the same checkout would build over a bundle the first
 # is running from, so every command that builds first takes that checkout's
 # lock and keeps it to the end. Runs from other checkouts never wait on it.
+# The checkout lock always comes first, so a run under a screen lock a parent
+# already holds, such as a hand-held lockf, takes it only if it is free.
 #
 # Each lock is a flock(2) on one file, taken with /usr/bin/lockf on a file
 # descriptor this shell keeps open, so it lasts exactly as long as the harness
@@ -229,11 +231,13 @@ lock_acquire() {
 		lock_say "waiting for the $label $file, $(lock_holder_line "$lock" "$(lock_openers "$lock")")"
 		local status=0 waiter started=$SECONDS
 		# In the background with a trap, so a run stopped while it waits takes
-		# its lockf down with it rather than leave one queued for the lock.
+		# its lockf down with it rather than leave one queued for the lock. It
+		# waits on a copy of the lock's descriptor and, like every helper,
+		# closes both locks' own (`8>&- 9>&-`).
 		if [ -n "$timeout" ]; then
-			/usr/bin/lockf -t "$timeout" "$fd" 2>/dev/null &
+			/usr/bin/lockf -t "$timeout" 7 7>&"$fd" 8>&- 9>&- 2>/dev/null &
 		else
-			/usr/bin/lockf "$fd" 2>/dev/null &
+			/usr/bin/lockf 7 7>&"$fd" 8>&- 9>&- 2>/dev/null &
 		fi
 		waiter=$!
 		# shellcheck disable=SC2064 # the pid is known now, and must be then
@@ -259,6 +263,19 @@ lock_acquire() {
 	lock_set "$lock" _OWNER "$$"
 	lock_note "$lock" "$what"
 	return 0
+}
+
+# Take this checkout's lock, which comes before the screen lock. Under a screen
+# lock a parent holds, it is taken only if it is free: a run from this checkout
+# that holds it and waits for the screen would wait on this one for ever, and
+# this one on it.
+checkout_lock_acquire() {
+	local what="$1" timeout="${2:-}" above
+	if above="$(first_holding_ancestor "$(process_ancestry $$)" "$(lock_openers SCREEN_LOCK)")"; then
+		lock_say "the screen lock is held by pid $above, which started this run, so the checkout lock is taken only if it is free"
+		timeout=0
+	fi
+	lock_acquire CHECKOUT_LOCK "$what" "$timeout"
 }
 
 # Give the lock back early. Exiting does the same, whatever the exit; this

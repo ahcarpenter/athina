@@ -554,6 +554,10 @@ too. Before they build, `run` and `warm` take their checkout's own lock,
 `build/athina-e2e.lock`, the same way, and keep it to the end, so a second
 run from the same checkout says who holds it and waits rather than build over
 the bundle the first runs from; runs from other checkouts never wait on it.
+Under a hand-held `lockf` on the screen lock the order is turned round, so
+such a run takes its checkout's lock only if it is free, and otherwise stops
+at once naming the run that holds it, rather than wait on a run that waits on
+it.
 
 ### Scenarios
 

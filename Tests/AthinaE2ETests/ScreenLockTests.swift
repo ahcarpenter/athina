@@ -257,6 +257,54 @@ import Testing
         #expect(try run("lock_acquire CHECKOUT_LOCK 'run next' 0", checkout: one).status == 0)
     }
 
+    @Test func aRunKilledWhileWaitingForTheScreenLeavesItsCheckoutFree() throws {
+        let one = checkout("one")
+        let screen = try startHolder("run menubar-width", seconds: 10, checkout: checkout("two"))
+        defer { screen.terminate() }
+        let (waiter, output) = try process(
+            "lock_acquire CHECKOUT_LOCK 'run all' && lock_acquire SCREEN_LOCK 'run all'", checkout: one
+        )
+        try waitFor("the run to queue for the screen") {
+            (try? String(contentsOf: output, encoding: .utf8))?.contains("waiting for the screen lock") ?? false
+        }
+        kill(waiter.processIdentifier, SIGKILL)
+        waiter.waitUntilExit()
+        let next = try run("lock_acquire CHECKOUT_LOCK 'run next' 1 && echo acquired", checkout: one)
+        #expect(next.status == 0)
+        #expect(next.output.contains("acquired"))
+    }
+
+    @Test func aRunUnderAHandHeldScreenLockDoesNotWaitOnItsCheckout() throws {
+        let one = checkout("one")
+        let holder = try startHolder("run menubar-keyboard", seconds: 10, checkout: one, lock: "CHECKOUT_LOCK")
+        defer { holder.terminate() }
+        let hand = Process()
+        hand.executableURL = URL(fileURLWithPath: "/usr/bin/lockf")
+        let script = "set -euo pipefail; source '\(Self.library)'; checkout_lock_acquire 'run all'"
+        hand.arguments = ["-k", lock, "/bin/bash", "-c", script]
+        var environment = ProcessInfo.processInfo.environment
+        environment["ATHINA_E2E_SCREEN_LOCK"] = lock
+        environment["ROOT"] = one
+        hand.environment = environment
+        let pipe = Pipe()
+        hand.standardOutput = pipe
+        hand.standardError = pipe
+        let started = Date()
+        try hand.run()
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        hand.waitUntilExit()
+        #expect(hand.terminationStatus == 75)
+        #expect(Date().timeIntervalSince(started) < 5, "it waited on the run that holds its checkout")
+        #expect(output.contains("the screen lock is held by pid \(hand.processIdentifier), which started this run"))
+        #expect(output.contains("still held by \(one) running \"run menubar-keyboard\" (pid \(holder.processIdentifier))"))
+        // Free, it takes it.
+        holder.terminate()
+        holder.waitUntilExit()
+        let free = try run("checkout_lock_acquire 'run all' && echo acquired", checkout: one)
+        #expect(free.status == 0)
+        #expect(free.output.contains("took the checkout lock, which was free"))
+    }
+
     // MARK: A hand-held lockf
 
     @Test func aHandHeldLockfAndAHarnessRunExcludeEachOther() throws {

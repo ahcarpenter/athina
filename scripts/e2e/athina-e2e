@@ -288,7 +288,7 @@ main() {
 	if checkout_lock_needed "$command"; then
 		# Held to the end, so a second run from this checkout waits here
 		# rather than build over the bundle this one runs from.
-		lock_acquire CHECKOUT_LOCK "$what" "$LOCK_TIMEOUT" || status=$?
+		checkout_lock_acquire "$what" "$LOCK_TIMEOUT" || status=$?
 		[ "$status" = 0 ] || exit "$status"
 		# Exiting gives the locks back however the run ends; this also takes
 		# down their holder files. warm sets its own trap, which does both.
