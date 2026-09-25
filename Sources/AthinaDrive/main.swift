@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import AthinaE2E
+import CoreGraphics
 import Foundation
 
 // athina-drive: the one implementation of every step an end-to-end scenario

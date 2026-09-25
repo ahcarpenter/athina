@@ -1,5 +1,8 @@
 import AppKit
 import AthinaCore
+import CoreGraphics
+import Foundation
+import Observation
 import SwiftUI
 
 /// Owns the floating suggestion panel: a non-activating window that never takes

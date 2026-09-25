@@ -1,5 +1,6 @@
 import AppKit
 import AthinaCore
+import Foundation
 
 /// Loads the menu bar mark's variants from the bundle.
 ///
