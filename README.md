@@ -194,8 +194,8 @@ does (a dependency or framework added to one goes in the other too), bundles
 the same icon and menu bar marks `scripts/bundle.sh` does, and signs with
 `Resources/Athina.app-store.entitlements` (the App Sandbox, `network.client`,
 and the microphone keys of both the hardened runtime, `device.audio-input`,
-and the sandbox, `device.microphone`). Its Info.plist is `Resources/Info.plist` with
-`CFBundleIdentifier` rewritten at build time to the target's
+and the sandbox, `device.microphone`). Its Info.plist is `Resources/Info.plist`
+with `CFBundleIdentifier` rewritten at build time to the target's
 `PRODUCT_BUNDLE_IDENTIFIER`, so the version and every other key are still set
 in one place. That id is set only in `project.yml`, and is the development id
 `com.ahcarpenter.athina.appstore.dev` until the permanent App Store id is
@@ -1674,10 +1674,10 @@ particular to this app:
 --snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the macOS
 26 SDK this package targets, and uploads the rendered PNGs, replay-mode renders
 on a scaled clock included, as the `ui-snapshots` artifact. A second job
-generates the Xcode project, archives its App Store target, and
-checks that the archived app carries the target's bundle id and the App
-Sandbox (see The Xcode project). No test waits on
-real time (see A faster clock). The tests exercise the pure parts
+generates the Xcode project, archives its App Store target, and checks that
+the archived app carries the target's bundle id and the App Sandbox (see The
+Xcode project). No test waits on real time (see A faster clock). The tests
+exercise the pure parts
 (hashing, cadence, journal, retention and its in-place migration, settings, the
 mentor scheduler and every gate, mentorship context rules and placement, spend
 accounting, snooze and never-for-this rules per category, the rolling window,
