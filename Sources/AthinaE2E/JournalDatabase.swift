@@ -7,79 +7,112 @@ import Foundation
 /// characters no journal text can contain, so a title or an OCR line with tabs
 /// and newlines in it still parses back into one row.
 public struct JournalDatabase: Sendable {
-    public struct Failure: Error, CustomStringConvertible {
-        public let description: String
-        public init(_ description: String) { self.description = description }
+  /// Why the journal could not be read.
+  public struct Failure: Error, CustomStringConvertible {
+    /// What went wrong, with the message `sqlite3` printed when it failed.
+    public let description: String
+    /// Creates the failure with its message.
+    public init(_ description: String) { self.description = description }
+  }
+
+  /// The ASCII unit separator, which `sqlite3` is told to put between
+  /// fields.
+  public static let fieldSeparator = "\u{1f}"
+  /// The ASCII record separator, which `sqlite3` is told to put between
+  /// rows.
+  public static let rowSeparator = "\u{1e}"
+
+  /// The path of the journal's database file.
+  public let path: String
+  /// Creates a reader for the journal at `path`, which need not exist yet.
+  public init(path: String) { self.path = path }
+
+  /// Runs `sql` read-only against the journal and returns its rows, each
+  /// field as text.
+  ///
+  /// - Throws: `Failure` when there is no journal at `path`, `sqlite3` will
+  ///   not run, or the query fails.
+  public func rows(_ sql: String) throws -> [[String]] {
+    guard FileManager.default.fileExists(atPath: path) else {
+      throw Failure("no journal at \(path)")
     }
-
-    public static let fieldSeparator = "\u{1f}"
-    public static let rowSeparator = "\u{1e}"
-
-    public let path: String
-    public init(path: String) { self.path = path }
-
-    public func rows(_ sql: String) throws -> [[String]] {
-        guard FileManager.default.fileExists(atPath: path) else {
-            throw Failure("no journal at \(path)")
-        }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-        process.arguments = [
-            "-readonly", "-noheader",
-            "-separator", Self.fieldSeparator, "-newline", Self.rowSeparator,
-            path, sql,
-        ]
-        let output = Pipe()
-        let errors = Pipe()
-        process.standardOutput = output
-        process.standardError = errors
-        do { try process.run() } catch { throw Failure("could not run sqlite3: \(error)") }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errors.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw Failure("sqlite3 failed: \(String(decoding: errorData, as: UTF8.self))")
-        }
-        return String(decoding: data, as: UTF8.self)
-            .components(separatedBy: Self.rowSeparator)
-            .filter { !$0.isEmpty }
-            .map { $0.components(separatedBy: Self.fieldSeparator) }
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+    process.arguments = [
+      "-readonly",
+      "-noheader",
+      "-separator",
+      Self.fieldSeparator,
+      "-newline",
+      Self.rowSeparator,
+      path,
+      sql,
+    ]
+    let output = Pipe()
+    let errors = Pipe()
+    process.standardOutput = output
+    process.standardError = errors
+    do { try process.run() } catch { throw Failure("could not run sqlite3: \(error)") }
+    let data = output.fileHandleForReading.readDataToEndOfFile()
+    let errorData = errors.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else {
+      throw Failure("sqlite3 failed: \(String(decoding: errorData, as: UTF8.self))")
     }
+    return String(decoding: data, as: UTF8.self)
+      .components(separatedBy: Self.rowSeparator)
+      .filter { !$0.isEmpty }
+      .map { $0.components(separatedBy: Self.fieldSeparator) }
+  }
 
-    public func table(_ query: JournalQuery) throws -> String {
-        JournalQueries.table(columns: query.columns, rows: try rows(query.sql))
+  /// Runs `query` and returns its result as a tab-separated table with a
+  /// header line.
+  ///
+  /// - Throws: `Failure` when the journal cannot be read.
+  public func table(_ query: JournalQuery) throws -> String {
+    JournalQueries.table(columns: query.columns, rows: try rows(query.sql))
+  }
+
+  /// The change moments in this journal and whether a focus-change capture
+  /// followed each, with the same columns however the run was driven.
+  public func captureRace() throws -> (table: String, report: CaptureRaceReport.Report) {
+    let switches = try rows(
+      """
+      select id, timestamp, kind from events
+      where kind in ('appSwitch', 'windowSwitch') order by timestamp, id
+      """
+    ).compactMap { row -> CaptureRaceReport.Switch? in
+      guard row.count == 3, let id = Int(row[0]), let seconds = Double(row[1]) else { return nil }
+      return CaptureRaceReport.Switch(
+        id: id,
+        at: Date(timeIntervalSince1970: seconds),
+        kind: row[2]
+      )
     }
-
-    /// The change moments in this journal and whether a focus-change capture
-    /// followed each, with the same columns however the run was driven.
-    public func captureRace() throws -> (table: String, report: CaptureRaceReport.Report) {
-        let switches = try rows("""
-            select id, timestamp, kind from events
-            where kind in ('appSwitch', 'windowSwitch') order by timestamp, id
-            """).compactMap { row -> CaptureRaceReport.Switch? in
-            guard row.count == 3, let id = Int(row[0]), let seconds = Double(row[1]) else { return nil }
-            return CaptureRaceReport.Switch(id: id, at: Date(timeIntervalSince1970: seconds), kind: row[2])
-        }
-        let captures = try rows("select id, timestamp, reason from observations order by timestamp, id")
-            .compactMap { row -> CaptureRaceReport.Capture? in
-                guard row.count == 3, let id = Int(row[0]), let seconds = Double(row[1]) else { return nil }
-                return CaptureRaceReport.Capture(id: id, at: Date(timeIntervalSince1970: seconds), reason: row[2])
-            }
-        let report = CaptureRaceReport.evaluate(switches: switches, captures: captures)
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
-        let table = JournalQueries.table(
-            columns: ["switch_ids", "at", "capture", "capture_reason", "verdict"],
-            rows: report.moments.map { moment in
-                [
-                    moment.switchIDs.map(String.init).joined(separator: ","),
-                    formatter.string(from: moment.at),
-                    moment.captureID.map(String.init) ?? "-",
-                    moment.captureReason ?? "-",
-                    moment.verdict,
-                ]
-            }
+    let captures = try rows("select id, timestamp, reason from observations order by timestamp, id")
+      .compactMap { row -> CaptureRaceReport.Capture? in
+        guard row.count == 3, let id = Int(row[0]), let seconds = Double(row[1]) else { return nil }
+        return CaptureRaceReport.Capture(
+          id: id,
+          at: Date(timeIntervalSince1970: seconds),
+          reason: row[2]
         )
-        return (table, report)
-    }
+      }
+    let report = CaptureRaceReport.evaluate(switches: switches, captures: captures)
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
+    let table = JournalQueries.table(
+      columns: ["switch_ids", "at", "capture", "capture_reason", "verdict"],
+      rows: report.moments.map { moment in
+        [
+          moment.switchIDs.map(String.init).joined(separator: ","),
+          formatter.string(from: moment.at),
+          moment.captureID.map(String.init) ?? "-",
+          moment.captureReason ?? "-",
+          moment.verdict,
+        ]
+      }
+    )
+    return (table, report)
+  }
 }

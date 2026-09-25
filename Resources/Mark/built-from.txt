@@ -4,5 +4,5 @@
 # script or the variant set, never edit this by hand.
 AthinaMark.svg 02dc7f7b960525ffe50cce980c37640aa7311ee36da5e9c025451d904706fb79
 AthinaOwl.svg e227bce988b0923c2caffc967581fd748de147d9258106d52ae7ae3808de9aa5
-mark-assets.swift 96f2bf8f804c77665e88e6069d40644a614bd0024183c97c4acc78a9a7846a40
+mark-assets.swift 3a92623738b679835f405bb8ec1bf6d279127c162c89dda40449abbb1b3d4b23
 variants watching idle paused excluded needsSomething held

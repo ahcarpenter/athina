@@ -2,6 +2,7 @@
 // turns on, so `make test` compiles none of this.
 #if UISnapshotsSmoke
   import AppKit
+  import Foundation
   import SnapshotDiff
   import SnapshotTesting
   import Testing
@@ -36,8 +37,10 @@
     private static let testsDirectory = URL(filePath: #filePath).deletingLastPathComponent()
     private static let root = testsDirectory.deletingLastPathComponent().deletingLastPathComponent()
 
-    /// The sets of renders another commit drew on this Mac, each in a process of its own, when the
-    /// run compares with those, separated by colons. A snapshot matches when it matches any set's.
+    /// The sets of renders another commit drew on this Mac, each in a process
+    /// of its own, when the run compares with those, separated by colons.
+    ///
+    /// A snapshot matches when it matches any set's.
     private static let against = ProcessInfo.processInfo.environment["UI_SNAPSHOTS_SMOKE_AGAINST"]
       .flatMap { value -> [URL]? in
         guard !value.isEmpty else { return nil }
@@ -56,7 +59,9 @@
     private static let references =
       against?.first
       ?? testsDirectory.appending(
-        path: "__Snapshots__/UISnapshotsSmokeTests", directoryHint: .isDirectory)
+        path: "__Snapshots__/UISnapshotsSmokeTests",
+        directoryHint: .isDirectory
+      )
 
     private static let output =
       ProcessInfo.processInfo.environment["UI_SNAPSHOTS_SMOKE_OUTPUT"]
@@ -70,8 +75,10 @@
       }
     }
 
-    /// The shard this run checks, or nil for every snapshot. A value that is not a shard
-    /// `SnapshotShard` accepts fails the run rather than checking some other set.
+    /// The shard this run checks, or nil for every snapshot.
+    ///
+    /// A value that is not a shard `SnapshotShard` accepts fails the run rather
+    /// than checking some other set.
     private static func shard() throws -> SnapshotShard? {
       guard let value = ProcessInfo.processInfo.environment["UI_SNAPSHOTS_SMOKE_SHARD"],
         !value.isEmpty
@@ -97,21 +104,25 @@
       // Scroll bars always shown, as `scripts/snapshots.sh` has `--snapshot` show them and the
       // runner, with no trackpad, shows them, whatever this Mac is set to.
       UserDefaults.standard.setVolatileDomain(
-        ["AppleShowScrollBars": "Always"], forName: UserDefaults.argumentDomain)
+        ["AppleShowScrollBars": "Always"],
+        forName: UserDefaults.argumentDomain
+      )
       // An app that owns windows, with no Dock icon, as the app itself is.
       NSApplication.shared.setActivationPolicy(.accessory)
       // A test process's bundle is the test runner's, so the marks come from the folder the app
       // bundle copies them from.
       MenuBarMarkImage.directory = Self.root.appending(
-        path: "Resources/Mark", directoryHint: .isDirectory)
+        path: "Resources/Mark",
+        directoryHint: .isDirectory
+      )
     }
 
     @Test func everySnapshotMatchesItsReference() async throws {
       let fileManager = FileManager.default
       // The set a run publishes for approving: the reference of every snapshot that matched and
       // the new render of every other one. It is filled beside its final place and moved there
-      // only once every snapshot it draws has rendered, so an unfinished run never publishes a partial
-      // set that approving would take for the whole one.
+      // only once every snapshot it draws has rendered, so an unfinished run never publishes a
+      // partial set that approving would take for the whole one.
       let partial = Self.output.appending(path: "references-partial", directoryHint: .isDirectory)
       let approvable = Self.output.appending(path: "references", directoryHint: .isDirectory)
       let drift = Self.output.appending(path: "drift", directoryHint: .isDirectory)
@@ -134,34 +145,48 @@
           let file = "\(Self.testName).\(name).png"
           if let only = Self.only, !only.contains(name) { continue }
           let bitmap = try await Snapshots.settledPicture(
-            of: spec, in: appearance, capture: Self.capture)
+            of: spec,
+            in: appearance,
+            capture: Self.capture
+          )
           if Self.isBlank(bitmap) {
             Issue.record("\(name) drew nothing: every pixel is the same colour")
           }
           let image = NSImage(cgImage: try bitmap.cgImage(), size: .zero)
           let failures = (Self.against ?? [Self.references]).map { set in
             verifySnapshot(
-              of: image, as: Self.strategy, named: name, snapshotDirectory: set.path,
-              testName: Self.testName)
+              of: image,
+              as: Self.strategy,
+              named: name,
+              snapshotDirectory: set.path,
+              testName: Self.testName
+            )
           }
           let failure = failures.contains { $0 == nil } ? nil : failures.first ?? nil
           guard let failure else {
             try fileManager.copyItem(
-              at: Self.references.appending(path: file), to: partial.appending(path: file))
+              at: Self.references.appending(path: file),
+              to: partial.appending(path: file)
+            )
             continue
           }
           if Self.against == nil { Issue.record(Comment(rawValue: failure)) }
           try Self.strategy.diffing.toData(image).write(to: partial.appending(path: file))
           try Self.writeDrift(
-            of: image, from: Self.references.appending(path: file), to: drift.appending(path: name))
+            of: image,
+            from: Self.references.appending(path: file),
+            to: drift.appending(path: name)
+          )
         }
       }
       try fileManager.moveItem(at: partial, to: approvable)
     }
 
-    /// A reference no snapshot produces fails until it is deleted, as approving deletes it, so the
-    /// references are only ever the ones the test compares. Each shard checks the files of its own
-    /// snapshots, and one whose snapshot has no shard falls to the first.
+    /// A reference no snapshot produces fails until it is deleted, as approving
+    /// deletes it, so the references are only ever the ones the test compares.
+    ///
+    /// Each shard checks the files of its own snapshots, and one whose snapshot
+    /// has no shard falls to the first.
     @Test func everyReferenceHasASnapshot() throws {
       // Another commit's renders are compared as a report, which names a removed snapshot itself.
       guard Self.against == nil else { return }
@@ -172,7 +197,8 @@
         .filter { !$0.hasPrefix(".") }
         .filter { file in
           shard?.compares(
-            file: file.hasPrefix(prefix) ? String(file.dropFirst(prefix.count)) : file)
+            file: file.hasPrefix(prefix) ? String(file.dropFirst(prefix.count)) : file
+          )
             ?? true
         }
       for file in present.sorted() where !expected.contains(file) {
@@ -180,14 +206,18 @@
       }
     }
 
-    /// The window drawn in this process by swift-snapshot-testing's view strategy, rather than
-    /// captured from the window server as `--snapshot` does. It draws the window's frame view, the
-    /// view under the content that paints the window's background, so the picture has the same
-    /// backdrop, and it shows much of what sits on Liquid Glass, which the content view drawn on
-    /// its own leaves out. Drawn in process, a view is drawn as its layers stand, so the first
-    /// capture needs no wait.
+    /// The window drawn in this process by swift-snapshot-testing's view
+    /// strategy, rather than captured from the window server as `--snapshot`
+    /// does.
+    ///
+    /// It draws the window's frame view, the view under the content that paints
+    /// the window's background, so the picture has the same backdrop, and it
+    /// shows much of what sits on Liquid Glass, which the content view drawn on
+    /// its own leaves out. Drawn in process, a view is drawn as its layers
+    /// stand, so the first capture needs no wait.
     private static let capture = Snapshots.Capture(firstCaptureDelay: .zero, backingScale: 1) {
-      window, hosting in
+      window,
+      hosting in
       let frameView = window.contentView?.superview ?? hosting
       let image = await withCheckedContinuation { continuation in
         Snapshotting<NSView, NSImage>.image.snapshot(frameView).run {
