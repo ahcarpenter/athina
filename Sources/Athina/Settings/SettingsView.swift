@@ -2,6 +2,7 @@ import AppKit
 import AthinaCore
 import CoreGraphics
 import Foundation
+import Observation
 import SwiftUI
 
 /// A pane of the Settings window.

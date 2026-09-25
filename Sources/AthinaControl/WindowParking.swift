@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import ObjectiveC
 
 /// Keeps a hermetic run's windows off the screen.

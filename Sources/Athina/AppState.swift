@@ -1,5 +1,6 @@
 import AppKit
 import AthinaCore
+import CoreGraphics
 import Foundation
 import OSLog
 import Observation
@@ -657,6 +658,27 @@ final class AppState {
     }
   }
 
+  /// Runs one of the menu's commands: chosen from the menu bar extra's menu,
+  /// or through the control API.
+  func perform(_ command: MenuModel.Command) {
+    switch command {
+    case .togglePause: togglePause()
+    case .captureNow: captureNow()
+    case .showLastSuggestion: showLastSuggestion()
+    case .answer(let feedback): answerActiveSuggestion(feedback)
+    case .openSuggestions: windows.open(WindowID.history)
+    case .openPermissions: windows.open(WindowID.permissions)
+    case .openSettings(let pane):
+      pane.flatMap(SettingsPane.init(rawValue:))?.select()
+      windows.openSettings()
+    case .openDebugPanel: windows.open(WindowID.debug)
+    case .about:
+      AppActivation.request()
+      NSApp.orderFrontStandardAboutPanel(nil)
+    case .quit: NSApp.terminate(nil)
+    }
+  }
+
   func clearJournal() async {
     do {
       await mentor?.resetUnderstanding()
@@ -1260,27 +1282,6 @@ final class AppState {
   /// which a hermetic run's control API runs with no menu bar extra up.
   /// `AthinaApp` hands it the app's own actions as it builds its scenes.
   let windows = WindowOpener()
-
-  /// Runs one of the menu's commands: chosen from the menu bar extra's menu,
-  /// or through the control API.
-  func perform(_ command: MenuModel.Command) {
-    switch command {
-    case .togglePause: togglePause()
-    case .captureNow: captureNow()
-    case .showLastSuggestion: showLastSuggestion()
-    case .answer(let feedback): answerActiveSuggestion(feedback)
-    case .openSuggestions: windows.open(WindowID.history)
-    case .openPermissions: windows.open(WindowID.permissions)
-    case .openSettings(let pane):
-      pane.flatMap(SettingsPane.init(rawValue:))?.select()
-      windows.openSettings()
-    case .openDebugPanel: windows.open(WindowID.debug)
-    case .about:
-      AppActivation.request()
-      NSApp.orderFrontStandardAboutPanel(nil)
-    case .quit: NSApp.terminate(nil)
-    }
-  }
 
   /// One line for the menu on talking back: how to do it, or what it needs.
   var talkBackLine: String {

@@ -215,6 +215,17 @@ final class ToastController {
     handleClick(at: location, onToast: event.window != nil && event.window === panel)
   }
 
+  private func handleClick(at location: CGPoint, onToast: Bool) {
+    guard let panel, panel.isVisible, let suggestion = model.suggestion else { return }
+    let click = ToastClick(
+      onToast: onToast,
+      location: location,
+      menuBarItems: NSApp.windows.filter(\.holdsStatusBarButton).map(\.frame)
+    )
+    guard click.dismissesToast(talkBack: model.talkBack) else { return }
+    onAction?(suggestion.id, .dismissed)
+  }
+
   /// A mouse-down outside Athina's windows at `location`, in screen
   /// coordinates, as the global monitor reports one: how the control API's
   /// `outside-click` reaches a hermetic run's toast, which watches no other
@@ -226,17 +237,6 @@ final class ToastController {
     guard panel?.isVisible == true, model.suggestion != nil else { return false }
     handleClick(at: location, onToast: false)
     return true
-  }
-
-  private func handleClick(at location: CGPoint, onToast: Bool) {
-    guard let panel, panel.isVisible, let suggestion = model.suggestion else { return }
-    let click = ToastClick(
-      onToast: onToast,
-      location: location,
-      menuBarItems: NSApp.windows.filter(\.holdsStatusBarButton).map(\.frame)
-    )
-    guard click.dismissesToast(talkBack: model.talkBack) else { return }
-    onAction?(suggestion.id, .dismissed)
   }
 
   /// Re-fits the panel after its content changed size (expand, collapse, a

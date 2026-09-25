@@ -41,7 +41,8 @@ import Testing
     )
     try fileManager.copyItem(at: URL(fileURLWithPath: "/usr/bin/true"), to: binary)
     let info: [String: Any] = [
-      "CFBundleIdentifier": "com.ahcarpenter.athina", "CFBundleExecutable": "Athina",
+      "CFBundleIdentifier": "com.ahcarpenter.athina",
+      "CFBundleExecutable": "Athina",
       "CFBundlePackageType": "APPL",
     ]
     try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)

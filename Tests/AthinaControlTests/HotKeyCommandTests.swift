@@ -1,6 +1,7 @@
 import AppKit
 import AthinaControlProtocol
 import AthinaCore
+import CoreGraphics
 import Testing
 
 @testable import AthinaControl
