@@ -4,15 +4,19 @@
 # the renders CI made (README "UI snapshot baselines").
 #
 # Usage: scripts/snapshots.sh <command>
-#   gate            what CI runs: render twice, fail unless the two renders
-#                   are the same picture, then fail on any drift from the baselines
-#   approve [<run>] make the baselines match the renders of CI run <run>, by
-#                   default the newest CI run of this checkout's HEAD commit
+#   gate [<k>/<n>]  what CI runs: render twice, fail unless the two renders
+#                   are the same picture, then fail on any drift from the
+#                   baselines; with k/n, only the snapshots CI shard k of n
+#                   renders and compares (SnapshotShard, in Sources/SnapshotDiff)
+#   approve [<run>] make the baselines match the renders of CI run <run>, every
+#                   shard's together, by default the newest CI run of this
+#                   checkout's HEAD commit
 #
 # Output lands in build/snapshots: render-first/ and render-again/ hold the two
 # renders; render/ holds the first once both finished and agree, with
 # source-tree naming the git tree they were made from, and is what CI uploads
-# for approve; report/index.html shows each drifted snapshot before, after, and
+# for approve, with shard naming the shard it holds when there is one;
+# report/index.html shows each drifted snapshot before, after, and
 # where it changed, and determinism/ the same for two renders that did not match.
 #
 # ATHINA_APP names the app to render with (build/Athina.app by default).
@@ -40,7 +44,7 @@ render() {
   local dir="$1"
   [ -x "$APP/Contents/MacOS/Athina" ] || die "no app at $APP; run make build first"
   rm -rf "$dir"
-  TZ=UTC "$APP/Contents/MacOS/Athina" --snapshot "$dir" \
+  TZ=UTC "$APP/Contents/MacOS/Athina" --snapshot "$dir" ${render_shard[@]+"${render_shard[@]}"} \
     -AppleLocale en_US -AppleLanguages '(en-US)' -AppleICUForce24HourTime NO -AppleShowScrollBars Always \
     || die "could not render every snapshot into $dir"
 }
@@ -48,22 +52,30 @@ render() {
 command="${1:-}"
 case "$command" in
   gate)
-    [ "$#" -eq 1 ] || die "usage: scripts/snapshots.sh gate"
+    [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh gate [<k>/<n>]"
+    shard="${2:-}"
+    render_shard=()
+    diff_shard=()
+    if [ -n "$shard" ]; then
+      render_shard=(--snapshot-shard "$shard")
+      diff_shard=(--shard "$shard")
+    fi
     rm -rf "$OUT/render" "$OUT/report" "$OUT/determinism"
     render "$OUT/render-first"
     render "$OUT/render-again"
     # Two renders of one build must be the same picture, by the rule the
     # baselines are held to, or a baseline could never be trusted to hold still.
     status=0
-    diff_tool agree "$OUT/render-first" "$OUT/render-again" --report "$OUT/determinism" || status=$?
+    diff_tool agree "$OUT/render-first" "$OUT/render-again" --report "$OUT/determinism" ${diff_shard[@]+"${diff_shard[@]}"} || status=$?
     if [ "$status" -eq 1 ]; then
       echo "snapshots: two renders of the same build differ; the renderer is not deterministic (see build/snapshots/determinism)" >&2
     fi
     [ "$status" -eq 0 ] || exit "$status"
     rm -rf "$OUT/determinism"
     git -C "$ROOT" rev-parse 'HEAD^{tree}' > "$OUT/render-first/source-tree"
+    [ -z "$shard" ] || echo "$shard" > "$OUT/render-first/shard"
     mv "$OUT/render-first" "$OUT/render"
-    diff_tool compare "$BASELINES" "$OUT/render" --report "$OUT/report"
+    diff_tool compare "$BASELINES" "$OUT/render" --report "$OUT/report" ${diff_shard[@]+"${diff_shard[@]}"}
     ;;
 
   approve)
@@ -73,22 +85,38 @@ case "$command" in
     head="$(git -C "$ROOT" rev-parse HEAD)"
     tree="$(git -C "$ROOT" rev-parse 'HEAD^{tree}')"
     if [ -z "$run" ]; then
-      run="$(gh run list --workflow ci.yml --commit "$head" --status completed --limit 1 --json databaseId --jq '.[0].databaseId // empty')" \
-        || die "could not list the CI runs of HEAD ($head)"
-      [ -n "$run" ] || die "no finished CI run of HEAD ($head); push it and let CI finish, or name a run"
+      run="$(gh run list --workflow merge-checks.yml --commit "$head" --status completed --limit 20 --json databaseId,conclusion --jq 'map(select(.conclusion != "skipped")) | .[0].databaseId // empty')" \
+        || die "could not list the merge-checks runs of HEAD ($head)"
+      [ -n "$run" ] || die "no finished merge-checks run of HEAD ($head); push it with the merge-checks label on its pull request and let the run finish, or name a run"
     fi
-    rm -rf "$OUT/approved-run"
-    gh run download "$run" --name ui-snapshots --dir "$OUT/approved-run" \
-      || die "CI run $run has no ui-snapshots artifact to approve; a run publishes one only when both its renders finished and agree"
-    run_tree="$(cat "$OUT/approved-run/source-tree" 2>/dev/null)" \
-      || die "CI run $run does not name the source tree it rendered, so its renders cannot be matched to HEAD"
-    [ "$run_tree" = "$tree" ] \
-      || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into these baselines; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
+    # Each shard uploads the renders of its own snapshots as
+    # ui-snapshots-shard-<k>; approving takes them all together, and only
+    # when every shard's are there, since a missing shard's snapshots would
+    # read as removed and have their baselines deleted.
+    rm -rf "$OUT/approved-run" "$OUT/approved-shards"
+    gh run download "$run" --pattern 'ui-snapshots-shard-*' --dir "$OUT/approved-shards" \
+      || die "could not download the renders of CI run $run"
+    first="$(cat "$OUT/approved-shards/ui-snapshots-shard-1/shard" 2>/dev/null)" \
+      || die "CI run $run has no renders from shard 1 to approve; a shard publishes them only when both its renders finished and agree"
+    count="${first#*/}"
+    mkdir -p "$OUT/approved-run"
+    for k in $(seq 1 "$count"); do
+      dir="$OUT/approved-shards/ui-snapshots-shard-$k"
+      [ "$(cat "$dir/shard" 2>/dev/null)" = "$k/$count" ] \
+        || die "CI run $run has no renders from shard $k of $count to approve; a shard publishes them only when both its renders finished and agree"
+      run_tree="$(cat "$dir/source-tree" 2>/dev/null)" \
+        || die "shard $k of CI run $run does not name the source tree it rendered, so its renders cannot be matched to HEAD"
+      [ "$run_tree" = "$tree" ] \
+        || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into these baselines; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
+      cp "$dir"/*.png "$OUT/approved-run/"
+    done
+    extra="$(find "$OUT/approved-shards" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+    [ "$extra" -eq "$count" ] || die "CI run $run has renders from $extra shards, not $count"
     diff_tool approve "$BASELINES" "$OUT/approved-run"
     echo "snapshots: review the changed images (git status Tests/Snapshots), then commit them with the change that caused them"
     ;;
 
   *)
-    die "usage: scripts/snapshots.sh gate | approve [<run id>]"
+    die "usage: scripts/snapshots.sh gate [<k>/<n>] | approve [<run id>]"
     ;;
 esac

@@ -19,6 +19,10 @@ enum Snapshots {
 
     static var isActive: Bool { requestedDirectory != nil }
 
+    /// `--snapshot-shard <k>/<n>` renders only the snapshots CI shard k of n
+    /// renders (`SnapshotShard`); without it, a run renders every snapshot.
+    static let shardFlag = "--snapshot-shard"
+
     /// The moment every sample stands still at, so every age, time and date a
     /// render shows is the same on every run: Tuesday 15 September 2026,
     /// 14:32:10 UTC. `scripts/snapshots.sh` renders in UTC and US English, so
@@ -31,6 +35,14 @@ enum Snapshots {
     private static let capturesWithScreenCaptureKit = CGPreflightScreenCaptureAccess()
 
     static func render(to directory: URL) async throws {
+        let arguments = CommandLine.arguments
+        var shard: SnapshotShard?
+        if let index = arguments.firstIndex(of: shardFlag) {
+            guard index + 1 < arguments.count, let parsed = SnapshotShard(parsing: arguments[index + 1]) else {
+                throw SnapshotError.badShard
+            }
+            shard = parsed
+        }
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         print(capturesWithScreenCaptureKit
             ? "snapshot: capturing each window with ScreenCaptureKit"
@@ -93,8 +105,15 @@ enum Snapshots {
             ("debug-panel-calls-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView(initialSidePage: .calls)), replay),
             ("settings-models-replay", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), replay),
         ]
+        if let mismatch = SnapshotShard.mismatch(with: specs.map(\.name)) {
+            throw SnapshotError.shardTable(mismatch)
+        }
+        let rendered = specs.filter { shard?.renders($0.name) ?? true }
+        if let shard {
+            print("snapshot: shard \(shard), \(rendered.count) of \(specs.count) snapshots")
+        }
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
-            for spec in specs {
+            for spec in rendered {
                 let suffix = appearance == .aqua ? "light" : "dark"
                 let url = directory.appendingPathComponent("\(spec.name)-\(suffix).png")
                 try await render(spec.view.environment(spec.state), size: spec.size, appearance: appearance, to: url)
@@ -259,6 +278,10 @@ enum Snapshots {
         /// file: something in the view keeps moving, it lays out differently
         /// every time, or ScreenCaptureKit kept missing its windows.
         case neverSettled(String)
+        /// `--snapshot-shard` without a shard `SnapshotShard` accepts.
+        case badShard
+        /// The snapshots and `SnapshotShard.assignment` do not name the same set.
+        case shardTable(String)
     }
 }
 

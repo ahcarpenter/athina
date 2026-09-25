@@ -101,9 +101,11 @@ public struct SnapshotComparison: Sendable {
     public var drift: [SnapshotResult] { results.filter(\.status.isDrift) }
     public var matches: Bool { drift.isEmpty }
 
-    public static func compare(baseline: URL, actual: URL, kind: Kind = .baselines, tolerance: Int = defaultTolerance) throws -> SnapshotComparison {
-        let before = try pngs(in: baseline)
-        let after = try pngs(in: actual)
+    /// Every snapshot in either directory, or only those `shard` compares.
+    public static func compare(baseline: URL, actual: URL, kind: Kind = .baselines, tolerance: Int = defaultTolerance, shard: SnapshotShard? = nil) throws -> SnapshotComparison {
+        let inShard = { (file: String) in shard?.compares(file: file) ?? true }
+        let before = try pngs(in: baseline).filter(inShard)
+        let after = try pngs(in: actual).filter(inShard)
         var results: [SnapshotResult] = []
         for file in Set(before).union(after).sorted() {
             switch (before.contains(file), after.contains(file)) {

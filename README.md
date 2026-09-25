@@ -180,14 +180,15 @@ signing with provisioning profiles, archiving, and uploading to App Store
 Connect. `project.yml` is its committed spec, and `make xcodeproj` generates
 `Athina.xcodeproj` from it with XcodeGen, pinned by version in
 `Tools/XcodeGenTool` (its `Package.resolved` is committed), which SwiftPM
-builds on first use, so nothing is installed and every Mac and CI generate the
+builds on first use, so nothing is installed and every Mac generates the
 same project. The generated project is not committed, so no `project.pbxproj`
 is ever merged by hand: change `project.yml` and regenerate. Opening the
 project in Xcode starts with `make xcodeproj`, then `open Athina.xcodeproj`;
 run it again after changing `project.yml` or adding or removing a source file.
 The tools package is not part of the app's package, so `make build`, `make
-test`, `scripts/bundle.sh`, `make release` and the package CI job never fetch
-or build XcodeGen.
+test`, `scripts/bundle.sh`, `make release` and CI never fetch or build XcodeGen.
+CI does not generate or archive the project: that check left CI until the App
+Store release flow brings it back as part of that flow.
 
 The project has one target, `Athina App Store`, and a scheme of the same name
 whose Archive action builds Release. It compiles `Sources/Athina` against the
@@ -205,7 +206,7 @@ in one place. That id is set only in `project.yml`, and is the development id
 chosen, which can never change once a build is uploaded. Signing is automatic
 and `DEVELOPMENT_TEAM` is left empty: until a team id is filled in there, the
 target signs to run locally, which is how `make xcode-build` and `make
-xcode-archive` build it and CI archives it; with one, Xcode signs with that
+xcode-archive` build it; with one, Xcode signs with that
 team's Apple Development certificate and Product > Archive feeds the
 Organizer's App Store Connect upload. The built app is sandboxed, so it keeps
 its files in its own container and runs as A sandboxed build describes. The
@@ -1722,15 +1723,50 @@ particular to this app:
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs three jobs on GitHub's `macos-26` runner, which
-ships Xcode 26 and the macOS 26 SDK this package targets: `build-and-test` runs
-`swift test` and the bundle script; `ui-snapshots` renders every snapshot
-with `Athina --snapshot`, replay-mode renders on a scaled clock included,
-compares the renders with the approved baselines, and uploads them as the
-`ui-snapshots` artifact (see UI snapshot baselines); and `xcode-project`
-generates the Xcode project, archives its App Store target, and checks that
-the archived app carries the target's bundle id and the App Sandbox (see The
-Xcode project). No test waits on real time (see A faster clock). The tests
+CI runs two jobs on GitHub's `macos-26` runner, which ships Xcode 26 and the
+macOS 26 SDK this package targets: `build-and-test` runs `swift test` and the
+bundle script, and `ui-snapshots` renders every snapshot with `Athina
+--snapshot`, replay-mode renders on a scaled clock included, compares the
+renders with the approved baselines, and uploads them, split across four
+runners that each take a quarter of the snapshots (see UI snapshot baselines). The Xcode project's archive check is out
+of CI until the App Store release flow brings it back as part of that flow
+(see The Xcode project).
+
+Both run on every push to main. On a pull request, `build-and-test`
+(`.github/workflows/ci.yml`) runs on its own, and the slow `ui-snapshots`
+(`.github/workflows/merge-checks.yml`) runs only while the pull request carries
+the `merge-checks` label: adding the label runs it, and so does every push, or
+any other label added, while it is on. Anyone with write access can add it,
+from the pull request page or with
+
+```sh
+gh pr edit <number> --add-label merge-checks
+```
+
+Both must pass at a pull request's head before it can merge: the `main`
+ruleset requires them, with no bypass, and until `ui-snapshots` has run there,
+the pull request lists it as expected and cannot merge. Two traps shape this.
+A job that an `if` skips still reports a check run, and a skipped check counts
+as passed for a required one, so the skipped job takes another name: GitHub
+names a skipped job after its unevaluated `name:` expression, which is not
+`ui-snapshots`, and the expression's own answer for a skip is not either. And
+a `workflow_dispatch` run of the same job does not count: its checks are on
+the commit, but a pull request's required checks ignore them.
+
+The ruleset is kept in `.github/rulesets/main.json`; after a change to it,
+apply it with
+
+```sh
+gh api -X PUT "repos/ahcarpenter/athina/rulesets/$(gh api repos/ahcarpenter/athina/rulesets --jq '.[] | select(.name == "main") | .id')" --input .github/rulesets/main.json
+```
+
+(`gh api -X POST repos/ahcarpenter/athina/rulesets --input .github/rulesets/main.json`
+creates it if it is gone). It requires each check from GitHub Actions itself
+(integration 15368), so a commit status of the same name cannot stand in for
+one, and it does not require a branch to be up to date with main, so a pull
+request is not rerun each time another merges.
+
+No test waits on real time (see A faster clock). The tests
 exercise the pure parts
 (hashing, cadence, journal, retention and its in-place migration, settings, the
 mentor scheduler and every gate, mentorship context rules and placement, spend
@@ -1766,9 +1802,17 @@ replay puts beside it, and enlarged.
 
 `Tests/Snapshots` holds the approved render of every snapshot, light and dark,
 rendered on the CI runner, which is the one reference environment. The
-`ui-snapshots` job (`scripts/snapshots.sh gate`) builds the app, renders every
-snapshot twice and fails unless the two renders are the same picture, then
-compares each render with its baseline and fails on any drift. A pixel counts
+`ui-snapshots` check runs on four runners at once, the `ui-snapshots shard 1`
+to `4` jobs, and passes only when all four do. Each (`scripts/snapshots.sh
+gate <k>/4`) builds the app, renders its own snapshots twice and fails unless
+the two renders are the same picture, then compares each render with its
+baseline and fails on any drift. Which shard renders a snapshot is fixed in
+`SnapshotShard.assignment` (`Sources/SnapshotDiff`), which keeps the four even:
+a new snapshot needs a line there, since a render fails while any snapshot has
+no shard or any line names a snapshot that is gone, and a baseline whose
+snapshot has no shard is compared by the first, so a removed snapshot is still
+caught. `scripts/snapshots.sh gate` with no shard renders and compares them
+all. A pixel counts
 as changed when any of its channels moves by more than 6 of 255: that covers
 the shading an anti-aliased edge can pick up and the window server's glass,
 which on the runner draws a dark switch's knob one of two ways from one window
@@ -1776,8 +1820,8 @@ to the next (a few dozen pixels, up to 5 of 255 apart), and nothing a person
 would see, since a shifted edge, a new colour or a moved line moves some
 channel much further. A new snapshot fails until its baseline is approved, and
 a baseline the renderer no longer produces fails until it is deleted. For
-every drifted snapshot the job lists what changed in its summary and uploads
-the `ui-snapshot-report` artifact: the approved image, the new render and the
+every drifted snapshot the shard lists what changed in its summary and uploads
+the `ui-snapshot-report-shard-<k>` artifact: the approved image, the new render and the
 difference (changed pixels in red over a faded copy), one folder each, with an
 `index.html` that shows them side by side at real size. The comparison is
 `snapshot-diff` (`Sources/SnapshotDiff`, with unit tests), and the renderer
@@ -1809,15 +1853,18 @@ where it was made:
   glass differently, so a run never mixes them: a ScreenCaptureKit capture
   that fails is taken again, never drawn the other way.
 
-**Approving an intended change.** Push the change and let CI fail on the
-drift, look at the report, then run `make snapshots-approve` (or
-`scripts/snapshots.sh approve`), which downloads the renders from HEAD's
-newest CI run and makes `Tests/Snapshots` match them: a changed or new
+**Approving an intended change.** Push the change, with the `merge-checks`
+label on its pull request (see Continuous integration), and let `ui-snapshots`
+fail on the drift, look at the report, then run `make snapshots-approve` (or
+`scripts/snapshots.sh approve`), which downloads the renders of all four
+shards of HEAD's newest merge-checks run, the `ui-snapshots-shard-<k>`
+artifacts, and makes `Tests/Snapshots` match them: a changed or new
 snapshot's render replaces its baseline, a removed snapshot's baseline is
 deleted, and every other file is left alone. `RUN=<id>` names another CI run.
-A run publishes its renders only once both renders finished and agree, so a
-run that failed, timed out or was cancelled before then has nothing to
-approve, and the renders name the source tree they were made from, which
+A shard publishes its renders only once both its renders finished and agree,
+and approve refuses a run unless every shard did, since a missing shard's
+snapshots would read as removed; so a run that failed, timed out or was
+cancelled before then has nothing to approve, and the renders name the source tree they were made from, which
 approve refuses unless it is HEAD's own. A pull request's run renders the
 branch merged with main, so once main has moved on since the branch, merge or
 rebase onto main and push before approving. Commit the images with the change
@@ -1828,7 +1875,8 @@ edges and glass differently everywhere, so only the runner's renders are
 compared or approved.
 
 **A runner change is a deliberate refresh.** The baselines depend on the
-runner's macOS image and the newest Xcode on it, which `ci.yml` selects. When
+runner's macOS image and the newest Xcode on it, which `merge-checks.yml`
+selects. When
 GitHub updates either, the renders change with no change to the app; approve
 them from a CI run of an unchanged commit, in a commit of their own that names
 the new image or Xcode, so a real UI change is never approved under it.
