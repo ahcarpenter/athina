@@ -11,7 +11,11 @@ public struct MentorSettings: Codable, Equatable, Sendable {
   ///
   /// Off means no model call of any kind.
   public var enabled = true
+  /// The id of the model that makes the triage call, one of
+  /// `ModelCatalog.triageChoices`.
   public var triageModel = ModelCatalog.haiku45.id
+  /// The id of the model that makes mentor and follow-up calls, one of
+  /// `ModelCatalog.mentorChoices`.
   public var mentorModel = ModelCatalog.opus5.id
   /// The model that rewrites the understanding on a periodic refresh.
   ///
@@ -19,7 +23,9 @@ public struct MentorSettings: Codable, Equatable, Sendable {
   public var understandingModel = ModelCatalog.opus5.id
   /// Reasoning depth per tier, sent only to models that accept it.
   public var triageEffort: Effort = .low
+  /// The reasoning depth sent with mentor and follow-up calls.
   public var mentorEffort: Effort = .medium
+  /// The reasoning depth sent with the understanding's refresh calls.
   public var understandingEffort: Effort = .low
 
   // MARK: Cadence
@@ -97,13 +103,20 @@ public struct MentorSettings: Codable, Equatable, Sendable {
   ///
   /// Cadence slows as spend approaches it; calls stop at it.
   public var hourlySpendCap = 1.0
+  /// Dollars per million tokens for each model, which every call's usage is
+  /// priced with toward the spend cap; edited in Settings > Models.
   public var prices = PriceTable.defaults
 
   // MARK: Feedback rules
 
+  /// The Never for This rules: a category never raised again for an app.
   public var neverRules: [NeverRule] = []
+  /// The Not Now snoozes: a category kept quiet for an app until a deadline.
+  ///
+  /// One whose deadline has passed no longer counts.
   public var snoozes: [Snooze] = []
 
+  /// Creates the default settings.
   public init() {}
 
   // MARK: Codable with per-field defaults
@@ -121,6 +134,8 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     case neverRules, snoozes
   }
 
+  /// Decodes the settings, giving any field missing from the file its
+  /// default, and validates them.
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     let d = MentorSettings()
@@ -210,12 +225,18 @@ public struct MentorSettings: Codable, Equatable, Sendable {
 
   // MARK: Convenience
 
+  /// The catalog entry for `triageModel`, or Haiku 4.5 when the id is not
+  /// in the catalog.
   public var triageModelInfo: ClaudeModel {
     ModelCatalog.model(id: triageModel) ?? ModelCatalog.haiku45
   }
+  /// The catalog entry for `mentorModel`, or Opus 5 when the id is not in
+  /// the catalog.
   public var mentorModelInfo: ClaudeModel {
     ModelCatalog.model(id: mentorModel) ?? ModelCatalog.opus5
   }
+  /// The catalog entry for `understandingModel`, or Opus 5 when the id is
+  /// not in the catalog.
   public var understandingModelInfo: ClaudeModel {
     ModelCatalog.model(id: understandingModel) ?? ModelCatalog.opus5
   }
@@ -266,6 +287,8 @@ public struct MentorSettings: Codable, Equatable, Sendable {
     )
   }
 
+  /// Every category a Never for This rule or a live snooze keeps quiet for
+  /// the app at `now`, which the mentor prompt tells the model not to raise.
   public func suppressedCategories(bundleID: String?, now: Date) -> [SuggestionCategory] {
     SuppressionRules.suppressedCategories(
       bundleID: bundleID,

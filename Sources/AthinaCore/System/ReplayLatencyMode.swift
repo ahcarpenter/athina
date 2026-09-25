@@ -23,13 +23,22 @@ public struct ReplayLatencyMode: Equatable, Sendable {
   /// Why the flag was not accepted, or nil when it was or was not given.
   public var refusal: String?
 
+  /// The command-line flag that chooses the latency.
   public static let flag = "--replay-latency"
 
+  /// Creates a mode with this latency and refusal; the defaults are the
+  /// recorded latency and no refusal.
   public init(latency: ReplayClaudeClient.Latency = .recorded, refusal: String? = nil) {
     self.latency = latency
     self.refusal = refusal
   }
 
+  /// Reads the latency flag from the launch's command-line arguments.
+  ///
+  /// - Parameters:
+  ///   - arguments: The launch's command-line arguments.
+  ///   - clientMode: The launch's model client mode; the flag is honored only
+  ///     in a replay, including one that could not start.
   public init(arguments: [String], clientMode: ModelClientMode) {
     guard let index = arguments.firstIndex(of: ReplayLatencyMode.flag) else {
       self.init()

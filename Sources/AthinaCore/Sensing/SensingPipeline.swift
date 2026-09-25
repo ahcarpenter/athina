@@ -17,6 +17,8 @@ public enum SensingSource: Sendable {
 /// Orchestrates focus tracking, input polling, screen capture, frame diffing,
 /// OCR, and journaling, and publishes `SensingEvent`s to subscribers.
 public actor SensingPipeline {
+  /// The validated sensing settings in effect, replaced by
+  /// `updateSettings(_:)`.
   public private(set) var settings: SensingSettings
   private let journal: Journal
   private let tracker: FocusTracker
@@ -44,6 +46,8 @@ public actor SensingPipeline {
   private var lastPublishedCadence: Date = .distantPast
   private var lastPublishedSnapshot: CadenceStatus?
 
+  /// Creates a stopped pipeline that journals into `journal`, follows focus
+  /// with `tracker`, and stamps and paces everything on `clock`.
   public init(
     settings: SensingSettings,
     journal: Journal,
@@ -77,6 +81,8 @@ public actor SensingPipeline {
 
   // MARK: Control
 
+  /// Starts focus tracking and the sensing loop, and journals a `started`
+  /// event; does nothing when already started.
   public func start() async {
     guard loopTask == nil else { return }
     if source == .system {
@@ -93,6 +99,8 @@ public actor SensingPipeline {
     }
   }
 
+  /// Stops the sensing loop and focus tracking, journals a `stopped` event,
+  /// and ends every subscriber's stream.
   public func stop() async {
     loopTask?.cancel()
     loopTask = nil
@@ -103,6 +111,8 @@ public actor SensingPipeline {
     await broadcaster.finish()
   }
 
+  /// Pauses or resumes sensing at the owner's request, journaling a `paused`
+  /// or `resumed` event when that changes anything.
   public func setPaused(_ paused: Bool) async {
     guard paused != userPaused else { return }
     userPaused = paused
@@ -110,6 +120,8 @@ public actor SensingPipeline {
     await signal.signal()
   }
 
+  /// Validates and applies new sensing settings, including the excluded
+  /// apps, and wakes the loop so they take effect at once.
   public func updateSettings(_ newSettings: SensingSettings) async {
     let validated = newSettings.validated()
     settings = validated
@@ -130,6 +142,11 @@ public actor SensingPipeline {
     await signal.signal()
   }
 
+  /// Deletes everything in the journal, leaving one `journalCleared` event,
+  /// and publishes that event.
+  ///
+  /// The next frame captured is kept whatever it looks like, since there is
+  /// no earlier frame left to compare it with.
   public func clearJournal() async throws {
     try await journal.clear(at: clock.date)
     lastKept = nil

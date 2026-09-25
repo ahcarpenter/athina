@@ -7,11 +7,17 @@ import Foundation
 /// again in each scenario. The column list is the contract: adding a column
 /// changes what scenarios read, so it belongs here and is covered by tests.
 public struct JournalQuery: Sendable, Equatable {
+  /// What `athina-drive journal <db> <query>` calls the query.
   public let name: String
+  /// A line saying what the query shows, for `athina-drive journal - queries`.
   public let summary: String
+  /// The header of the printed table, one name per column the SQL selects.
   public let columns: [String]
+  /// The read-only SQL that `sqlite3` runs against the journal.
   public let sql: String
 
+  /// Creates a query called `name` that prints `columns` from what `sql`
+  /// selects.
   public init(name: String, summary: String, columns: [String], sql: String) {
     self.name = name
     self.summary = summary
@@ -20,6 +26,8 @@ public struct JournalQuery: Sendable, Equatable {
   }
 }
 
+/// Every named journal query the harness offers, and how their results are
+/// printed.
 public enum JournalQueries {
   /// Local wall-clock time of a journal's REAL seconds-since-1970 column,
   /// to the millisecond, so a transcript lines up with a log or a tap.
@@ -31,6 +39,7 @@ public enum JournalQueries {
     "coalesce(\(expression), '-') as \(name)"
   }
 
+  /// Every suggestion, with the feedback it got and when.
   public static let suggestions = JournalQuery(
     name: "suggestions",
     summary: "every suggestion with its feedback and when the feedback landed",
@@ -44,6 +53,8 @@ public enum JournalQueries {
       """
   )
 
+  /// Every model call, with its tier, outcome, cost, latency, and whether a
+  /// fixture answered it.
   public static let calls = JournalQuery(
     name: "calls",
     summary: "every model call, its tier, outcome, and whether it was replayed",
@@ -55,6 +66,8 @@ public enum JournalQueries {
       """
   )
 
+  /// Every follow-up question asked about a suggestion, with its answer or
+  /// error.
   public static let followUps = JournalQuery(
     name: "follow-ups",
     summary: "every spoken or typed follow-up with its answer",
@@ -66,6 +79,7 @@ public enum JournalQueries {
       """
   )
 
+  /// The sensing event log: app and window switches, idle, and pauses.
   public static let events = JournalQuery(
     name: "events",
     summary: "the sensing event log (app and window switches, idle, pauses)",
@@ -77,6 +91,8 @@ public enum JournalQueries {
       """
   )
 
+  /// Every capture, with its app, window, reason, and the length of its OCR
+  /// text.
   public static let observations = JournalQuery(
     name: "observations",
     summary: "every capture, why it happened, and how much text it read",
@@ -89,6 +105,8 @@ public enum JournalQueries {
       """
   )
 
+  /// One row of each table's row count, the cheapest way to poll a run's
+  /// progress.
   public static let counts = JournalQuery(
     name: "counts",
     summary: "one row of row counts, the cheapest way to poll a run's progress",
@@ -103,10 +121,12 @@ public enum JournalQueries {
       """
   )
 
+  /// Every query, in the order `athina-drive journal - queries` lists them.
   public static let all: [JournalQuery] = [
     suggestions, calls, followUps, events, observations, counts,
   ]
 
+  /// The query called `name`, or nil when there is none.
   public static func named(_ name: String) -> JournalQuery? {
     all.first { $0.name == name }
   }
@@ -122,6 +142,8 @@ public enum JournalQueries {
       }).joined(separator: "\n")
   }
 
+  /// `value` with backslashes, tabs, carriage returns and newlines written
+  /// as backslash escapes, so it stays one field of one line.
   public static func escape(_ value: String) -> String {
     value
       .replacingOccurrences(of: "\\", with: "\\\\")

@@ -3,10 +3,15 @@ import Foundation
 
 /// A point-in-time reading of this process's CPU time and memory footprint.
 public struct ProcessResourceSample: Equatable, Sendable {
+  /// User plus system CPU time the process has used since it started, in
+  /// seconds.
   public var cpuSeconds: Double
+  /// The real date the sample was taken.
   public var wallTime: Date
+  /// The process's physical memory footprint, in bytes.
   public var footprintBytes: UInt64
 
+  /// Creates a sample from its readings.
   public init(cpuSeconds: Double, wallTime: Date, footprintBytes: UInt64) {
     self.cpuSeconds = cpuSeconds
     self.wallTime = wallTime
@@ -16,9 +21,12 @@ public struct ProcessResourceSample: Equatable, Sendable {
 
 /// CPU percent over an interval (100 = one full core) plus current memory.
 public struct ProcessResourceUsage: Equatable, Sendable {
+  /// CPU use over the interval, where 100 is one full core.
   public var cpuPercent: Double
+  /// The physical memory footprint at the later sample, in bytes.
   public var footprintBytes: UInt64
 
+  /// Creates a usage reading from its two values.
   public init(cpuPercent: Double, footprintBytes: UInt64) {
     self.cpuPercent = cpuPercent
     self.footprintBytes = footprintBytes
@@ -39,6 +47,7 @@ public struct ProcessResourceUsage: Equatable, Sendable {
   }
 }
 
+/// Reads this process's CPU time and memory footprint, for the debug panel.
 public enum ProcessResources {
   /// CPU seconds are real seconds, so a sample is taken on real time
   /// whatever clock the rest of the app runs on (`AthinaClock`).

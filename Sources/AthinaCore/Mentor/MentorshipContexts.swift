@@ -2,9 +2,12 @@ import Foundation
 
 /// One kind of work the user wants mentoring in, in their own words.
 public struct MentorshipContext: Codable, Equatable, Sendable, Identifiable {
+  /// The longest name kept, in characters.
   public static let maxNameLength = 60
+  /// The longest detail kept, in characters.
   public static let maxDetailLength = 280
 
+  /// A stable identity that survives renames.
   public var id: UUID
   /// A short name, for example "building web apps".
   ///
@@ -14,6 +17,7 @@ public struct MentorshipContext: Codable, Equatable, Sendable, Identifiable {
   /// An optional longer description, sent to the triage model with the name.
   public var detail: String
 
+  /// Creates a context, with a new id unless one is given.
   public init(id: UUID = UUID(), name: String, detail: String = "") {
     self.id = id
     self.name = name
@@ -24,6 +28,8 @@ public struct MentorshipContext: Codable, Equatable, Sendable, Identifiable {
     case id, name, detail
   }
 
+  /// Decodes a context, filling a missing id with a new one and a missing
+  /// name or detail with empty text.
   public init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
     id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -42,6 +48,8 @@ public enum ContextPlacement: Equatable, Sendable {
   case inside(ContextMatch)
   case outside(ContextExclusion)
 
+  /// A short phrase for the placement, as the menu and the debug panel show
+  /// it.
   public var label: String {
     switch self {
     case .notEnforced: "not enforced"
@@ -58,6 +66,7 @@ public enum ContextPlacement: Equatable, Sendable {
     }
   }
 
+  /// The id of the declared context this activity was placed in, if any.
   public var contextID: UUID? {
     switch self {
     case .inside(let match): match.contextID
@@ -65,6 +74,7 @@ public enum ContextPlacement: Equatable, Sendable {
     }
   }
 
+  /// Whether the activity was placed outside every declared context.
   public var isOutside: Bool {
     if case .outside = self { return true }
     return false
@@ -73,14 +83,19 @@ public enum ContextPlacement: Equatable, Sendable {
 
 /// An activity placed inside a declared context.
 public struct ContextMatch: Equatable, Sendable {
+  /// The id of the declared context the activity was placed in.
   public var contextID: UUID
+  /// The context's name as declared.
   public var name: String
 
+  /// Creates a match with a declared context.
   public init(contextID: UUID, name: String) {
     self.contextID = contextID
     self.name = name
   }
 
+  /// The match as the menu and the debug panel show it: inside, then the
+  /// name in quotes.
   public var label: String {
     "inside \"\(name)\""
   }
@@ -94,6 +109,8 @@ public enum ContextExclusion: Equatable, Sendable {
   /// it is unsure.
   case noMatch(reason: String)
 
+  /// A short phrase for why the activity is outside: triage's own reason
+  /// when it gave one.
   public var label: String {
     switch self {
     case .noContextsDeclared: "no context is declared"
@@ -109,6 +126,7 @@ public enum ContextExclusion: Equatable, Sendable {
 /// gate, the prompts, the settings editor, and the tests all see the same
 /// answer.
 public enum ContextRules {
+  /// The most contexts kept; the settings editor offers no more.
   public static let maxContexts = 12
 
   // MARK: Normalizing
@@ -160,6 +178,8 @@ public enum ContextRules {
 
   // MARK: Matching
 
+  /// Returns the declared context whose name matches `name` ignoring case,
+  /// or nil when none does.
   public static func context(
     named name: String,
     in contexts: [MentorshipContext]

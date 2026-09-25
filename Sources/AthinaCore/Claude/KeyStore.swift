@@ -25,10 +25,15 @@ extension KeyStore {
   }
 }
 
+/// A keychain call that failed.
 public struct KeyStoreError: Error, CustomStringConvertible, Equatable, Sendable {
+  /// The status the Security framework returned.
   public let status: OSStatus
+  /// The operation that failed: `read`, `add`, `update`, or `delete`.
   public let operation: String
 
+  /// The failure as one line: `keychain`, the operation, and the system's
+  /// message for the status.
   public var description: String {
     let message = SecCopyErrorMessageString(status, nil) as String? ?? "OSStatus \(status)"
     return "keychain \(operation): \(message)"
@@ -42,10 +47,13 @@ public struct KeyStoreError: Error, CustomStringConvertible, Equatable, Sendable
 /// after an ad-hoc rebuild shows the system's keychain prompt once; Always
 /// Allow adds that build to the item's list (README, "Code signing").
 public struct KeychainKeyStore: KeyStore {
+  /// The service Athina's key is saved under: the running app's bundle
+  /// identifier.
   public static let service = AppPaths.keychainService
   /// The service the item was saved under while the app was called Mentor.
   /// `KeyMigration` copies that item to the one above on the first launch.
   public static let legacyService = AppPaths.legacyBundleIdentifier
+  /// The account name of the key's item, the same under every service.
   public static let account = "anthropic-api-key"
 
   /// Which item this store reads and writes.
@@ -53,6 +61,7 @@ public struct KeychainKeyStore: KeyStore {
   /// Only `KeyMigration` names anything but the default.
   public let service: String
 
+  /// Creates a store for the item under `service`.
   public init(service: String = KeychainKeyStore.service) {
     self.service = service
   }
@@ -65,6 +74,11 @@ public struct KeychainKeyStore: KeyStore {
     ]
   }
 
+  /// Returns the saved key, or nil when there is none.
+  ///
+  /// The first read after a rebuild can wait on the system's keychain prompt.
+  ///
+  /// - Throws: `KeyStoreError` for any failure but a missing item.
   public func load() throws -> String? {
     var query = baseQuery
     query[kSecReturnData as String] = true
@@ -82,6 +96,10 @@ public struct KeychainKeyStore: KeyStore {
     }
   }
 
+  /// Saves `key`, replacing the item's key or adding the item when there is
+  /// none.
+  ///
+  /// - Throws: `KeyStoreError` when the keychain refuses the update or the add.
   public func save(_ key: String) throws {
     let data = Data(key.utf8)
     let update: [String: Any] = [kSecValueData as String: data]
@@ -102,6 +120,9 @@ public struct KeychainKeyStore: KeyStore {
     }
   }
 
+  /// Deletes the item; one that is not there is not an error.
+  ///
+  /// - Throws: `KeyStoreError` when the keychain refuses the delete.
   public func delete() throws {
     let status = SecItemDelete(baseQuery as CFDictionary)
     guard status == errSecSuccess || status == errSecItemNotFound else {
@@ -126,6 +147,7 @@ public enum KeyMigration {
   /// deleted in Settings is never brought back from the item left behind.
   public static let doneKey = "apiKeyCopiedFromMentor"
 
+  /// What one run of the copy did.
   public enum Outcome: Equatable, Sendable {
     /// No key was saved under the old name.
     case nothingToMove
@@ -189,18 +211,22 @@ public final class InMemoryKeyStore: KeyStore, @unchecked Sendable {
   private let lock = NSLock()
   private var key: String?
 
+  /// Creates a store holding `key`, or none.
   public init(key: String? = nil) {
     self.key = key
   }
 
+  /// Returns the key held, or nil.
   public func load() throws -> String? {
     lock.withLock { key }
   }
 
+  /// Holds `key` in place of any other.
   public func save(_ key: String) throws {
     lock.withLock { self.key = key }
   }
 
+  /// Forgets the key.
   public func delete() throws {
     lock.withLock { key = nil }
   }

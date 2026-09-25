@@ -9,8 +9,11 @@ public enum FocusChangeKind: Sendable {
   case element
 }
 
+/// A change of focus the tracker saw, with the context read right after it.
 public struct FocusChange: Sendable {
+  /// Whether the app, its window, or its focused element changed.
   public var kind: FocusChangeKind
+  /// The focus context read fresh when the change was seen.
   public var context: FocusContext
 }
 
@@ -36,14 +39,23 @@ public final class FocusTracker {
   /// Stamps each context read.
   private let clock: any AthinaClock
 
+  /// Creates a stopped tracker that stamps each context it reads with
+  /// `clock`.
   public nonisolated init(clock: any AthinaClock) {
     self.clock = clock
   }
 
+  /// Sets the handler called on the accessibility actor with each focus
+  /// change, or removes it when nil.
   public func setOnChange(_ handler: (@Sendable (FocusChange) -> Void)?) {
     onChange = handler
   }
 
+  /// Replaces the bundle ids of the excluded apps, whose contexts are marked
+  /// excluded and never read through Accessibility.
+  ///
+  /// When the set changes while running, the current app is attached again
+  /// and a change published, since its exclusion may have flipped.
   public func updateExcluded(_ bundleIDs: Set<String>) {
     guard bundleIDs != excludedBundleIDs else { return }
     excludedBundleIDs = bundleIDs
@@ -63,6 +75,8 @@ public final class FocusTracker {
     attach(to: current, kind: .application)
   }
 
+  /// Starts following app activations and attaches to the frontmost app,
+  /// which publishes a first change.
   public func start() {
     guard !isRunning else { return }
     isRunning = true
@@ -95,6 +109,8 @@ public final class FocusTracker {
     }
   }
 
+  /// Stops following app activations and removes the current app's
+  /// Accessibility observer.
   public func stop() {
     isRunning = false
     if let workspaceToken {

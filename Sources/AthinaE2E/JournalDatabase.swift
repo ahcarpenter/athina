@@ -7,17 +7,31 @@ import Foundation
 /// characters no journal text can contain, so a title or an OCR line with tabs
 /// and newlines in it still parses back into one row.
 public struct JournalDatabase: Sendable {
+  /// Why the journal could not be read.
   public struct Failure: Error, CustomStringConvertible {
+    /// What went wrong, with the message `sqlite3` printed when it failed.
     public let description: String
+    /// Creates the failure with its message.
     public init(_ description: String) { self.description = description }
   }
 
+  /// The ASCII unit separator, which `sqlite3` is told to put between
+  /// fields.
   public static let fieldSeparator = "\u{1f}"
+  /// The ASCII record separator, which `sqlite3` is told to put between
+  /// rows.
   public static let rowSeparator = "\u{1e}"
 
+  /// The path of the journal's database file.
   public let path: String
+  /// Creates a reader for the journal at `path`, which need not exist yet.
   public init(path: String) { self.path = path }
 
+  /// Runs `sql` read-only against the journal and returns its rows, each
+  /// field as text.
+  ///
+  /// - Throws: `Failure` when there is no journal at `path`, `sqlite3` will
+  ///   not run, or the query fails.
   public func rows(_ sql: String) throws -> [[String]] {
     guard FileManager.default.fileExists(atPath: path) else {
       throw Failure("no journal at \(path)")
@@ -46,6 +60,10 @@ public struct JournalDatabase: Sendable {
       .map { $0.components(separatedBy: Self.fieldSeparator) }
   }
 
+  /// Runs `query` and returns its result as a tab-separated table with a
+  /// header line.
+  ///
+  /// - Throws: `Failure` when the journal cannot be read.
   public func table(_ query: JournalQuery) throws -> String {
     JournalQueries.table(columns: query.columns, rows: try rows(query.sql))
   }

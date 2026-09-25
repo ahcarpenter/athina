@@ -13,9 +13,12 @@ import Foundation
 public actor ReplayClaudeClient: ClaudeClient {
   /// One fixture and the name it is reported under.
   public struct Entry: Equatable, Sendable {
+    /// The fixture's file name, which the log and a stale refusal report.
     public var name: String
+    /// The recorded call.
     public var fixture: CallFixture
 
+    /// Creates an entry.
     public init(name: String, fixture: CallFixture) {
       self.name = name
       self.fixture = fixture
@@ -35,14 +38,20 @@ public actor ReplayClaudeClient: ClaudeClient {
 
   /// One call that was answered or refused, for tests and the log.
   public struct Served: Equatable, Sendable {
+    /// The identity the call was made with.
     public var call: CallIdentity
+    /// The request as the loop built it.
     public var request: MessagesRequest
     /// The fixture that answered or was refused; nil when none of the kind exists.
     public var fixtureName: String?
   }
 
+  /// Every fixture loaded, in file-name order, which is the order each kind is
+  /// served in.
   public nonisolated let entries: [Entry]
+  /// Whether a stale fixture is served rather than refused.
   public nonisolated let allowStale: Bool
+  /// Whether an answer comes at once or after the recorded latency.
   public nonisolated let latency: Latency
   /// Set when the fixtures could not be loaded: every call is refused with it.
   public nonisolated let unavailableReason: String?
@@ -50,8 +59,12 @@ public actor ReplayClaudeClient: ClaudeClient {
   /// clock answers faster too.
   private let clock: any AthinaClock
   private var nextIndex: [String: Int] = [:]
+  /// Every call answered or refused so far, oldest first.
   public private(set) var served: [Served] = []
 
+  /// Creates a client that serves `entries`.
+  ///
+  /// `clock` is what a recorded latency is waited out on.
   public init(
     entries: [Entry],
     allowStale: Bool = false,
@@ -101,8 +114,18 @@ public actor ReplayClaudeClient: ClaudeClient {
     )
   }
 
+  /// Always true: a replayed call reaches no network, needs no key, and is not
+  /// billed.
   public nonisolated var isReplay: Bool { true }
 
+  /// Answers the call with the next fixture of its kind, in turn.
+  ///
+  /// When `latency` is `.recorded` it first waits the recorded latency, never
+  /// past `timeout`. A recorded error is thrown as it was recorded.
+  ///
+  /// - Throws: `ClaudeClientError.replay` when the client is unavailable, when
+  ///   no fixture of the call's kind exists, or when the fixture is stale and
+  ///   stale fixtures are not allowed.
   public func send(
     _ request: MessagesRequest,
     call: CallIdentity,
@@ -138,6 +161,14 @@ public actor ReplayClaudeClient: ClaudeClient {
     return try entry.fixture.result.get()
   }
 
+  /// Returns the refusal for a stale fixture.
+  ///
+  /// - Parameters:
+  ///   - fixture: The fixture's file name.
+  ///   - recorded: The prompt version it was recorded with.
+  ///   - current: The current prompt version.
+  /// - Returns: A message naming the fixture and both prompt versions, and
+  ///   saying how to record it again or replay it anyway.
   public static func staleMessage(fixture: String, recorded: Int, current: Int) -> String {
     "fixture \(fixture) is stale: recorded with prompt version \(recorded), the current prompt version is \(current). Record it again live with make record, for the committed fixtures in the same change that bumped the version. To replay it anyway while iterating on prompts locally, use \(ModelClientMode.allowStaleFlag) (make run-replay ALLOW_STALE=1)."
   }
@@ -168,15 +199,23 @@ public actor ReplayClaudeClient: ClaudeClient {
 
 /// What a replay is serving from, as the app shows it.
 public struct ReplaySummary: Equatable, Sendable {
+  /// The directory the fixtures were loaded from.
   public var directory: URL
+  /// How many fixtures there are of each call kind, keyed by kind.
   public var countsByKind: [String: Int]
+  /// How many fixtures were recorded with a prompt version other than
+  /// `promptVersion`.
   public var staleCount: Int
+  /// The prompt versions the stale fixtures were recorded with, ascending.
   public var staleVersions: [Int]
+  /// The current prompt version, which each fixture is compared against.
   public var promptVersion: Int
+  /// Whether stale fixtures are served rather than refused.
   public var allowStale: Bool
   /// Why nothing can be replayed, when that is the case.
   public var unavailableReason: String?
 
+  /// Creates a summary.
   public init(
     directory: URL,
     countsByKind: [String: Int],
@@ -195,6 +234,7 @@ public struct ReplaySummary: Equatable, Sendable {
     self.unavailableReason = unavailableReason
   }
 
+  /// How many fixtures there are, of every kind.
   public var total: Int { countsByKind.values.reduce(0, +) }
 
   /// Kinds in the loop's tier order, then any others by name, with counts:

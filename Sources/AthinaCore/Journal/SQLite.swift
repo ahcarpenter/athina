@@ -2,9 +2,14 @@ import AthinaSQLiteShim
 import Foundation
 import SQLite3
 
+/// An error SQLite returned, with its result code and message.
 public struct SQLiteError: Error, CustomStringConvertible, Sendable {
+  /// The SQLite result code, such as `SQLITE_BUSY`.
   public let code: Int32
+  /// SQLite's message for the error, often prefixed with the step that
+  /// failed, such as "prepare".
   public let message: String
+  /// The code and message, reading like "SQLite error 5: database is locked".
   public var description: String { "SQLite error \(code): \(message)" }
 }
 

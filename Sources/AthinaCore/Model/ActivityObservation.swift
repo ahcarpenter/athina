@@ -3,16 +3,26 @@ import Foundation
 
 /// What the accessibility API says the user is focused on.
 public struct FocusContext: Codable, Equatable, Sendable {
+  /// When the reading was taken.
   public var timestamp: Date
+  /// The process id of the frontmost app.
   public var pid: Int32
+  /// The app's bundle identifier, or nil for an app without one.
   public var bundleID: String?
+  /// The app's localized name, falling back to its bundle identifier or pid.
   public var appName: String
+  /// The title of the app's focused window, or its main window when none is
+  /// focused, or nil when there is none or it has no title.
   public var windowTitle: String?
   /// Focused window frame in global display coordinates (origin top-left of the main display).
   public var windowFrame: CGRect?
+  /// The focused element's accessibility role, such as AXTextArea.
   public var focusedRole: String?
+  /// The focused element's accessibility subrole, when it has one.
   public var focusedSubrole: String?
+  /// The focused element's accessibility title, when it has one.
   public var focusedTitle: String?
+  /// The focused element's accessibility description, such as Source editor.
   public var focusedDescription: String?
   /// Focused element text, truncated to `FocusContext.maxValueLength`.
   public var focusedValue: String?
@@ -23,8 +33,11 @@ public struct FocusContext: Codable, Equatable, Sendable {
   /// False when the Accessibility permission is missing or the app exposes nothing.
   public var accessibilityAvailable: Bool
 
+  /// The longest focused element text kept, in characters.
   public static let maxValueLength = 4000
 
+  /// Creates a reading; by default only the app is known, it is not
+  /// excluded, and accessibility is available.
   public init(
     timestamp: Date,
     pid: Int32,
@@ -95,13 +108,16 @@ public struct FocusContext: Codable, Equatable, Sendable {
 
 /// A region of recognized text, in frame pixels and in global display points.
 public struct TextBlock: Codable, Equatable, Sendable {
+  /// The text Vision recognized in the block.
   public var text: String
+  /// Vision's confidence in the text, from 0 to 1.
   public var confidence: Float
   /// Bounding box in captured-frame pixel coordinates, origin top-left.
   public var imageRect: CGRect
   /// Bounding box in global display coordinates, origin top-left of the main display.
   public var screenRect: CGRect
 
+  /// Creates a block of recognized text.
   public init(text: String, confidence: Float, imageRect: CGRect, screenRect: CGRect) {
     self.text = text
     self.confidence = confidence
@@ -112,9 +128,14 @@ public struct TextBlock: Codable, Equatable, Sendable {
 
 /// A kept, downscaled capture of the display the user was working on.
 public struct FrameInfo: Codable, Equatable, Sendable {
+  /// The image's perceptual hash, whose Hamming distance to the previous
+  /// kept frame's decides whether a capture is a near duplicate.
   public var hash: PerceptualHash
+  /// The image's width in pixels, after downscaling.
   public var width: Int
+  /// The image's height in pixels, after downscaling.
   public var height: Int
+  /// The Core Graphics id of the display the frame shows.
   public var displayID: UInt32
   /// The display rectangle the frame shows, in global display coordinates.
   public var screenRect: CGRect
@@ -123,6 +144,7 @@ public struct FrameInfo: Codable, Equatable, Sendable {
   /// Nil when it has been deleted by retention or not loaded.
   public var jpeg: Data?
 
+  /// Creates the record of a kept frame.
   public init(
     hash: PerceptualHash,
     width: Int,
@@ -152,6 +174,10 @@ public enum CaptureReason: String, Codable, Sendable, CaseIterable {
   case floor
   case manual
 
+  /// A short lowercase phrase for the reason, shown in the debug panel.
+  ///
+  /// It also reaches the model in the context the prompts are built from, so
+  /// changing one changes what the model is told.
   public var label: String {
     switch self {
     case .focusChange: "focus change"
@@ -164,13 +190,20 @@ public enum CaptureReason: String, Codable, Sendable, CaseIterable {
 
 /// One kept observation: the subscription unit for later phases.
 public struct ActivityObservation: Codable, Equatable, Sendable, Identifiable {
+  /// The journal's row id, or 0 until the observation is journaled.
   public var id: Int64
+  /// When the capture started.
   public var timestamp: Date
+  /// The accessibility reading the capture was made under.
   public var focus: FocusContext
+  /// The kept frame.
   public var frame: FrameInfo
+  /// The text recognized in the frame, in the order Vision returned it.
   public var textBlocks: [TextBlock]
+  /// Why the capture was made.
   public var reason: CaptureReason
 
+  /// Creates an observation; its id stays 0 until the journal stores it.
   public init(
     id: Int64 = 0,
     timestamp: Date,
@@ -208,6 +241,7 @@ public enum SensingMode: String, Codable, Sendable, CaseIterable {
   case excluded
   case stopped
 
+  /// The mode's name, capitalized, as the debug panel's badge shows it.
   public var label: String {
     switch self {
     case .watching: "Watching"
@@ -240,6 +274,7 @@ public enum SensingMode: String, Codable, Sendable, CaseIterable {
 
 /// A discrete happening worth remembering alongside observations.
 public struct JournalEvent: Codable, Equatable, Sendable, Identifiable {
+  /// What happened.
   public enum Kind: String, Codable, Sendable, CaseIterable {
     case started
     case stopped
@@ -263,6 +298,10 @@ public struct JournalEvent: Codable, Equatable, Sendable, Identifiable {
     /// journaled here; they are in the model call log.
     case understanding
 
+    /// The kind's name, capitalized, as the debug panel's timeline shows it.
+    ///
+    /// Lowercased, it also reaches the model in the recent events, so changing
+    /// one changes what the model is told.
     public var label: String {
       switch self {
       case .started: "Started"
@@ -285,13 +324,20 @@ public struct JournalEvent: Codable, Equatable, Sendable, Identifiable {
     }
   }
 
+  /// The journal's row id, or 0 until the event is journaled.
   public var id: Int64
+  /// When it happened.
   public var timestamp: Date
+  /// What happened.
   public var kind: Kind
+  /// The bundle identifier of the app the event is about, if any.
   public var bundleID: String?
+  /// The name of the app the event is about, if any.
   public var appName: String?
+  /// A few words more, such as the app switched from.
   public var detail: String?
 
+  /// Creates an event; its id stays 0 until the journal stores it.
   public init(
     id: Int64 = 0,
     timestamp: Date,
@@ -314,6 +360,8 @@ public enum JournalEntry: Equatable, Sendable, Identifiable {
   case observation(ActivityObservation)
   case event(JournalEvent)
 
+  /// A key unique across both kinds of row: the row id after an o for an
+  /// observation or an e for an event.
   public var id: String {
     switch self {
     case .observation(let o): "o\(o.id)"
@@ -321,6 +369,7 @@ public enum JournalEntry: Equatable, Sendable, Identifiable {
     }
   }
 
+  /// When the observation was captured or the event happened.
   public var timestamp: Date {
     switch self {
     case .observation(let o): o.timestamp
@@ -331,18 +380,35 @@ public enum JournalEntry: Equatable, Sendable, Identifiable {
 
 /// Live cadence information for the debug panel.
 public struct CadenceStatus: Equatable, Sendable {
+  /// The pipeline's mode.
   public var mode: SensingMode
+  /// When the last capture attempt finished, whether or not its frame was
+  /// kept, or nil before the first.
   public var lastCaptureAt: Date?
+  /// Why the last kept frame was captured, or nil before the first.
   public var lastCaptureReason: CaptureReason?
+  /// When the next capture falls due, or nil while the pipeline is not
+  /// capturing.
   public var nextDueAt: Date?
+  /// Why the next capture falls due, or nil while the pipeline is not
+  /// capturing.
   public var nextDueReason: CaptureReason?
   /// When the user last pressed a key or moved the mouse, as of the last input poll.
   public var lastInputAt: Date?
+  /// How many captures were kept since the pipeline started.
   public var keptCount: Int
+  /// How many captures were dropped as near duplicates of the last kept
+  /// frame since the pipeline started.
   public var droppedCount: Int
+  /// The last dropped capture's hash distance to the last kept frame, or nil
+  /// before the first drop.
   public var lastDropDistance: Int?
+  /// The last error the pipeline hit, prefixed with its stage, such as
+  /// capture or ocr; a capture that succeeds clears it.
   public var lastError: String?
 
+  /// Creates a status; by default the pipeline is stopped and has captured
+  /// nothing.
   public init(
     mode: SensingMode = .stopped,
     lastCaptureAt: Date? = nil,
