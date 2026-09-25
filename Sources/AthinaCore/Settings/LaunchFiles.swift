@@ -33,9 +33,10 @@ public struct LaunchFiles: Equatable, Sendable {
   /// is still inside the retention window.
   public static let keptFinishedLaunches = 10
 
-  /// Holds the journal and the settings the launch saves. For a replay it is
-  /// this launch's alone, which a later replay launch may remove once no
-  /// running replay holds it.
+  /// Holds the journal and the settings the launch saves.
+  ///
+  /// For a replay it is this launch's alone, which a later replay launch may
+  /// remove once no running replay holds it.
   public var dataDirectory: URL
   /// The settings file the launch starts from.
   public var settingsSource: URL
@@ -104,8 +105,10 @@ public struct LaunchFiles: Equatable, Sendable {
     SettingsStore(url: SettingsStore.defaultURL(in: dataDirectory))
   }
 
-  /// The settings the launch starts from. Must be called before `claim`,
-  /// which is where a file that refuses the launch is reported.
+  /// The settings the launch starts from.
+  ///
+  /// Must be called before `claim`, which is where a file that refuses the
+  /// launch is reported.
   ///
   /// A `--settings` file that is there but is not settings stops the launch:
   /// a check names a file it generated, and if that file came out truncated
@@ -144,12 +147,13 @@ public struct LaunchFiles: Equatable, Sendable {
     case refusedToStart(String)
   }
 
-  /// Makes the replay's data directory its own for as long as the lock in
-  /// the returned claim lives; a live or recording launch holds nothing.
-  /// The directory is this launch's own and is made here, owner-only, so
-  /// there is nothing to judge about where it is or who can reach it.
-  /// Every replay launch sweeps the finished per-launch directories as it
-  /// starts (`pruneFinishedLaunches`).
+  /// Makes the replay's data directory its own for as long as the lock in the
+  /// returned claim lives; a live or recording launch holds nothing.
+  ///
+  /// The directory is this launch's own and is made here, owner-only, so there
+  /// is nothing to judge about where it is or who can reach it. Every replay
+  /// launch sweeps the finished per-launch directories as it starts
+  /// (`pruneFinishedLaunches`).
   ///
   /// A `--settings` file that is there but is not settings refuses the
   /// launch, on the reason `loadSettings` left behind, so a check whose
@@ -192,13 +196,14 @@ public struct LaunchFiles: Equatable, Sendable {
     name.wholeMatch(of: /launch-[0-9]+-[0-9a-f]{8}/) != nil
   }
 
-  /// Removes the per-launch directories in `root` that no running replay
-  /// holds: those past the newest `keeping`, and those unwritten for longer
-  /// than `window`, the owner's own `thumbnailRetention`. A replay senses the
-  /// real screen, and its journal is never opened again once it quits, so
-  /// retention can never age the thumbnails and recognized text inside it
-  /// and the whole directory goes at that window instead. Anything in `root`
-  /// that is not one of these directories is left alone.
+  /// Removes the per-launch directories in `root` that no running replay holds:
+  /// those past the newest `keeping`, and those unwritten for longer than
+  /// `window`, the owner's own `thumbnailRetention`.
+  ///
+  /// A replay senses the real screen, and its journal is never opened again
+  /// once it quits, so retention can never age the thumbnails and recognized
+  /// text inside it and the whole directory goes at that window instead.
+  /// Anything in `root` that is not one of these directories is left alone.
   ///
   /// Newest, and unwritten, are both measured by `lastWritten`, so a lane
   /// that ran all day and quit a moment ago is still one of the newest and
@@ -229,18 +234,19 @@ public struct LaunchFiles: Equatable, Sendable {
   }
 
   /// When a replay's journal was last written, which bounds how new anything
-  /// inside it can be: the newer of the journal and its `-wal` file, since
-  /// in WAL mode a write lands in `-wal` and the journal file itself changes
-  /// only when it is made and at a checkpoint. Not `-shm`, which a read-only
-  /// read rewrites, so a read-only read never keeps a finished lane longer.
-  /// A read-write reader, the `sqlite3` CLI at its default among them, runs
-  /// a checkpoint as it closes that touches both files, and so can put the
-  /// lane's removal off by up to one window. The stamps inside the journal
-  /// cannot date a lane instead: they come from the replay's clock, which
-  /// `--time-scale`, `--advance-clock` and `ClockRemote` run ahead of real
-  /// time, so they would keep its captures long past the window.
-  /// `.distantPast` when there is none to read, so a directory holding no
-  /// journal at all is swept rather than kept forever.
+  /// inside it can be: the newer of the journal and its `-wal` file, since in
+  /// WAL mode a write lands in `-wal` and the journal file itself changes only
+  /// when it is made and at a checkpoint.
+  ///
+  /// Not `-shm`, which a read-only read rewrites, so a read-only read never
+  /// keeps a finished lane longer. A read-write reader, the `sqlite3` CLI at
+  /// its default among them, runs a checkpoint as it closes that touches both
+  /// files, and so can put the lane's removal off by up to one window. The
+  /// stamps inside the journal cannot date a lane instead: they come from the
+  /// replay's clock, which `--time-scale`, `--advance-clock` and `ClockRemote`
+  /// run ahead of real time, so they would keep its captures long past the
+  /// window. `.distantPast` when there is none to read, so a directory holding
+  /// no journal at all is swept rather than kept forever.
   private static func lastWritten(_ journal: URL) -> Date {
     ["", "-wal"].compactMap { suffix in
       try? URL(fileURLWithPath: journal.path + suffix)
@@ -251,9 +257,10 @@ public struct LaunchFiles: Equatable, Sendable {
 }
 
 /// An exclusive hold on a replay's data directory for the life of the process:
-/// an advisory `flock` on `athina.pid` inside it, which holds the pid. The
-/// system lets go of it when the process exits, however it exits, so a crash
-/// never leaves a directory held.
+/// an advisory `flock` on `athina.pid` inside it, which holds the pid.
+///
+/// The system lets go of it when the process exits, however it exits, so a
+/// crash never leaves a directory held.
 public final class DataDirectoryLock: @unchecked Sendable {
   public static let fileName = "athina.pid"
 
@@ -321,11 +328,13 @@ public final class DataDirectoryLock: @unchecked Sendable {
 }
 
 /// What a launch tells whoever started it, on the one line `scripts/launch.sh`
-/// waits for before it writes a pid file. Every reason a lane is not up has to
-/// arrive here rather than look like one, which is why the journal is part of
-/// the question: a lane whose journal did not open never starts its sensing
-/// pipeline, never positions its replay clock, and journals no event, so a
-/// check that took its pid would wait on a lane that can never answer.
+/// waits for before it writes a pid file.
+///
+/// Every reason a lane is not up has to arrive here rather than look like one,
+/// which is why the journal is part of the question: a lane whose journal did
+/// not open never starts its sensing pipeline, never positions its replay
+/// clock, and journals no event, so a check that took its pid would wait on a
+/// lane that can never answer.
 ///
 /// `started` goes to stdout and `didNotStart` to stderr, both unbuffered,
 /// since stdout to a file is not line buffered.
@@ -344,11 +353,12 @@ public enum LaunchReport: Equatable, Sendable {
     self = journalError.map { .didNotStart($0) } ?? .started(pid: pid, dataDirectory: dataDirectory)
   }
 
-  /// The line itself, newline included. The started line ends in the data
-  /// directory this launch made, and nothing follows it, so a reader takes
-  /// everything past the first ` in ` and needs no quoting however the path
-  /// is spelled. That is how a script learns where the journal is now that
-  /// nothing can name it beforehand.
+  /// The line itself, newline included.
+  ///
+  /// The started line ends in the data directory this launch made, and nothing
+  /// follows it, so a reader takes everything past the first ` in ` and needs
+  /// no quoting however the path is spelled. That is how a script learns where
+  /// the journal is now that nothing can name it beforehand.
   public var line: String {
     switch self {
     case .started(let pid, let directory): "Athina started: pid \(pid) in \(directory.path)\n"

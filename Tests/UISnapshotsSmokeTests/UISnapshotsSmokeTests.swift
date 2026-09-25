@@ -36,8 +36,10 @@
     private static let testsDirectory = URL(filePath: #filePath).deletingLastPathComponent()
     private static let root = testsDirectory.deletingLastPathComponent().deletingLastPathComponent()
 
-    /// The sets of renders another commit drew on this Mac, each in a process of its own, when the
-    /// run compares with those, separated by colons. A snapshot matches when it matches any set's.
+    /// The sets of renders another commit drew on this Mac, each in a process
+    /// of its own, when the run compares with those, separated by colons.
+    ///
+    /// A snapshot matches when it matches any set's.
     private static let against = ProcessInfo.processInfo.environment["UI_SNAPSHOTS_SMOKE_AGAINST"]
       .flatMap { value -> [URL]? in
         guard !value.isEmpty else { return nil }
@@ -72,8 +74,10 @@
       }
     }
 
-    /// The shard this run checks, or nil for every snapshot. A value that is not a shard
-    /// `SnapshotShard` accepts fails the run rather than checking some other set.
+    /// The shard this run checks, or nil for every snapshot.
+    ///
+    /// A value that is not a shard `SnapshotShard` accepts fails the run rather
+    /// than checking some other set.
     private static func shard() throws -> SnapshotShard? {
       guard let value = ProcessInfo.processInfo.environment["UI_SNAPSHOTS_SMOKE_SHARD"],
         !value.isEmpty
@@ -177,9 +181,11 @@
       try fileManager.moveItem(at: partial, to: approvable)
     }
 
-    /// A reference no snapshot produces fails until it is deleted, as approving deletes it, so the
-    /// references are only ever the ones the test compares. Each shard checks the files of its own
-    /// snapshots, and one whose snapshot has no shard falls to the first.
+    /// A reference no snapshot produces fails until it is deleted, as approving
+    /// deletes it, so the references are only ever the ones the test compares.
+    ///
+    /// Each shard checks the files of its own snapshots, and one whose snapshot
+    /// has no shard falls to the first.
     @Test func everyReferenceHasASnapshot() throws {
       // Another commit's renders are compared as a report, which names a removed snapshot itself.
       guard Self.against == nil else { return }
@@ -199,12 +205,15 @@
       }
     }
 
-    /// The window drawn in this process by swift-snapshot-testing's view strategy, rather than
-    /// captured from the window server as `--snapshot` does. It draws the window's frame view, the
-    /// view under the content that paints the window's background, so the picture has the same
-    /// backdrop, and it shows much of what sits on Liquid Glass, which the content view drawn on
-    /// its own leaves out. Drawn in process, a view is drawn as its layers stand, so the first
-    /// capture needs no wait.
+    /// The window drawn in this process by swift-snapshot-testing's view
+    /// strategy, rather than captured from the window server as `--snapshot`
+    /// does.
+    ///
+    /// It draws the window's frame view, the view under the content that paints
+    /// the window's background, so the picture has the same backdrop, and it
+    /// shows much of what sits on Liquid Glass, which the content view drawn on
+    /// its own leaves out. Drawn in process, a view is drawn as its layers
+    /// stand, so the first capture needs no wait.
     private static let capture = Snapshots.Capture(firstCaptureDelay: .zero, backingScale: 1) {
       window,
       hosting in

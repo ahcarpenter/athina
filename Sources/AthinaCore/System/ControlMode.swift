@@ -42,11 +42,15 @@ public enum ControlMode: Equatable, Sendable {
   case refused(String)
 
   public static let flag = "--control"
-  /// Makes a served launch a hermetic run. Read only with `flag`.
+  /// Makes a served launch a hermetic run.
+  ///
+  /// Read only with `flag`.
   public static let hermeticFlag = "--hermetic"
   /// Leaves a hermetic run's windows on screen rather than parking them, to
   /// watch what a scenario does or to compare its checkpoints with a parked
-  /// run's. Read only with `hermeticFlag`.
+  /// run's.
+  ///
+  /// Read only with `hermeticFlag`.
   public static let showWindowsFlag = "--show-windows"
   /// The socket the app makes inside the directory.
   public static let socketName = "control.sock"

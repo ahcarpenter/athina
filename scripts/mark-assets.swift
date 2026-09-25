@@ -35,8 +35,9 @@ enum Failure: Error {
 
 /// A small reader for the subset of SVG this project's mark uses: groups,
 /// paths, and the three primitives the cream layer is made of, all in one flat
-/// coordinate space. Enough to rasterise the committed master source, and no
-/// more.
+/// coordinate space.
+///
+/// Enough to rasterise the committed master source, and no more.
 ///
 /// Anything outside that subset stops the build. Both assets are generated and
 /// committed, so a master carrying something this reader does not understand
@@ -327,8 +328,9 @@ let content: CGRect = document.elements.reduce(CGRect.null) { $0.union($1.path.b
 
 // MARK: The app icon
 
-/// Full bleed, because macOS does the masking. The drawing is kept clear of
-/// the corners, which the mask rounds away.
+/// Full bleed, because macOS does the masking.
+///
+/// The drawing is kept clear of the corners, which the mask rounds away.
 let iconBackground = CGColor(red: 1, green: 1, blue: 1, alpha: 1)
 let iconHeightFraction = 0.86
 
@@ -436,16 +438,18 @@ func writeIcon() throws {
 let owlMaster = root.appendingPathComponent("Resources/Mark/AthinaOwl.svg")
 let owl = try SVG.parse(contentsOf: owlMaster)
 
-/// The owl is one path made of four closed subpaths. They are told apart by
-/// what they are rather than by the order they happen to be written in, so a
-/// re-export of the artwork does not silently swap them.
+/// The owl is one path made of four closed subpaths.
+///
+/// They are told apart by what they are rather than by the order they happen to
+/// be written in, so a re-export of the artwork does not silently swap them.
 struct Owl {
   var body: CGPath
   var faceCutout: CGPath
   var pupils: [CGPath]
-  /// The white of each eye, concentric with its pupil. Measured from the
-  /// drawing: the cutout reaches 35.8 units from each pupil's centre before
-  /// the body's ink begins again.
+  /// The white of each eye, concentric with its pupil.
+  ///
+  /// Measured from the drawing: the cutout reaches 35.8 units from each pupil's
+  /// centre before the body's ink begins again.
   var eyes: [CGPath]
   var bounds: CGRect
 
@@ -512,15 +516,17 @@ struct Owl {
   }
 
   /// Everything but the eyes: the silhouette with the face cut out of it.
-  /// Every state starts here, which is why none of them can change the
-  /// outline or the width.
+  ///
+  /// Every state starts here, which is why none of them can change the outline
+  /// or the width.
   var base: CGPath { body.subtracting(faceCutout) }
 }
 
 let parts = try Owl.read(owl)
 
-/// What a state does to the owl's eyes. The drawing carries the state; nothing
-/// is hung off the side of it.
+/// What a state does to the owl's eyes.
+///
+/// The drawing carries the state; nothing is hung off the side of it.
 enum Eyes: String {
   /// Both pupils where the artist put them.
   case open
@@ -691,11 +697,13 @@ func drawMenuBarMark(_ eyes: Eyes, asleep: Bool, into context: CGContext) {
   context.restoreGState()
 }
 
-/// Core Graphics stamps every PDF it writes with the time it was written and
-/// an id derived from it, so two runs over the same drawing produce two
-/// different files. These are committed, so that would dirty all six on every
-/// `make mark`. Rewriting both fields, the id from the file's own content,
-/// leaves the output a pure function of the masters and this script.
+/// Core Graphics stamps every PDF it writes with the time it was written and an
+/// id derived from it, so two runs over the same drawing produce two different
+/// files.
+///
+/// These are committed, so that would dirty all six on every `make mark`.
+/// Rewriting both fields, the id from the file's own content, leaves the output
+/// a pure function of the masters and this script.
 func makeReproducible(_ url: URL) throws {
   var bytes = try Data(contentsOf: url)
   let before = bytes.count
@@ -773,12 +781,14 @@ func writeMenuBarMarks() throws {
 // one the app shows once they do.
 
 /// The icon as Finder and the Dock show it, rather than the full bleed square
-/// the .icns carries. A page is not masked by macOS, so the picture has to
-/// carry the mask, the shadow and the glass the system adds, and the one
-/// thing that draws those exactly as Finder does is the system: the new .icns
-/// is put in a throwaway bundle and macOS is asked for that bundle's icon.
-/// Drawing them here instead would be an imitation that drifts from the real
-/// thing with every macOS release, as the Big Sur grid already has.
+/// the .icns carries.
+///
+/// A page is not masked by macOS, so the picture has to carry the mask, the
+/// shadow and the glass the system adds, and the one thing that draws those
+/// exactly as Finder does is the system: the new .icns is put in a throwaway
+/// bundle and macOS is asked for that bundle's icon. Drawing them here instead
+/// would be an imitation that drifts from the real thing with every macOS
+/// release, as the Big Sur grid already has.
 ///
 /// The bundle's path is new on every run, so the icon is never one the system
 /// cached from an earlier build.
@@ -856,9 +866,10 @@ func readmeBitmap(of icon: NSImage) throws -> NSBitmapImageRep {
 }
 
 /// Whether two bitmaps from `readmeBitmap` show the same picture: nine in ten
-/// pixels or more within 2 of 255 of each other in every channel. The generic
-/// icon matches itself in every pixel, and the Athina icon matches it in about
-/// a third, the clear margin both share.
+/// pixels or more within 2 of 255 of each other in every channel.
+///
+/// The generic icon matches itself in every pixel, and the Athina icon matches
+/// it in about a third, the clear margin both share.
 func samePicture(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep) -> Bool {
   let pa = a.bitmapData!
   let pb = b.bitmapData!

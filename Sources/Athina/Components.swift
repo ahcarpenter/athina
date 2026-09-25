@@ -50,9 +50,10 @@ struct StatusLabel: View {
   }
 }
 
-/// A short status word in a capsule, such as Granted or Replay. The tint
-/// only colors the capsule; the word stays in the primary label color, and
-/// Increase Contrast adds an outline so the capsule keeps its edge.
+/// A short status word in a capsule, such as Granted or Replay.
+///
+/// The tint only colors the capsule; the word stays in the primary label color,
+/// and Increase Contrast adds an outline so the capsule keeps its edge.
 struct StatusBadge: View {
   @Environment(\.colorSchemeContrast) private var contrast
 

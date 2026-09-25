@@ -104,9 +104,11 @@ public enum ClockMode: Equatable, Sendable {
     seconds > 0 && seconds <= maxAdvance
   }
 
-  /// The clock for this mode, and the handle that moves it, which only a
-  /// replay has. A replay's clock starts at real time; `startReplay` moves
-  /// it to where the replay starts.
+  /// The clock for this mode, and the handle that moves it, which only a replay
+  /// has.
+  ///
+  /// A replay's clock starts at real time; `startReplay` moves it to where the
+  /// replay starts.
   public func makeClock(
     base: some AthinaClock = SystemClock()
   ) -> (clock: any AthinaClock, control: AdjustableClock?) {
@@ -119,9 +121,11 @@ public enum ClockMode: Equatable, Sendable {
     }
   }
 
-  /// Moves a replay's clock to where the replay starts, which is `--advance-clock`
-  /// ahead of real time. Every replay makes a directory of its own and so
-  /// opens an empty journal, so there is never anything to carry on from.
+  /// Moves a replay's clock to where the replay starts, which is
+  /// `--advance-clock` ahead of real time.
+  ///
+  /// Every replay makes a directory of its own and so opens an empty journal,
+  /// so there is never anything to carry on from.
   public func startReplay(_ clock: AdjustableClock) {
     guard case .replay(_, let ahead, _) = self, ahead > 0 else { return }
     clock.advance(by: .seconds(ahead))
@@ -215,8 +219,9 @@ public enum ClockRemote {
   }
 
   /// Where the request asks for its answer, or nil when it asked for none.
-  /// A relative path is refused rather than resolved, because the app's
-  /// working directory is `/` when it was started with `open`.
+  ///
+  /// A relative path is refused rather than resolved, because the app's working
+  /// directory is `/` when it was started with `open`.
   public static func replyURL(from userInfo: [AnyHashable: Any]?) -> URL? {
     guard let path = userInfo?[replyKey] as? String, path.hasPrefix("/") else { return nil }
     return URL(fileURLWithPath: path)
@@ -263,13 +268,14 @@ public enum ClockRemote {
     }
   }
 
-  /// Carries out a request: creates the file it named to answer at, and
-  /// only then hands the request to `move`, which moves the clock or refuses
-  /// the interval and returns the answer written there. A request that
-  /// cannot be answered throws its `Refusal` before `move` is called, which
-  /// the caller logs, so it moves nothing: the script that sent it sees no
-  /// answer and fails, and a clock that moved anyway would move again on
-  /// every retry. Any other error comes from writing the answer, after
+  /// Carries out a request: creates the file it named to answer at, and only
+  /// then hands the request to `move`, which moves the clock or refuses the
+  /// interval and returns the answer written there.
+  ///
+  /// A request that cannot be answered throws its `Refusal` before `move` is
+  /// called, which the caller logs, so it moves nothing: the script that sent
+  /// it sees no answer and fails, and a clock that moved anyway would move
+  /// again on every retry. Any other error comes from writing the answer, after
   /// `move`.
   ///
   /// A request is answered only where it may make a replay write: a file

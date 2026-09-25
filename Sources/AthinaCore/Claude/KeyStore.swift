@@ -1,7 +1,9 @@
 import Foundation
 import Security
 
-/// Where the Anthropic API key lives. The app uses the Keychain; tests use memory.
+/// Where the Anthropic API key lives.
+///
+/// The app uses the Keychain; tests use memory.
 public protocol KeyStore: Sendable {
   func load() throws -> String?
   func save(_ key: String) throws
@@ -9,9 +11,11 @@ public protocol KeyStore: Sendable {
 }
 
 extension KeyStore {
-  /// `load()` on a background queue. The keychain can block on its own
-  /// prompt for as long as the user takes to answer it, and neither the main
-  /// thread nor an actor's executor should wait on that.
+  /// `load()` on a background queue.
+  ///
+  /// The keychain can block on its own prompt for as long as the user takes to
+  /// answer it, and neither the main thread nor an actor's executor should wait
+  /// on that.
   public func loadInBackground() async throws -> String? {
     try await withCheckedThrowingContinuation { continuation in
       DispatchQueue.global(qos: .userInitiated).async {
@@ -31,11 +35,12 @@ public struct KeyStoreError: Error, CustomStringConvertible, Equatable, Sendable
   }
 }
 
-/// A generic password item in the login keychain. The keychain trusts a
-/// non-Apple-signed app by the hash of its binary, not by the designated
-/// requirement that keeps the TCC grants, so the first read after an ad-hoc
-/// rebuild shows the system's keychain prompt once; Always Allow adds that
-/// build to the item's list (README, "Code signing").
+/// A generic password item in the login keychain.
+///
+/// The keychain trusts a non-Apple-signed app by the hash of its binary, not by
+/// the designated requirement that keeps the TCC grants, so the first read
+/// after an ad-hoc rebuild shows the system's keychain prompt once; Always
+/// Allow adds that build to the item's list (README, "Code signing").
 public struct KeychainKeyStore: KeyStore {
   public static let service = AppPaths.keychainService
   /// The service the item was saved under while the app was called Mentor.
@@ -43,8 +48,9 @@ public struct KeychainKeyStore: KeyStore {
   public static let legacyService = AppPaths.legacyBundleIdentifier
   public static let account = "anthropic-api-key"
 
-  /// Which item this store reads and writes. Only `KeyMigration` names
-  /// anything but the default.
+  /// Which item this store reads and writes.
+  ///
+  /// Only `KeyMigration` names anything but the default.
   public let service: String
 
   public init(service: String = KeychainKeyStore.service) {
@@ -142,8 +148,10 @@ public enum KeyMigration {
     }
   }
 
-  /// Copies the key, once. Safe to call on every launch, and does nothing
-  /// at all when there is nothing to copy.
+  /// Copies the key, once.
+  ///
+  /// Safe to call on every launch, and does nothing at all when there is
+  /// nothing to copy.
   ///
   /// Reads the keychain, which on the first launch of a newly signed build
   /// can put up the system's access prompt, so this belongs off the main
@@ -200,8 +208,10 @@ public final class InMemoryKeyStore: KeyStore, @unchecked Sendable {
 
 /// Helpers that let the UI talk about a key without ever showing it.
 public enum APIKey {
-  /// Trims whitespace. Empty or internally spaced keys are rejected; the
-  /// format is otherwise not checked so future key shapes keep working.
+  /// Trims whitespace.
+  ///
+  /// Empty or internally spaced keys are rejected; the format is otherwise not
+  /// checked so future key shapes keep working.
   public static func normalized(_ raw: String) -> String? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty, trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else {

@@ -8,11 +8,14 @@ public enum FrameKeepPolicy {
     public var reason: String
   }
 
+  /// Decides whether a frame differs enough from the previous kept frame to keep.
+  ///
   /// - Parameters:
   ///   - distance: Hamming distance to the previous kept frame, nil when there is none.
-  ///   - threshold: frames at or under this distance are duplicates.
-  ///   - windowChanged: the window signature differs from the previous kept frame.
-  ///   - textChanged: the focused element's text differs from the previous kept frame.
+  ///   - threshold: Frames at or under this distance are duplicates.
+  ///   - windowChanged: Whether the window signature differs from the previous kept frame.
+  ///   - textChanged: Whether the focused element's text differs from the previous kept frame.
+  /// - Returns: Whether to keep the frame, with its distance and the reason.
   public static func decide(
     distance: Int?,
     threshold: Int,

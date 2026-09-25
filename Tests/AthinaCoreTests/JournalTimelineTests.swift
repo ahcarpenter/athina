@@ -51,8 +51,10 @@ import Testing
   }
 
   /// What a launch journals as sensing starts: Started, the frontmost app and
-  /// the permissions, all in one instant. AppState loads the timeline before
-  /// `pipeline.start()`, so at launch these reach it on the stream alone.
+  /// the permissions, all in one instant.
+  ///
+  /// AppState loads the timeline before `pipeline.start()`, so at launch these
+  /// reach it on the stream alone.
   private var startup: [JournalEntry] {
     [event(1, .started), event(2, .appSwitch), event(3, .permissionsChanged)]
   }

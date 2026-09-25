@@ -377,10 +377,11 @@ import Testing
     #expect(try await liveJournal.recentSuggestions(limit: 5).isEmpty)
   }
 
-  /// Every replay launch starts from the live settings, read and never
-  /// written, so an app the user excluded stays excluded while replaying,
-  /// whatever an earlier replay saved to its own file. With no live
-  /// settings a replay starts from the defaults.
+  /// Every replay launch starts from the live settings, read and never written,
+  /// so an app the user excluded stays excluded while replaying, whatever an
+  /// earlier replay saved to its own file.
+  ///
+  /// With no live settings a replay starts from the defaults.
   @Test func aReplayStartsEveryLaunchFromTheLiveSettingsSoExcludedAppsStayExcluded() throws {
     let support = FileManager.default.temporaryDirectory.appendingPathComponent(
       "athina-support-\(UUID().uuidString)",
@@ -457,8 +458,9 @@ import Testing
   }
 
   /// Fails the run, naming each fixture recorded with another prompt version
-  /// than `current` and each tier with no fixture, unless the set is
-  /// current. Returns whether it is.
+  /// than `current` and each tier with no fixture, unless the set is current.
+  ///
+  /// Returns whether it is.
   @discardableResult
   static func expectCurrent(
     _ loaded: [(name: String, fixture: CallFixture)],
@@ -481,9 +483,11 @@ import Testing
     return false
   }
 
-  /// What `make fixture-status` runs. When a prompt or schema change bumps
-  /// the prompt version, or a call kind is added, the committed set is
-  /// recorded again live in the same change, so this passes.
+  /// What `make fixture-status` runs.
+  ///
+  /// When a prompt or schema change bumps the prompt version, or a call kind is
+  /// added, the committed set is recorded again live in the same change, so
+  /// this passes.
   @Test func theCommittedFixturesAreCurrent() throws {
     let loaded = try CallFixtureFiles.load(from: try Self.committedFixturesDirectory())
     if Self.expectCurrent(loaded) {
@@ -591,8 +595,9 @@ import Testing
 
   /// Every triage recording in turn, on the loop the app runs: a candidate
   /// reaches the mentor recording next in line, a shown suggestion takes
-  /// feedback, and after the last recording the first answers again. The
-  /// replay is strict, as the app's is: a stale fixture is refused.
+  /// feedback, and after the last recording the first answers again.
+  ///
+  /// The replay is strict, as the app's is: a stale fixture is refused.
   @Test func theCommittedFixturesDriveTheWholeLoop() async throws {
     let directory = try Self.committedFixturesDirectory()
     let client = try ReplayClaudeClient.load(from: directory, allowStale: false)

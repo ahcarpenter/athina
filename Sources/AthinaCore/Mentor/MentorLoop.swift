@@ -26,14 +26,16 @@ public actor MentorLoop {
   /// Triage answers a short JSON object.
   public static let triageMaxTokens = 200
   /// Mentor replies include adaptive thinking, which counts against this.
+  ///
   /// They now also carry the rewritten understanding.
   public static let mentorMaxTokens = 8000
   /// A follow-up answer is a few short sentences, plus the same thinking.
   public static let followUpMaxTokens = 3000
   /// What a reply keeps for adaptive thinking, which every default model but
-  /// Haiku spends and which counts against max_tokens. The budget's range is
-  /// sized so a mentor reply keeps this beside the suggestion and a record
-  /// at the top of the range.
+  /// Haiku spends and which counts against max_tokens.
+  ///
+  /// The budget's range is sized so a mentor reply keeps this beside the
+  /// suggestion and a record at the top of the range.
   public static let thinkingAllowance = 3000
   /// The JSON around the record and the reason sentence in a refresh reply.
   public static let understandingReplyOverhead = 1000
@@ -51,9 +53,10 @@ public actor MentorLoop {
 
   private static let log = Logger(subsystem: "com.ahcarpenter.athina", category: "mentor")
 
-  /// Stands in for the key while calls are replayed. It is not a secret, the
-  /// replay client ignores it, and it lets every call path run unchanged
-  /// without reading the keychain.
+  /// Stands in for the key while calls are replayed.
+  ///
+  /// It is not a secret, the replay client ignores it, and it lets every call
+  /// path run unchanged without reading the keychain.
   public static let replayCredential = "replay-needs-no-key"
 
   public private(set) var settings: MentorSettings
@@ -86,19 +89,24 @@ public actor MentorLoop {
   private var understanding: UnderstandingRecord?
   /// When the last observation arrived: the idle gap that expires the
   /// understanding is measured from it, and the refresh gate holds until it
-  /// exists. Seeded from the journal at launch so the gap is measured from
-  /// real activity rather than from the record's last write.
+  /// exists.
+  ///
+  /// Seeded from the journal at launch so the gap is measured from real
+  /// activity rather than from the record's last write.
   private var lastActivityAt: Date?
-  /// The active use counted toward the next refresh: begun at the record's
-  /// last write, or at the first observation while there is no record, and
-  /// cleared with the record so the next stretch gets a whole interval for a
-  /// mentor call to write the record for free. Counted whenever the mode
-  /// changes and kept in the journal, so a relaunch carries on from it.
+  /// The active use counted toward the next refresh: begun at the record's last
+  /// write, or at the first observation while there is no record, and cleared
+  /// with the record so the next stretch gets a whole interval for a mentor
+  /// call to write the record for free.
+  ///
+  /// Counted whenever the mode changes and kept in the journal, so a relaunch
+  /// carries on from it.
   private var period: RefreshPeriod?
-  /// The system uptime when `period` was last counted or replaced. Uptime
-  /// stops while the Mac sleeps, so the next count measures only time awake.
-  /// Nil until this run first sets the period, so nothing from before the
-  /// launch is counted.
+  /// The system uptime when `period` was last counted or replaced.
+  ///
+  /// Uptime stops while the Mac sleeps, so the next count measures only time
+  /// awake. Nil until this run first sets the period, so nothing from before
+  /// the launch is counted.
   private var uptimeAtCount: TimeInterval?
   /// Counts Reset Understanding, so a request built before one cannot
   /// store the record it was shown.
@@ -162,9 +170,11 @@ public actor MentorLoop {
 
   /// Call as an exchange with the toast begins and ends: from the key going
   /// down until the toast that was talked to is closed, so its answer can be
-  /// read. While it is on, a new suggestion is held rather than shown; when
-  /// it goes off, the held one is shown if it is still fresh, otherwise it
-  /// expires unseen. `now` defaults to the clock's.
+  /// read.
+  ///
+  /// While it is on, a new suggestion is held rather than shown; when it goes
+  /// off, the held one is shown if it is still fresh, otherwise it expires
+  /// unseen. `now` defaults to the clock's.
   public func setTalkingBack(_ active: Bool, at now: Date? = nil) async {
     guard talkingBack != active else { return }
     talkingBack = active
@@ -173,10 +183,11 @@ public actor MentorLoop {
     await publish(held, now: now ?? clock.date)
   }
 
-  /// A held suggestion is not shown while the user is pausing Athina. The
-  /// pause reaches the loop through the sensing stream too, but the app
-  /// calls this first when it ends a hold while pausing, so the held
-  /// suggestion cannot slip out in between.
+  /// A held suggestion is not shown while the user is pausing Athina.
+  ///
+  /// The pause reaches the loop through the sensing stream too, but the app
+  /// calls this first when it ends a hold while pausing, so the held suggestion
+  /// cannot slip out in between.
   public func expireHeldSuggestion(now: Date? = nil) async {
     guard let held = heldSuggestion else { return }
     heldSuggestion = nil
@@ -252,8 +263,9 @@ public actor MentorLoop {
     return updated
   }
 
-  /// Records that a callout was drawn for a suggestion. Returns the
-  /// suggestion as journaled, or nil when it is unknown.
+  /// Records that a callout was drawn for a suggestion.
+  ///
+  /// Returns the suggestion as journaled, or nil when it is unknown.
   @discardableResult
   public func noteCalloutShown(suggestionID: Int64) async -> Suggestion? {
     do {
@@ -264,8 +276,10 @@ public actor MentorLoop {
     }
   }
 
-  /// One tiny request on the triage model. Returns the model that answered,
-  /// or the API's own error message. Counted as spend like any other call.
+  /// One tiny request on the triage model.
+  ///
+  /// Returns the model that answered, or the API's own error message. Counted
+  /// as spend like any other call.
   public func testConnection() async -> Result<String, ClaudeClientError> {
     await reloadKey()
     guard let apiKey else { return .failure(.transport("no API key saved")) }
@@ -405,11 +419,13 @@ public actor MentorLoop {
 
   // MARK: Triage tier
 
-  /// Text only: app and window, accessibility summary, the latest OCR text,
-  /// and a compact event summary. While contexts are enforced the system
-  /// prompt also carries the declared list and the reply places the snapshot
-  /// in one of them, so the placement costs no extra call. Returns the
-  /// verdict with that placement, or nil when the call did not produce one.
+  /// Text only: app and window, accessibility summary, the latest OCR text, and
+  /// a compact event summary.
+  ///
+  /// While contexts are enforced the system prompt also carries the declared
+  /// list and the reply places the snapshot in one of them, so the placement
+  /// costs no extra call. Returns the verdict with that placement, or nil when
+  /// the call did not produce one.
   private func runTriage(
     _ observation: ActivityObservation
   ) async -> (TriageVerdict, ContextPlacement)? {
@@ -468,10 +484,11 @@ public actor MentorLoop {
 
   // MARK: Mentor tier
 
-  /// The rolling window of recent observations' text plus, when enabled,
-  /// the latest kept thumbnail as an image. With a record standing, the
-  /// window also takes every screen journaled after the ones its last write
-  /// read, since the reply rewrites it.
+  /// The rolling window of recent observations' text plus, when enabled, the
+  /// latest kept thumbnail as an image.
+  ///
+  /// With a record standing, the window also takes every screen journaled after
+  /// the ones its last write read, since the reply rewrites it.
   private func runMentor(_ observation: ActivityObservation, context: ContextPlacement) async {
     guard let apiKey else { return }
     let now = clock.date
@@ -660,8 +677,10 @@ public actor MentorLoop {
   }
 
   /// The spot the model pointed at, kept only when it saw the image and the
-  /// spot lies inside it. Anything else is a guess and is dropped here, so
-  /// the journal never holds a region that cannot be placed.
+  /// spot lies inside it.
+  ///
+  /// Anything else is a guess and is dropped here, so the journal never holds a
+  /// region that cannot be placed.
   static func region(
     from raw: MentorVerdict.Payload.Region?,
     frame: FrameInfo,
@@ -678,13 +697,14 @@ public actor MentorLoop {
 
   // MARK: Follow-up
 
-  /// One thing the user said about a suggestion, answered by the mentor
-  /// model at the mentor tier's effort. The exchange is journaled as a
-  /// follow-up row and the call as a model call, counted against the hour's
-  /// spend like every other call. A held question is journaled with the
-  /// reason and never sent. A question asked while a call is in flight
-  /// waits for it to return and is then asked; only one waits at a time,
-  /// and a newer question, or `withdrawFollowUp`, drops it, in which case
+  /// One thing the user said about a suggestion, answered by the mentor model
+  /// at the mentor tier's effort.
+  ///
+  /// The exchange is journaled as a follow-up row and the call as a model call,
+  /// counted against the hour's spend like every other call. A held question is
+  /// journaled with the reason and never sent. A question asked while a call is
+  /// in flight waits for it to return and is then asked; only one waits at a
+  /// time, and a newer question, or `withdrawFollowUp`, drops it, in which case
   /// this returns nil and nothing is journaled. `now` defaults to the clock's.
   public func askFollowUp(
     about suggestion: Suggestion,
@@ -834,9 +854,10 @@ public actor MentorLoop {
   }
 
   /// Takes a rewritten record as the current one: bounds it to the token
-  /// budget, stores it as the next revision, and publishes it. False when
-  /// the record was empty and nothing changed. `coveredThrough` is the
-  /// highest observation id the writing call read.
+  /// budget, stores it as the next revision, and publishes it.
+  ///
+  /// False when the record was empty and nothing changed. `coveredThrough` is
+  /// the highest observation id the writing call read.
   @discardableResult
   private func adopt(
     _ content: Understanding,
@@ -886,8 +907,10 @@ public actor MentorLoop {
   }
 
   /// Drops an understanding that no longer describes the present: a long gap
-  /// with no activity, or a new day. A period still counting toward the first
-  /// record goes by the same rules, quietly, since nothing was formed.
+  /// with no activity, or a new day.
+  ///
+  /// A period still counting toward the first record goes by the same rules,
+  /// quietly, since nothing was formed.
   private func expireUnderstandingIfNeeded(now: Date) async {
     guard let writtenAt = understanding?.updatedAt ?? period?.startedAt,
       let expiry = UnderstandingExpiry.of(
@@ -953,18 +976,21 @@ public actor MentorLoop {
     }
   }
 
-  /// Counts the time awake since the period was last counted as active use
-  /// when the current mode captures the screen. Runs before every mode
-  /// change, so all of that time was spent in the current mode.
+  /// Counts the time awake since the period was last counted as active use when
+  /// the current mode captures the screen.
+  ///
+  /// Runs before every mode change, so all of that time was spent in the
+  /// current mode.
   private func countActiveUse(now: Date) async {
     guard let period else { return }
     let awake = uptimeAtCount.map { clock.uptime - $0 }
     await setPeriod(period.counted(through: now, awake: awake, in: mode))
   }
 
-  /// Runs the periodic refresh when the gate allows it. Every mentor call
-  /// refreshes the record for free, so this only fires in a stretch of active
-  /// use with no mentor call in it.
+  /// Runs the periodic refresh when the gate allows it.
+  ///
+  /// Every mentor call refreshes the record for free, so this only fires in a
+  /// stretch of active use with no mentor call in it.
   private func refreshUnderstandingIfDue(after observation: ActivityObservation) async {
     let now = clock.date
     await countActiveUse(now: now)
@@ -1063,12 +1089,13 @@ public actor MentorLoop {
 
   /// The screens a call reads: those at or after `since`, and every one
   /// journaled after `cursor`, the highest id the record's last write read.
-  /// Returns the newest that fit the observation token budget; how many
-  /// older ones were left out, counting the rows a capped journal read never
-  /// returned and, with a cursor, only those after it, because the record
-  /// already covers the rest; and the highest id read, for the next
-  /// revision's cursor. `observation` is the one being considered, added
-  /// when the journal has not stored it.
+  ///
+  /// Returns the newest that fit the observation token budget; how many older
+  /// ones were left out, counting the rows a capped journal read never returned
+  /// and, with a cursor, only those after it, because the record already covers
+  /// the rest; and the highest id read, for the next revision's cursor.
+  /// `observation` is the one being considered, added when the journal has not
+  /// stored it.
   private func screens(
     since: Date?,
     after cursor: Int64?,
@@ -1115,8 +1142,10 @@ public actor MentorLoop {
     var record: ModelCallRecord
   }
 
-  /// The single path to the network. Marks the tier in flight, times the
-  /// call, and prices its usage; the caller sets the outcome.
+  /// The single path to the network.
+  ///
+  /// Marks the tier in flight, times the call, and prices its usage; the caller
+  /// sets the outcome.
   private func perform(
     tier: ModelTier,
     request: MessagesRequest,
@@ -1187,7 +1216,9 @@ public actor MentorLoop {
     return stored
   }
 
-  /// Resumes the waiting question, if any, as dropped. True when there was one.
+  /// Resumes the waiting question, if any, as dropped.
+  ///
+  /// True when there was one.
   @discardableResult
   private func dropPendingQuestion() -> Bool {
     guard let pending = pendingQuestion else { return false }

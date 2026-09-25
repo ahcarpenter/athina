@@ -59,10 +59,12 @@ import Testing
 
   // MARK: Recording
 
-  /// The clock a recording runs on. On real time the two calls below are
-  /// often less than a millisecond apart, the precision a file name shows,
-  /// but only now and then fall in the same one; a test clock that never
-  /// moves reads the same instant for both, every time.
+  /// The clock a recording runs on.
+  ///
+  /// On real time the two calls below are often less than a millisecond apart,
+  /// the precision a file name shows, but only now and then fall in the same
+  /// one; a test clock that never moves reads the same instant for both, every
+  /// time.
   enum RecordingClock: CaseIterable, Sendable {
     case system, standing
 
@@ -538,8 +540,9 @@ import Testing
   }
 
   /// A recording that could write nothing must spend nothing: every call is
-  /// refused with the reason and the live client never sees one. The
-  /// refusing client is not a replay.
+  /// refused with the reason and the live client never sees one.
+  ///
+  /// The refusing client is not a replay.
   @Test(arguments: ["existing", "existing/missing"])
   func aRecordingThatCannotWriteRefusesEveryCall(subpath: String) async throws {
     let parent = temporaryDirectory()

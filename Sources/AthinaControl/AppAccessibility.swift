@@ -113,10 +113,11 @@ struct AppAccessibility {
       && abs(frame.width - expected.width) < 2 && abs(frame.height - expected.height) < 2
   }
 
-  /// Visits `element` and everything under it. A sheet shows in the tree
-  /// of the window it is attached to, under the title a request names, but
-  /// is a window of its own: what it holds is judged against the sheet, and
-  /// a click on it posted there.
+  /// Visits `element` and everything under it.
+  ///
+  /// A sheet shows in the tree of the window it is attached to, under the title
+  /// a request names, but is a window of its own: what it holds is judged
+  /// against the sheet, and a click on it posted there.
   private static func walk(
     _ element: AXUIElement,
     in window: NSWindow,

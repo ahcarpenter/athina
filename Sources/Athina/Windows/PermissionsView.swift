@@ -2,9 +2,11 @@ import AppKit
 import AthinaCore
 import SwiftUI
 
-/// The first-run and permissions window. It explains each permission before
-/// anything is asked: no system prompt appears until the person chooses a
-/// permission's button, which then asks or opens its System Settings pane.
+/// The first-run and permissions window.
+///
+/// It explains each permission before anything is asked: no system prompt
+/// appears until the person chooses a permission's button, which then asks or
+/// opens its System Settings pane.
 struct PermissionsView: View {
   @Environment(AppState.self) private var state
   @Environment(\.dismiss) private var dismiss

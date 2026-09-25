@@ -1,7 +1,9 @@
 import Foundation
 
-/// The closed set of suggestion kinds. "Never for this" suppresses one
-/// category for one app, so the set stays small and stable.
+/// The closed set of suggestion kinds.
+///
+/// "Never for this" suppresses one category for one app, so the set stays small
+/// and stable.
 ///
 /// The last three judge the current action against the goal Athina has
 /// inferred, and are raised only when there is an understanding to judge
@@ -64,7 +66,9 @@ public enum SuggestionCategory: String, Codable, CaseIterable, Sendable, Identif
   }
 }
 
-/// What the user did with a suggestion. Nil while the toast is still up.
+/// What the user did with a suggestion.
+///
+/// Nil while the toast is still up.
 public enum SuggestionFeedback: String, Codable, CaseIterable, Sendable {
   case tellMeMore
   case notNow
@@ -109,9 +113,10 @@ public struct Suggestion: Codable, Equatable, Sendable, Identifiable {
   public var body: String
   public var explanation: String
   public var confidence: Double
-  /// The inferred goal this was judged against, when there was one. Shown in
-  /// the history window and the debug panel so a suggestion can be read
-  /// against what Athina thought the user was trying to do.
+  /// The inferred goal this was judged against, when there was one.
+  ///
+  /// Shown in the history window and the debug panel so a suggestion can be
+  /// read against what Athina thought the user was trying to do.
   public var judgedGoal: String?
   public var observationID: Int64?
   public var model: String
@@ -237,7 +242,9 @@ public enum ModelCallOutcome: String, Codable, Sendable, CaseIterable {
   }
 }
 
-/// One model call: what it cost and how it ended. Prompt text is never stored.
+/// One model call: what it cost and how it ended.
+///
+/// Prompt text is never stored.
 public struct ModelCallRecord: Codable, Equatable, Sendable, Identifiable {
   public var id: Int64
   public var timestamp: Date
@@ -255,6 +262,7 @@ public struct ModelCallRecord: Codable, Equatable, Sendable, Identifiable {
   public var detail: String?
   /// Answered from a recording, not the network: never billed, never counted
   /// against the hourly cap, and shown as a replay wherever calls are listed.
+  ///
   /// The usage is the recorded call's; the cost is zero.
   public var replayed: Bool
 
@@ -306,8 +314,10 @@ public struct MentorStatus: Equatable, Sendable {
       }
     }
 
-    /// Whether Athina can work out an understanding at all: not while it is
-    /// off or has no key. A reached cap only delays it.
+    /// Whether Athina can work out an understanding at all: not while it is off
+    /// or has no key.
+    ///
+    /// A reached cap only delays it.
     public var formsUnderstanding: Bool {
       switch self {
       case .ready, .capReached: true
@@ -444,9 +454,10 @@ public struct MentorStatus: Equatable, Sendable {
     self.pendingFollowUp = pendingFollowUp
   }
 
-  /// Whether the cadence is stretched enough to call it slowed. The spend
-  /// slowdown leaves 1 with the first cheap call of the hour, so a readout
-  /// only names it past a slowdown a person would notice.
+  /// Whether the cadence is stretched enough to call it slowed.
+  ///
+  /// The spend slowdown leaves 1 with the first cheap call of the hour, so a
+  /// readout only names it past a slowdown a person would notice.
   public var isCadenceSlowed: Bool { cadenceMultiplier > 1.05 }
 
   /// Where the periodic refresh stands now, for a readout.
@@ -463,8 +474,9 @@ public struct MentorStatus: Equatable, Sendable {
 
   /// The refresh's standing in `mode`, derived from the current state rather
   /// than from the refresh gate's last look, which may predate a pause, a
-  /// reset, or a new record. A not-due hold is in force only while its time
-  /// is still the next refresh.
+  /// reset, or a new record.
+  ///
+  /// A not-due hold is in force only while its time is still the next refresh.
   public func refreshStanding(mode: SensingMode) -> RefreshStanding {
     guard mode.capturesFrames else { return .notCounting(mode) }
     guard let next = nextRefreshAt else { return .notStarted }

@@ -4,10 +4,12 @@ import Testing
 
 /// Which bundle may skip the API tier (`ensure_app` in
 /// `scripts/e2e/lib/harness.sh`): only one ATHINA_E2E_APP names, such as a
-/// release build. The harness's own bundle is the development one, so when it
-/// carries no control API it is rebuilt with it, never skipped. Each test runs
-/// on a checkout of its own, with a stand-in scripts/bundle.sh that lands a
-/// bundle carrying the control API and the real release check.
+/// release build.
+///
+/// The harness's own bundle is the development one, so when it carries no
+/// control API it is rebuilt with it, never skipped. Each test runs on a
+/// checkout of its own, with a stand-in scripts/bundle.sh that lands a bundle
+/// carrying the control API and the real release check.
 @Suite struct ControlAPIBundleTests {
   private static let repository = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()  // AthinaE2ETests
@@ -71,8 +73,9 @@ import Testing
   }
 
   /// Runs the harness's `ensure_app` on this test's checkout, with
-  /// ATHINA_E2E_APP naming its bundle when `named`. Returns the exit status
-  /// and the CONTROL_API it left.
+  /// ATHINA_E2E_APP naming its bundle when `named`.
+  ///
+  /// Returns the exit status and the CONTROL_API it left.
   private func ensureApp(named: Bool = false) throws -> (status: Int32, controlAPI: String) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/bash")

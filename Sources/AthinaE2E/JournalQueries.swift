@@ -111,9 +111,10 @@ public enum JournalQueries {
     all.first { $0.name == name }
   }
 
-  /// A tab-separated table with a header line. Values are escaped so one row
-  /// is always one line and one column is always one field, whatever text a
-  /// title or an OCR line happens to hold.
+  /// A tab-separated table with a header line.
+  ///
+  /// Values are escaped so one row is always one line and one column is always
+  /// one field, whatever text a title or an OCR line happens to hold.
   public static func table(columns: [String], rows: [[String]]) -> String {
     ([columns.joined(separator: "\t")]
       + rows.map { row in

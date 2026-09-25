@@ -4,9 +4,10 @@ import Testing
 
 @testable import AthinaCore
 
-/// Frame-to-screen mapping and every reason a callout is refused or taken
-/// down. The frame fixture is 1280 by 800 pixels on a 2560 by 1600 point
-/// display, so every frame pixel is two screen points.
+/// Frame-to-screen mapping and every reason a callout is refused or taken down.
+///
+/// The frame fixture is 1280 by 800 pixels on a 2560 by 1600 point display, so
+/// every frame pixel is two screen points.
 @Suite struct CalloutAnchorTests {
   private let t0 = Date(timeIntervalSince1970: 1_700_000_000)
   private let window = CGRect(x: 100, y: 50, width: 2000, height: 1400)
@@ -408,9 +409,11 @@ import Testing
     )
   }
 
-  /// The app checks a callout once a second on its clock. A near duplicate
-  /// a minute in confirms the screen, and the callout comes down the first
-  /// check after two minutes pass with nothing confirming it again.
+  /// The app checks a callout once a second on its clock.
+  ///
+  /// A near duplicate a minute in confirms the screen, and the callout comes
+  /// down the first check after two minutes pass with nothing confirming it
+  /// again.
   @Test func aCalloutAgesOutOnTheClockOnceNothingConfirmsItsScreen() {
     let clock = AdjustableClock(startingAt: t0)
     var observation = Fixtures.observation(id: 1, at: t0, text: "one\ntwo\nthree")

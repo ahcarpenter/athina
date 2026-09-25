@@ -3,8 +3,9 @@ import Testing
 
 @testable import AthinaCore
 
-/// Settings validation and the placement a triage answer maps to. The gate that
-/// enforces these lives in `MentorSchedulerTests`.
+/// Settings validation and the placement a triage answer maps to.
+///
+/// The gate that enforces these lives in `MentorSchedulerTests`.
 @Suite struct MentorshipContextsTests {
   // MARK: Settings validation
 

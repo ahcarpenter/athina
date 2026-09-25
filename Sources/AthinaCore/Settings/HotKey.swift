@@ -33,9 +33,11 @@ public struct HotKey: Codable, Equatable, Hashable, Sendable {
     return s + HotKey.keyName(for: keyCode)
   }
 
-  /// The combination spelled out the way the Human Interface Guidelines
-  /// write shortcuts, for VoiceOver: "Control-Option-Command-P". Modifiers
-  /// keep the standard order, and a key shown as a symbol gets its name.
+  /// The combination spelled out the way the Human Interface Guidelines write
+  /// shortcuts, for VoiceOver: "Control-Option-Command-P".
+  ///
+  /// Modifiers keep the standard order, and a key shown as a symbol gets its
+  /// name.
   public var accessibilityName: String {
     var parts: [String] = []
     if modifiers.contains(.control) { parts.append("Control") }

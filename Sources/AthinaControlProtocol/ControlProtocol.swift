@@ -12,9 +12,10 @@ public enum ControlProtocol {
   /// The longest request line the app reads, so a stray writer cannot make
   /// it buffer without end.
   public static let maximumLineLength = 1 << 20
-  /// The socket and the secret inside a run's control directory. AthinaCore's
-  /// `ControlMode` names the same two, and a test holds them equal: the app's
-  /// release build links AthinaCore but never this module.
+  /// The socket and the secret inside a run's control directory.
+  ///
+  /// AthinaCore's `ControlMode` names the same two, and a test holds them
+  /// equal: the app's release build links AthinaCore but never this module.
   public static let socketName = "control.sock"
   public static let secretName = "secret"
 
@@ -88,7 +89,9 @@ public enum ControlValue: Equatable, Sendable, Codable {
   }
 
   /// The value at a dotted path such as `elements.0.enabled`: a key into an
-  /// object, or an index into an array. Nil when the path leads nowhere.
+  /// object, or an index into an array.
+  ///
+  /// Nil when the path leads nowhere.
   public subscript(path path: String) -> ControlValue? {
     var current: ControlValue? = self
     for part in path.split(separator: ".", omittingEmptySubsequences: true) {
@@ -118,10 +121,11 @@ public enum ControlValue: Equatable, Sendable, Codable {
   }
 
   /// `key=value` from a command line, typed as the parameter takes it
-  /// (`ControlProtocol.kinds`): `true` or `false`, a number, or JSON for
-  /// the parameters that take one, and the text as written for every other.
-  /// A value that does not read as what its parameter takes goes as text,
-  /// which the app refuses by the parameter's name.
+  /// (`ControlProtocol.kinds`): `true` or `false`, a number, or JSON for the
+  /// parameters that take one, and the text as written for every other.
+  ///
+  /// A value that does not read as what its parameter takes goes as text, which
+  /// the app refuses by the parameter's name.
   public static func argument(_ text: String) -> (key: String, value: ControlValue)? {
     guard let equals = text.firstIndex(of: "="), equals != text.startIndex else { return nil }
     let key = String(text[..<equals])
@@ -202,8 +206,9 @@ public struct ControlArgumentError: Error, Equatable, CustomStringConvertible {
 
 /// One answer: `ok`, and when it is not, `refused` (the app would not do it,
 /// for a reason a check can name, such as `disabled`) or `error`; the rest is
-/// the command's own. It never repeats the request, so the secret never comes
-/// back out.
+/// the command's own.
+///
+/// It never repeats the request, so the secret never comes back out.
 public struct ControlReply: Equatable, Sendable {
   public var fields: [String: ControlValue]
 

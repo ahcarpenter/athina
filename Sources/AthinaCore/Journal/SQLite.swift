@@ -10,7 +10,9 @@ public struct SQLiteError: Error, CustomStringConvertible, Sendable {
 
 private let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
 
-/// A thin, non-Sendable wrapper over the system SQLite C API. Owned by `Journal`.
+/// A thin, non-Sendable wrapper over the system SQLite C API.
+///
+/// Owned by `Journal`.
 final class SQLiteConnection {
   private var db: OpaquePointer?
 

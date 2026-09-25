@@ -2,8 +2,9 @@ import Foundation
 
 /// A 256-bit difference hash: the image is reduced to a 17 x 16 luminance grid
 /// and each bit records whether a cell is brighter than its right neighbour.
-/// Small layout shifts and compression noise barely move it; a different
-/// window or a large content change flips many bits.
+///
+/// Small layout shifts and compression noise barely move it; a different window
+/// or a large content change flips many bits.
 public struct PerceptualHash: Equatable, Hashable, Sendable {
   public static let gridRows = 16
   public static let gridColumns = 17

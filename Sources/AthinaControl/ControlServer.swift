@@ -40,8 +40,10 @@ public enum ControlHotKey: String, CaseIterable, Sendable {
 
 @MainActor
 public enum ControlServer {
-  /// Listens on the channel until the app quits. Throws when the socket
-  /// cannot be made, which the app reports as it reports a refusal.
+  /// Listens on the channel until the app quits.
+  ///
+  /// Throws when the socket cannot be made, which the app reports as it reports
+  /// a refusal.
   public static func start(_ channel: ControlChannel, host: ControlHost) throws {
     let commands = ControlCommands(host: host)
     let listener = try ControlListener(channel: channel) { request in

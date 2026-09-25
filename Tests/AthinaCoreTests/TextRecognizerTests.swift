@@ -73,8 +73,10 @@ import Testing
     #expect(blocks.allSatisfy { $0.confidence > 0 })
   }
 
-  /// Terminals and dark-mode editors show light text on a dark background. The default
-  /// recognition level must read them; the fast level returns nothing for such frames.
+  /// Terminals and dark-mode editors show light text on a dark background.
+  ///
+  /// The default recognition level must read them; the fast level returns
+  /// nothing for such frames.
   @Test func accurateLevelReadsLightTextOnDarkBackground() async throws {
     let frame = try #require(
       drawnFrame(

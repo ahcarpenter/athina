@@ -34,9 +34,10 @@ public struct Snooze: Codable, Equatable, Hashable, Sendable, Identifiable {
   public var id: String { "\(bundleID?.lowercased() ?? "-")|\(category.rawValue)" }
 }
 
-/// Pure matching for the two feedback rules. Apps are matched by bundle
-/// identifier, case-insensitively; an app without one matches only rules
-/// recorded without one.
+/// Pure matching for the two feedback rules.
+///
+/// Apps are matched by bundle identifier, case-insensitively; an app without
+/// one matches only rules recorded without one.
 public enum SuppressionRules {
   public enum Reason: Equatable, Sendable {
     case never(NeverRule)

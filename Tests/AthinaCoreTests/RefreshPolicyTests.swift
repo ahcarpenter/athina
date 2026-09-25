@@ -171,10 +171,12 @@ import Testing
 
   // MARK: Active use
 
-  /// The record is written at 10:00, the user works until 10:05, goes to
-  /// lunch, and is back at 11:00. The hour away is not use, so the first
-  /// observation after lunch buys nothing and the refresh comes due at
-  /// 11:10, after ten more minutes of work.
+  /// The record is written at 10:00, the user works until 10:05, goes to lunch,
+  /// and is back at 11:00.
+  ///
+  /// The hour away is not use, so the first observation after lunch buys
+  /// nothing and the refresh comes due at 11:10, after ten more minutes of
+  /// work.
   @Test func aLunchBreakDoesNotCountTowardTheInterval() {
     let scheduler = MentorScheduler(settings: settings)
     let written = t0
@@ -205,9 +207,11 @@ import Testing
   }
 
   /// The same lunch with the lid closed at 10:05:20, before the mode could go
-  /// idle, and opened at 11:00. The mode never left one that captures the
-  /// screen, but the Mac slept, so only the twenty seconds before the lid
-  /// closed and the five after it opened count, not the hour between.
+  /// idle, and opened at 11:00.
+  ///
+  /// The mode never left one that captures the screen, but the Mac slept, so
+  /// only the twenty seconds before the lid closed and the five after it opened
+  /// count, not the hour between.
   @Test func aLunchWithTheLidClosedDoesNotCountTheSleep() {
     let scheduler = MentorScheduler(settings: settings)
     let written = t0
@@ -243,9 +247,10 @@ import Testing
     #expect(unmeasured.countedAt == now)
   }
 
-  /// Only a mode that captures the screen counts. The time a closed app
-  /// spends stopped counts for nothing too, so a relaunch neither restarts
-  /// the count nor adds the time it was closed.
+  /// Only a mode that captures the screen counts.
+  ///
+  /// The time a closed app spends stopped counts for nothing too, so a relaunch
+  /// neither restarts the count nor adds the time it was closed.
   @Test(arguments: SensingMode.allCases)
   func onlyTimeInAModeThatCapturesTheScreenCounts(mode: SensingMode) {
     let period = RefreshPeriod(startedAt: t0, activeUse: 120, countedAt: t0.addingTimeInterval(120))

@@ -6,8 +6,10 @@ public struct MentorshipContext: Codable, Equatable, Sendable, Identifiable {
   public static let maxDetailLength = 280
 
   public var id: UUID
-  /// A short name, for example "building web apps". Also the label the triage
-  /// model answers with, so it must be unique and readable.
+  /// A short name, for example "building web apps".
+  ///
+  /// Also the label the triage model answers with, so it must be unique and
+  /// readable.
   public var name: String
   /// An optional longer description, sent to the triage model with the name.
   public var detail: String
@@ -30,8 +32,10 @@ public struct MentorshipContext: Codable, Equatable, Sendable, Identifiable {
   }
 }
 
-/// Where an activity sits relative to the declared contexts. The mentor gate
-/// turns this into a yes or no; the menu and the debug panel show its label.
+/// Where an activity sits relative to the declared contexts.
+///
+/// The mentor gate turns this into a yes or no; the menu and the debug panel
+/// show its label.
 public enum ContextPlacement: Equatable, Sendable {
   /// "Only mentor inside these contexts" is off, so contexts gate nothing.
   case notEnforced
@@ -99,17 +103,21 @@ public enum ContextExclusion: Equatable, Sendable {
   }
 }
 
-/// Pure normalizing and placement for the declared contexts. Everything here is
-/// a function of the settings and one triage answer, so the gate, the prompts,
-/// the settings editor, and the tests all see the same answer.
+/// Pure normalizing and placement for the declared contexts.
+///
+/// Everything here is a function of the settings and one triage answer, so the
+/// gate, the prompts, the settings editor, and the tests all see the same
+/// answer.
 public enum ContextRules {
   public static let maxContexts = 12
 
   // MARK: Normalizing
 
-  /// Trims names and details, drops nameless contexts and duplicate names,
-  /// and caps the count. The settings editor refuses exactly what this drops,
-  /// so nothing the user saves disappears silently.
+  /// Trims names and details, drops nameless contexts and duplicate names, and
+  /// caps the count.
+  ///
+  /// The settings editor refuses exactly what this drops, so nothing the user
+  /// saves disappears silently.
   public static func normalized(_ contexts: [MentorshipContext]) -> [MentorshipContext] {
     var seen = Set<String>()
     var out: [MentorshipContext] = []
@@ -160,8 +168,10 @@ public enum ContextRules {
   }
 
   /// Whether `name` would collide with a context other than `excluding`, which
-  /// `normalized` resolves by dropping the later one. The editor asks this
-  /// before saving so the user is refused rather than silently ignored.
+  /// `normalized` resolves by dropping the later one.
+  ///
+  /// The editor asks this before saving so the user is refused rather than
+  /// silently ignored.
   public static func isDuplicateName(
     _ name: String,
     in contexts: [MentorshipContext],
@@ -176,8 +186,10 @@ public enum ContextRules {
 
   // MARK: Placement
 
-  /// Turns the triage answer into a placement. A name the model did not give,
-  /// or gave and is not declared, is outside: enforcement fails closed.
+  /// Turns the triage answer into a placement.
+  ///
+  /// A name the model did not give, or gave and is not declared, is outside:
+  /// enforcement fails closed.
   public static func placement(
     triage: TriageVerdict,
     contexts: [MentorshipContext]

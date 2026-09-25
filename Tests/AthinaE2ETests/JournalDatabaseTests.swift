@@ -5,8 +5,10 @@ import Testing
 @testable import AthinaE2E
 
 /// The harness reads the journal from the outside, so a column renamed in the
-/// app would break every scenario with no test failing. These run each query
-/// against a journal `Journal` itself just created and migrated.
+/// app would break every scenario with no test failing.
+///
+/// These run each query against a journal `Journal` itself just created and
+/// migrated.
 @Suite struct JournalDatabaseTests {
   private func temporaryJournal() throws -> (Journal, JournalDatabase) {
     let directory = FileManager.default.temporaryDirectory

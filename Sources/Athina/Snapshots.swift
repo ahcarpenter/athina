@@ -5,8 +5,10 @@ import SnapshotDiff
 import SwiftUI
 
 /// Developer aid: `Athina --snapshot <dir>` renders every window with sample
-/// data to PNG files (light and dark) and quits. It draws the app's own views,
-/// so it needs no Screen Recording permission and works in CI.
+/// data to PNG files (light and dark) and quits.
+///
+/// It draws the app's own views, so it needs no Screen Recording permission and
+/// works in CI.
 @MainActor
 enum Snapshots {
   static let flag = "--snapshot"
@@ -31,9 +33,10 @@ enum Snapshots {
   /// the clock times read the same on every machine too.
   static let referenceDate = Date(timeIntervalSince1970: 1_789_482_730)
 
-  /// How every window of this run is captured, decided once. The two ways
-  /// draw glass differently, so a run never mixes them, and says which it
-  /// used; renders are compared only with renders made the same way.
+  /// How every window of this run is captured, decided once.
+  ///
+  /// The two ways draw glass differently, so a run never mixes them, and says
+  /// which it used; renders are compared only with renders made the same way.
   private static let capturesWithScreenCaptureKit = CGPreflightScreenCaptureAccess()
 
   /// One snapshot: a view, the sample state it shows, and the size of the
@@ -313,14 +316,17 @@ enum Snapshots {
   /// How a snapshot's window becomes a picture. `--snapshot` takes it from
   /// the window server; the UI smoke test draws the window in its own process.
   struct Capture {
-    /// How long a new window is left before its first capture. The window
-    /// server shows a fade, such as an app icon's, part of the way through
-    /// until it ends; a window drawn in process is drawn as its layers
+    /// How long a new window is left before its first capture.
+    ///
+    /// The window server shows a fade, such as an app icon's, part of the way
+    /// through until it ends; a window drawn in process is drawn as its layers
     /// stand, which the settled captures that follow already wait for.
     let firstCaptureDelay: Duration
-    /// The scale the window draws at whatever display it is on, or nil for
-    /// the display's own. The UI smoke test pins 1, the runner's scale, so
-    /// a Retina Mac draws the pictures the runner's references hold.
+    /// The scale the window draws at whatever display it is on, or nil for the
+    /// display's own.
+    ///
+    /// The UI smoke test pins 1, the runner's scale, so a Retina Mac draws the
+    /// pictures the runner's references hold.
     var backingScale: CGFloat? = nil
     /// The picture, or nil when it could not be taken this time and should
     /// be taken again.
@@ -331,12 +337,14 @@ enum Snapshots {
   static let fromWindowServer = Capture(firstCaptureDelay: .milliseconds(700), take: capture)
 
   /// Renders the snapshot in fresh windows until two in a row give the same
-  /// picture, and returns the second. AppKit now and then lays a text field
-  /// out a point off in one window (about one window in a few hundred on the
-  /// runner), so a single window cannot be trusted to give the picture every
-  /// other run gives. The same picture means within `SnapshotComparison`'s
-  /// tolerance, since the window server draws some glass, a dark switch's
-  /// knob among it, one of two ways from one window to the next.
+  /// picture, and returns the second.
+  ///
+  /// AppKit now and then lays a text field out a point off in one window (about
+  /// one window in a few hundred on the runner), so a single window cannot be
+  /// trusted to give the picture every other run gives. The same picture means
+  /// within `SnapshotComparison`'s tolerance, since the window server draws
+  /// some glass, a dark switch's knob among it, one of two ways from one window
+  /// to the next.
   static func settledPicture(
     of spec: Spec,
     in appearance: NSAppearance.Name,
@@ -438,11 +446,13 @@ enum Snapshots {
     override var backingScaleFactor: CGFloat { fixedScale ?? super.backingScaleFactor }
   }
 
-  /// Captures until two captures in a row are the same picture, so a view
-  /// that was still settling (a late layout pass, an image that loads on its
-  /// own) is never what gets kept; nil when no two ever are. A `Bitmap` is in
-  /// sRGB, so what is kept does not depend on the colour profile of the
-  /// display it was captured on, and every viewer shows the file the same way.
+  /// Captures until two captures in a row are the same picture, so a view that
+  /// was still settling (a late layout pass, an image that loads on its own) is
+  /// never what gets kept; nil when no two ever are.
+  ///
+  /// A `Bitmap` is in sRGB, so what is kept does not depend on the colour
+  /// profile of the display it was captured on, and every viewer shows the file
+  /// the same way.
   private static func settledCapture(
     window: NSWindow,
     hosting: NSView,
@@ -462,12 +472,14 @@ enum Snapshots {
     return nil
   }
 
-  /// The window captured the run's one way, or nil when ScreenCaptureKit
-  /// missed it this time: its stream occasionally fails to start when many
-  /// windows are captured back to back, and a new window can be missing from
-  /// the shareable content for a moment. A missed capture is taken again,
-  /// never drawn the other way. The control API's `snapshot` takes an open
-  /// window this way too (`ControlHosting.swift`).
+  /// The window captured the run's one way, or nil when ScreenCaptureKit missed
+  /// it this time: its stream occasionally fails to start when many windows are
+  /// captured back to back, and a new window can be missing from the shareable
+  /// content for a moment.
+  ///
+  /// A missed capture is taken again, never drawn the other way. The control
+  /// API's `snapshot` takes an open window this way too
+  /// (`ControlHosting.swift`).
   static func capture(window: NSWindow, hosting: NSView) async throws -> CGImage? {
     guard capturesWithScreenCaptureKit else { return try renderLayerTree(of: hosting) }
     do {
@@ -561,7 +573,9 @@ extension AppState {
   static let samplePid: Int32 = -1
 
   /// Realistic data for snapshots and previews, stamped around `now` (the
-  /// sample's own clock when nil). Nothing here touches the pipeline.
+  /// sample's own clock when nil).
+  ///
+  /// Nothing here touches the pipeline.
   static func sample(
     at now: Date? = nil,
     speechAvailability: SpeechListener.Availability = .available(locale: "English (US)"),

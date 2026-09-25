@@ -2,8 +2,9 @@ import CoreGraphics
 import Foundation
 
 /// The system prompts and output schemas for every tier, versioned so a call
-/// log entry can be traced to the exact prompt that produced it. Bump
-/// `version` whenever any prompt or schema changes.
+/// log entry can be traced to the exact prompt that produced it.
+///
+/// Bump `version` whenever any prompt or schema changes.
 ///
 /// The app is Athina, but the name these prompts give the model is still
 /// Mentor, here and in the history line `PromptBuilder` writes. Changing it
@@ -52,8 +53,10 @@ public enum MentorPrompts {
     """
 
   /// The extra section appended to the triage system prompt while the user
-  /// enforces mentorship contexts. It changes only when the declared list
-  /// changes, so the cached prefix is rewritten once per edit.
+  /// enforces mentorship contexts.
+  ///
+  /// It changes only when the declared list changes, so the cached prefix is
+  /// rewritten once per edit.
   static func triageContextSection(_ contexts: [MentorshipContext]) -> String {
     let declared = contexts.map { context in
       context.detail.isEmpty ? "- \"\(context.name)\"" : "- \"\(context.name)\": \(context.detail)"
@@ -76,7 +79,9 @@ public enum MentorPrompts {
   }
 
   /// The triage system prompt, with the declared contexts appended when the
-  /// user is enforcing them. One cached block; identical calls hit the cache.
+  /// user is enforcing them.
+  ///
+  /// One cached block; identical calls hit the cache.
   public static func triageSystem(contexts: [MentorshipContext]) -> String {
     guard !contexts.isEmpty else { return triageBase }
     return triageBase + triageContextSection(contexts)
@@ -92,9 +97,11 @@ public enum MentorPrompts {
     "additionalProperties": false,
   ]
 
-  /// The triage output schema. While contexts are enforced it also asks which
-  /// declared context the snapshot belongs to; the enum of declared names
-  /// means the model cannot answer with a context that does not exist.
+  /// The triage output schema.
+  ///
+  /// While contexts are enforced it also asks which declared context the
+  /// snapshot belongs to; the enum of declared names means the model cannot
+  /// answer with a context that does not exist.
   public static func triageSchema(contexts: [MentorshipContext]) -> JSONValue {
     guard !contexts.isEmpty else { return triageBaseSchema }
     return [
@@ -225,8 +232,10 @@ public enum MentorPrompts {
     "additionalProperties": false,
   ]
 
-  /// The optional spot a suggestion points at, in the pixels of the frame
-  /// the model saw. Null is the normal answer.
+  /// The optional spot a suggestion points at, in the pixels of the frame the
+  /// model saw.
+  ///
+  /// Null is the normal answer.
   static let regionSchema: JSONValue = [
     "anyOf": [
       ["type": "null"],
@@ -273,8 +282,9 @@ public enum MentorPrompts {
     "additionalProperties": false,
   ]
 
-  /// The refresh tier: the same record-keeping the mentor tier does on the
-  /// way past, run on its own when a stretch of work produced no mentor call.
+  /// The refresh tier: the same record-keeping the mentor tier does on the way
+  /// past, run on its own when a stretch of work produced no mentor call.
+  ///
   /// It never writes suggestions, so it can be a cheap model.
   public static let understandingSystem = """
     You keep the standing understanding for Mentor, a macOS app that watches what its user is doing and \
@@ -334,11 +344,13 @@ public enum MentorPrompts {
 
   // MARK: Follow-up
 
-  /// The mentor tier answering something the user said about a suggestion
-  /// while holding the talk-back key. The answer is shown in the toast, so
-  /// it is short prose, never a list. The prompt still says it may be read
-  /// aloud: reading suggestions aloud is deferred, and changing this text
-  /// would stale every recorded fixture for nothing.
+  /// The mentor tier answering something the user said about a suggestion while
+  /// holding the talk-back key.
+  ///
+  /// The answer is shown in the toast, so it is short prose, never a list. The
+  /// prompt still says it may be read aloud: reading suggestions aloud is
+  /// deferred, and changing this text would stale every recorded fixture for
+  /// nothing.
   public static let followUpSystem = """
     You are Mentor, a live mentor for someone working at their Mac. A moment ago you made the suggestion \
     described in the message, and the user has now said something about it, transcribed on their Mac while \
@@ -385,9 +397,11 @@ extension String {
   }
 }
 
-/// What the triage tier returns. The context field is asked for only while
-/// mentorship contexts are enforced, so it is optional: a reply without it
-/// names no context, which counts as outside.
+/// What the triage tier returns.
+///
+/// The context field is asked for only while mentorship contexts are enforced,
+/// so it is optional: a reply without it names no context, which counts as
+/// outside.
 public struct TriageVerdict: Codable, Equatable, Sendable {
   public var worthALook: Bool
   public var reason: String
@@ -411,9 +425,11 @@ public struct TriageVerdict: Codable, Equatable, Sendable {
 /// What the mentor tier returns.
 public struct MentorVerdict: Codable, Equatable, Sendable {
   public struct Payload: Codable, Equatable, Sendable {
-    /// The spot the suggestion is about, in the pixels of the frame the
-    /// model saw. Decodes from `"region": null` and from a reply with no
-    /// region field at all, so older prompt versions still parse.
+    /// The spot the suggestion is about, in the pixels of the frame the model
+    /// saw.
+    ///
+    /// Decodes from `"region": null` and from a reply with no region field at
+    /// all, so older prompt versions still parse.
     public struct Region: Codable, Equatable, Sendable {
       public var x: Double
       public var y: Double
@@ -443,8 +459,10 @@ public struct MentorVerdict: Codable, Equatable, Sendable {
     public var judgedGoal: String?
     public var region: Region?
 
-    /// True when the title or the body has no words. The schema requires
-    /// both fields, and a model can still fill them with empty strings.
+    /// True when the title or the body has no words.
+    ///
+    /// The schema requires both fields, and a model can still fill them with
+    /// empty strings.
     public var isBlank: Bool {
       title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         || body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -477,8 +495,9 @@ public struct MentorVerdict: Codable, Equatable, Sendable {
   public var reason: String
   public var suggestion: Payload?
   /// The rewritten understanding this call carried, so a mentor call refreshes
-  /// the record without a call of its own. Optional so a reply that omits it
-  /// still yields its suggestion.
+  /// the record without a call of its own.
+  ///
+  /// Optional so a reply that omits it still yields its suggestion.
   public var updatedUnderstanding: Understanding?
 
   public init(reason: String, suggestion: Payload?, updatedUnderstanding: Understanding? = nil) {

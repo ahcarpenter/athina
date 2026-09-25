@@ -248,10 +248,11 @@ import Testing
     if case .suggestion = event { return true } else { return false }
   }
 
-  /// The captain's sequence: S1 is up and being talked to, S2 arrives from
-  /// a mentor call that was already under way, the answer lands. S2 never
-  /// replaces S1 while it is up; it is shown once S1 is closed, which is
-  /// when the app tells the loop the exchange ended.
+  /// The captain's sequence: S1 is up and being talked to, S2 arrives from a
+  /// mentor call that was already under way, the answer lands.
+  ///
+  /// S2 never replaces S1 while it is up; it is shown once S1 is closed, which
+  /// is when the app tells the loop the exchange ended.
   @Test func aSuggestionThatArrivesMidExchangeWaitsUntilTheTalkedToToastCloses() async throws {
     let h = try await MentorLoopTests.Harness()
     let s1 = try await journaledSuggestion(h)
@@ -400,8 +401,10 @@ import Testing
     #expect(try await h.journal.recentEvents(limit: 5).allSatisfy { $0.kind != .talkBack })
   }
 
-  /// Recorded live on 2026-09-14: Sonnet 5 answered a real risk with every
-  /// text field empty. Such a reply is logged as an error and never shown.
+  /// Recorded live on 2026-09-14: Sonnet 5 answered a real risk with every text
+  /// field empty.
+  ///
+  /// Such a reply is logged as an error and never shown.
   @Test func aSuggestionWithNoWordsIsLoggedAndNeverShown() async throws {
     let h = try await MentorLoopTests.Harness()
     await h.client.enqueue(json: Self.yes)
@@ -440,8 +443,10 @@ import Testing
 }
 
 /// The committed replay fixtures carry this phase's two new paths: a mentor
-/// reply whose region places a callout, and a follow-up answer. Both run
-/// through the loop the app runs, from recordings, with no network and no spend.
+/// reply whose region places a callout, and a follow-up answer.
+///
+/// Both run through the loop the app runs, from recordings, with no network and
+/// no spend.
 @Suite(.timeLimit(.minutes(1))) struct ReplayInterventionTests {
   /// The frame size the recorded mentor request told the model about.
   static func recordedFrameSize(of request: MessagesRequest) -> (width: Int, height: Int)? {

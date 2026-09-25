@@ -6,8 +6,9 @@ import SwiftUI
 /// has cost, and when it will be rewritten next.
 struct UnderstandingCard: View {
   /// The understanding's color wherever the debug panel marks it: this card,
-  /// its events in the timeline, and its calls in the call log. No other
-  /// tier or status uses it.
+  /// its events in the timeline, and its calls in the call log.
+  ///
+  /// No other tier or status uses it.
   static let tint: Color = .brown
 
   /// Symbols and bullets sit in a column this wide, so every heading, goal,
@@ -173,12 +174,14 @@ struct UnderstandingCard: View {
 
   // MARK: Text
 
-  /// The interval a refresh is held to. Once the cadence counts as slowed
-  /// this is the stretched figure `nextRefreshAllowed` uses, named beside
-  /// what it was stretched from, so it cannot disagree with the countdown
-  /// beside it. Below that the set interval is stated plainly rather than as
-  /// a figure every call moves, while the scheduler still stretches it, so
-  /// the countdown can run past the figure shown by up to a twentieth of it.
+  /// The interval a refresh is held to.
+  ///
+  /// Once the cadence counts as slowed this is the stretched figure
+  /// `nextRefreshAllowed` uses, named beside what it was stretched from, so it
+  /// cannot disagree with the countdown beside it. Below that the set interval
+  /// is stated plainly rather than as a figure every call moves, while the
+  /// scheduler still stretches it, so the countdown can run past the figure
+  /// shown by up to a twentieth of it.
   private var refreshInterval: String {
     let set = state.settings.mentor.understandingRefreshInterval
     let status = state.mentorStatus
@@ -205,11 +208,12 @@ struct UnderstandingCard: View {
     }
   }
 
-  /// Whether a hold is worth repeating beside the countdown. A not-due hold
-  /// names the time the countdown already shows, and a call in flight is the
-  /// progress row above when the refresh is the call in flight, or nothing to
-  /// report once the call it named has finished; a call of another tier still
-  /// in flight is news, so it is shown.
+  /// Whether a hold is worth repeating beside the countdown.
+  ///
+  /// A not-due hold names the time the countdown already shows, and a call in
+  /// flight is the progress row above when the refresh is the call in flight,
+  /// or nothing to report once the call it named has finished; a call of
+  /// another tier still in flight is news, so it is shown.
   private func repeats(_ hold: MentorScheduler.RefreshHold) -> Bool {
     switch hold {
     case .notDue: false

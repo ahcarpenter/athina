@@ -39,8 +39,10 @@ private func unsandboxed(in root: URL) -> RuntimeEnvironment {
 
 /// Whether the process is sandboxed, and what that changes: the ids an App
 /// Store build keeps apart under its own bundle identifier, the moves from
-/// Mentor it skips, and the development flags that may name only a path it
-/// can reach. Unsandboxed, every one of them is exactly what it was.
+/// Mentor it skips, and the development flags that may name only a path it can
+/// reach.
+///
+/// Unsandboxed, every one of them is exactly what it was.
 @Suite struct RuntimeEnvironmentTests {
   // MARK: This process
 

@@ -2,10 +2,12 @@ import AppKit
 import AthinaCore
 import SwiftUI
 
-/// Owns the floating suggestion panel: a non-activating window that never
-/// takes keyboard focus, placed under the menu bar at the top right of the
-/// screen the user is working on. With no suggestion up it can show a short
-/// note instead, for a talk-back key press that has nothing to reply to.
+/// Owns the floating suggestion panel: a non-activating window that never takes
+/// keyboard focus, placed under the menu bar at the top right of the screen the
+/// user is working on.
+///
+/// With no suggestion up it can show a short note instead, for a talk-back key
+/// press that has nothing to reply to.
 ///
 /// Because the panel never becomes key, VoiceOver hears about it through
 /// announcements, and the menu bar menu offers its answers to the keyboard.
@@ -28,8 +30,9 @@ final class ToastController {
   private var noteTask: Task<Void, Never>?
   /// What a note's time on screen is waited out on.
   private let clock: any AthinaClock
-  /// Whether clicks outside Athina's own windows reach the toast. A
-  /// hermetic run's never do, so whoever is using the Mac cannot dismiss a
+  /// Whether clicks outside Athina's own windows reach the toast.
+  ///
+  /// A hermetic run's never do, so whoever is using the Mac cannot dismiss a
   /// toast they cannot see; the control API's `outside-click` stands in.
   private let watchesOtherApps: Bool
 
@@ -115,7 +118,9 @@ final class ToastController {
   }
 
   /// A short line for the user: inside the toast when a suggestion is up,
-  /// otherwise as a small panel of its own. It clears itself.
+  /// otherwise as a small panel of its own.
+  ///
+  /// It clears itself.
   func showNote(_ text: String) {
     noteTask?.cancel()
     model.note = text
@@ -160,15 +165,17 @@ final class ToastController {
 
   // MARK: Outside clicks
 
-  /// A mouse-down anywhere but the toast or Athina's menu bar item dismisses
-  /// it (`ToastClick`). The global monitor sees clicks in other apps, on the
-  /// desktop, and on the menu bar, which carry no window of ours; the local
-  /// one sees clicks in Athina's own windows and passes every event through,
-  /// so an event aimed at the toast's own panel keeps it up and its buttons
-  /// still work. A click inside the menu bar item's frame, whichever monitor
-  /// sees it, opens the menu that answers the toast. Only mouse-down is
-  /// watched, so scrolling, typing, and moving the pointer leave the toast
-  /// alone. Neither monitor makes the panel key or activates the app.
+  /// A mouse-down anywhere but the toast or Athina's menu bar item dismisses it
+  /// (`ToastClick`).
+  ///
+  /// The global monitor sees clicks in other apps, on the desktop, and on the
+  /// menu bar, which carry no window of ours; the local one sees clicks in
+  /// Athina's own windows and passes every event through, so an event aimed at
+  /// the toast's own panel keeps it up and its buttons still work. A click
+  /// inside the menu bar item's frame, whichever monitor sees it, opens the
+  /// menu that answers the toast. Only mouse-down is watched, so scrolling,
+  /// typing, and moving the pointer leave the toast alone. Neither monitor
+  /// makes the panel key or activates the app.
   private func startWatchingForOutsideClicks() {
     guard outsideClickMonitors.isEmpty else { return }
     let clicks: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
@@ -208,7 +215,9 @@ final class ToastController {
   /// A mouse-down outside Athina's windows at `location`, in screen
   /// coordinates, as the global monitor reports one: how the control API's
   /// `outside-click` reaches a hermetic run's toast, which watches no other
-  /// app. True when the toast was up to hear it, whatever it made of it.
+  /// app.
+  ///
+  /// True when the toast was up to hear it, whatever it made of it.
   @discardableResult
   func outsideClick(at location: CGPoint) -> Bool {
     guard panel?.isVisible == true, model.suggestion != nil else { return false }
@@ -277,10 +286,11 @@ final class ToastController {
     return panel
   }
 
-  /// Top right of the screen, just under the menu bar. The width is the
-  /// toast's fixed width; only the height comes from the content, and a
-  /// degenerate reading mid-update (SwiftUI can report zero while it
-  /// re-lays out) keeps the frame it had, so the panel never jumps off
+  /// Top right of the screen, just under the menu bar.
+  ///
+  /// The width is the toast's fixed width; only the height comes from the
+  /// content, and a degenerate reading mid-update (SwiftUI can report zero
+  /// while it re-lays out) keeps the frame it had, so the panel never jumps off
   /// the edge of the screen while its content changes.
   private func place(_ panel: NSPanel, on screen: NSScreen?) {
     guard let screen else { return }
@@ -339,9 +349,11 @@ final class ToastModel {
   var talkBackKey: String?
 }
 
-/// The toast on its Liquid Glass surface. Its corners are concentric with the
-/// small capsule buttons inset from its bottom corners, the way system glass
-/// containers relate to the controls inside them.
+/// The toast on its Liquid Glass surface.
+///
+/// Its corners are concentric with the small capsule buttons inset from its
+/// bottom corners, the way system glass containers relate to the controls
+/// inside them.
 struct ToastView: View {
   /// Space between the glass edge and the content.
   static let inset: CGFloat = 14
@@ -407,11 +419,12 @@ struct ToastNote: View {
   }
 }
 
-/// The toast body, also used by snapshots. The header and body sit on top,
-/// the explanation grows between them and the button bar when expanded
-/// (scrolling past a sensible height), the talk-back exchange and listening
-/// row sit under that, and the button bar is pinned to the bottom edge with
-/// the same three buttons in every state.
+/// The toast body, also used by snapshots.
+///
+/// The header and body sit on top, the explanation grows between them and the
+/// button bar when expanded (scrolling past a sensible height), the talk-back
+/// exchange and listening row sit under that, and the button bar is pinned to
+/// the bottom edge with the same three buttons in every state.
 struct ToastContent: View {
   static let explanationMaxHeight: CGFloat = 300
   static let exchangeMaxHeight: CGFloat = 220
@@ -550,6 +563,7 @@ struct ToastContent: View {
 }
 
 /// A scroll view as tall as its content up to `maxHeight`, then scrolling.
+///
 /// A plain `ScrollView` inside a panel that sizes to fit keeps whatever height
 /// it had, so an answer that arrives later would be cut off instead of growing
 /// the toast.

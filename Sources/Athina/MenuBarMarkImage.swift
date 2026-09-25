@@ -12,9 +12,11 @@ import AthinaCore
 enum MenuBarMarkImage {
   private static var loaded: [MenuBarMark: NSImage] = [:]
 
-  /// The folder the variants are read from: the app bundle's resources. The
-  /// UI smoke test runs in a test process, whose bundle is the test runner's,
-  /// so it points this at `Resources/Mark`, where `make mark` writes them.
+  /// The folder the variants are read from: the app bundle's resources.
+  ///
+  /// The UI smoke test runs in a test process, whose bundle is the test
+  /// runner's, so it points this at `Resources/Mark`, where `make mark` writes
+  /// them.
   static var directory = Bundle.main.resourceURL
 
   static func image(for mark: MenuBarMark) -> NSImage? {

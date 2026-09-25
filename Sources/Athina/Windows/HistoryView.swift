@@ -118,7 +118,9 @@ private struct DeliveryMarks: View {
 }
 
 /// The feedback recorded for a suggestion, or "Showing" while its toast is up
-/// and nothing has been recorded yet. A suggestion with neither gets no pill.
+/// and nothing has been recorded yet.
+///
+/// A suggestion with neither gets no pill.
 struct FeedbackPill: View {
   let feedback: SuggestionFeedback?
   let isShowing: Bool

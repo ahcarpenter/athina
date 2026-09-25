@@ -149,9 +149,10 @@ import Testing
   }
 }
 
-/// The captain's rule for when a press counts: a toast is talked to only
-/// once a transcript matched an answer or a question was asked. An
-/// accidental tap, or a recording cut short, is not an exchange.
+/// The captain's rule for when a press counts: a toast is talked to only once a
+/// transcript matched an answer or a question was asked.
+///
+/// An accidental tap, or a recording cut short, is not an exchange.
 @Suite struct TalkBackPressTests {
   @Test func anAccidentalTapEndsTheHoldAndGivesBackTheCountdown() {
     #expect(

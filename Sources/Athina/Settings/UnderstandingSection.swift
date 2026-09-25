@@ -67,8 +67,10 @@ struct UnderstandingSection: View {
   }
 }
 
-/// Reset Understanding, in Settings and in the debug panel. It forgets every
-/// revision at once and nothing brings them back, so it asks first.
+/// Reset Understanding, in Settings and in the debug panel.
+///
+/// It forgets every revision at once and nothing brings them back, so it asks
+/// first.
 struct ResetUnderstandingButton: View {
   @Environment(AppState.self) private var state
   @State private var confirming = false

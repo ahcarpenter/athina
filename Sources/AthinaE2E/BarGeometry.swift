@@ -34,8 +34,9 @@ public enum BarGeometry {
     CGPoint(x: frame.midX.rounded(), y: frame.midY.rounded())
   }
 
-  /// The horizontal gap between each pair of neighbouring items, left to
-  /// right. A negative gap means they overlap.
+  /// The horizontal gap between each pair of neighbouring items, left to right.
+  ///
+  /// A negative gap means they overlap.
   public static func gaps(_ items: [BarItem]) -> [(left: BarItem, right: BarItem, gap: Double)] {
     let ordered = sorted(items)
     guard ordered.count > 1 else { return [] }
@@ -48,10 +49,11 @@ public enum BarGeometry {
     sorted(items).first { $0.frame.contains(point) }
   }
 
-  /// A point on the menu bar that is on no item at all: the middle of the
-  /// span between the frontmost app's last menu title and the leftmost
-  /// status item. A click there reaches the same global monitor an item
-  /// click does, which is what makes it the control case for a dismissal.
+  /// A point on the menu bar that is on no item at all: the middle of the span
+  /// between the frontmost app's last menu title and the leftmost status item.
+  ///
+  /// A click there reaches the same global monitor an item click does, which is
+  /// what makes it the control case for a dismissal.
   ///
   /// Returns nil when the span is narrower than `minWidth`, rather than
   /// guessing: a scenario that cannot find empty bar space must say so.

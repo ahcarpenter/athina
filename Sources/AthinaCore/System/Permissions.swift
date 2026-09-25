@@ -5,8 +5,10 @@ import CoreGraphics
 import Foundation
 import Speech
 
-/// The permissions Athina asks for. The first two are what sensing needs;
-/// the last two only serve talking back, and everything else works without them.
+/// The permissions Athina asks for.
+///
+/// The first two are what sensing needs; the last two only serve talking back,
+/// and everything else works without them.
 public enum Permission: String, CaseIterable, Sendable, Identifiable {
   case screenRecording
   case accessibility
@@ -24,9 +26,11 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
     Permission.required.contains(self)
   }
 
-  /// Screen Recording and Accessibility are switched on in System Settings;
-  /// the system's own request for them only points there. Microphone and
-  /// Speech Recognition are answered in the system's Allow alert.
+  /// Screen Recording and Accessibility are switched on in System Settings; the
+  /// system's own request for them only points there.
+  ///
+  /// Microphone and Speech Recognition are answered in the system's Allow
+  /// alert.
   public var isGrantedInSystemSettings: Bool {
     switch self {
     case .screenRecording, .accessibility: true
@@ -91,7 +95,9 @@ public struct PermissionStatus: Equatable, Sendable {
     self.speechRecognition = speechRecognition
   }
 
-  /// Both sensing permissions. The voice pair is optional and not counted.
+  /// Both sensing permissions.
+  ///
+  /// The voice pair is optional and not counted.
   public var allGranted: Bool { screenRecording && accessibility }
   public var anyGranted: Bool { screenRecording || accessibility }
   /// Both voice permissions, which talking back needs.
@@ -131,8 +137,9 @@ public enum PermissionAction: Equatable, Sendable {
 
 /// Reads and requests the permissions Athina uses.
 public enum PermissionProbe {
-  /// Whether the system has never asked about this permission. Only the
-  /// alert-based pair can say; the System Settings pair reports false.
+  /// Whether the system has never asked about this permission.
+  ///
+  /// Only the alert-based pair can say; the System Settings pair reports false.
   public static func isUndetermined(_ permission: Permission) -> Bool {
     switch permission {
     case .screenRecording, .accessibility:

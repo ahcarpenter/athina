@@ -113,12 +113,14 @@ public enum ModelClientMode: Equatable, Sendable {
     public var recordingUnavailableReason: String?
   }
 
-  /// Builds the client. A replay whose fixtures cannot be loaded and an
-  /// invalid command line get a replay client that refuses every call with
-  /// the reason; a recording whose directory cannot be written gets a
-  /// `RefusingClaudeClient`, which is not a replay. Either way the problem
-  /// shows up in the call log and nothing goes live. `clock` is what a
-  /// replayed latency is waited out on and a recording is stamped with.
+  /// Builds the client.
+  ///
+  /// A replay whose fixtures cannot be loaded and an invalid command line get a
+  /// replay client that refuses every call with the reason; a recording whose
+  /// directory cannot be written gets a `RefusingClaudeClient`, which is not a
+  /// replay. Either way the problem shows up in the call log and nothing goes
+  /// live. `clock` is what a replayed latency is waited out on and a recording
+  /// is stamped with.
   public func makeClient(
     prices: PriceTable,
     clock: any AthinaClock = SystemClock(),

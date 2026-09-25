@@ -29,8 +29,9 @@ public struct JournalTimeline: Equatable, Sendable {
     merge([entry])
   }
 
-  /// Rows read back from the journal, or any other batch. A row whose id is
-  /// already here replaces the one held.
+  /// Rows read back from the journal, or any other batch.
+  ///
+  /// A row whose id is already here replaces the one held.
   public mutating func merge(_ batch: [JournalEntry]) {
     var held = Dictionary(
       uniqueKeysWithValues: entries.indices.compactMap { index in

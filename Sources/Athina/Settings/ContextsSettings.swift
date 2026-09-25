@@ -123,6 +123,7 @@ private struct ContextRow: View {
 // MARK: - Context editor
 
 /// Edits one context on a local copy: the sheet's Save is what writes it back.
+///
 /// A context is new when the declared list does not hold its id yet, so the
 /// sheet's copy comes from the same data it validates against rather than a
 /// flag set beside the presented item.

@@ -281,11 +281,13 @@ final class ControlCommands {
 
   // MARK: - The menu bar extra's menu
 
-  /// The status item's menu as the app builds it (`MenuModel`), read
-  /// without showing it; `press=<title>`, or `press="<submenu> > <title>"`,
-  /// runs an item's command through the handler choosing it from the open
-  /// menu runs (`MenuModel.target`). Only the real menu bar can show that
-  /// macOS draws and opens the menu; that stays a real-screen check.
+  /// The status item's menu as the app builds it (`MenuModel`), read without
+  /// showing it; `press=<title>`, or `press="<submenu> > <title>"`, runs an
+  /// item's command through the handler choosing it from the open menu runs
+  /// (`MenuModel.target`).
+  ///
+  /// Only the real menu bar can show that macOS draws and opens the menu; that
+  /// stays a real-screen check.
   private func menu(_ request: ControlRequest) async throws -> ControlReply {
     let menu = host.controlMenu
     var fields: [String: ControlValue] = ["items": Self.items(menu.items)]
@@ -333,12 +335,13 @@ final class ControlCommands {
     return .ok(["heard": .bool(heard), "dispatched": .bool(await EventFlush.flush())])
   }
 
-  /// One of the hot keys set in Settings > General, through the handler
-  /// Carbon calls: `key=pause` or `key=talk-back`, pressed and let go, or
-  /// only `phase=down` or `phase=up`. `heard=<words>` is what talking back
-  /// hears while its key is down, since a hermetic run opens no microphone.
-  /// Refused as `disabled` when the key is not registered, since Carbon
-  /// never reports a key it does not hold.
+  /// One of the hot keys set in Settings > General, through the handler Carbon
+  /// calls: `key=pause` or `key=talk-back`, pressed and let go, or only
+  /// `phase=down` or `phase=up`.
+  ///
+  /// `heard=<words>` is what talking back hears while its key is down, since a
+  /// hermetic run opens no microphone. Refused as `disabled` when the key is
+  /// not registered, since Carbon never reports a key it does not hold.
   private func hotKey(_ request: ControlRequest) async throws -> ControlReply {
     let names = ControlHotKey.allCases.map(\.rawValue).joined(separator: " or ")
     guard let name = try request.string("key"), let key = ControlHotKey(rawValue: name) else {
@@ -424,11 +427,13 @@ final class ControlCommands {
     }
   }
 
-  /// Waits, for up to two seconds, until the window server has finished
-  /// drawing `window` in. macOS opens a window with an animation that scales
-  /// and fades it in over a few hundred milliseconds, and a capture taken
-  /// meanwhile is a smaller, washed-out picture of it. It is drawn in once
-  /// the window server's bounds for it match its frame and hold for 100 ms.
+  /// Waits, for up to two seconds, until the window server has finished drawing
+  /// `window` in. macOS opens a window with an animation that scales and fades
+  /// it in over a few hundred milliseconds, and a capture taken meanwhile is a
+  /// smaller, washed-out picture of it.
+  ///
+  /// It is drawn in once the window server's bounds for it match its frame and
+  /// hold for 100 ms.
   private func drawnIn(_ window: NSWindow) async {
     let clock = ContinuousClock()
     let deadline = clock.now + .seconds(2)
