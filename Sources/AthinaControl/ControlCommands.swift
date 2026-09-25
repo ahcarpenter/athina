@@ -89,18 +89,18 @@ final class ControlCommands {
         case answer(ControlReply)
     }
 
-    /// The control a request names, or the answer saying why there is none.
+    /// The first control, in tree order, a request names, or the answer
+    /// saying why there is none.
     private func control(_ request: ControlRequest) throws -> Lookup {
         let query = try AppAccessibility.Query(request)
         guard query.namesAControl else {
             return .answer(.error("\(request.command) needs identifier=, role=, subrole=, or label= naming a control"))
         }
-        let nodes = AppAccessibility.nodes(query)
-        guard nodes.indices.contains(query.index) else {
+        guard let node = AppAccessibility.nodes(query).first else {
             let place = query.window.map { "a window titled " + $0 } ?? "any window"
-            return .answer(.refused("missing", "no such control in \(place)", ["matches": .number(Double(nodes.count))]))
+            return .answer(.refused("missing", "no such control in \(place)"))
         }
-        return .found(nodes[query.index])
+        return .found(node)
     }
 
     private func click(_ request: ControlRequest) async throws -> ControlReply {
@@ -135,8 +135,6 @@ final class ControlCommands {
         if try request.bool("force") != true, let refusal = rule.refusal {
             return .refused(refusal.rawValue, message(for: refusal), details)
         }
-        // `dry=true` answers whether the click would land, and posts nothing.
-        if try request.bool("dry") == true { return .ok(details) }
         post(clickAt: centre, in: window)
         let dispatched = await EventFlush.flush()
         return .ok(details.merging(["dispatched": .bool(dispatched)]) { _, new in new })

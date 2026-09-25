@@ -715,18 +715,18 @@ suite rather than every scenario.
 An API-tier scenario drives Athina through a control API the app serves on a
 Unix socket: `athina-drive api <command> [key=value ...]` sends one request
 and prints the answer. Each value goes as its parameter takes it: `true` or
-`false` for `force`, `dry` and `present`, a number for `index` and `timeout`,
-JSON for `equals` (`equals=true`, `equals=3`, and `equals='"30"'` for the text
-30), and the text as written for every other, so `text=30` types 30. The app
-answers a value of the wrong type with an error naming its parameter, never
-carrying on without it.
+`false` for `force` and `present`, a number for `timeout`, JSON for `equals`
+(`equals=true`, `equals=3`, and `equals='"30"'` for the text 30), and the text
+as written for every other, so `text=30` types 30. The app answers a value of
+the wrong type with an error naming its parameter, never carrying on without
+it.
 
 | command | what it does |
 | --- | --- |
 | `ping` | the protocol, the app's pid, and whether it is the active app |
 | `windows` | Athina's open windows: title, number, frame, level, key and main |
 | `find` | controls in `window=<title>` (every window when it is left out) by `identifier=`, or by `role=`, `subrole=` and `label=` (a control's description or title, whole, ignoring case), read from Athina's own accessibility tree: role, label, identifier, value, enabled, frame |
-| `click` | a left click on one such control (`index=` picks among several), posted to the app's own event queue and dispatched by AppKit as a real click is after the window server; the answer comes once it has been handled. Refused as `disabled` when the control is dimmed, `offscreen` when a scroll area has it out of sight or it is outside its part of the window (the content, or the whole window for the toolbar and title bar), and `covered` when a sheet is up or the window's own hit test at its centre lands on something else. `force=true` clicks anyway, for proving a refusal; `dry=true` only answers whether it would land |
+| `click` | a left click on the first such control, posted to the app's own event queue and dispatched by AppKit as a real click is after the window server; the answer comes once it has been handled. Refused as `disabled` when the control is dimmed, `offscreen` when a scroll area has it out of sight or it is outside its part of the window (the content, or the whole window for the toolbar and title bar), and `covered` when a sheet is up or the window's own hit test at its centre lands on something else. `force=true` clicks anyway, for proving a refusal |
 | `type` | `text=` as key presses to the first responder of `window=`, such as the field a click just focused |
 | `scroll` | the scroll view holding a control scrolls it into view |
 | `menu` | the menu bar extra's menu as the app builds it, without showing it; `press="<title>"`, or `press="<submenu> > <title>"`, runs that item's own action, refused as `missing` or `disabled`, naming the step, when an item or submenu on the way is not there or is dimmed |

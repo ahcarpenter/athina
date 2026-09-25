@@ -6,7 +6,7 @@ import AthinaCore
 @Suite struct ControlProtocolTests {
     @Test func aRequestRoundTripsAsOneLine() throws {
         let request = ControlRequest(id: 7, secret: "s3cret", command: "click", arguments: [
-            "window": .string("Advanced"), "force": .bool(true), "index": .number(2),
+            "window": .string("Advanced"), "force": .bool(true), "timeout": .number(2),
         ])
         let line = try request.line()
         #expect(line.last == 0x0A)
@@ -14,7 +14,7 @@ import AthinaCore
         #expect(try ControlRequest.decode(line: line.dropLast()) == request)
         #expect(try request.string("window") == "Advanced")
         #expect(try request.bool("force") == true)
-        #expect(try request.number("index") == 2)
+        #expect(try request.number("timeout") == 2)
         #expect(try request.string("label") == nil)
     }
 
@@ -67,7 +67,7 @@ import AthinaCore
     @Test func aCommandLineArgumentIsTypedAsItsParameterTakesIt() {
         #expect(ControlValue.argument("force=true")! == ("force", .bool(true)))
         #expect(ControlValue.argument("present=false")! == ("present", .bool(false)))
-        #expect(ControlValue.argument("index=2")! == ("index", .number(2)))
+        #expect(ControlValue.argument("timeout=2")! == ("timeout", .number(2)))
         #expect(ControlValue.argument("timeout=0.5")! == ("timeout", .number(0.5)))
         #expect(ControlValue.argument("equals=true")! == ("equals", .bool(true)))
         #expect(ControlValue.argument("equals=3")! == ("equals", .number(3)))
@@ -95,9 +95,9 @@ import AthinaCore
 
     @Test func aValueNotOfItsParametersTypeGoesAsTextForTheAppToRefuse() throws {
         #expect(ControlValue.argument("force=yes")! == ("force", .string("yes")))
-        #expect(ControlValue.argument("index=two")! == ("index", .string("two")))
+        #expect(ControlValue.argument("timeout=soon")! == ("timeout", .string("soon")))
         #expect(ControlValue.argument("timeout=true")! == ("timeout", .string("true")))
-        #expect(ControlValue.argument("dry=1")! == ("dry", .string("1")))
+        #expect(ControlValue.argument("present=1")! == ("present", .string("1")))
         let (key, value) = ControlValue.argument("force=yes")!
         let request = ControlRequest(id: 1, secret: "s", command: "click", arguments: [key: value])
         #expect(throws: ControlArgumentError(key: "force", expected: "true or false", given: .string("yes"))) { try request.bool("force") }

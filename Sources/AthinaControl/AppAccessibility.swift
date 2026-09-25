@@ -45,14 +45,13 @@ struct AppAccessibility {
     /// What a request asks for: the window whose title contains `window`
     /// (every window of the app when it is absent), and a control there by
     /// `identifier`, or by `role`, `subrole`, and `label` (its description or
-    /// title, compared whole, ignoring case). `index` picks among several.
+    /// title, compared whole, ignoring case).
     struct Query {
         var window: String?
         var identifier: String?
         var role: String?
         var subrole: String?
         var label: String?
-        var index: Int
 
         init(_ request: ControlRequest) throws {
             window = try request.string("window")
@@ -60,7 +59,6 @@ struct AppAccessibility {
             role = try request.string("role")
             subrole = try request.string("subrole")
             label = try request.string("label")
-            index = Int(try request.number("index") ?? 0)
         }
 
         var namesAControl: Bool { identifier != nil || role != nil || subrole != nil || label != nil }

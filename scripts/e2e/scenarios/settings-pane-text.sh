@@ -46,10 +46,10 @@ scenario_run() {
 	check "the Models footer shows its link to Journal as a link" "AXLink" "$(link_field Models athina-settings:journal role)"
 
 	check "a click on the link below the fold is refused" "offscreen" \
-		"$(api click window=Models identifier=athina-settings:journal dry=true --field refused)"
+		"$(api click window=Models identifier=athina-settings:journal --field refused)"
 	check "the pane scrolls to the link" "true" "$(api scroll window=Models identifier=athina-settings:journal --field ok)"
-	check "scrolled into view, a click on the link would land" "true" \
-		"$(api click window=Models identifier=athina-settings:journal dry=true --field ok)"
+	check "scrolled into view, a click on the link lands" "true" \
+		"$(api click window=Models identifier=athina-settings:journal --field ok)"
 	checkpoint Models models-footer
 	return 0
 }

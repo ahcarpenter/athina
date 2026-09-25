@@ -37,7 +37,9 @@ let package = Package(
             ]
         ),
         // project.yml's App Store target compiles these same sources against
-        // AthinaCore and SnapshotDiff: a dependency or framework added here goes there too.
+        // AthinaCore and SnapshotDiff: a dependency or framework added here goes
+        // there too, except the ControlAPI-conditional AthinaControl, which the
+        // App Store build never carries.
         .executableTarget(
             name: "Athina",
             // SnapshotDiff so `--snapshot` judges two captures the same picture
