@@ -71,6 +71,21 @@ enum Accessibility {
                 say("AXMenuItem title=\"\(title(element))\" en=\(text(attr(element, kAXEnabledAttribute)))")
             }
 
+        case "menu":
+            // The open status menu's own rows as macOS shows them, top level
+            // only, in order: the title and whether it is enabled, or "-" for
+            // a separator, which accessibility shows as a row with no title.
+            // The same shape as the control API's `menu`, so the two compare.
+            guard let extras = attr(app, "AXExtrasMenuBar"),
+                  let menu = first(extras as! AXUIElement, { role($0) == "AXMenu" }) else {
+                fail("ax menu: pid \(pid) has no open menu", code: 2)
+            }
+            for item in children(menu) where role(item) == "AXMenuItem" {
+                let name = title(item)
+                let enabled = text(attr(item, kAXEnabledAttribute)) == "1"
+                say(name.isEmpty ? "-" : "\(name)\t\(enabled ? "enabled" : "dimmed")")
+            }
+
         case "pressextra":
             guard let item = statusItem(of: pid) else { fail("ax pressextra: pid \(pid) has no menu bar extra", code: 2) }
             let status = AXUIElementPerformAction(item, kAXPressAction as CFString)

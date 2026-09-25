@@ -42,7 +42,7 @@ public enum DriveArguments {
         Command(name: "bar", arguments: "[pid]", summary: "menu bar extras and menu titles with frames, gaps, and empty space", minimum: 0, maximum: 1, options: []),
         Command(name: "front", arguments: "", summary: "the frontmost app and its pid", minimum: 0, maximum: 0, options: []),
         Command(name: "activate", arguments: "<pid>", summary: "bring a pid to the front", minimum: 1, maximum: 1, options: []),
-        Command(name: "ax", arguments: "<pid> <dump|texts|menuitems|pressextra|cancelmenu|get|press|pressx|focus|set> [role] [match] [value]", summary: "read or press elements through accessibility", minimum: 2, maximum: 6, options: ["--scope"]),
+        Command(name: "ax", arguments: "<pid> <dump|texts|menuitems|menu|pressextra|cancelmenu|get|press|pressx|focus|set> [role] [match] [value]", summary: "read or press elements through accessibility", minimum: 2, maximum: 6, options: ["--scope"]),
         Command(name: "click", arguments: "<item <pid> | at <x> <y> | window <pid> <x> <y>>", summary: "post a real HID click, aborting if the pointer is moved", minimum: 2, maximum: 4, options: ["--shot"]),
         Command(name: "raise", arguments: "<pid> [title]", summary: "bring one of a pid's windows to the front, which journals a window switch", minimum: 1, maximum: 2, options: []),
         Command(name: "close", arguments: "<pid> <title>", summary: "close one of a pid's windows through its close button", minimum: 2, maximum: 2, options: []),
