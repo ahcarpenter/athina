@@ -111,7 +111,7 @@ check() {
 	fi
 }
 
-# Start the next step of a scenario that runs several in one launch, named
+# Start the next step of a scenario that runs several, named
 # "<number> <what it proves>", so a failed check, or a scenario that stops at
 # it, says which step it was.
 step() {

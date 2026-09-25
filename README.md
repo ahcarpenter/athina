@@ -684,11 +684,11 @@ it took, every check it made, and the directory holding its evidence (transcript
 screenshots, event taps, announcements, and the journal as TSV and as a copy;
 for an API-tier run, every request and answer in `api.log`, the checkpoint
 PNGs it took of Athina's windows, and what the harness saw of the screen in
-`hermetic-windows.log` and `hermetic-bar.log`).
-A scenario that runs several steps in one launch, as `real-screen` does, names
-each (`step`), so each check carries its step (`step 5 a real click on empty
-menu bar space dismisses the toast: the toast is gone after the click`), and a
-run that stops early says at which step.
+`hermetic-windows.log` and `hermetic-bar.log`). A scenario that runs several
+steps, as `real-screen` does, names each (`step`), so each check carries its
+step (`step 5 a real click on empty menu bar space dismisses a new toast, and
+that is recorded: the toast is gone after the click`), and a run that stops
+early says at which step.
 
 ### The warm fixture home
 
