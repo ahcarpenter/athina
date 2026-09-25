@@ -128,9 +128,10 @@ ensure_drive() {
 	log "building athina-drive $(build_when)"
 	# Stamped when the build starts, so a source saved during it is still newer.
 	mkdir -p "$(dirname "$DRIVE_BUILT")"
-	: >"$DRIVE_BUILT.new"
-	(cd "$ROOT" && swift build --product athina-drive >/dev/null) || die "could not build athina-drive"
-	mv -f "$DRIVE_BUILT.new" "$DRIVE_BUILT"
+	local started
+	started="$(mktemp "$DRIVE_BUILT.XXXXXX")"
+	(cd "$ROOT" && swift build --product athina-drive >/dev/null) || { rm -f "$started"; die "could not build athina-drive"; }
+	mv -f "$started" "$DRIVE_BUILT"
 }
 
 # A check of a stale bundle proves nothing, so the app is rebuilt when a source
