@@ -1387,17 +1387,6 @@ final class AppState {
         return controlFailure.map { "Control API failed: \($0)" }
     }
 
-    /// The debug panel's Mentor card: where the API listens, or why it does
-    /// not; nil when `--control` was not given.
-    var controlField: String? {
-        switch controlMode {
-        case .off: return nil
-        case .refused(let reason): return "refused: \(reason)"
-        case .on(let channel):
-            return controlFailure.map { "failed: \($0)" } ?? "listening at \(Formatting.path(URL(fileURLWithPath: channel.socketPath)))"
-        }
-    }
-
     // MARK: Launch files
 
     /// Every launch flag that was refused and has no line of its own, in the

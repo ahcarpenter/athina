@@ -90,7 +90,7 @@ struct AppAccessibility {
         var found: [Node] = []
         for window in windows(titled: query.window) {
             guard let root = axWindows.first(where: { matches($0, window) }) else { continue }
-            walk(root, in: window, chrome: false, clips: [], depth: 0) { node in
+            walk(root, in: window, titled: window.title, chrome: false, clips: [], depth: 0) { node in
                 if query.matches(node) { found.append(node) }
             }
         }
@@ -106,16 +106,22 @@ struct AppAccessibility {
             && abs(frame.width - expected.width) < 2 && abs(frame.height - expected.height) < 2
     }
 
+    /// Visits `element` and everything under it. A sheet shows in the tree
+    /// of the window it is attached to, under the title a request names, but
+    /// is a window of its own: what it holds is judged against the sheet, and
+    /// a click on it posted there.
     private static func walk(
-        _ element: AXUIElement, in window: NSWindow, chrome: Bool, clips: [CGRect], depth: Int, visit: (Node) -> Void
+        _ element: AXUIElement, in window: NSWindow, titled title: String, chrome: Bool, clips: [CGRect], depth: Int,
+        visit: (Node) -> Void
     ) {
         guard depth < 48 else { return }
         let role = string(element, kAXRoleAttribute)
+        let window = role == "AXSheet" ? window.attachedSheet ?? window : window
         let subrole = string(element, kAXSubroleAttribute)
         let frame = frame(of: element)
         let inChrome = chrome || role == "AXToolbar" || windowButtons.contains(subrole)
         visit(Node(
-            element: element, window: window, windowTitle: window.title, role: role, subrole: subrole,
+            element: element, window: window, windowTitle: title, role: role, subrole: subrole,
             label: string(element, kAXDescriptionAttribute), title: string(element, kAXTitleAttribute),
             identifier: string(element, kAXIdentifierAttribute), value: string(element, kAXValueAttribute),
             enabled: (value(element, kAXEnabledAttribute) as? Bool) ?? true,
@@ -123,7 +129,7 @@ struct AppAccessibility {
         ))
         let childClips = role == "AXScrollArea" ? clips + [frame] : clips
         for child in (value(element, kAXChildrenAttribute) as? [AXUIElement]) ?? [] {
-            walk(child, in: window, chrome: inChrome, clips: childClips, depth: depth + 1, visit: visit)
+            walk(child, in: window, titled: title, chrome: inChrome, clips: childClips, depth: depth + 1, visit: visit)
         }
     }
 

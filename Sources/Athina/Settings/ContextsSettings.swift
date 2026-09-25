@@ -50,6 +50,7 @@ struct MentorshipContextsSection: View {
                     editing = MentorshipContext(name: "")
                 }
                 .disabled(atCap)
+                .accessibilityIdentifier("contexts.addContext")
             } label: {
                 if atCap {
                     Text("That is all \(ContextRules.maxContexts) contexts. Remove one to add another.")
@@ -190,6 +191,7 @@ struct ContextEditor: View {
                 Spacer()
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("contextEditor.cancel")
                 Button(isNew ? "Add" : "Save", action: save)
                     .keyboardShortcut(.defaultAction)
                     .disabled(trimmedName.isEmpty || isDuplicate)

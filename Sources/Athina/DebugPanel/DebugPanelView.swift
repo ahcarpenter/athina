@@ -716,8 +716,8 @@ private struct MentorCard: View {
                     if let clock = clock(now: now) {
                         Field(label: "Clock", value: clock, lineLimit: 4)
                     }
-                    if let control = state.controlField {
-                        Field(label: "Control API", value: control, lineLimit: 4)
+                    if let control = controlField {
+                        Field(label: control.label, value: control.value, lineLimit: control.lineLimit, truncation: control.truncation)
                     }
                     Field(label: "Triage gate", value: triageGate(now: now), lineLimit: 4)
                     Field(label: "Context", value: contextVerdict(now: now), lineLimit: 4)
@@ -800,6 +800,25 @@ private struct MentorCard: View {
                 ModeField(label: "Fixtures", value: fixtures, lineLimit: 3),
                 ModeField(label: "From", value: Formatting.path(directory), truncation: .middle),
             ]
+        }
+    }
+
+    /// Where the control API listens, one line with the path cut in the
+    /// middle as the paths above are, or why it does not; nothing without
+    /// `--control`.
+    private var controlField: ModeField? {
+        switch state.controlMode {
+        case .off:
+            return nil
+        case .refused(let reason):
+            return ModeField(label: "Control API", value: "refused: \(reason)", lineLimit: 4)
+        case .on(let channel):
+            if let failure = state.controlFailure {
+                return ModeField(label: "Control API", value: "failed: \(failure)", lineLimit: 4)
+            }
+            return ModeField(
+                label: "Control API", value: "listening at \(Formatting.path(URL(fileURLWithPath: channel.socketPath)))", truncation: .middle
+            )
         }
     }
 
