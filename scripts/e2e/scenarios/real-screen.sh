@@ -18,7 +18,8 @@
 #     forward, and a real click on empty menu bar space dismisses it, which is
 #     recorded.
 #   6 Show Last Suggestion brings it back, and a real click in a staged TextEdit
-#     window, another app's, dismisses it.
+#     window, another app's, dismisses it. The suggestion is step 5's, so the
+#     journal can only show that the answer already given stays.
 #   7 The item keeps one width watching, in the excluded mode, and paused, so no
 #     extra to its left moves when the mode changes (HIG: Motion, "generally
 #     avoid adding motion to UI interactions that occur frequently"). The width
@@ -103,10 +104,9 @@ built_menu() {
 # --- Steps 5 and 6: Show Last Suggestion, then a real click elsewhere ---------
 
 # Brings the last suggestion forward from the menu, then clicks where $1 says
-# (empty-bar, or other-app) and checks the toast went with a real mouse-down,
-# leaving suggestion $2 answered $3.
+# (empty-bar, or other-app) and checks the toast went with a real mouse-down.
 dismiss_by_click() {
-	local where="$1" suggestion="$2" answer="$3" before target x y frame
+	local where="$1" before target x y frame
 	menu_press "Show Last Suggestion" || { log "the menu offered no Show Last Suggestion to press"; return 1; }
 	sleep 0.6
 	check "Show Last Suggestion brings the toast up" "up" "$(toast_state)"
@@ -134,7 +134,6 @@ dismiss_by_click() {
 	check "the toast is gone after the click" "gone" "$(toast_gone)"
 	# The session tap ties the dismissal to a real click rather than a timeout.
 	check "a real mouse-down was seen" "yes" "$([ "$(mouse_downs)" -gt "$before" ] && echo yes || echo no)"
-	check "feedback recorded" "$answer" "$(suggestion_feedback "$suggestion")"
 	snapshot_state "$where-after"
 	return 0
 }
@@ -348,10 +347,12 @@ scenario_run() {
 	keep_toast_up || return 1
 	suggestion="$(newest_suggestion_id)"
 	check "a new toast is up for an unanswered suggestion" "none" "$(suggestion_feedback "$suggestion")"
-	dismiss_by_click empty-bar "$suggestion" dismissed || return 1
+	dismiss_by_click empty-bar || return 1
+	check "feedback recorded" "dismissed" "$(suggestion_feedback "$suggestion")"
 
 	step "6 a real click in another app's window dismisses the toast"
-	dismiss_by_click other-app "$suggestion" dismissed || return 1
+	dismiss_by_click other-app || return 1
+	check "the answer already given stays" "dismissed" "$(suggestion_feedback "$suggestion")"
 
 	step "7 the item keeps one width watching, excluded and paused"
 	watching="$(measure_bar watching "Watching TextEdit" "$TEXTEDIT_PID")" || return 1
