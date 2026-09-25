@@ -44,10 +44,6 @@ enum ControlAvailability {
       throw ControlCaptureError(window: window.title)
     }
 
-    var controlCaptureMethod: String {
-      Snapshots.capturesWithScreenCaptureKit ? "ScreenCaptureKit" : "layer tree"
-    }
-
     var controlMenu: MenuModel { menuModel }
 
     func controlPerform(_ command: MenuModel.Command) {

@@ -39,7 +39,7 @@ enum Snapshots {
   ///
   /// The two ways draw glass differently, so a run never mixes them, and says
   /// which it used; renders are compared only with renders made the same way.
-  static let capturesWithScreenCaptureKit = CGPreflightScreenCaptureAccess()
+  private static let capturesWithScreenCaptureKit = CGPreflightScreenCaptureAccess()
 
   /// One snapshot: a view, the sample state it shows, and the size of the
   /// window it is drawn in.
