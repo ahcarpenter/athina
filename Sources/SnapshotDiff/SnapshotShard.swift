@@ -67,6 +67,7 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
   /// 1 through `count`.
   public let index: Int
 
+  /// Creates shard `index`, or nil unless it is 1 through `count`.
   public init?(index: Int) {
     guard (1...Self.count).contains(index) else { return nil }
     self.index = index
@@ -85,6 +86,7 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
     self.init(index: index)
   }
 
+  /// Reads `k/n`, the form `init(parsing:)` reads, such as `2/4`.
   public var description: String { "\(index)/\(Self.count)" }
 
   /// Whether this shard renders the snapshot named `name`.

@@ -4,6 +4,7 @@ import Foundation
 // JSON request per line from athina-drive, one JSON answer per line from the
 // app. Both sides use these types, so neither can drift from the other.
 
+/// The names and limits both ends of the control API share.
 public enum ControlProtocol {
   /// Names this protocol in every `ping` answer, and marks a binary that
   /// carries the control API: `scripts/check-no-control-api.sh` refuses a
@@ -17,6 +18,7 @@ public enum ControlProtocol {
   /// AthinaCore's `ControlMode` names the same two, and a test holds them
   /// equal: the app's release build links AthinaCore but never this module.
   public static let socketName = "control.sock"
+  /// The file inside a run's control directory that holds its secret.
   public static let secretName = "secret"
 
   /// What a parameter takes, for those that take something other than text.
@@ -44,6 +46,8 @@ public enum ControlValue: Equatable, Sendable, Codable {
   case array([ControlValue])
   case object([String: ControlValue])
 
+  /// Decodes whatever JSON value there is: null, true or false, a number,
+  /// text, an array, or else an object.
   public init(from decoder: Decoder) throws {
     let container = try decoder.singleValueContainer()
     if container.decodeNil() {
@@ -61,6 +65,7 @@ public enum ControlValue: Equatable, Sendable, Codable {
     }
   }
 
+  /// Encodes the plain JSON value, with no case name around it.
   public func encode(to encoder: Encoder) throws {
     var container = encoder.singleValueContainer()
     switch self {
@@ -73,16 +78,19 @@ public enum ControlValue: Equatable, Sendable, Codable {
     }
   }
 
+  /// The text, or nil when the value is not a string.
   public var string: String? {
     if case .string(let value) = self { return value }
     return nil
   }
 
+  /// The value when it is true or false, or nil when it is anything else.
   public var bool: Bool? {
     if case .bool(let value) = self { return value }
     return nil
   }
 
+  /// The number, or nil when the value is not one.
   public var number: Double? {
     if case .number(let value) = self { return value }
     return nil
@@ -151,11 +159,20 @@ public enum ControlValue: Equatable, Sendable, Codable {
 
 /// One request: which command, with what arguments, carrying the run's secret.
 public struct ControlRequest: Equatable, Sendable, Codable {
+  /// The request's number, which its answer carries back as `id`; athina-drive
+  /// sends its own pid.
   public var id: Int
+  /// The run's secret, as the control directory's `secret` file holds it.
+  ///
+  /// A request whose secret does not match gets an error and nothing else.
   public var secret: String
+  /// The command's name, such as `click` or `wait-setting` (README "The
+  /// control API").
   public var command: String
+  /// The command's parameters by name, such as `window=` or `timeout=`.
   public var arguments: [String: ControlValue]
 
+  /// Creates a request for `command`, carrying the run's secret.
   public init(id: Int, secret: String, command: String, arguments: [String: ControlValue] = [:]) {
     self.id = id
     self.secret = secret
@@ -163,23 +180,33 @@ public struct ControlRequest: Equatable, Sendable, Codable {
     self.arguments = arguments
   }
 
+  /// Returns the request as it goes over the socket: one line of JSON ending
+  /// in a newline.
   public func line() throws -> Data {
     var data = try ControlValue.encoder.encode(self)
     data.append(0x0A)
     return data
   }
 
+  /// Reads a request from one line the app received, without its newline;
+  /// throws when the line is not one.
   public static func decode(line: Data) throws -> ControlRequest {
     try JSONDecoder().decode(ControlRequest.self, from: line)
   }
 
+  /// Returns the parameter named `key` as it was sent, whatever its type, or
+  /// nil when the request leaves it out.
   public func argument(_ key: String) -> ControlValue? { arguments[key] }
 
   /// A parameter as the type its command takes: nil when the request leaves
   /// it out, and thrown, by name, when it holds another type, so a command
   /// never carries on as if it had not been given.
   public func string(_ key: String) throws -> String? { try read(key, "text") { $0.string } }
+  /// Returns the parameter named `key` as true or false, nil when the request
+  /// leaves it out; throws when it holds anything else.
   public func bool(_ key: String) throws -> Bool? { try read(key, "true or false") { $0.bool } }
+  /// Returns the parameter named `key` as a number, nil when the request
+  /// leaves it out; throws when it holds anything else.
   public func number(_ key: String) throws -> Double? { try read(key, "a number") { $0.number } }
 
   private func read<T>(
@@ -197,10 +224,14 @@ public struct ControlRequest: Equatable, Sendable, Codable {
 
 /// A parameter holding another type than the one its command takes.
 public struct ControlArgumentError: Error, Equatable, CustomStringConvertible {
+  /// The name of the parameter, such as `timeout`.
   public let key: String
+  /// What the parameter takes, as the message words it, such as `a number`.
   public let expected: String
+  /// The value the request held instead.
   public let given: ControlValue
 
+  /// Reads like `timeout= takes a number, not soon`.
   public var description: String { "\(key)= takes \(expected), not \(given.text)" }
 }
 
@@ -210,16 +241,29 @@ public struct ControlArgumentError: Error, Equatable, CustomStringConvertible {
 ///
 /// It never repeats the request, so the secret never comes back out.
 public struct ControlReply: Equatable, Sendable {
+  /// Every field of the answer by name, `ok`, `refused` and `error` among
+  /// them.
   public var fields: [String: ControlValue]
 
+  /// Creates an answer holding exactly these fields.
   public init(_ fields: [String: ControlValue] = [:]) {
     self.fields = fields
   }
 
+  /// Returns an answer that succeeded, with the command's own fields.
   public static func ok(_ fields: [String: ControlValue] = [:]) -> ControlReply {
     ControlReply(fields.merging(["ok": .bool(true)]) { _, new in new })
   }
 
+  /// Returns an answer the app would not carry out, for a reason a check can
+  /// name.
+  ///
+  /// - Parameters:
+  ///   - reason: The reason a check names, such as `disabled` or `missing`,
+  ///     which goes in `refused`.
+  ///   - message: What went wrong, for a person to read, which goes in `error`.
+  ///   - fields: The command's own fields, such as the control it judged.
+  /// - Returns: The answer, with `ok` false and the command's fields beside it.
   public static func refused(
     _ reason: String,
     _ message: String,
@@ -233,6 +277,8 @@ public struct ControlReply: Equatable, Sendable {
     )
   }
 
+  /// Returns an answer that failed with `message` in `error`, for a reason no
+  /// check names.
   public static func error(
     _ message: String,
     _ fields: [String: ControlValue] = [:]
@@ -240,16 +286,26 @@ public struct ControlReply: Equatable, Sendable {
     ControlReply(fields.merging(["ok": .bool(false), "error": .string(message)]) { _, new in new })
   }
 
+  /// Whether the command succeeded: the answer's `ok` is true.
   public var ok: Bool { fields["ok"]?.bool == true }
+  /// The reason the app would not carry the command out, or nil when it was
+  /// not refused.
   public var refused: String? { fields["refused"]?.string }
 
+  /// The field named `key`, or nil when the answer has none.
   public subscript(key: String) -> ControlValue? {
     get { fields[key] }
     set { fields[key] = newValue }
   }
 
+  /// The whole answer as one JSON object, from which athina-drive reads a
+  /// dotted path such as `elements.0.enabled`.
   public var json: ControlValue { .object(fields) }
 
+  /// Returns the answer as it goes over the socket: one line of JSON ending in
+  /// a newline.
+  ///
+  /// An answer that cannot be encoded goes as an error saying so.
   public func line() -> Data {
     var data =
       (try? ControlValue.encoder.encode(json))
@@ -258,6 +314,8 @@ public struct ControlReply: Equatable, Sendable {
     return data
   }
 
+  /// Reads an answer from one line the app sent; throws unless the line is a
+  /// JSON object.
   public static func decode(line: Data) throws -> ControlReply {
     guard case .object(let fields) = try JSONDecoder().decode(ControlValue.self, from: line) else {
       throw DecodingError.dataCorrupted(
@@ -268,6 +326,7 @@ public struct ControlReply: Equatable, Sendable {
   }
 }
 
+/// The check of a request's secret against the run's.
 public enum ControlSecret {
   /// Whether `given` is the run's secret, in time that depends only on the
   /// secret's length and never on where the two first differ.

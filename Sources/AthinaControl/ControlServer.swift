@@ -39,6 +39,8 @@ public enum ControlHotKey: String, CaseIterable, Sendable {
   case talkBack = "talk-back"
 }
 
+/// The control API's server, which the app starts once on the channel
+/// `ControlMode` accepted and keeps until it quits.
 @MainActor
 public enum ControlServer {
   /// Listens on the channel until the app quits.
