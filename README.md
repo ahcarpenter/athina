@@ -837,11 +837,12 @@ answer ever repeats a request, so the secret never comes back out.
   outbound network, so no run can reach live data or make a live call.
 - **Cleanup runs on failure**, through a trap: helpers, taps, staged apps, the
   app itself, the preferences, and the scratch home.
-- **One run on the screen at a time**, across every checkout on the Mac: a
+- **One session on the screen at a time**, across every checkout on the Mac: a
   flock on `~/Library/Caches/athina-e2e/screen.lock` (`scripts/e2e/lib/lock.sh`),
-  the file a hand-held `lockf -k` uses too, held for exactly as long as the
-  harness process lives, so a killed run leaves no stale lock, and a run
-  started under a holder (`run all`, or a hand-held `lockf`) never waits on it.
+  the file a hand-held `lockf -k` uses too, held by `run` for each scenario
+  (above) and never past the harness process, so a killed run leaves no stale
+  lock, and a run started under a holder (`run all`, or a hand-held `lockf`)
+  never waits on it.
   The checkout lock, `build/athina-e2e.lock`, works the same way for one
   checkout.
 
