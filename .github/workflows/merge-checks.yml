@@ -19,14 +19,20 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled]
 
+# A new push to a pull request, or a label added to it, cancels that pull
+# request's run still going; every push to main keeps its own run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   ui-snapshots-shard:
     # One of four runners, each rendering and comparing the quarter of the
     # snapshots SnapshotShard (Sources/SnapshotDiff) gives it. The approved
-    # renders in Tests/Snapshots were made on this image with its newest
-    # Xcode, so a change to either is a deliberate baseline refresh (README
-    # "UI snapshot baselines"). This condition, the one on ui-snapshots and
-    # the one in its name are the same and change together.
+    # renders in Tests/Snapshots were made on this image with the Xcode that
+    # .xcode-version pins, so a change to either is a deliberate baseline
+    # refresh (README "UI snapshot baselines"). This condition, the one on
+    # ui-snapshots and the one in its name are the same and change together.
     name: ui-snapshots shard ${{ matrix.shard }}
     if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'merge-checks')
     strategy:
@@ -36,14 +42,8 @@ jobs:
         shard: [1, 2, 3, 4]
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
-      - name: Select the newest Xcode on the runner
-        run: |
-          latest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n1)"
-          echo "Using $latest"
-          sudo xcode-select -s "$latest"
-          sw_vers
-          swift --version
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/select-xcode
       - name: Build app bundle
         run: scripts/bundle.sh release
       - name: Render twice and compare with the approved baselines
@@ -63,7 +63,7 @@ jobs:
       - name: Upload the renders
         # What `scripts/snapshots.sh approve` fetches to approve a drift.
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-snapshots-shard-${{ matrix.shard }}
           path: build/snapshots/render
@@ -72,7 +72,7 @@ jobs:
         # Before, after and difference images of each drifted snapshot, with
         # index.html showing them side by side at real size.
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ui-snapshot-report-shard-${{ matrix.shard }}
           path: |

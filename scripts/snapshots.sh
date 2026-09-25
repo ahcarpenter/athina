@@ -14,11 +14,12 @@
 #   smoke [<k>/<n>] what CI's ui-snapshots-smoke runs: draw every snapshot in
 #                   the test process with swift-snapshot-testing and fail on any
 #                   drift from its reference image; with k/n, only the snapshots
-#                   CI shard k of n draws, by the same SnapshotShard table
+#                   shard k of n draws, by the SnapshotShard table the full gate
+#                   splits by (CI runs it whole, on one runner)
 #   smoke-approve [<run>]
-#                   make the smoke test's references match the sets CI run <run>
-#                   published, every shard's together, by default the newest CI
-#                   run of HEAD
+#                   make the smoke test's references match the set CI run <run>
+#                   published for every snapshot, by default the newest CI run
+#                   of HEAD
 #   smoke-local [<base>]
 #                   what local validation runs: draw the smoke set on this Mac
 #                   at HEAD and at <base> (by default HEAD's merge-base with
@@ -145,7 +146,7 @@ case "$command" in
     head="$(git -C "$ROOT" rev-parse HEAD)"
     tree="$(git -C "$ROOT" rev-parse 'HEAD^{tree}')"
     if [ -z "$run" ]; then
-      run="$(gh run list --workflow merge-checks.yml --commit "$head" --status completed --limit 20 --json databaseId,conclusion --jq 'map(select(.conclusion != "skipped")) | .[0].databaseId // empty')" \
+      run="$(gh run list --workflow merge-checks.yml --commit "$head" --status completed --limit 20 --json databaseId,conclusion --jq 'map(select(.conclusion != "skipped" and .conclusion != "cancelled")) | .[0].databaseId // empty')" \
         || die "could not list the merge-checks runs of HEAD ($head)"
       [ -n "$run" ] || die "no finished merge-checks run of HEAD ($head); push it with the merge-checks label on its pull request and let the run finish, or name a run"
     fi
@@ -214,36 +215,28 @@ case "$command" in
     head="$(git -C "$ROOT" rev-parse HEAD)"
     tree="$(git -C "$ROOT" rev-parse 'HEAD^{tree}')"
     if [ -z "$run" ]; then
-      run="$(gh run list --workflow ci.yml --commit "$head" --status completed --limit 1 --json databaseId --jq '.[0].databaseId // empty')" \
+      run="$(gh run list --workflow ci.yml --commit "$head" --status completed --limit 20 --json databaseId,conclusion --jq 'map(select(.conclusion != "cancelled")) | .[0].databaseId // empty')" \
         || die "could not list the CI runs of HEAD ($head)"
       [ -n "$run" ] || die "no finished CI run of HEAD ($head); push it and let CI finish, or name a run"
     fi
-    # Each shard uploads the set for its own snapshots as
-    # ui-snapshots-smoke-shard-<k>; approving takes them all together, and only
-    # when every shard's is there, since a missing shard's snapshots would read
-    # as removed and have their references deleted.
-    rm -rf "$SMOKE_OUT/approved-run" "$SMOKE_OUT/approved-shards"
-    gh run download "$run" --pattern 'ui-snapshots-smoke-shard-*' --dir "$SMOKE_OUT/approved-shards" \
-      || die "could not download the sets of CI run $run"
-    first="$(cat "$SMOKE_OUT/approved-shards/ui-snapshots-smoke-shard-1/shard" 2>/dev/null)" \
-      || die "CI run $run has no set from shard 1 to approve; a shard publishes one only once every snapshot it draws has rendered"
-    count="${first#*/}"
+    # CI's one smoke runner uploads the set for every snapshot as
+    # ui-snapshots-smoke-set, only once every snapshot has rendered. A set
+    # naming a shard holds only that shard's snapshots, and approving it would
+    # delete every other reference as removed, so it is refused.
+    rm -rf "$SMOKE_OUT/approved-run" "$SMOKE_OUT/approved-set"
+    gh run download "$run" --name ui-snapshots-smoke-set --dir "$SMOKE_OUT/approved-set" \
+      || die "CI run $run has no ui-snapshots-smoke-set to approve; the smoke job publishes one only once every snapshot has rendered"
+    [ ! -f "$SMOKE_OUT/approved-set/shard" ] \
+      || die "CI run $run published the set of shard $(cat "$SMOKE_OUT/approved-set/shard") only, not every snapshot's"
+    run_tree="$(cat "$SMOKE_OUT/approved-set/source-tree" 2>/dev/null)" \
+      || die "CI run $run does not name the source tree it rendered, so its renders cannot be matched to HEAD"
+    [ "$run_tree" = "$tree" ] \
+      || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into the references; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
     mkdir -p "$SMOKE_OUT/approved-run"
-    for k in $(seq 1 "$count"); do
-      dir="$SMOKE_OUT/approved-shards/ui-snapshots-smoke-shard-$k"
-      [ "$(cat "$dir/shard" 2>/dev/null)" = "$k/$count" ] \
-        || die "CI run $run has no set from shard $k of $count to approve; a shard publishes one only once every snapshot it draws has rendered"
-      run_tree="$(cat "$dir/source-tree" 2>/dev/null)" \
-        || die "shard $k of CI run $run does not name the source tree it rendered, so its renders cannot be matched to HEAD"
-      [ "$run_tree" = "$tree" ] \
-        || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into the references; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
-      cp "$dir"/*.png "$SMOKE_OUT/approved-run/"
-    done
-    extra="$(find "$SMOKE_OUT/approved-shards" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
-    [ "$extra" -eq "$count" ] || die "CI run $run has sets from $extra shards, not $count"
-    # The shards' sets together are every reference the test compares, so they
-    # replace the folder whole: a matching snapshot's file comes back byte for
-    # byte and shows no change, and a removed snapshot's reference goes.
+    cp "$SMOKE_OUT"/approved-set/*.png "$SMOKE_OUT/approved-run/"
+    # The set is every reference the test compares, so it replaces the folder
+    # whole: a matching snapshot's file comes back byte for byte and shows no
+    # change, and a removed snapshot's reference goes.
     mkdir -p "$SMOKE_REFERENCES"
     find "$SMOKE_REFERENCES" -name '*.png' -delete
     cp "$SMOKE_OUT"/approved-run/*.png "$SMOKE_REFERENCES/"

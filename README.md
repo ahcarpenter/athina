@@ -1991,14 +1991,11 @@ every rule it can only report, and CI runs `make lint` on every pull request
 and every push to `main`.
 
 A newer swift-format can format the same code differently, so the one CI runs
-is pinned: `.swift-format-xcode-version` names the Xcode it ships with, as
-`xcodebuild -version` prints it (26.6 today: Swift 6.3.3, swift-format 6.3.0).
-The `lint` job selects that Xcode by its exact path on the runner,
-`/Applications/Xcode_<version>.app` or the image's other name for it,
-`/Applications/Xcode_<version>.0.app`, never the newest there; it fails,
-naming the Xcodes the runner has, when neither exists, fails when that Xcode
-reports another version, and prints the Swift and swift-format versions that
-ran. `make format` and `make lint` read the same file and warn when the
+is pinned: `.xcode-version` names the Xcode every CI job runs, and so the
+swift-format it ships with, as `xcodebuild -version` prints it (26.6 today:
+Swift 6.3.3, swift-format 6.3.0). The `lint` job selects that Xcode by its
+exact path, as every job does (see Continuous integration), and prints the
+Swift and swift-format versions that ran. `make format` and `make lint` read the same file and warn when the
 selected Xcode is another; `DEVELOPER_DIR=<path to that Xcode.app>`
 runs either with the pinned one. Xcode 27.0's swift-format, which reports its
 version as `main`, formats this code identically today.
@@ -2007,7 +2004,7 @@ To move the pin, once the `macos-26` image lists the new Xcode (its
 [readme](https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md)
 names each path):
 
-1. Write the new version into `.swift-format-xcode-version`.
+1. Write the new version into `.xcode-version`.
 2. Run `make format` and `make lint` with that Xcode, and fix what the linter
    reports.
 3. Commit the pin and any reformatting together as one `style` commit, so
@@ -2101,17 +2098,19 @@ CI runs four checks on GitHub's `macos-26` runner, which ships Xcode 26 and
 the macOS 26 SDK this package targets: `build-and-test` runs `swift test`, the
 bundle script, and `scripts/check-no-control-api.sh` (which must find the
 control API in the development bundle and none in a build without the
-`ControlAPI` trait); `lint` runs `make lint` (see Code style) and fails on any
+`ControlAPI` trait, for which it takes the debug `Athina` the tests' build
+already made rather than compiling the package again); `lint` runs `make lint` (see Code style) and fails on any
 finding; `ui-snapshots-smoke`, the fast UI check, draws every
 snapshot inside a test process with swift-snapshot-testing and compares each
 with its reference image (see UI snapshot smoke test); and `ui-snapshots`, the
 full-fidelity UI check, renders every snapshot with `Athina --snapshot`
 through the window server, so Liquid Glass and materials are in them,
 replay-mode renders on a scaled clock included, compares the renders with the
-approved baselines, and uploads them (see UI snapshot baselines). Both UI
-checks are split across four runners that each take a quarter of the
-snapshots, by the same `SnapshotShard` table, and draw the same list of
-snapshots, so a UI change drifts both, and each has its own approved images:
+approved baselines, and uploads them (see UI snapshot baselines).
+`ui-snapshots` is split across four runners that each take a quarter of the
+snapshots, by the `SnapshotShard` table, and `ui-snapshots-smoke` draws them
+all on one. Both draw the same list of snapshots, so a UI change drifts both,
+and each has its own approved images:
 `make snapshots-approve` approves the `ui-snapshots` baselines from HEAD's
 merge-checks run and `make snapshots-smoke-approve` the `ui-snapshots-smoke`
 references from HEAD's CI run, both from the runner and never from a Mac. The
@@ -2151,6 +2150,24 @@ creates it if it is gone). It requires each check from GitHub Actions itself
 (integration 15368), so a commit status of the same name cannot stand in for
 one, and it does not require a branch to be up to date with main, so a pull
 request is not rerun each time another merges.
+
+**One Xcode, pinned.** Every macOS job selects the Xcode that `.xcode-version`
+names, as `xcodebuild -version` prints it (26.6 today), through the shared
+step in `.github/actions/select-xcode`: by its exact path on the runner,
+`/Applications/Xcode_<version>.app` or the image's other name for it,
+`/Applications/Xcode_<version>.0.app`, never the newest there. It fails,
+naming the Xcodes the runner has, when neither exists, and fails when that
+Xcode reports another version. So a new runner image changes no build, render
+or formatting by itself: moving the pin is one deliberate commit that
+refreshes both sets of approved images and runs `make format` with the new
+swift-format (see Code style and UI snapshot baselines). When GitHub's macOS
+27 image leaves preview, CI moves to it in such a commit.
+
+**Superseded runs.** A new push to a pull request cancels that pull request's
+runs still going, in both workflows, and so does a label added while
+merge-checks runs, so a superseded commit stops holding runners: the account
+runs five macOS jobs at once. Pushes to main are never cancelled; each keeps
+its own run.
 
 Local validation, the no-mistakes pipeline a change goes through before its
 pull request, never runs the Xcode project steps, the full `ui-snapshots` gate
@@ -2267,11 +2284,11 @@ edges and glass differently everywhere, so only the runner's renders are
 compared or approved.
 
 **A runner change is a deliberate refresh.** The baselines depend on the
-runner's macOS image and the newest Xcode on it, which `merge-checks.yml`
-selects. When
-GitHub updates either, the renders change with no change to the app; approve
-them from a CI run of an unchanged commit, in a commit of their own that names
-the new image or Xcode, so a real UI change is never approved under it.
+runner's macOS image and the Xcode that `.xcode-version` pins (see Continuous
+integration). Moving to a new image or a new pin changes the renders with no
+change to the app; approve them from a CI run of an unchanged commit, in a
+commit of their own that names the new image or Xcode, so a real UI change is
+never approved under it.
 
 **Size.** The set is a few megabytes of PNGs, rendered at the
 runner's 1x scale, and an approval adds only the images that changed to the
@@ -2288,17 +2305,16 @@ light and dark, in the same kind of window, settled by the same rule, and
 compares each with its reference image in
 `Tests/UISnapshotsSmokeTests/__Snapshots__/UISnapshotsSmokeTests` with
 [swift-snapshot-testing](https://github.com/pointfreeco/swift-snapshot-testing).
-The two gates cannot drift apart: a snapshot added to the list is in both, and
-needs a line in `SnapshotShard`'s table, which splits both.
+The two gates cannot drift apart: a snapshot added to the list is in both.
 
-In CI it runs on four runners, like `ui-snapshots`: the
-`ui-snapshots-smoke shard 1` to `4` jobs each run `make ui-snapshots-smoke
-SHARD=<k>/4`, which draws and compares only the snapshots `SnapshotShard`
-gives shard k (the test reads the shard from `UI_SNAPSHOTS_SMOKE_SHARD`), and
-the `ui-snapshots-smoke` job, the check the ruleset requires, passes only when
-all four ran and passed. Its name is an expression that reads
-`ui-snapshots-smoke` only when the job runs, so a skipped one never passes the
-required check. Without `SHARD`, the target draws every snapshot.
+In CI it runs on one runner, the `ui-snapshots-smoke` job, the check the
+ruleset requires, which runs `make ui-snapshots-smoke` and draws every
+snapshot. Most of that job is fetching and compiling; drawing all 76 images
+takes about a minute and a half, so it ends inside `build-and-test`, where
+four runners each compiled the test again for a quarter of the drawing.
+`make ui-snapshots-smoke SHARD=<k>/4` still draws only the snapshots
+`SnapshotShard` gives shard k (the test reads the shard from
+`UI_SNAPSHOTS_SMOKE_SHARD`), should it be split again.
 
 It draws each window inside the test process, with swift-snapshot-testing's
 view strategy on the window's frame view (the view under the content that
@@ -2323,8 +2339,8 @@ it skips the wait `--snapshot` gives a fade to end before its first capture.
 
 The test never records a reference. A snapshot with no reference fails, as a
 drifted one does, and a reference no snapshot produces fails until it is
-deleted. For each drifted snapshot its shard names it in its summary and
-uploads the `ui-snapshots-smoke-report-shard-<k>` artifact: one folder per snapshot with the
+deleted. The job names each drifted snapshot in its summary and uploads the
+`ui-snapshots-smoke-report` artifact: one folder per snapshot with the
 reference (`reference.png`), the new render (`failure.png`) and their
 difference (`difference.png`), or only the render when there is no reference
 yet.
@@ -2341,20 +2357,20 @@ have every build fetch every package it names.
 **Approving an intended change.** Push the change and let
 `ui-snapshots-smoke` fail on the drift, look at the report, then run `make
 snapshots-smoke-approve` (or `scripts/snapshots.sh smoke-approve`), which
-downloads the sets HEAD's newest CI run published, one from each shard
-(`ui-snapshots-smoke-shard-<k>`), refuses unless all four are there, since a
-missing shard's snapshots would read as removed, and makes the references
-folder match them together exactly: the run's render of every snapshot that drifted or
-was new, the reference of every one that matched, which comes back unchanged,
-and nothing else, so a removed snapshot's reference goes. `RUN=<id>` names
-another CI run. A shard publishes its set only once every snapshot it draws
-has rendered, each set names its shard and the source tree it was made from, and approving refuses any tree but
-HEAD's, as `make snapshots-approve` does. A UI change drifts both gates, so
+downloads the set HEAD's newest CI run published (`ui-snapshots-smoke-set`)
+and makes the references folder match it exactly: the run's render of every
+snapshot that drifted or was new, the reference of every one that matched,
+which comes back unchanged, and nothing else, so a removed snapshot's
+reference goes. `RUN=<id>` names another CI run. The job publishes the set
+only once every snapshot has rendered, the set names the source tree it was
+made from, and approving refuses any tree but HEAD's, as `make
+snapshots-approve` does, and a set that names a shard, which holds only that
+shard's snapshots. A UI change drifts both gates, so
 approve both, each from its own run of HEAD, and commit the images together
 with the change that caused them. References never come from a Mac: they are the
 runner's, rendered at its 1x scale on its macOS, and a Mac on another macOS or
 display scale draws differently everywhere, so `make ui-snapshots-smoke` on a
-Mac only shows how it would draw. The runner's image and newest Xcode are a
+Mac only shows how it would draw. The runner's image and the pinned Xcode are a
 deliberate refresh here too, approved with the baselines in a commit of their
 own.
 

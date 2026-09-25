@@ -15,7 +15,7 @@ LANE ?= replay
 PID ?=
 ## The CI run whose renders `make snapshots-approve` approves, the newest merge-checks run of HEAD when empty, or whose set `make snapshots-smoke-approve` approves, the newest CI run of HEAD when empty
 RUN ?=
-## The shard `make ui-snapshots-smoke` draws, k/n, as each of CI's runners passes it; every snapshot when empty
+## The shard `make ui-snapshots-smoke` draws, k/n, by the table the full gate splits by; every snapshot when empty, as CI runs it
 SHARD ?=
 ## The commit `make ui-snapshots-smoke-local` compares HEAD with; HEAD's merge-base with origin/main when empty
 BASE ?=
@@ -153,8 +153,9 @@ snapshots-smoke-approve:
 ## Every Swift file in the checkout, tracked or new, that git does not ignore
 SWIFT_FILES = git ls-files -z --cached --others --exclude-standard '*.swift'
 
-## The Xcode whose swift-format CI lints with (see README, "Code style")
-SWIFT_FORMAT_XCODE := $(shell cat .swift-format-xcode-version)
+## The Xcode every CI job runs, whose swift-format CI lints with (see README,
+## "Code style" and "Continuous integration")
+SWIFT_FORMAT_XCODE := $(shell cat .xcode-version)
 
 ## Format every Swift file in place to Google's Swift style with the toolchain's
 ## swift-format and the committed .swift-format (see README, "Code style")
