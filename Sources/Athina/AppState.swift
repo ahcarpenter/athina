@@ -901,7 +901,9 @@ final class AppState {
     toastTask = Task { [weak self] in
       try? await clock.sleep(untilDate: deadline)
       // Still this countdown: not held, cancelled, or run again meanwhile.
-      guard !Task.isCancelled, let self, self.activeSuggestion?.id == suggestionID,
+      guard !Task.isCancelled,
+        let self,
+        self.activeSuggestion?.id == suggestionID,
         self.toastCountdown.deadline == deadline
       else { return }
       self.respond(to: suggestionID, with: .expired)
@@ -1119,7 +1121,8 @@ final class AppState {
 
   /// The talk-back hotkey for the toast's hint, once everything it needs is in place.
   var talkBackKey: String? {
-    guard let key = settings.mentor.pushToTalkHotKey, speechAvailability.isAvailable,
+    guard let key = settings.mentor.pushToTalkHotKey,
+      speechAvailability.isAvailable,
       permissions.voiceGranted
     else { return nil }
     return key.displayString

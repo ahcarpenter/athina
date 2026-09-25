@@ -193,7 +193,8 @@ public struct MentorScheduler: Equatable, Sendable {
     if let next = nextTriageAllowed(multiplier: conditions.cadenceMultiplier), next > now {
       return .hold(.tooSoon(until: next))
     }
-    if let lastTriagedWindow, let lastTriagedText,
+    if let lastTriagedWindow,
+      let lastTriagedText,
       lastTriagedWindow == observation.focus.windowSignature
     {
       let similarity = TextSimilarity.lineJaccard(lastTriagedText, observation.ocrText)

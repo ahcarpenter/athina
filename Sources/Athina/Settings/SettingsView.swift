@@ -876,7 +876,8 @@ struct DurationRow: View {
     let seconds = value
     let offered = units
     let chosen: Unit
-    if offered.contains(.days), seconds >= 86400,
+    if offered.contains(.days),
+      seconds >= 86400,
       seconds.truncatingRemainder(dividingBy: 86400) == 0
     {
       chosen = .days

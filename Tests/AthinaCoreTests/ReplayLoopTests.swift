@@ -663,8 +663,10 @@ struct ReplayLoopTests {
         #expect(rewritten.source == .mentorCall)
         #expect(rewritten.cost == 0)
         let goalWasStanding = standing?.content.primaryGoal != nil
-        if let payload = reply.suggestion, payload.confidence >= settings.minimumConfidence,
-          payload.category.judgesAgainstGoal, !goalWasStanding
+        if let payload = reply.suggestion,
+          payload.confidence >= settings.minimumConfidence,
+          payload.category.judgesAgainstGoal,
+          !goalWasStanding
         {
           // A goal kind with no goal to judge against is never shown.
           #expect(status.lastMentor?.outcome == .suppressed)

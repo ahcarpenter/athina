@@ -65,46 +65,64 @@ enum Snapshots {
       ("permissions", CGSize(width: 580, height: 780), AnyView(PermissionsView()), state),
       ("debug-panel", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), state),
       (
-        "debug-panel-calls", CGSize(width: 1180, height: 860),
-        AnyView(DebugPanelView(initialSidePage: .calls)), state
+        "debug-panel-calls",
+        CGSize(width: 1180, height: 860),
+        AnyView(DebugPanelView(initialSidePage: .calls)),
+        state
       ),
       ("debug-panel-empty", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), empty),
       // The Understanding card whole, in each state it can be in.
       ("understanding-card", card(900), AnyView(SampleUnderstandingCard()), state),
       ("understanding-card-empty", card(360), AnyView(SampleUnderstandingCard()), noUnderstanding),
       (
-        "understanding-card-paused", card(900), AnyView(SampleUnderstandingCard()),
+        "understanding-card-paused",
+        card(900),
+        AnyView(SampleUnderstandingCard()),
         AppState.sampleUnderstanding(.paused)
       ),
       (
-        "understanding-card-refreshing", card(900), AnyView(SampleUnderstandingCard()),
+        "understanding-card-refreshing",
+        card(900),
+        AnyView(SampleUnderstandingCard()),
         AppState.sampleUnderstanding(.refreshing)
       ),
       (
-        "understanding-card-failed", card(900), AnyView(SampleUnderstandingCard()),
+        "understanding-card-failed",
+        card(900),
+        AnyView(SampleUnderstandingCard()),
         AppState.sampleUnderstanding(.failed)
       ),
       ("settings-general", whole(860), AnyView(GeneralSettings().formStyle(.grouped)), state),
       ("settings-contexts", pane, AnyView(ContextsSettings().formStyle(.grouped)), state),
       (
-        "settings-contexts-empty", CGSize(width: SettingsView.paneWidth, height: 420),
-        AnyView(ContextsSettings().formStyle(.grouped)), empty
+        "settings-contexts-empty",
+        CGSize(width: SettingsView.paneWidth, height: 420),
+        AnyView(ContextsSettings().formStyle(.grouped)),
+        empty
       ),
       (
-        "settings-contexts-at-cap", whole(1200), AnyView(ContextsSettings().formStyle(.grouped)),
+        "settings-contexts-at-cap",
+        whole(1200),
+        AnyView(ContextsSettings().formStyle(.grouped)),
         atCap
       ),
       (
-        "settings-context-editor", CGSize(width: 520, height: 360),
-        AnyView(SampleContextEditor(duplicate: false)), state
+        "settings-context-editor",
+        CGSize(width: 520, height: 360),
+        AnyView(SampleContextEditor(duplicate: false)),
+        state
       ),
       (
-        "settings-context-editor-duplicate", CGSize(width: 520, height: 360),
-        AnyView(SampleContextEditor(duplicate: true)), state
+        "settings-context-editor-duplicate",
+        CGSize(width: 520, height: 360),
+        AnyView(SampleContextEditor(duplicate: true)),
+        state
       ),
       (
-        "settings-status-messages", CGSize(width: SettingsView.paneWidth, height: 760),
-        AnyView(StatusMessagesPreview()), noSpeech
+        "settings-status-messages",
+        CGSize(width: SettingsView.paneWidth, height: 760),
+        AnyView(StatusMessagesPreview()),
+        noSpeech
       ),
       ("settings-models", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), state),
       ("settings-models-empty", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), empty),
@@ -112,23 +130,31 @@ enum Snapshots {
       // so it also renders on its own, with a record and without one.
       ("settings-understanding", whole(560), AnyView(SampleUnderstandingSettings()), state),
       (
-        "settings-understanding-empty", whole(480), AnyView(SampleUnderstandingSettings()),
+        "settings-understanding-empty",
+        whole(480),
+        AnyView(SampleUnderstandingSettings()),
         noUnderstanding
       ),
       ("settings-capture", whole(920), AnyView(CaptureSettings().formStyle(.grouped)), state),
       (
-        "settings-journal", CGSize(width: SettingsView.paneWidth, height: 500),
-        AnyView(JournalSettings().formStyle(.grouped)), state
+        "settings-journal",
+        CGSize(width: SettingsView.paneWidth, height: 500),
+        AnyView(JournalSettings().formStyle(.grouped)),
+        state
       ),
       ("settings-privacy", pane, AnyView(PrivacySettings().formStyle(.grouped)), state),
       // Off, as every install starts, and enabled, with its button live.
       (
-        "settings-advanced", CGSize(width: SettingsView.paneWidth, height: 180),
-        AnyView(AdvancedSettings().formStyle(.grouped)), state
+        "settings-advanced",
+        CGSize(width: SettingsView.paneWidth, height: 180),
+        AnyView(AdvancedSettings().formStyle(.grouped)),
+        state
       ),
       (
-        "settings-advanced-on", CGSize(width: SettingsView.paneWidth, height: 180),
-        AnyView(AdvancedSettings().formStyle(.grouped)), debugPanelOn
+        "settings-advanced-on",
+        CGSize(width: SettingsView.paneWidth, height: 180),
+        AnyView(AdvancedSettings().formStyle(.grouped)),
+        debugPanelOn
       ),
       // The side-effect suggestion, so the goal it was judged against shows.
       (
@@ -136,53 +162,67 @@ enum Snapshots {
       ),
       ("history-empty", CGSize(width: 860, height: 520), AnyView(HistoryView()), empty),
       (
-        "toast", CGSize(width: ToastController.panelWidth, height: 180),
-        AnyView(SampleToast(expanded: false)), state
+        "toast",
+        CGSize(width: ToastController.panelWidth, height: 180),
+        AnyView(SampleToast(expanded: false)),
+        state
       ),
       (
-        "toast-expanded", CGSize(width: ToastController.panelWidth, height: 460),
-        AnyView(SampleToast(expanded: true)), state
+        "toast-expanded",
+        CGSize(width: ToastController.panelWidth, height: 460),
+        AnyView(SampleToast(expanded: true)),
+        state
       ),
       (
-        "toast-listening", CGSize(width: ToastController.panelWidth, height: 300),
+        "toast-listening",
+        CGSize(width: ToastController.panelWidth, height: 300),
         AnyView(
           SampleToast(
             expanded: false,
             talkBack: .listening(partial: "does that work with tags as"),
             suggestionID: 4
           )
-        ), state
+        ),
+        state
       ),
       (
-        "toast-thinking", CGSize(width: ToastController.panelWidth, height: 300),
+        "toast-thinking",
+        CGSize(width: ToastController.panelWidth, height: 300),
         AnyView(
           SampleToast(
             expanded: false,
             talkBack: .thinking(question: "does that work with tags as well"),
             suggestionID: 4
           )
-        ), state
+        ),
+        state
       ),
       (
-        "toast-answered", CGSize(width: ToastController.panelWidth, height: 400),
+        "toast-answered",
+        CGSize(width: ToastController.panelWidth, height: 400),
         AnyView(
           SampleToast(
             expanded: false,
             exchange: SampleSuggestions.followUps(now: referenceDate, suggestionID: 4),
             suggestionID: 4
           )
-        ), state
+        ),
+        state
       ),
       (
-        "toast-note", CGSize(width: ToastController.panelWidth, height: 120),
-        AnyView(SampleToastNote()), state
+        "toast-note",
+        CGSize(width: ToastController.panelWidth, height: 120),
+        AnyView(SampleToastNote()),
+        state
       ),
       ("callout", CGSize(width: 900, height: 620), AnyView(SampleCallout()), state),
       ("menu-bar-marks", SampleMenuBarMarks.wholeSize, AnyView(SampleMenuBarMarks()), state),
       ("debug-panel-replay", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), replay),
       (
-        "debug-panel-calls-replay", CGSize(width: 1180, height: 860),
-        AnyView(DebugPanelView(initialSidePage: .calls)), replay
+        "debug-panel-calls-replay",
+        CGSize(width: 1180, height: 860),
+        AnyView(DebugPanelView(initialSidePage: .calls)),
+        replay
       ),
       ("settings-models-replay", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), replay),
     ]
@@ -1446,8 +1486,14 @@ private enum SampleFrame {
     ]
     var sy = size.height - 70
     for name in [
-      "AthinaCore", "Sensing", "SensingPipeline.swift", "FocusTracker.swift",
-      "ScreenCapturer.swift", "TextRecognizer.swift", "Journal", "Journal.swift",
+      "AthinaCore",
+      "Sensing",
+      "SensingPipeline.swift",
+      "FocusTracker.swift",
+      "ScreenCapturer.swift",
+      "TextRecognizer.swift",
+      "Journal",
+      "Journal.swift",
     ] {
       let attributed = NSAttributedString(string: name, attributes: sidebar)
       let origin = CGPoint(x: 24, y: sy)

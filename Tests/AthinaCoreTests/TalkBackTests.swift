@@ -78,7 +78,8 @@ import Testing
 
 @Suite struct ToastClickTests {
   static let talkingBack: [TalkBackState] = [
-    .listening(partial: ""), .waiting(question: "which line do you mean"),
+    .listening(partial: ""),
+    .waiting(question: "which line do you mean"),
     .thinking(question: "which line do you mean"),
   ]
 
@@ -124,7 +125,9 @@ import Testing
   /// Athina's item, so they close the toast like any other click.
   @Test func aClickBesideOrUnderTheMenuBarItemIsElsewhere() {
     for location in [
-      CGPoint(x: 1181, y: 1084), CGPoint(x: 1221, y: 1100), CGPoint(x: 1141, y: 1100),
+      CGPoint(x: 1181, y: 1084),
+      CGPoint(x: 1221, y: 1100),
+      CGPoint(x: 1141, y: 1100),
       CGPoint(x: 400, y: 600),
     ] {
       #expect(
@@ -481,7 +484,9 @@ import Testing
     #expect(required.contains(.string("region")))
     #expect(
       MentorPrompts.followUpSchema == [
-        "type": "object", "properties": ["answer": ["type": "string"]], "required": ["answer"],
+        "type": "object",
+        "properties": ["answer": ["type": "string"]],
+        "required": ["answer"],
         "additionalProperties": false,
       ]
     )

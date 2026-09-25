@@ -398,9 +398,16 @@ func writeIcon() throws {
   // Every size the .icns format carries, each drawn from the vector rather
   // than resampled from a larger bitmap, so none of them is soft.
   let sizes: [(String, Int)] = [
-    ("icon_16x16", 16), ("icon_16x16@2x", 32), ("icon_32x32", 32), ("icon_32x32@2x", 64),
-    ("icon_128x128", 128), ("icon_128x128@2x", 256), ("icon_256x256", 256),
-    ("icon_256x256@2x", 512), ("icon_512x512", 512), ("icon_512x512@2x", 1024),
+    ("icon_16x16", 16),
+    ("icon_16x16@2x", 32),
+    ("icon_32x32", 32),
+    ("icon_32x32@2x", 64),
+    ("icon_128x128", 128),
+    ("icon_128x128@2x", 256),
+    ("icon_256x256", 256),
+    ("icon_256x256@2x", 512),
+    ("icon_512x512", 512),
+    ("icon_512x512@2x", 1024),
   ]
   for (name, pixels) in sizes {
     let rep = NSBitmapImageRep(cgImage: drawIcon(size: pixels))
@@ -411,8 +418,11 @@ func writeIcon() throws {
   let process = Process()
   process.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
   process.arguments = [
-    "--convert", "icns", "--output",
-    root.appendingPathComponent("Resources/AppIcon.icns").path, iconset.path,
+    "--convert",
+    "icns",
+    "--output",
+    root.appendingPathComponent("Resources/AppIcon.icns").path,
+    iconset.path,
   ]
   try process.run()
   process.waitUntilExit()
@@ -814,7 +824,8 @@ func writeReadmeIcon() throws {
   try Data("#!/bin/sh\n".utf8).write(to: executable)
   try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
   let info: [String: Any] = [
-    "CFBundlePackageType": "APPL", "CFBundleExecutable": "stub",
+    "CFBundlePackageType": "APPL",
+    "CFBundleExecutable": "stub",
     "CFBundleIconFile": "AppIcon",
     "CFBundleIdentifier": "com.ahcarpenter.athina.readme-icon",
   ]
