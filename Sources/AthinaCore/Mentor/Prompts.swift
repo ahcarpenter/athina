@@ -13,11 +13,11 @@ import Foundation
 /// re-recording change rather than with the rename (README, "The committed
 /// fixtures").
 public enum MentorPrompts {
-    public static let version = 10
+  public static let version = 10
 
-    // MARK: Triage
+  // MARK: Triage
 
-    public static let triageBase = """
+  public static let triageBase = """
     You are the triage stage of Mentor, a macOS app that watches what its user is doing and, rarely, \
     offers a live suggestion the way an expert sitting beside them would. You do not write suggestions. \
     You decide whether the stronger mentor model should look at this moment at all.
@@ -51,72 +51,72 @@ public enum MentorPrompts {
     sentence in plain text with plain hyphens, naming the concrete sign you saw, or why you passed.
     """
 
-    /// The extra section appended to the triage system prompt while the user
-    /// enforces mentorship contexts. It changes only when the declared list
-    /// changes, so the cached prefix is rewritten once per edit.
-    static func triageContextSection(_ contexts: [MentorshipContext]) -> String {
-        let declared = contexts.map { context in
-            context.detail.isEmpty ? "- \"\(context.name)\"" : "- \"\(context.name)\": \(context.detail)"
-        }.joined(separator: "\n")
-        let opening = """
-        The user has declared the kinds of work they want mentoring in, and asked to be left alone \
-        everywhere else. Place this snapshot in one of them, in the same answer:
-        """
-        let closing = """
-        Set context to the name of the one this snapshot belongs to, exactly as written above, or to null \
-        when it belongs to none of them. Judge the work, not the app: the same app can be inside one \
-        moment and outside the next. A snapshot outside every context is never shown to the user, so \
-        answer null whenever you are unsure rather than guessing, and answer worth_a_look on its own \
-        merits either way.
+  /// The extra section appended to the triage system prompt while the user
+  /// enforces mentorship contexts. It changes only when the declared list
+  /// changes, so the cached prefix is rewritten once per edit.
+  static func triageContextSection(_ contexts: [MentorshipContext]) -> String {
+    let declared = contexts.map { context in
+      context.detail.isEmpty ? "- \"\(context.name)\"" : "- \"\(context.name)\": \(context.detail)"
+    }.joined(separator: "\n")
+    let opening = """
+      The user has declared the kinds of work they want mentoring in, and asked to be left alone \
+      everywhere else. Place this snapshot in one of them, in the same answer:
+      """
+    let closing = """
+      Set context to the name of the one this snapshot belongs to, exactly as written above, or to null \
+      when it belongs to none of them. Judge the work, not the app: the same app can be inside one \
+      moment and outside the next. A snapshot outside every context is never shown to the user, so \
+      answer null whenever you are unsure rather than guessing, and answer worth_a_look on its own \
+      merits either way.
 
-        This replaces the reply shape above: reply with JSON only, \
-        {"worth_a_look": boolean, "reason": string, "context": string or null}.
-        """
-        return "\n\n" + opening + "\n\n" + declared + "\n\n" + closing
-    }
+      This replaces the reply shape above: reply with JSON only, \
+      {"worth_a_look": boolean, "reason": string, "context": string or null}.
+      """
+    return "\n\n" + opening + "\n\n" + declared + "\n\n" + closing
+  }
 
-    /// The triage system prompt, with the declared contexts appended when the
-    /// user is enforcing them. One cached block; identical calls hit the cache.
-    public static func triageSystem(contexts: [MentorshipContext]) -> String {
-        guard !contexts.isEmpty else { return triageBase }
-        return triageBase + triageContextSection(contexts)
-    }
+  /// The triage system prompt, with the declared contexts appended when the
+  /// user is enforcing them. One cached block; identical calls hit the cache.
+  public static func triageSystem(contexts: [MentorshipContext]) -> String {
+    guard !contexts.isEmpty else { return triageBase }
+    return triageBase + triageContextSection(contexts)
+  }
 
-    static let triageBaseSchema: JSONValue = [
-        "type": "object",
-        "properties": [
-            "worth_a_look": ["type": "boolean"],
-            "reason": ["type": "string"],
+  static let triageBaseSchema: JSONValue = [
+    "type": "object",
+    "properties": [
+      "worth_a_look": ["type": "boolean"],
+      "reason": ["type": "string"],
+    ],
+    "required": ["worth_a_look", "reason"],
+    "additionalProperties": false,
+  ]
+
+  /// The triage output schema. While contexts are enforced it also asks which
+  /// declared context the snapshot belongs to; the enum of declared names
+  /// means the model cannot answer with a context that does not exist.
+  public static func triageSchema(contexts: [MentorshipContext]) -> JSONValue {
+    guard !contexts.isEmpty else { return triageBaseSchema }
+    return [
+      "type": "object",
+      "properties": [
+        "worth_a_look": ["type": "boolean"],
+        "reason": ["type": "string"],
+        "context": [
+          "anyOf": [
+            ["type": "null"],
+            ["type": "string", "enum": .array(contexts.map { .string($0.name) })],
+          ]
         ],
-        "required": ["worth_a_look", "reason"],
-        "additionalProperties": false,
+      ],
+      "required": ["worth_a_look", "reason", "context"],
+      "additionalProperties": false,
     ]
+  }
 
-    /// The triage output schema. While contexts are enforced it also asks which
-    /// declared context the snapshot belongs to; the enum of declared names
-    /// means the model cannot answer with a context that does not exist.
-    public static func triageSchema(contexts: [MentorshipContext]) -> JSONValue {
-        guard !contexts.isEmpty else { return triageBaseSchema }
-        return [
-            "type": "object",
-            "properties": [
-                "worth_a_look": ["type": "boolean"],
-                "reason": ["type": "string"],
-                "context": [
-                    "anyOf": [
-                        ["type": "null"],
-                        ["type": "string", "enum": .array(contexts.map { .string($0.name) })],
-                    ],
-                ],
-            ],
-            "required": ["worth_a_look", "reason", "context"],
-            "additionalProperties": false,
-        ]
-    }
+  // MARK: Mentor
 
-    // MARK: Mentor
-
-    public static let mentorSystem = """
+  public static let mentorSystem = """
     You are Mentor, a live mentor for someone working at their Mac. You see a rolling journal of their \
     recent screens as recognized text, and usually the latest screenshot. You also keep a standing \
     understanding of what they are working toward, which you wrote yourself on an earlier call and which \
@@ -191,90 +191,92 @@ public enum MentorPrompts {
     you stayed silent. When you have enough information to decide, decide; do not narrate alternatives.
     """
 
-    public static let mentorSchema: JSONValue = [
-        "type": "object",
-        "properties": [
-            "reason": ["type": "string"],
-            "suggestion": [
-                "anyOf": [
-                    ["type": "null"],
-                    [
-                        "type": "object",
-                        "properties": [
-                            "title": ["type": "string"],
-                            "body": ["type": "string"],
-                            "explanation": ["type": "string"],
-                            "category": [
-                                "type": "string",
-                                "enum": .array(SuggestionCategory.allCases.map { .string($0.rawValue) }),
-                            ],
-                            "confidence": ["type": "number"],
-                            "judged_goal": ["anyOf": [["type": "null"], ["type": "string"]]],
-                            "region": regionSchema,
-                        ],
-                        "required": ["title", "body", "explanation", "category", "confidence", "judged_goal", "region"],
-                        "additionalProperties": false,
-                    ],
-                ],
-            ],
-            "updated_understanding": understandingSchema,
-        ],
-        "required": ["reason", "suggestion", "updated_understanding"],
-        "additionalProperties": false,
-    ]
-
-    /// The optional spot a suggestion points at, in the pixels of the frame
-    /// the model saw. Null is the normal answer.
-    static let regionSchema: JSONValue = [
+  public static let mentorSchema: JSONValue = [
+    "type": "object",
+    "properties": [
+      "reason": ["type": "string"],
+      "suggestion": [
         "anyOf": [
-            ["type": "null"],
-            [
-                "type": "object",
-                "properties": [
-                    "x": ["type": "number"],
-                    "y": ["type": "number"],
-                    "width": ["type": "number"],
-                    "height": ["type": "number"],
-                    "note": ["type": "string"],
-                ],
-                "required": ["x", "y", "width", "height", "note"],
-                "additionalProperties": false,
+          ["type": "null"],
+          [
+            "type": "object",
+            "properties": [
+              "title": ["type": "string"],
+              "body": ["type": "string"],
+              "explanation": ["type": "string"],
+              "category": [
+                "type": "string",
+                "enum": .array(SuggestionCategory.allCases.map { .string($0.rawValue) }),
+              ],
+              "confidence": ["type": "number"],
+              "judged_goal": ["anyOf": [["type": "null"], ["type": "string"]]],
+              "region": regionSchema,
             ],
-        ],
-    ]
+            "required": [
+              "title", "body", "explanation", "category", "confidence", "judged_goal", "region",
+            ],
+            "additionalProperties": false,
+          ],
+        ]
+      ],
+      "updated_understanding": understandingSchema,
+    ],
+    "required": ["reason", "suggestion", "updated_understanding"],
+    "additionalProperties": false,
+  ]
 
-    // MARK: Understanding
-
-    /// The shape of the understanding itself, shared by the mentor tier's
-    /// `updated_understanding` field and the refresh tier's whole reply.
-    public static let understandingSchema: JSONValue = [
+  /// The optional spot a suggestion points at, in the pixels of the frame
+  /// the model saw. Null is the normal answer.
+  static let regionSchema: JSONValue = [
+    "anyOf": [
+      ["type": "null"],
+      [
         "type": "object",
         "properties": [
-            "goals": [
-                "type": "array",
-                "items": [
-                    "type": "object",
-                    "properties": [
-                        "goal": ["type": "string"],
-                        "evidence": ["type": "string"],
-                        "confidence": ["type": "number"],
-                    ],
-                    "required": ["goal", "evidence", "confidence"],
-                    "additionalProperties": false,
-                ],
-            ],
-            "timeline": ["type": "array", "items": ["type": "string"]],
-            "mentor_history": ["type": "array", "items": ["type": "string"]],
-            "open_concerns": ["type": "array", "items": ["type": "string"]],
+          "x": ["type": "number"],
+          "y": ["type": "number"],
+          "width": ["type": "number"],
+          "height": ["type": "number"],
+          "note": ["type": "string"],
         ],
-        "required": ["goals", "timeline", "mentor_history", "open_concerns"],
+        "required": ["x", "y", "width", "height", "note"],
         "additionalProperties": false,
+      ],
     ]
+  ]
 
-    /// The refresh tier: the same record-keeping the mentor tier does on the
-    /// way past, run on its own when a stretch of work produced no mentor call.
-    /// It never writes suggestions, so it can be a cheap model.
-    public static let understandingSystem = """
+  // MARK: Understanding
+
+  /// The shape of the understanding itself, shared by the mentor tier's
+  /// `updated_understanding` field and the refresh tier's whole reply.
+  public static let understandingSchema: JSONValue = [
+    "type": "object",
+    "properties": [
+      "goals": [
+        "type": "array",
+        "items": [
+          "type": "object",
+          "properties": [
+            "goal": ["type": "string"],
+            "evidence": ["type": "string"],
+            "confidence": ["type": "number"],
+          ],
+          "required": ["goal", "evidence", "confidence"],
+          "additionalProperties": false,
+        ],
+      ],
+      "timeline": ["type": "array", "items": ["type": "string"]],
+      "mentor_history": ["type": "array", "items": ["type": "string"]],
+      "open_concerns": ["type": "array", "items": ["type": "string"]],
+    ],
+    "required": ["goals", "timeline", "mentor_history", "open_concerns"],
+    "additionalProperties": false,
+  ]
+
+  /// The refresh tier: the same record-keeping the mentor tier does on the
+  /// way past, run on its own when a stretch of work produced no mentor call.
+  /// It never writes suggestions, so it can be a cheap model.
+  public static let understandingSystem = """
     You keep the standing understanding for Mentor, a macOS app that watches what its user is doing and \
     rarely offers a live suggestion. You do not write suggestions and you never address the user. Your \
     only job is to rewrite the record of what they are working toward and what has happened, so the \
@@ -304,37 +306,40 @@ public enum MentorPrompts {
     open_concerns}}. The reason is one sentence for the log saying what changed since the last record.
     """
 
-    public static let understandingRefreshSchema: JSONValue = [
-        "type": "object",
-        "properties": [
-            "reason": ["type": "string"],
-            "understanding": understandingSchema,
-        ],
-        "required": ["reason", "understanding"],
-        "additionalProperties": false,
-    ]
+  public static let understandingRefreshSchema: JSONValue = [
+    "type": "object",
+    "properties": [
+      "reason": ["type": "string"],
+      "understanding": understandingSchema,
+    ],
+    "required": ["reason", "understanding"],
+    "additionalProperties": false,
+  ]
 
-    /// The standing understanding as its own system block after the mentor
-    /// prompt, with no cache marker: every mentor call rewrites the record, so
-    /// the block changes on every call and could never be read from the cache,
-    /// while the prompt before it keeps its own marker and stays cached.
-    public static func understandingBlock(_ record: UnderstandingRecord) -> SystemBlock {
-        SystemBlock(text: """
+  /// The standing understanding as its own system block after the mentor
+  /// prompt, with no cache marker: every mentor call rewrites the record, so
+  /// the block changes on every call and could never be read from the cache,
+  /// while the prompt before it keeps its own marker and stays cached.
+  public static func understandingBlock(_ record: UnderstandingRecord) -> SystemBlock {
+    SystemBlock(
+      text: """
         Your standing understanding of this user's work, revision \(record.revision), which you wrote \
         yourself and which replaces nothing you see in the messages below.
 
         \(record.content.promptBlock)
-        """, cacheControl: nil)
-    }
+        """,
+      cacheControl: nil
+    )
+  }
 
-    // MARK: Follow-up
+  // MARK: Follow-up
 
-    /// The mentor tier answering something the user said about a suggestion
-    /// while holding the talk-back key. The answer is shown in the toast, so
-    /// it is short prose, never a list. The prompt still says it may be read
-    /// aloud: reading suggestions aloud is deferred, and changing this text
-    /// would stale every recorded fixture for nothing.
-    public static let followUpSystem = """
+  /// The mentor tier answering something the user said about a suggestion
+  /// while holding the talk-back key. The answer is shown in the toast, so
+  /// it is short prose, never a list. The prompt still says it may be read
+  /// aloud: reading suggestions aloud is deferred, and changing this text
+  /// would stale every recorded fixture for nothing.
+  public static let followUpSystem = """
     You are Mentor, a live mentor for someone working at their Mac. A moment ago you made the suggestion \
     described in the message, and the user has now said something about it, transcribed on their Mac while \
     they held a talk-back key. Answer as the same expert who made the suggestion.
@@ -350,161 +355,161 @@ public enum MentorPrompts {
     Reply with JSON only: {"answer": string}.
     """
 
-    public static let followUpSchema: JSONValue = [
-        "type": "object",
-        "properties": [
-            "answer": ["type": "string"],
-        ],
-        "required": ["answer"],
-        "additionalProperties": false,
-    ]
+  public static let followUpSchema: JSONValue = [
+    "type": "object",
+    "properties": [
+      "answer": ["type": "string"]
+    ],
+    "required": ["answer"],
+    "additionalProperties": false,
+  ]
 }
 
 /// What the mentor tier returns to a follow-up question.
 public struct FollowUpReply: Codable, Equatable, Sendable {
-    public var answer: String
+  public var answer: String
 
-    public init(answer: String) {
-        self.answer = answer
-    }
+  public init(answer: String) {
+    self.answer = answer
+  }
 }
 
 extension String {
-    /// Model text with em and en dashes replaced by a plain dash, so nothing
-    /// the app shows or stores carries one whatever the model does.
-    public var withPlainDashes: String {
-        guard contains("\u{2014}") || contains("\u{2013}") else { return self }
-        return replacingOccurrences(of: " \u{2014} ", with: " - ")
-            .replacingOccurrences(of: "\u{2014}", with: " - ")
-            .replacingOccurrences(of: "\u{2013}", with: "-")
-    }
+  /// Model text with em and en dashes replaced by a plain dash, so nothing
+  /// the app shows or stores carries one whatever the model does.
+  public var withPlainDashes: String {
+    guard contains("\u{2014}") || contains("\u{2013}") else { return self }
+    return replacingOccurrences(of: " \u{2014} ", with: " - ")
+      .replacingOccurrences(of: "\u{2014}", with: " - ")
+      .replacingOccurrences(of: "\u{2013}", with: "-")
+  }
 }
 
 /// What the triage tier returns. The context field is asked for only while
 /// mentorship contexts are enforced, so it is optional: a reply without it
 /// names no context, which counts as outside.
 public struct TriageVerdict: Codable, Equatable, Sendable {
-    public var worthALook: Bool
-    public var reason: String
-    /// The declared context this snapshot belongs to, or nil for none of them,
-    /// which is also how the model says it is unsure.
-    public var context: String?
+  public var worthALook: Bool
+  public var reason: String
+  /// The declared context this snapshot belongs to, or nil for none of them,
+  /// which is also how the model says it is unsure.
+  public var context: String?
 
-    public init(worthALook: Bool, reason: String, context: String? = nil) {
-        self.worthALook = worthALook
-        self.reason = reason
-        self.context = context
-    }
+  public init(worthALook: Bool, reason: String, context: String? = nil) {
+    self.worthALook = worthALook
+    self.reason = reason
+    self.context = context
+  }
 
-    private enum CodingKeys: String, CodingKey {
-        case worthALook = "worth_a_look"
-        case reason
-        case context
-    }
+  private enum CodingKeys: String, CodingKey {
+    case worthALook = "worth_a_look"
+    case reason
+    case context
+  }
 }
 
 /// What the mentor tier returns.
 public struct MentorVerdict: Codable, Equatable, Sendable {
-    public struct Payload: Codable, Equatable, Sendable {
-        /// The spot the suggestion is about, in the pixels of the frame the
-        /// model saw. Decodes from `"region": null` and from a reply with no
-        /// region field at all, so older prompt versions still parse.
-        public struct Region: Codable, Equatable, Sendable {
-            public var x: Double
-            public var y: Double
-            public var width: Double
-            public var height: Double
-            public var note: String
+  public struct Payload: Codable, Equatable, Sendable {
+    /// The spot the suggestion is about, in the pixels of the frame the
+    /// model saw. Decodes from `"region": null` and from a reply with no
+    /// region field at all, so older prompt versions still parse.
+    public struct Region: Codable, Equatable, Sendable {
+      public var x: Double
+      public var y: Double
+      public var width: Double
+      public var height: Double
+      public var note: String
 
-            public init(x: Double, y: Double, width: Double, height: Double, note: String) {
-                self.x = x
-                self.y = y
-                self.width = width
-                self.height = height
-                self.note = note
-            }
+      public init(x: Double, y: Double, width: Double, height: Double, note: String) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.note = note
+      }
 
-            public var rect: CGRect {
-                CGRect(x: x, y: y, width: width, height: height)
-            }
-        }
-
-        public var title: String
-        public var body: String
-        public var explanation: String
-        public var category: SuggestionCategory
-        public var confidence: Double
-        /// The inferred goal this was judged against, for the goal categories.
-        public var judgedGoal: String?
-        public var region: Region?
-
-        /// True when the title or the body has no words. The schema requires
-        /// both fields, and a model can still fill them with empty strings.
-        public var isBlank: Bool {
-            title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                || body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-
-        public init(
-            title: String,
-            body: String,
-            explanation: String,
-            category: SuggestionCategory,
-            confidence: Double,
-            judgedGoal: String? = nil,
-            region: Region? = nil
-        ) {
-            self.title = title
-            self.body = body
-            self.explanation = explanation
-            self.category = category
-            self.confidence = confidence
-            self.judgedGoal = judgedGoal
-            self.region = region
-        }
-
-        private enum CodingKeys: String, CodingKey {
-            case title, body, explanation, category, confidence, region
-            case judgedGoal = "judged_goal"
-        }
+      public var rect: CGRect {
+        CGRect(x: x, y: y, width: width, height: height)
+      }
     }
 
-    public var reason: String
-    public var suggestion: Payload?
-    /// The rewritten understanding this call carried, so a mentor call refreshes
-    /// the record without a call of its own. Optional so a reply that omits it
-    /// still yields its suggestion.
-    public var updatedUnderstanding: Understanding?
+    public var title: String
+    public var body: String
+    public var explanation: String
+    public var category: SuggestionCategory
+    public var confidence: Double
+    /// The inferred goal this was judged against, for the goal categories.
+    public var judgedGoal: String?
+    public var region: Region?
 
-    public init(reason: String, suggestion: Payload?, updatedUnderstanding: Understanding? = nil) {
-        self.reason = reason
-        self.suggestion = suggestion
-        self.updatedUnderstanding = updatedUnderstanding
+    /// True when the title or the body has no words. The schema requires
+    /// both fields, and a model can still fill them with empty strings.
+    public var isBlank: Bool {
+      title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        || body.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    public init(
+      title: String,
+      body: String,
+      explanation: String,
+      category: SuggestionCategory,
+      confidence: Double,
+      judgedGoal: String? = nil,
+      region: Region? = nil
+    ) {
+      self.title = title
+      self.body = body
+      self.explanation = explanation
+      self.category = category
+      self.confidence = confidence
+      self.judgedGoal = judgedGoal
+      self.region = region
     }
 
     private enum CodingKeys: String, CodingKey {
-        case reason, suggestion
-        case updatedUnderstanding = "updated_understanding"
+      case title, body, explanation, category, confidence, region
+      case judgedGoal = "judged_goal"
     }
+  }
 
-    /// The suggestion is what the user came for, so a bookkeeping field that
-    /// does not decode is dropped rather than allowed to fail the whole reply.
-    public init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        reason = try c.decode(String.self, forKey: .reason)
-        suggestion = try c.decodeIfPresent(Payload.self, forKey: .suggestion)
-        updatedUnderstanding = try? c.decodeIfPresent(Understanding.self, forKey: .updatedUnderstanding)
-    }
+  public var reason: String
+  public var suggestion: Payload?
+  /// The rewritten understanding this call carried, so a mentor call refreshes
+  /// the record without a call of its own. Optional so a reply that omits it
+  /// still yields its suggestion.
+  public var updatedUnderstanding: Understanding?
+
+  public init(reason: String, suggestion: Payload?, updatedUnderstanding: Understanding? = nil) {
+    self.reason = reason
+    self.suggestion = suggestion
+    self.updatedUnderstanding = updatedUnderstanding
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case reason, suggestion
+    case updatedUnderstanding = "updated_understanding"
+  }
+
+  /// The suggestion is what the user came for, so a bookkeeping field that
+  /// does not decode is dropped rather than allowed to fail the whole reply.
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    reason = try c.decode(String.self, forKey: .reason)
+    suggestion = try c.decodeIfPresent(Payload.self, forKey: .suggestion)
+    updatedUnderstanding = try? c.decodeIfPresent(Understanding.self, forKey: .updatedUnderstanding)
+  }
 }
 
 /// What a periodic understanding refresh returns.
 public struct UnderstandingVerdict: Codable, Equatable, Sendable {
-    /// One line for the call log: what changed since the last record.
-    public var reason: String
-    public var understanding: Understanding
+  /// One line for the call log: what changed since the last record.
+  public var reason: String
+  public var understanding: Understanding
 
-    public init(reason: String, understanding: Understanding) {
-        self.reason = reason
-        self.understanding = understanding
-    }
+  public init(reason: String, understanding: Understanding) {
+    self.reason = reason
+    self.understanding = understanding
+  }
 }
