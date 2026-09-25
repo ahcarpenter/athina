@@ -152,6 +152,9 @@ func run(_ invocation: DriveInvocation) throws {
             shift: invocation.flag("--shift")
         )
 
+    case "api":
+        try ControlClient.run(invocation)
+
     case "shot":
         let kind = try invocation.positional(0)
         switch kind {

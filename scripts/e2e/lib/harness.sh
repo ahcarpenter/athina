@@ -92,7 +92,7 @@ sources_newer_than() {
 }
 
 ensure_drive() {
-	if sources_newer_than "$DRIVE" "$ROOT/Sources/AthinaDrive" "$ROOT/Sources/AthinaE2E"; then
+	if sources_newer_than "$DRIVE" "$ROOT/Sources/AthinaDrive" "$ROOT/Sources/AthinaE2E" "$ROOT/Sources/AthinaControlProtocol"; then
 		log "building athina-drive"
 		(cd "$ROOT" && swift build --product athina-drive >/dev/null) || die "could not build athina-drive"
 	fi
@@ -248,7 +248,9 @@ launch_athina() {
 		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited during launch; see $RUN_DIR/app.log"
 		if "$DRIVE" ready "$ATHINA_PID" 2>/dev/null | grep -q READY; then
 			log "Athina ready after $((i / 2))s"
-			wake_input
+			# An API-tier run posts no input of its own unless a scenario that
+			# needs sensing asks for it (wait_first_observation does).
+			[ "${SCENARIO_TIER:-screen}" = api ] || wake_input
 			return 0
 		fi
 		# A macOS consent prompt can stall a launch silently; say so rather than
@@ -290,6 +292,7 @@ cleanup() {
 	for pid in ${HELPER_PIDS[@]+"${HELPER_PIDS[@]}"}; do stop_pid "$pid"; done
 	for pid in ${STAGED_PIDS[@]+"${STAGED_PIDS[@]}"}; do stop_pid "$pid"; done
 	stop_pid "$ATHINA_PID"
+	[ -n "${CONTROL_DIR:-}" ] && rm -rf "$CONTROL_DIR"
 	prefs_restore
 	if [ -n "$HOME_DIR" ] && [ "${KEEP_HOME:-0}" != 1 ]; then
 		rm -rf "$HOME_DIR"
@@ -500,6 +503,75 @@ raise_window() {
 window_id() {
 	"$DRIVE" windows "$ATHINA_PID" \
 		| awk -v want="$1" 'index($0, "name=\"" want) {sub("id=", "", $1); print $1; exit}' || echo ""
+}
+
+# --- The control API ----------------------------------------------------------
+
+# An API-tier scenario (SCENARIO_TIER=api) drives Athina through its control
+# API (README "The control API") rather than the pointer and accessibility from
+# outside: the app finds its own controls and clicks them through its own event
+# path, so no step waits for idle input.
+
+# The run's control directory: 0700, inside the per-user temporary directory
+# (itself closed to everyone else) rather than the run's home, whose path is
+# too long for a Unix socket, and holding the run's secret. The app makes its
+# socket there; athina-drive api finds both through ATHINA_CONTROL_DIR.
+control_prepare() {
+	local temporary
+	temporary="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)"
+	[ -n "$temporary" ] || temporary="${TMPDIR:-/tmp}"
+	CONTROL_DIR="$(mktemp -d "${temporary%/}/athina-ctl.XXXXXX")" || die "could not make a control directory"
+	chmod 700 "$CONTROL_DIR"
+	(umask 077 && head -c 32 /dev/urandom | xxd -p -c 64 >"$CONTROL_DIR/secret") || die "could not write the control secret"
+	export ATHINA_CONTROL_DIR="$CONTROL_DIR"
+	log "control directory $CONTROL_DIR"
+}
+
+# Waits until the app answers on its control socket. The app says on stderr
+# why when it will not serve one, which ends the run with that reason.
+control_wait() {
+	local i refusal
+	for i in $(seq 1 100); do
+		if "$DRIVE" api ping >>"$RUN_DIR/api.log" 2>&1; then
+			log "control API answering after $((i / 10)).$((i % 10))s"
+			return 0
+		fi
+		refusal="$(grep -m 1 -E '^control API (refused|failed): ' "$RUN_DIR/app.log" 2>/dev/null || true)"
+		[ -n "$refusal" ] && die "$refusal"
+		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited before its control API answered; see $RUN_DIR/app.log"
+		sleep 0.1
+	done
+	die "the control API never answered; see $RUN_DIR/app.log and $RUN_DIR/api.log"
+}
+
+# Reads $2 (a function) until it prints $1, for up to two seconds, and prints
+# the last read: SwiftUI redraws a control a moment after the click that
+# changed it has been handled.
+settled() {
+	local want="$1" read="$2" got="" i
+	for i in $(seq 1 20); do
+		got="$("$read")"
+		[ "$got" = "$want" ] && break
+		sleep 0.1
+	done
+	printf '%s\n' "$got"
+}
+
+# A Python expression over a JSON answer, bound to `r`, printed: for checks
+# that count or search what an answer holds. Arguments after the expression
+# are `a[0]`, `a[1]`, and so on.
+json_eval() {
+	python3 -c 'import json, re, sys; r = json.loads(sys.argv[1]); a = sys.argv[3:]; print(eval(sys.argv[2]))' "$@" 2>>"$RUN_DIR/api.log"
+}
+
+# One request to the app; the answer goes to api.log and, with --field, the
+# field alone to stdout. Returns non-zero when the answer is not ok.
+api() {
+	local status=0 answer
+	answer="$("$DRIVE" api "$@" 2>>"$RUN_DIR/api.log")" || status=$?
+	printf '%s %s\n    %s\n' "$(date '+%H:%M:%S')" "$*" "$answer" >>"$RUN_DIR/api.log"
+	printf '%s\n' "$answer"
+	return "$status"
 }
 
 # --- The menu bar -------------------------------------------------------------

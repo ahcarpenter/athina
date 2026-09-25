@@ -126,7 +126,7 @@ enum Snapshots {
     /// ScreenCaptureKit gives the truest picture, but its stream occasionally
     /// fails to start when many windows are captured back to back. One retry,
     /// then the layer-tree render, so an unattended run always produces a file.
-    private static func captureWithFallback(window: NSWindow, hosting: NSView) async throws -> CGImage {
+    static func captureWithFallback(window: NSWindow, hosting: NSView) async throws -> CGImage {
         for attempt in 0..<2 {
             do {
                 if let image = try await captureOwnWindow(window) { return image }

@@ -1,5 +1,8 @@
 import AppKit
 import AthinaCore
+#if ATHINA_CONTROL
+import AthinaControl
+#endif
 import SwiftUI
 
 @main
@@ -214,6 +217,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         AppState.shared.start()
+        // Before the line below, so the harness that reads it can connect at
+        // once, and saying why on stderr when it cannot: the harness reads
+        // that, not the menu.
+        startControl()
         // Past every reason this launch could refuse itself, and past `start`,
         // so a launcher waiting on this line knows the lane is up rather than
         // guessing from elapsed time: by now the clock channel is listening,
@@ -234,6 +241,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             FileHandle.standardError.write(Data(report.line.utf8))
             AppState.log.error("did not start: \(reason, privacy: .public)")
         }
+    }
+
+    @MainActor private func startControl() {
+        let state = AppState.shared
+        if let refusal = state.controlMode.refusal {
+            FileHandle.standardError.write(Data("control API refused: \(refusal)\n".utf8))
+            return
+        }
+        #if ATHINA_CONTROL
+        guard case .on(let channel) = state.controlMode else { return }
+        do {
+            try ControlServer.start(channel, host: state)
+            AppState.log.notice("control API listening at \(channel.socketPath, privacy: .public)")
+        } catch {
+            state.controlFailure = String(describing: error)
+            AppState.log.error("control API failed: \(String(describing: error), privacy: .public)")
+            FileHandle.standardError.write(Data("control API failed: \(error)\n".utf8))
+        }
+        #endif
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -262,6 +288,9 @@ struct MenuBarContent: View {
             Text(line)
         }
         if let line = state.launchFilesLine {
+            Text(line)
+        }
+        if let line = state.controlLine {
             Text(line)
         }
         if let action = state.menuStatusAction {

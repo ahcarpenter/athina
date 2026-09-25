@@ -189,14 +189,23 @@ run_scenario() (
 	SCENARIO_SUMMARY=""
 	SCENARIO_ARGS=()
 	SCENARIO_SETTINGS='{}'
-	scenario_stage() { stage_text_document; }
+	# screen: driven from outside, with the real pointer and accessibility;
+	# api: driven through the app's control API (README "The control API").
+	SCENARIO_TIER=screen
+	# A screen-tier run watches a staged TextEdit window; an API-tier one
+	# stages nothing unless its scenario says so.
+	scenario_stage() { [ "$SCENARIO_TIER" = api ] || stage_text_document; }
 	# shellcheck disable=SC1090
 	source "$file"
+	case "$SCENARIO_TIER" in
+	screen | api) ;;
+	*) die "$name: SCENARIO_TIER is screen or api, not $SCENARIO_TIER" ;;
+	esac
 
 	RUN_DIR="${OUT_ROOT:-$RUNS_ROOT}/$name-$(date '+%Y%m%d-%H%M%S')"
 	mkdir -p "$RUN_DIR"
 	screen_lock_note "run $name"
-	log "=== $name: $SCENARIO_SUMMARY"
+	log "=== $name ($SCENARIO_TIER tier): $SCENARIO_SUMMARY"
 	log "evidence: $RUN_DIR"
 
 	trap cleanup EXIT
@@ -213,10 +222,17 @@ run_scenario() (
 	started=$(date +%s)
 
 	scenario_stage
-	launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
-	watch_announcements
-	watch_clicks
-	wait_first_observation 90 || log "WARNING: no capture yet; the home may not be warm"
+	if [ "$SCENARIO_TIER" = api ]; then
+		control_prepare
+		args+=(--control "$CONTROL_DIR")
+		launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
+		control_wait
+	else
+		launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
+		watch_announcements
+		watch_clicks
+		wait_first_observation 90 || log "WARNING: no capture yet; the home may not be warm"
+	fi
 
 	detail=""
 	if scenario_run; then

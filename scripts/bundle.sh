@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Build Athina.app from the SwiftPM binary: no Xcode project needed.
 #
-# Usage: scripts/bundle.sh [debug|release] [--universal] [--out <dir>] [--no-sign]
+# Usage: scripts/bundle.sh [debug|release] [--universal] [--out <dir>] [--no-sign] [--no-control]
 #
-#   --universal  build for Apple silicon and Intel in one binary, as a release does
-#   --out <dir>  put Athina.app in <dir> instead of build/
-#   --no-sign    leave the bundle unsigned, for scripts/release.sh to sign
+#   --universal   build for Apple silicon and Intel in one binary, as a release does
+#   --out <dir>   put Athina.app in <dir> instead of build/
+#   --no-sign     leave the bundle unsigned, for scripts/release.sh to sign
+#   --no-control  leave out the end-to-end harness's control API, as a release
+#                 does; every other bundle is a development one and carries it
+#                 (the ControlAPI package trait, README "The control API")
 #
 # The version is Resources/Info.plist's own (CFBundleShortVersionString and
 # CFBundleVersion), copied as it is: the one place either number is set
@@ -25,6 +28,7 @@ set -euo pipefail
 CONFIG="release"
 UNIVERSAL=0
 SIGN=1
+CONTROL=1
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$ROOT/build"
 while [ "$#" -gt 0 ]; do
@@ -33,12 +37,14 @@ while [ "$#" -gt 0 ]; do
     --universal) UNIVERSAL=1; shift ;;
     --out) [ "$#" -ge 2 ] || { echo "bundle: --out needs a directory" >&2; exit 2; }; OUT_DIR="$2"; shift 2 ;;
     --no-sign) SIGN=0; shift ;;
-    *) echo "usage: scripts/bundle.sh [debug|release] [--universal] [--out <dir>] [--no-sign]" >&2; exit 2 ;;
+    --no-control) CONTROL=0; shift ;;
+    *) echo "usage: scripts/bundle.sh [debug|release] [--universal] [--out <dir>] [--no-sign] [--no-control]" >&2; exit 2 ;;
   esac
 done
 APP="$OUT_DIR/Athina.app"
 
 build_args=(-c "$CONFIG" --product Athina)
+if [ "$CONTROL" = 1 ]; then build_args+=(--traits ControlAPI); fi
 if [ "$UNIVERSAL" = 1 ]; then build_args+=(--arch arm64 --arch x86_64); fi
 
 cd "$ROOT"

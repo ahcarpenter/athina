@@ -167,6 +167,15 @@ final class AppState {
     /// debug panel; the clock itself is not observable.
     private(set) var clockMovedAhead: TimeInterval = 0
 
+    // MARK: Control API
+
+    /// Whether this launch serves the end-to-end harness's control API, from
+    /// `--control` (`ControlMode`).
+    let controlMode: ControlMode
+    /// Why the control API could not start listening although it was allowed,
+    /// set once at launch.
+    var controlFailure: String?
+
     private let store: SettingsStore
     private let keyStore: any KeyStore
     private let isSample: Bool
@@ -208,6 +217,9 @@ final class AppState {
     private init() {
         clientMode = ModelClientMode(arguments: CommandLine.arguments)
         clockMode = ClockMode(arguments: CommandLine.arguments, clientMode: clientMode)
+        controlMode = ControlMode(
+            arguments: CommandLine.arguments, clientMode: clientMode, environment: .current, compiledIn: ControlAvailability.compiledIn
+        )
         (clock, clockControl) = clockMode.makeClock()
         toast = ToastController(clock: clock)
         listener = SpeechListener(clock: clock)
@@ -267,6 +279,7 @@ final class AppState {
         store = SettingsStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("athina-sample-settings.json"))
         self.clientMode = clientMode
         self.clockMode = clockMode
+        controlMode = .off
         // A sample's time stands still, so a render reads the same however long it takes.
         (clock, clockControl) = clockMode.makeClock(base: AdjustableClock(startingAt: Date()))
         toast = ToastController(clock: clock)
@@ -360,6 +373,9 @@ final class AppState {
         AppState.log.notice("model calls: \(self.clientModeLog, privacy: .public)")
         AppState.log.notice("clock: \(self.clockLog, privacy: .public)")
         AppState.log.notice("files: \(self.launchFilesLog, privacy: .public)")
+        if let refusal = controlMode.refusal {
+            AppState.log.error("control API refused: \(refusal, privacy: .public)")
+        }
         toast.onAction = { [weak self] id, feedback in
             self?.respond(to: id, with: feedback)
         }
@@ -1354,6 +1370,26 @@ final class AppState {
             AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
         } catch {
             AppState.log.error("could not answer the clock request at \(replyURL?.path ?? "", privacy: .public): \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    // MARK: Control API
+
+    /// One line for the menu when `--control` was refused or could not
+    /// listen, or nil.
+    var controlLine: String? {
+        if let refusal = controlMode.refusal { return "Control API refused: \(refusal)" }
+        return controlFailure.map { "Control API failed: \($0)" }
+    }
+
+    /// The debug panel's Mentor card: where the API listens, or why it does
+    /// not; nil when `--control` was not given.
+    var controlField: String? {
+        switch controlMode {
+        case .off: return nil
+        case .refused(let reason): return "refused: \(reason)"
+        case .on(let channel):
+            return controlFailure.map { "failed: \($0)" } ?? "listening at \(Formatting.path(URL(fileURLWithPath: channel.socketPath)))"
         }
     }
 
