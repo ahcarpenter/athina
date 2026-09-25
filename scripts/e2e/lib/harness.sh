@@ -44,6 +44,7 @@ HOME_DIR=""
 JOURNAL=""
 ATHINA_PID=""
 EXCLUDED_PID=""
+CONTROL_DIR=""
 HELPER_PIDS=()
 STAGED_PIDS=()
 STAGED_WINDOWS=()
@@ -511,6 +512,18 @@ window_id() {
 # API (README "The control API") rather than the pointer and accessibility from
 # outside: the app finds its own controls and clicks them through its own event
 # path, so no step waits for idle input.
+
+# Whether the bundle under test carries the control API, as the release check
+# (scripts/check-no-control-api.sh) finds it: a release build carries none.
+bundle_has_control_api() {
+	local status=0
+	"$ROOT/scripts/check-no-control-api.sh" "$APP_BINARY" >/dev/null 2>&1 || status=$?
+	case "$status" in
+	0) return 1 ;;
+	1) return 0 ;;
+	*) die "could not tell whether $APP carries the control API" ;;
+	esac
+}
 
 # The run's control directory: 0700, inside the per-user temporary directory
 # (itself closed to everyone else) rather than the run's home, whose path is

@@ -25,11 +25,6 @@ import Testing
         return process.terminationStatus
     }
 
-    @Test func theScriptLooksForTheProtocolsOwnName() throws {
-        let text = try String(contentsOf: Self.script, encoding: .utf8)
-        #expect(text.contains("MARKER=\"\(ControlProtocol.name)\""))
-    }
-
     @Test func aBinaryCarryingTheAPIFails() throws {
         var binary = Data([0xCF, 0xFA, 0xED, 0xFE, 0x00, 0x01])
         binary.append(Data(ControlProtocol.name.utf8))
