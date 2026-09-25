@@ -22,7 +22,7 @@ BASE ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
-.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release xcodeproj xcode-build xcode-archive snapshots-approve ui-snapshots-smoke ui-snapshots-smoke-local snapshots-smoke-approve
+.PHONY: build mark run run-replay record clear-recordings fixture-status test format lint swift-format-version clean measure release xcodeproj xcode-build xcode-archive snapshots-approve ui-snapshots-smoke ui-snapshots-smoke-local snapshots-smoke-approve
 
 ## Build the .app bundle into build/Athina.app
 build:
@@ -149,6 +149,30 @@ ui-snapshots-smoke-local:
 ## the change that caused them.
 snapshots-smoke-approve:
 	scripts/snapshots.sh smoke-approve $(RUN)
+
+## Every Swift file in the checkout, tracked or new, that git does not ignore
+SWIFT_FILES = git ls-files -z --cached --others --exclude-standard '*.swift'
+
+## The Xcode whose swift-format CI lints with (see README, "Code style")
+SWIFT_FORMAT_XCODE := $(shell cat .swift-format-xcode-version)
+
+## Format every Swift file in place to Google's Swift style with the toolchain's
+## swift-format and the committed .swift-format (see README, "Code style")
+format: swift-format-version
+	$(SWIFT_FILES) | xargs -0 xcrun swift-format format --in-place --parallel
+
+## Check every Swift file against .swift-format without changing it, failing on
+## any finding, as CI does; `make format` fixes all but the documentation ones
+lint: swift-format-version
+	$(SWIFT_FILES) | xargs -0 xcrun swift-format lint --strict --parallel
+
+## Warn when the selected Xcode is not the one CI lints with, whose swift-format
+## may format differently
+swift-format-version:
+	@xcode="$$(xcodebuild -version 2>/dev/null | head -n1)"; \
+	if [ "$$xcode" != "Xcode $(SWIFT_FORMAT_XCODE)" ]; then \
+	  echo "warning: CI lints with the swift-format in Xcode $(SWIFT_FORMAT_XCODE), but this runs the one in $${xcode:-no selected Xcode} (swift-format $$(xcrun swift-format --version 2>/dev/null)), which may format differently; see README, \"Code style\"" >&2; \
+	fi
 
 ## Sample the running app's CPU and memory for a while (see scripts/measure.sh);
 ## PID=<pid> names the Athina to sample when several are running

@@ -1,9 +1,9 @@
 name: CI
 
-# Runs on every push to a pull request and to main: build-and-test and the
-# fast UI check, ui-snapshots-smoke. The slow, full-fidelity ui-snapshots
+# Runs on every push to a pull request and to main: build-and-test, lint and
+# the fast UI check, ui-snapshots-smoke. The slow, full-fidelity ui-snapshots
 # check lives in merge-checks.yml, which runs on push to main and for a pull
-# request only with the merge-checks label; the main ruleset requires all three
+# request only with the merge-checks label; the main ruleset requires all four
 # at a pull request's head before it merges (README "Continuous integration").
 on:
   push:
@@ -41,6 +41,39 @@ jobs:
           fi
           swift build -c release --product Athina
           scripts/check-no-control-api.sh "$(swift build -c release --product Athina --show-bin-path)/Athina"
+
+  lint:
+    # Google's Swift style (README "Code style"): swift-format from the Xcode
+    # that .swift-format-xcode-version pins checks every Swift file against
+    # the committed .swift-format and fails on any finding.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the pinned Xcode
+        # By exact path, never the newest on the runner: a newer swift-format
+        # can format differently and fail every pull request with no change.
+        # The image names an Xcode both <version>.app and <version>.0.app.
+        run: |
+          pin="$(cat .swift-format-xcode-version)"
+          for xcode in "/Applications/Xcode_$pin.app" "/Applications/Xcode_$pin.0.app" ""; do
+            [ -z "$xcode" ] || [ -d "$xcode" ] && break
+          done
+          if [ -z "$xcode" ]; then
+            echo "::error::The runner has no Xcode $pin at /Applications/Xcode_$pin.app or /Applications/Xcode_$pin.0.app, the Xcode .swift-format-xcode-version pins for swift-format; it has $(ls -d /Applications/Xcode_*.app | xargs). Bump the pin (README \"Code style\")."
+            exit 1
+          fi
+          echo "Using $xcode"
+          sudo xcode-select -s "$xcode"
+          if [ "$(xcodebuild -version | head -n1)" != "Xcode $pin" ]; then
+            echo "::error::$xcode is $(xcodebuild -version | head -n1), not the Xcode $pin that .swift-format-xcode-version pins."
+            exit 1
+          fi
+          xcodebuild -version
+          swift --version
+          echo "swift-format $(xcrun swift-format --version)"
+      - name: Lint
+        timeout-minutes: 10
+        run: make lint
 
   ui-snapshots-smoke-shard:
     # The fast UI check, split across four runners like ui-snapshots and by
