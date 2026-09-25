@@ -280,6 +280,15 @@ main() {
 		esac
 	done
 	mkdir -p "$RUNS_ROOT"
+	case "$command" in
+	run | warm)
+		# Built before the screen lock is taken, so no other checkout waits
+		# on this one's build. The commands build again only if a source file
+		# changes while they wait for the lock.
+		ensure_app
+		ensure_drive
+		;;
+	esac
 	if screen_lock_needed "$command"; then
 		local status=0
 		screen_lock_acquire "$command${rest[*]:+ ${rest[*]}}" "$LOCK_TIMEOUT" || status=$?

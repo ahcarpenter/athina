@@ -202,6 +202,8 @@ screen_lock_acquire() {
 			return "$status"
 		fi
 		screen_lock_say "took the screen lock after $((SECONDS - started))s"
+	else
+		screen_lock_say "took the screen lock, which was free"
 	fi
 	SCREEN_LOCK_STATE=1
 	SCREEN_LOCK_OWNER="$$"

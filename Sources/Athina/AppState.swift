@@ -154,6 +154,8 @@ final class AppState {
     /// Why a recording cannot be written, once the loop has started; every
     /// call is refused while it is set.
     var recordingUnavailableReason: String?
+    /// How long a replayed call takes, from the launch arguments.
+    let replayLatency: ReplayLatencyMode
 
     // MARK: Clock
 
@@ -208,6 +210,7 @@ final class AppState {
     private init() {
         clientMode = ModelClientMode(arguments: CommandLine.arguments)
         clockMode = ClockMode(arguments: CommandLine.arguments, clientMode: clientMode)
+        replayLatency = ReplayLatencyMode(arguments: CommandLine.arguments, clientMode: clientMode)
         (clock, clockControl) = clockMode.makeClock()
         toast = ToastController(clock: clock)
         listener = SpeechListener(clock: clock)
@@ -267,6 +270,7 @@ final class AppState {
         store = SettingsStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("athina-sample-settings.json"))
         self.clientMode = clientMode
         self.clockMode = clockMode
+        replayLatency = ReplayLatencyMode()
         // A sample's time stands still, so a render reads the same however long it takes.
         (clock, clockControl) = clockMode.makeClock(base: AdjustableClock(startingAt: Date()))
         toast = ToastController(clock: clock)
@@ -354,7 +358,7 @@ final class AppState {
         self.pipeline = pipeline
         let mentorSettings = settings.mentor
         let keyStore = keyStore
-        let clientSetup = clientMode.makeClient(prices: settings.mentor.prices, clock: clock)
+        let clientSetup = clientMode.makeClient(prices: settings.mentor.prices, clock: clock, latency: replayLatency.latency)
         replaySummary = clientSetup.replay
         recordingUnavailableReason = clientSetup.recordingUnavailableReason
         AppState.log.notice("model calls: \(self.clientModeLog, privacy: .public)")
@@ -1359,9 +1363,16 @@ final class AppState {
 
     // MARK: Launch files
 
-    /// One line for the menu when a file flag was refused, or nil.
-    var launchFilesLine: String? {
-        launchFiles.refusals.isEmpty ? nil : "Refused: \(launchFiles.refusals.joined(separator: "; "))"
+    /// Every launch flag that was refused and has no line of its own, in the
+    /// order they were found: the file flags, then the replay latency. A
+    /// refused clock flag is on the Clock line instead.
+    var launchRefusals: [String] {
+        launchFiles.refusals + [replayLatency.refusal].compactMap { $0 }
+    }
+
+    /// One line for the menu when a launch flag was refused, or nil.
+    var launchRefusalsLine: String? {
+        launchRefusals.isEmpty ? nil : "Refused: \(launchRefusals.joined(separator: "; "))"
     }
 
     /// For the log at launch.
@@ -1389,19 +1400,23 @@ final class AppState {
             if summary.staleCount > 0 {
                 line += summary.allowStale ? ", \(summary.staleCount) stale allowed" : ", \(summary.staleCount) stale refused"
             }
+            if replayLatency.latency == .immediate { line += ", answered at once" }
             return line
         }
     }
 
     /// For the log at launch.
     private var clientModeLog: String {
-        switch clientMode {
+        var line = switch clientMode {
         case .live: "live"
         case .record(let directory):
             recordingUnavailableReason.map { "refused: \($0)" } ?? "live, recording to \(directory.path)"
-        case .replay(let directory, let allowStale): "replaying from \(directory.path)\(allowStale ? ", stale fixtures allowed" : "")"
+        case .replay(let directory, let allowStale):
+            "replaying from \(directory.path)\(allowStale ? ", stale fixtures allowed" : ""), \(replayLatency.latency.rawValue) latency"
         case .invalid(let reason): "refused: \(reason)"
         }
+        if let refusal = replayLatency.refusal { line += ", refused: \(refusal)" }
+        return line
     }
 
     /// One line for the menu: spend this hour against the cap, or why the loop is off.

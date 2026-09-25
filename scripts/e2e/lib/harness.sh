@@ -43,6 +43,10 @@ RUN_DIR=""
 HOME_DIR=""
 JOURNAL=""
 ATHINA_PID=""
+# The arguments the run's Athina was launched with, so a relaunch gets the same.
+LAUNCH_ARGS=()
+LAUNCHED_AT=0
+RELAUNCHES=0
 EXCLUDED_PID=""
 HELPER_PIDS=()
 STAGED_PIDS=()
@@ -91,9 +95,20 @@ sources_newer_than() {
 	[ -n "$(find "$@" -name '*.swift' -newer "$product" -print -quit)" ]
 }
 
+# Where a build happens, for its log line. The entry point builds before it
+# takes the screen lock, so no other checkout waits on a build; one inside the
+# lock means a source file changed while this run waited for it.
+build_when() {
+	if [ "${SCREEN_LOCK_STATE:-0}" = 0 ]; then
+		echo "before taking the screen lock"
+	else
+		echo "inside the screen lock, since a source file changed while this run waited for it"
+	fi
+}
+
 ensure_drive() {
 	if sources_newer_than "$DRIVE" "$ROOT/Sources/AthinaDrive" "$ROOT/Sources/AthinaE2E"; then
-		log "building athina-drive"
+		log "building athina-drive $(build_when)"
 		(cd "$ROOT" && swift build --product athina-drive >/dev/null) || die "could not build athina-drive"
 	fi
 }
@@ -112,7 +127,7 @@ ensure_app() {
 		if pgrep -f "$APP_BINARY" >/dev/null 2>&1; then
 			die "$APP is out of date and something is running from it; rebuild it when nothing is"
 		fi
-		log "building $APP (a source file is newer than it)"
+		log "building $APP (a source file is newer than it) $(build_when)"
 		(cd "$ROOT" && scripts/bundle.sh release >/dev/null 2>&1) || die "could not build the app bundle"
 	fi
 }
@@ -184,7 +199,9 @@ new_home() {
 
 # The settings a replay starts from. Two things matter beyond the timings: the
 # owner's own apps are excluded, so a replayed callout never lands on his work,
-# and the toast lives long enough to survive a wait for idle input.
+# and the toast lives long enough to survive a wait for idle input. The triage
+# gate is at its 5 second floor, so with the replay answering at once (see
+# launch_athina) the first toast comes seconds after the first capture.
 seed_settings() {
 	local home="$1" overrides="${2:-}"
 	[ -n "$overrides" ] || overrides='{}'
@@ -209,7 +226,10 @@ PY
 
 # --- Launching and stopping ---------------------------------------------------
 
-# Replay only, sandboxed, in a scratch home, tracked by pid.
+# Replay only, sandboxed, in a scratch home, tracked by pid, and answered at
+# once: `--replay-latency immediate` skips each fixture's recorded latency, 42
+# seconds for the mentor call that raises a toast, which a check has no use for
+# and which is time for a click by whoever is at the Mac to dismiss the toast.
 #
 # Never `make run-replay` and never `pkill -x Athina`: the first stops the lane
 # it launched before, and the second stops every Athina on the Mac, including
@@ -229,9 +249,11 @@ launch_athina() {
 	# outlives a killed run can keep the lock.
 	sed -e "s#__LIVE_SUPPORT__#$LIVE_SUPPORT#" -e "s#__LEGACY_SUPPORT__#$LEGACY_SUPPORT#" "$E2E_DIR/lib/isolate.sb" >"$profile"
 	CFFIXED_USER_HOME="$home" HOME="$home" \
-		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" "$@" \
+		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" --replay-latency immediate "$@" \
 		>>"$RUN_DIR/app.log" 2>&1 9>&- &
 	ATHINA_PID=$!
+	LAUNCH_ARGS=("$@")
+	LAUNCHED_AT=$(date +%s)
 	JOURNAL=""
 	log "launched Athina pid=$ATHINA_PID (replay, sandboxed, home=$home)"
 	local i started
@@ -272,6 +294,21 @@ stop_pid() {
 	done
 	kill -KILL "$pid" 2>/dev/null || true
 	return 0
+}
+
+# Stop the run's Athina and launch it again in the same home with the same
+# arguments. A replay makes a new data directory for each launch, so the new one
+# starts from an empty journal, as the first did; the first one's journal is
+# kept with the evidence.
+relaunch_athina() {
+	RELAUNCHES=$((RELAUNCHES + 1))
+	sqlite3 -readonly "$JOURNAL" ".backup '$RUN_DIR/journal-launch$RELAUNCHES.sqlite'" 2>/dev/null || true
+	log "relaunching Athina (pid $ATHINA_PID's journal kept as journal-launch$RELAUNCHES.sqlite)"
+	stop_pid "$ATHINA_PID"
+	launch_athina "$HOME_DIR" ${LAUNCH_ARGS[@]+"${LAUNCH_ARGS[@]}"}
+	watch_announcements
+	watch_app_clicks
+	wait_first_observation 90 || log "WARNING: no capture yet after the relaunch"
 }
 
 track_helper() { HELPER_PIDS+=("$1"); }
@@ -335,13 +372,18 @@ journal_count() {
 
 # Wait for the first capture. On a warm home this is seconds; on a cold one it
 # is the 30 to 60 second OCR model compile, which is exactly what the warm home
-# exists to avoid.
+# exists to avoid. Sensing captures nothing while an excluded app is in front,
+# and whoever is at the Mac may have gone back to one since TextEdit was
+# staged, so the nudge brings TextEdit forward again.
 wait_first_observation() {
 	local limit="${1:-120}" i
 	for i in $(seq 1 "$limit"); do
 		[ "$(journal_count observations)" -ge 1 ] && { log "first observation after ${i}s"; return 0; }
 		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited while waiting for the first capture"
-		[ $((i % 3)) = 0 ] && wake_input
+		if [ $((i % 3)) = 0 ]; then
+			wake_input
+			[ -n "${TEXTEDIT_PID:-}" ] && raise_window "$TEXTEDIT_PID" notes.txt
+		fi
 		sleep 1
 	done
 	return 1
@@ -363,21 +405,27 @@ suggestion_feedback() {
 }
 
 # Wait until a toast is up for a suggestion nobody has answered, nudging
-# sensing along the way: the helper window flips (a screen that never changes
-# journals nothing) and Capture Now is pressed through accessibility.
+# sensing along the way: every 2 seconds the helper window flips (a screen that
+# never changes journals nothing) and TextEdit switches windows, and after 30
+# seconds with no toast Capture Now is pressed through accessibility. It looks
+# for the toast every quarter second, since with an immediate replay and the
+# triage gate at its floor the toast comes seconds after the first capture.
 # Prints the toast's window id.
 wait_toast() {
-	local limit="${1:-300}" i last_flip=0 last_capture=0 switches=0 now toast
-	for i in $(seq 1 "$limit"); do
+	local limit="${1:-300}" started last_flip=0 last_capture switches=0 now toast
+	started=$(date +%s)
+	last_capture=$started
+	while [ $(($(date +%s) - started)) -lt "$limit" ]; do
 		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited while waiting for a toast"
 		toast="$(toast_window)"
 		if [ -n "$toast" ] && [ "$(newest_suggestion_open)" = 1 ]; then
-			log "toast window $toast up for suggestion $(newest_suggestion_id)"
+			now=$(date +%s)
+			log "toast window $toast up for suggestion $(newest_suggestion_id) after waiting $((now - started))s ($((now - LAUNCHED_AT))s since launch)"
 			printf '%s\n' "$toast"
 			return 0
 		fi
 		now=$(date +%s)
-		if [ $((now - last_flip)) -ge 10 ]; then
+		if [ $((now - last_flip)) -ge 2 ]; then
 			# A screen that never changes journals nothing, and a window
 			# switch is what makes the next capture a focus-change one, so
 			# both nudges go together.
@@ -400,18 +448,44 @@ wait_toast() {
 			"$DRIVE" ax "$ATHINA_PID" cancelmenu >/dev/null 2>&1
 			last_capture=$(date +%s)
 		fi
-		sleep 1
+		sleep 0.25
 	done
 	log "no toast within ${limit}s"
 	return 1
 }
 
-# A toast can expire while a scenario waits for the Mac to go quiet. A pointer
-# step that lands after it went is not a check of anything, so say so and stop.
-require_toast() {
-	[ -n "$(toast_window)" ] && [ "$(newest_suggestion_open)" = 1 ] && return 0
-	log "the toast went away while waiting; rerun the scenario"
-	return 1
+toast_up() { [ -n "$(toast_window)" ] && [ "$(newest_suggestion_open)" = 1 ]; }
+
+# Make sure the scenario's toast is still up, first waiting for `idle` seconds
+# of quiet keyboard and mouse when that is given, and bring a new toast up when
+# it went.
+#
+# The toast listens for clicks anywhere, as it must, so a click by whoever is at
+# the Mac dismisses it, and a wait for idle input is exactly when that happens.
+# That is someone using their Mac, not a failure of anything, so rather than
+# fail the run, Athina is relaunched for a new toast and the wait starts again,
+# three times at most. A relaunch rather than Show Last Suggestion: that brings
+# the toast back but not an unanswered suggestion, since the journal keeps the
+# dismissal, and the checks after this read the answer the suggestion gets
+# next. So a scenario reads the suggestion and the toast after this returns,
+# never before.
+keep_toast_up() {
+	local idle="${1:-0}" relaunched=0 newest
+	while :; do
+		if [ "$idle" -gt 0 ]; then
+			wait_idle_input "$idle" || return 1
+		fi
+		toast_up && return 0
+		newest="$(newest_suggestion_id)"
+		if [ "$relaunched" -ge 3 ]; then
+			log "the toast went away $((relaunched + 1)) times (suggestion $newest: $(suggestion_feedback "$newest")); the Mac is too busy for this scenario now"
+			return 1
+		fi
+		relaunched=$((relaunched + 1))
+		log "the toast went away (suggestion $newest: $(suggestion_feedback "$newest")); relaunching for a new one"
+		relaunch_athina
+		wait_toast >/dev/null || return 1
+	done
 }
 
 # --- Staging ------------------------------------------------------------------
@@ -530,15 +604,20 @@ wait_item_title() {
 
 # --- Watchers -----------------------------------------------------------------
 
+# Appending, so a relaunch's watchers add to the first launch's logs.
 watch_announcements() {
-	"$DRIVE" announce "$ATHINA_PID" >"$RUN_DIR/announcements.log" 2>&1 9>&- &
+	"$DRIVE" announce "$ATHINA_PID" >>"$RUN_DIR/announcements.log" 2>&1 9>&- &
 	track_helper $!
 }
 
 watch_clicks() {
-	"$DRIVE" tap session >"$RUN_DIR/session-clicks.log" 2>&1 9>&- &
+	"$DRIVE" tap session >>"$RUN_DIR/session-clicks.log" 2>&1 9>&- &
 	track_helper $!
-	"$DRIVE" tap pid "$ATHINA_PID" >"$RUN_DIR/athina-clicks.log" 2>&1 9>&- &
+	watch_app_clicks
+}
+
+watch_app_clicks() {
+	"$DRIVE" tap pid "$ATHINA_PID" >>"$RUN_DIR/athina-clicks.log" 2>&1 9>&- &
 	track_helper $!
 	sleep 0.5
 }

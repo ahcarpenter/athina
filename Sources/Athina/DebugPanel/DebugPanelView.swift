@@ -790,16 +790,20 @@ private struct MentorCard: View {
                 let versions = summary.staleVersions.map { "v\($0)" }.joined(separator: ", ")
                 fixtures += "\n\(summary.staleCount) stale, from prompt \(versions) (now v\(summary.promptVersion)), \(summary.allowStale ? "served anyway" : "refused")"
             }
-            return [
-                ModeField(label: "Calls", value: "replayed, never sent or billed"),
-                ModeField(label: "Fixtures", value: fixtures, lineLimit: 3),
-                ModeField(label: "From", value: Formatting.path(directory), truncation: .middle),
-            ]
+            var fields = [ModeField(label: "Calls", value: "replayed, never sent or billed")]
+            // Only when it is not what live looks like, as the Clock field is.
+            if state.replayLatency.latency == .immediate {
+                fields.append(ModeField(label: "Latency", value: "none, each call answered at once"))
+            }
+            fields.append(ModeField(label: "Fixtures", value: fixtures, lineLimit: 3))
+            fields.append(ModeField(label: "From", value: Formatting.path(directory), truncation: .middle))
+            return fields
         }
     }
 
-    /// A replay's own files and the settings it started from, and any file
-    /// flag that was refused; nothing for a live launch that was given none.
+    /// A replay's own files and the settings it started from, and any launch
+    /// flag that was refused (`AppState.launchRefusals`); nothing for a live
+    /// launch that was given none.
     private var launchFilesFields: [ModeField] {
         let files = state.launchFiles
         var fields: [ModeField] = []
@@ -810,8 +814,8 @@ private struct MentorCard: View {
                 label: "Settings", value: files.settingsGiven ? "from \(Formatting.path(files.settingsSource))" : "from the live settings", truncation: .middle
             ))
         }
-        if !files.refusals.isEmpty {
-            fields.append(ModeField(label: "Refused", value: files.refusals.joined(separator: "\n"), lineLimit: 4))
+        if !state.launchRefusals.isEmpty {
+            fields.append(ModeField(label: "Refused", value: state.launchRefusals.joined(separator: "\n"), lineLimit: 4))
         }
         return fields
     }
