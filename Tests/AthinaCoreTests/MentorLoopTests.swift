@@ -9,7 +9,8 @@ import Testing
 /// Everything runs on a test clock, so nothing here waits on real time: a
 /// behavior that takes minutes or hours is proven by advancing the clock, and
 /// every wait for the loop is a wait for an event it publishes.
-@Suite(.timeLimit(.minutes(1))) struct MentorLoopTests {
+@Suite(.timeLimit(.minutes(1)))
+struct MentorLoopTests {
   struct Harness {
     /// Where every harness clock starts: noon, on the UTC calendar the loop
     /// is given, so a record written any test age ago is still today.

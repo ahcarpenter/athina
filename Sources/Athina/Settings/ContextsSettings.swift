@@ -20,7 +20,9 @@ struct ContextsSettings: View {
 /// `ContextRules.normalized` would drop - a name past the cap, or one another
 /// context already uses - so saved work never disappears silently.
 struct MentorshipContextsSection: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   @State private var editing: MentorshipContext?
 
   private var contexts: [MentorshipContext] { state.settings.mentor.contexts }
@@ -92,7 +94,9 @@ struct MentorshipContextsSection: View {
 
 /// One declared context: its name and what it covers, with Edit and Remove.
 private struct ContextRow: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   let context: MentorshipContext
   let onEdit: () -> Void
 
@@ -128,7 +132,9 @@ private struct ContextRow: View {
 /// sheet's copy comes from the same data it validates against rather than a
 /// flag set beside the presented item.
 struct ContextEditor: View {
-  @Environment(\.dismiss) private var dismiss
+  @Environment(\.dismiss)
+  private var dismiss
+
   @State private var draft: MentorshipContext
   private let existing: [MentorshipContext]
   private let onSave: (MentorshipContext) -> Void

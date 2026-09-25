@@ -89,7 +89,8 @@ final class CalloutController {
 struct CalloutView: View {
   static let cornerRadius: CGFloat = 8
 
-  @Environment(\.colorSchemeContrast) private var contrast
+  @Environment(\.colorSchemeContrast)
+  private var contrast
 
   let layout: CalloutLayout
   let note: String

@@ -8,9 +8,15 @@ import SwiftUI
 
 @main
 struct AthinaApp: App {
-  @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-  @Environment(\.openWindow) private var openWindow
-  @Environment(\.openSettings) private var openSettings
+  @NSApplicationDelegateAdaptor(AppDelegate.self)
+  private var delegate
+
+  @Environment(\.openWindow)
+  private var openWindow
+
+  @Environment(\.openSettings)
+  private var openSettings
+
   private let state = AppState.shared
 
   var body: some Scene {
@@ -334,7 +340,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /// The menu bar extra's menu, drawn from the app's `MenuModel`, whose
 /// commands it runs through the handler the control API uses too.
 struct MenuBarContent: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
 
   var body: some View {
     MenuItems(items: state.menuModel.items)
@@ -344,7 +351,9 @@ struct MenuBarContent: View {
 /// Rows of the menu or of one of its submenus.
 private struct MenuItems: View {
   let items: [MenuModel.Item]
-  @Environment(AppState.self) private var state
+
+  @Environment(AppState.self)
+  private var state
 
   var body: some View {
     ForEach(Array(items.enumerated()), id: \.offset) { _, item in

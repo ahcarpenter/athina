@@ -4,7 +4,9 @@ import SwiftUI
 
 /// Past suggestions with their feedback, and the full text of the selected one.
 struct HistoryView: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   @State private var selectedID: Int64?
 
   init(initialSelection: Int64? = nil) {
@@ -52,7 +54,9 @@ struct HistoryView: View {
 }
 
 private struct HistoryRow: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   let suggestion: Suggestion
 
   var body: some View {
@@ -143,7 +147,9 @@ struct FeedbackPill: View {
 }
 
 private struct SuggestionDetail: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   let suggestion: Suggestion
 
   var body: some View {

@@ -55,7 +55,8 @@ struct StatusLabel: View {
 /// The tint only colors the capsule; the word stays in the primary label color,
 /// and Increase Contrast adds an outline so the capsule keeps its edge.
 struct StatusBadge: View {
-  @Environment(\.colorSchemeContrast) private var contrast
+  @Environment(\.colorSchemeContrast)
+  private var contrast
 
   let text: String
   let tint: Color
@@ -97,7 +98,9 @@ extension EnvironmentValues {
 /// the captures it compares.
 struct EverySecond<Content: View>: View {
   @ViewBuilder let content: () -> Content
-  @Environment(\.drawsStill) private var drawsStill
+
+  @Environment(\.drawsStill)
+  private var drawsStill
 
   var body: some View {
     TimelineView(SecondTicks(once: drawsStill)) { _ in content() }

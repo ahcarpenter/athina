@@ -7,7 +7,8 @@ import Testing
 /// nothing, never touch the key or the live files, and the committed fixture
 /// set carries the whole path from triage to a suggestion and its feedback,
 /// the understanding each mentor reply rewrites, and a periodic refresh.
-@Suite(.timeLimit(.minutes(1))) struct ReplayLoopTests {
+@Suite(.timeLimit(.minutes(1)))
+struct ReplayLoopTests {
   /// Counts reads, so a test can prove the keychain is never asked.
   private final class CountingKeyStore: KeyStore, @unchecked Sendable {
     private let lock = NSLock()

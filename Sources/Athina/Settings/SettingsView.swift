@@ -170,7 +170,8 @@ extension View {
 // MARK: - Capture
 
 struct CaptureSettings: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
 
   var body: some View {
     @Bindable var state = state
@@ -302,7 +303,9 @@ struct CaptureSettings: View {
 // MARK: - Journal
 
 struct JournalSettings: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   @State private var confirmClear = false
 
   var body: some View {
@@ -398,7 +401,9 @@ struct JournalSettings: View {
 // MARK: - Privacy
 
 struct PrivacySettings: View {
-  @Environment(AppState.self) private var state
+  @Environment(AppState.self)
+  private var state
+
   @State private var showAdd = false
 
   var body: some View {
@@ -514,7 +519,10 @@ struct RemoveButton: View {
 private struct AddExcludedAppPopover: View {
   let existing: [String]
   let onAdd: (String) -> Void
-  @Environment(\.dismiss) private var dismiss
+
+  @Environment(\.dismiss)
+  private var dismiss
+
   @State private var bundleID = ""
 
   private var runningApps: [(name: String, id: String)] {

@@ -5,7 +5,8 @@ import Testing
 
 /// The test clock: time stands still until it is advanced, and a sleep ends
 /// exactly when an advance reaches its deadline.
-@Suite(.timeLimit(.minutes(1))) struct AdjustableClockTests {
+@Suite(.timeLimit(.minutes(1)))
+struct AdjustableClockTests {
   private let t0 = Date(timeIntervalSince1970: 1_789_473_600)
 
   @Test func timeStandsStillUntilItIsAdvanced() {
@@ -96,7 +97,8 @@ import Testing
 /// demand.
 ///
 /// Proven over a test clock, so no real time passes.
-@Suite(.timeLimit(.minutes(1))) struct ScaledClockTests {
+@Suite(.timeLimit(.minutes(1)))
+struct ScaledClockTests {
   private let t0 = Date(timeIntervalSince1970: 1_789_473_600)
 
   @Test func itRunsItsBaseScaleTimesFaster() {
@@ -438,7 +440,8 @@ import Testing
 
 /// The sensing loop's wait between turns, on the test clock: it ends at its
 /// timeout, or at once when something wakes it.
-@Suite(.timeLimit(.minutes(1))) struct AsyncSignalTests {
+@Suite(.timeLimit(.minutes(1)))
+struct AsyncSignalTests {
   private let t0 = Date(timeIntervalSince1970: 1_789_473_600)
 
   @Test func aWaitEndsAtItsTimeoutOnTheClock() async {

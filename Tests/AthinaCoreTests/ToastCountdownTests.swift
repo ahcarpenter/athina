@@ -6,7 +6,8 @@ import Testing
 /// A toast's countdown to expiring on its own, on the test clock, driven the
 /// way the app drives it: run when shown, held on hover, run again with what
 /// was held on leave, and expired by a wait until the deadline it names.
-@Suite(.timeLimit(.minutes(1))) struct ToastCountdownTests {
+@Suite(.timeLimit(.minutes(1)))
+struct ToastCountdownTests {
   private let t0 = Date(timeIntervalSince1970: 1_789_473_600)
   private let timeout = MentorSettings().toastTimeout
 
