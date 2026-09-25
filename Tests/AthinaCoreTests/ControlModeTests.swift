@@ -32,24 +32,31 @@ import Testing
         #expect(served.refusal == nil)
     }
 
-    @Test func aServedLaunchIsHermeticAndParksItsWindows() {
+    /// A real-screen check drives a served launch too, so it stays on the
+    /// screen and in the menu bar unless asked to be hermetic.
+    @Test func aServedLaunchIsHermeticOnlyWhenAsked() {
         let served = mode(["--replay", "/fixtures", "--control", "/tmp/athina-ctl.abc"])
-        #expect(served.isHermetic)
-        #expect(served.parksWindows)
+        #expect(!served.isHermetic)
+        #expect(!served.parksWindows)
+        let hermetic = mode(["--replay", "/fixtures", "--control", "/tmp/athina-ctl.abc", "--hermetic"])
+        #expect(hermetic.isHermetic)
+        #expect(hermetic.parksWindows)
     }
 
     @Test func showWindowsLeavesAHermeticRunsWindowsOnScreen() {
-        let shown = mode(["--replay", "/fixtures", "--control", "/tmp/athina-ctl.abc", "--show-windows"])
+        let shown = mode(["--replay", "/fixtures", "--control", "/tmp/athina-ctl.abc", "--hermetic", "--show-windows"])
         #expect(shown.isHermetic)
         #expect(!shown.parksWindows)
+        // Without --hermetic nothing is parked to leave on screen.
+        #expect(!mode(["--control", "/tmp/athina-ctl.abc", "--show-windows"]).parksWindows)
     }
 
     /// A refused `--control` leaves the launch as it would be without it, so
-    /// a live launch given the flag still senses and shows itself.
+    /// a live launch given the flags still senses and shows itself.
     @Test func onlyAServedLaunchIsHermetic() {
         #expect(!ControlMode.off.isHermetic)
-        #expect(!mode(["--control", "/tmp/c"], client: .live).isHermetic)
-        #expect(!mode(["--control", "/tmp/c", "--show-windows"], compiledIn: false).parksWindows)
+        #expect(!mode(["--control", "/tmp/c", "--hermetic"], client: .live).isHermetic)
+        #expect(!mode(["--control", "/tmp/c", "--hermetic"], compiledIn: false).parksWindows)
     }
 
     @Test func aBuildWithoutTheTraitRefusesWhateverElseIsTrue() {

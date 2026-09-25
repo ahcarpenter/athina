@@ -336,7 +336,8 @@ run_scenario() (
 	scenario_stage
 	if [ "$SCENARIO_TIER" = api ]; then
 		control_prepare
-		args+=(--control "$CONTROL_DIR")
+		# Hermetic (README "Hermetic runs"), which --control alone is not.
+		args+=(--control "$CONTROL_DIR" --hermetic)
 		[ "$SHOW_WINDOWS" = 1 ] && args+=(--show-windows)
 		launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
 		control_wait

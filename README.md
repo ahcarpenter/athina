@@ -800,18 +800,23 @@ answer ever repeats a request, so the secret never comes back out.
 
 ### Hermetic runs
 
-A launch the control API serves is hermetic (`ControlMode.isHermetic`): it
+The harness launches every API-tier scenario with `--hermetic` beside
+`--control`, which makes it a hermetic run (`ControlMode.isHermetic`): it
 takes nothing from the real world and leaves nothing in it, so API-tier runs
 need no lock and any number of them run at once, beside a real-screen run and
-beside whoever is using the Mac. Measured on the owner's Mac, four copies of
+beside whoever is using the Mac. `--control` alone serves the API to a launch
+that is otherwise a replay like any other, on the screen, in the menu bar and
+sensing, which a real-screen scenario can drive through the API too;
+`--hermetic` is read only with a `--control` the app serves. Measured on the owner's Mac, four copies of
 `debug-panel-access` pass together in about the 5 seconds one takes.
 
-- **It shows nothing.** Every window moves below the desktop picture as it
-  first appears (`WindowParking`), the level `--snapshot` renders at: the
-  window server still composites it, so it takes every click the API
-  simulates and its checkpoints are the pictures a visible window gives, and
-  nobody sees it. It is parked once it is on screen, never while it is being
-  made, which left the Settings window out of reach altogether. The item stays
+- **It shows nothing.** Every window goes below the desktop picture as it is
+  ordered onto the screen (`WindowParking`, in the control API's target), the
+  level `--snapshot` renders at: the window server still composites it, so it
+  takes every click the API simulates and its checkpoints are the pictures a
+  visible window gives, and nobody sees it. Moved any later, even at the end
+  of the event loop pass that opened it, a window showed for a frame, and for
+  the length of its opening animation. The item stays
   out of the menu bar (`MenuBarExtra(isInserted:)` is false), and the menu's
   content comes from `MenuModel`, which the menu bar extra draws everywhere
   else and the API's `menu` reads and presses here, with the same handler for
@@ -854,7 +859,8 @@ beside whoever is using the Mac. Measured on the owner's Mac, four copies of
   with two checks that both counts stayed at 0.
 
 `--show-windows`, given to the harness (`run --show-windows <scenario>`) and
-passed on to the app, leaves a hermetic run's windows where they open, to
+passed on to the app beside `--hermetic`, leaves a hermetic run's windows
+where they open, to
 watch what a scenario does or to compare its checkpoints with a parked run's;
 such a run is on the screen, so it takes the screen lock.
 

@@ -206,10 +206,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Chosen before any scene is built, so the Settings window opens on it.
         LaunchArguments.settingsPane?.select()
-        // Watching before any window opens, so the first one is parked too.
+        // Before any window opens, so the first one is parked too.
+        #if ControlAPI
         if AppState.shared.controlMode.parksWindows {
             WindowParking.start()
         }
+        #endif
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
