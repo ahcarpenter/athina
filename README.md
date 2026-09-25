@@ -1778,11 +1778,15 @@ changes conflict:
 ```sh
 git fetch origin
 reformat=$(git show origin/main:.git-blame-ignore-revs | grep -v '^#' | grep . | head -n1)
-# 0. Stop unless main holds that very commit: an empty $reformat stops every step.
-git merge-base --is-ancestor "$reformat" origin/main || {
+# 0. Stop unless main holds that very commit and the branch forked from main
+#    no later than the commit before it: an empty $reformat stops every step.
+if ! git merge-base --is-ancestor "$reformat" origin/main; then
   echo "Stop: origin/main does not contain the reformat commit $reformat." >&2
   reformat=
-}
+elif ! git merge-base --is-ancestor "$(git merge-base HEAD origin/main)" "$reformat~1"; then
+  echo "Stop: this branch forked from main after $reformat~1; see below." >&2
+  reformat=
+fi
 # 1. Catch up to just before the reformat, resolving real conflicts as usual.
 git rebase "${reformat:?}~1"
 # 2. Format every commit of the branch where it stands.
@@ -1800,6 +1804,18 @@ landed as a merge commit; a squash or rebase merge gives it a new one, and
 `.git-blame-ignore-revs` would then name a commit `main` does not have, which
 step 0 catches. Run the steps one at a time: each must finish cleanly before
 the next begins.
+
+Step 0 also stops a branch that forked from `main` after the commit before the
+reformat: steps 1 and 2 would carry `main`'s own later commits back onto an
+older base, and step 4 would replay them onto a `main` that already has them.
+Such a branch takes the short way instead:
+
+```sh
+git rebase origin/main   # resolving conflicts as usual
+make format
+git commit -a -m "style(athina): format the branch to Google's Swift style"
+make lint
+```
 
 `-X theirs` in step 3 is safe only because step 1 settled every real conflict
 and the reformat commit holds nothing but formatting; replaying `main`'s own
