@@ -25,6 +25,8 @@ final class RunLoopExecutor: SerialExecutor, @unchecked Sendable {
     thread.start()
     ready.wait()
     self.thread = thread
+    // The thread sets the box's run loop before it signals `ready`, and
+    // `wait()` returns only after that signal, so it is never nil here.
     self.runLoop = box.runLoop!
   }
 
