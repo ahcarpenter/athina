@@ -25,11 +25,14 @@ enum Snapshots {
     /// the clock times read the same on every machine too.
     static let referenceDate = Date(timeIntervalSince1970: 1_789_482_730)
 
+    /// How every window of this run is captured, decided once. The two ways
+    /// draw glass differently, so a run never mixes them, and says which it
+    /// used; renders are compared only with renders made the same way.
+    private static let capturesWithScreenCaptureKit = CGPreflightScreenCaptureAccess()
+
     static func render(to directory: URL) async throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        // The two ways a window is captured draw glass differently, so a run
-        // says which it used; renders are compared only with renders made the same way.
-        print(CGPreflightScreenCaptureAccess()
+        print(capturesWithScreenCaptureKit
             ? "snapshot: capturing each window with ScreenCaptureKit"
             : "snapshot: no Screen Recording permission, rendering each window's layer tree")
         let state = AppState.sample()
@@ -184,36 +187,34 @@ enum Snapshots {
         for _ in 0..<8 {
             hosting.layoutSubtreeIfNeeded()
             window.displayIfNeeded()
-            let bitmap = try Bitmap(await captureWithFallback(window: window, hosting: hosting))
-            if let previous, samePicture(previous, bitmap) { return bitmap }
-            previous = bitmap
+            if let image = try await capture(window: window, hosting: hosting) {
+                let bitmap = try Bitmap(image)
+                if let previous, samePicture(previous, bitmap) { return bitmap }
+                previous = bitmap
+            }
             try await Task.sleep(for: .milliseconds(150))
         }
         return nil
     }
 
-    /// ScreenCaptureKit gives the truest picture, but its stream occasionally
-    /// fails to start when many windows are captured back to back. One retry,
-    /// then the layer-tree render, so an unattended run always produces a file.
-    private static func captureWithFallback(window: NSWindow, hosting: NSView) async throws -> CGImage {
-        for attempt in 0..<2 {
-            do {
-                if let image = try await captureOwnWindow(window) { return image }
-                break
-            } catch {
-                if attempt == 0 {
-                    try? await Task.sleep(for: .milliseconds(400))
-                } else {
-                    FileHandle.standardError.write(Data("snapshot: window capture failed twice (\(error.localizedDescription)), rendering the layer tree\n".utf8))
-                }
-            }
+    /// The window captured the run's one way, or nil when ScreenCaptureKit
+    /// missed it this time: its stream occasionally fails to start when many
+    /// windows are captured back to back, and a new window can be missing from
+    /// the shareable content for a moment. A missed capture is taken again,
+    /// never drawn the other way.
+    private static func capture(window: NSWindow, hosting: NSView) async throws -> CGImage? {
+        guard capturesWithScreenCaptureKit else { return try renderLayerTree(of: hosting) }
+        do {
+            if let image = try await captureOwnWindow(window) { return image }
+            FileHandle.standardError.write(Data("snapshot: window not among the shareable windows yet, capturing again\n".utf8))
+        } catch {
+            FileHandle.standardError.write(Data("snapshot: window capture failed (\(error.localizedDescription)), capturing again\n".utf8))
         }
-        return try renderLayerTree(of: hosting)
+        return nil
     }
 
-    /// ScreenCaptureKit for the app's own window; nil when the permission is missing.
+    /// ScreenCaptureKit for the app's own window; nil when it is not among the shareable windows.
     private static func captureOwnWindow(_ window: NSWindow) async throws -> CGImage? {
-        guard CGPreflightScreenCaptureAccess() else { return nil }
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: false)
         guard let scWindow = content.windows.first(where: { $0.windowID == CGWindowID(window.windowNumber) }) else { return nil }
         let filter = SCContentFilter(desktopIndependentWindow: scWindow)
@@ -255,8 +256,8 @@ enum Snapshots {
     enum SnapshotError: Error {
         case noBitmap
         /// No two windows in a row gave the same settled picture of the named
-        /// file: something in the view keeps moving, or it lays out
-        /// differently every time.
+        /// file: something in the view keeps moving, it lays out differently
+        /// every time, or ScreenCaptureKit kept missing its windows.
         case neverSettled(String)
     }
 }

@@ -41,7 +41,8 @@ render() {
   [ -x "$APP/Contents/MacOS/Athina" ] || die "no app at $APP; run make build first"
   rm -rf "$dir"
   TZ=UTC "$APP/Contents/MacOS/Athina" --snapshot "$dir" \
-    -AppleLocale en_US -AppleLanguages '(en-US)' -AppleICUForce24HourTime NO -AppleShowScrollBars Always
+    -AppleLocale en_US -AppleLanguages '(en-US)' -AppleICUForce24HourTime NO -AppleShowScrollBars Always \
+    || die "could not render every snapshot into $dir"
 }
 
 command="${1:-}"
@@ -53,10 +54,12 @@ case "$command" in
     render "$OUT/render-again"
     # Two renders of one build must be the same picture, by the rule the
     # baselines are held to, or a baseline could never be trusted to hold still.
-    if ! diff_tool agree "$OUT/render-first" "$OUT/render-again" --report "$OUT/determinism"; then
+    status=0
+    diff_tool agree "$OUT/render-first" "$OUT/render-again" --report "$OUT/determinism" || status=$?
+    if [ "$status" -eq 1 ]; then
       echo "snapshots: two renders of the same build differ; the renderer is not deterministic (see build/snapshots/determinism)" >&2
-      exit 1
     fi
+    [ "$status" -eq 0 ] || exit "$status"
     rm -rf "$OUT/determinism"
     git -C "$ROOT" rev-parse 'HEAD^{tree}' > "$OUT/render-first/source-tree"
     mv "$OUT/render-first" "$OUT/render"
@@ -70,7 +73,8 @@ case "$command" in
     head="$(git -C "$ROOT" rev-parse HEAD)"
     tree="$(git -C "$ROOT" rev-parse 'HEAD^{tree}')"
     if [ -z "$run" ]; then
-      run="$(gh run list --workflow ci.yml --commit "$head" --status completed --limit 1 --json databaseId --jq '.[0].databaseId // empty')"
+      run="$(gh run list --workflow ci.yml --commit "$head" --status completed --limit 1 --json databaseId --jq '.[0].databaseId // empty')" \
+        || die "could not list the CI runs of HEAD ($head)"
       [ -n "$run" ] || die "no finished CI run of HEAD ($head); push it and let CI finish, or name a run"
     fi
     rm -rf "$OUT/approved-run"

@@ -1800,6 +1800,11 @@ where it was made:
   two in a row agree, because AppKit now and then lays a text field out a
   point off in one window. Captures are kept in sRGB whatever the display's
   profile.
+- **One way of capturing.** A run captures every window with ScreenCaptureKit
+  when it has Screen Recording, as the runner does, and renders each window's
+  layer tree when it does not, and says which on its first line. The two draw
+  glass differently, so a run never mixes them: a ScreenCaptureKit capture
+  that fails is taken again, never drawn the other way.
 
 **Approving an intended change.** Push the change and let CI fail on the
 drift, look at the report, then run `make snapshots-approve` (or
