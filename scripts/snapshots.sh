@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# UI snapshot baselines: render every snapshot the way CI does, compare the
-# renders with the approved set in Tests/Snapshots, and approve a drift from
-# the renders CI made (README "UI snapshot baselines").
+# UI snapshot gates: render every snapshot the way CI does, compare the
+# renders with the approved set, and approve a drift from the renders CI made
+# (README "UI snapshot baselines" and "UI snapshot smoke test").
 #
 # Usage: scripts/snapshots.sh <command>
 #   gate [<k>/<n>]  what CI runs: render twice, fail unless the two renders
@@ -11,6 +11,12 @@
 #   approve [<run>] make the baselines match the renders of CI run <run>, every
 #                   shard's together, by default the newest CI run of this
 #                   checkout's HEAD commit
+#   smoke           what CI's ui-snapshots-smoke runs: draw every snapshot in
+#                   the test process with swift-snapshot-testing and fail on any
+#                   drift from its reference image
+#   smoke-approve [<run>]
+#                   make the smoke test's references match the set CI run <run>
+#                   published, by default the newest CI run of HEAD
 #
 # Output lands in build/snapshots: render-first/ and render-again/ hold the two
 # renders; render/ holds the first once both finished and agree, with
@@ -18,6 +24,12 @@
 # for approve, with shard naming the shard it holds when there is one;
 # report/index.html shows each drifted snapshot before, after, and
 # where it changed, and determinism/ the same for two renders that did not match.
+#
+# The smoke test's output lands in build/snapshots-smoke: references/ holds the
+# set approving takes, every matching snapshot's reference and every other
+# one's new render, with source-tree as above, once every snapshot has rendered;
+# drift/ holds the reference, the render and the difference of each snapshot
+# that drifted; summary.md names them.
 #
 # ATHINA_APP names the app to render with (build/Athina.app by default).
 # Exit: 0 match, 1 drift or renders that differ, 2 bad usage or a step that
@@ -27,6 +39,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BASELINES="$ROOT/Tests/Snapshots"
 OUT="$ROOT/build/snapshots"
+SMOKE_REFERENCES="$ROOT/Tests/UISnapshotsSmokeTests/__Snapshots__/UISnapshotsSmokeTests"
+SMOKE_OUT="$ROOT/build/snapshots-smoke"
 APP="${ATHINA_APP:-$ROOT/build/Athina.app}"
 
 die() { echo "snapshots: $*" >&2; exit 2; }
@@ -116,7 +130,63 @@ case "$command" in
     echo "snapshots: review the changed images (git status Tests/Snapshots), then commit them with the change that caused them"
     ;;
 
+  smoke)
+    [ "$#" -eq 1 ] || die "usage: scripts/snapshots.sh smoke"
+    rm -rf "$SMOKE_OUT"
+    mkdir -p "$SMOKE_OUT"
+    # SNAPSHOT_ARTIFACTS keeps swift-snapshot-testing's own copy of each
+    # failing render in this checkout rather than the temporary folder.
+    status=0
+    (cd "$ROOT" && SNAPSHOT_ARTIFACTS="$SMOKE_OUT/artifacts" \
+      swift test --traits UISnapshotsSmoke --filter UISnapshotsSmokeTests) || status=1
+    if [ -d "$SMOKE_OUT/references" ]; then
+      git -C "$ROOT" rev-parse 'HEAD^{tree}' > "$SMOKE_OUT/references/source-tree"
+    fi
+    {
+      echo "## UI snapshot smoke test"
+      echo
+      if [ -d "$SMOKE_OUT/drift" ] && [ -n "$(ls -A "$SMOKE_OUT/drift")" ]; then
+        echo "Drifted from its reference, or has none yet (the ui-snapshots-smoke-report artifact holds each one's images):"
+        echo
+        for snapshot in "$SMOKE_OUT"/drift/*; do echo "- \`$(basename "$snapshot")\`"; done
+      elif [ "$status" -eq 0 ]; then
+        echo "Every snapshot matches its reference."
+      else
+        echo "No snapshot drifted, but the test failed; see its output."
+      fi
+    } > "$SMOKE_OUT/summary.md"
+    exit "$status"
+    ;;
+
+  smoke-approve)
+    [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh smoke-approve [<run id>]"
+    command -v gh >/dev/null || die "approving needs the GitHub CLI (gh) to fetch the runner's renders"
+    run="${2:-}"
+    head="$(git -C "$ROOT" rev-parse HEAD)"
+    tree="$(git -C "$ROOT" rev-parse 'HEAD^{tree}')"
+    if [ -z "$run" ]; then
+      run="$(gh run list --workflow ci.yml --commit "$head" --status completed --limit 1 --json databaseId --jq '.[0].databaseId // empty')" \
+        || die "could not list the CI runs of HEAD ($head)"
+      [ -n "$run" ] || die "no finished CI run of HEAD ($head); push it and let CI finish, or name a run"
+    fi
+    rm -rf "$SMOKE_OUT/approved-run"
+    gh run download "$run" --name ui-snapshots-smoke --dir "$SMOKE_OUT/approved-run" \
+      || die "CI run $run has no ui-snapshots-smoke artifact to approve; a run publishes one only once every snapshot has rendered"
+    run_tree="$(cat "$SMOKE_OUT/approved-run/source-tree" 2>/dev/null)" \
+      || die "CI run $run does not name the source tree it rendered, so its renders cannot be matched to HEAD"
+    [ "$run_tree" = "$tree" ] \
+      || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into the references; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
+    ls "$SMOKE_OUT"/approved-run/*.png >/dev/null 2>&1 || die "the approved set holds no images"
+    # The set is every reference the test compares, so it replaces the folder
+    # whole: a matching snapshot's file comes back byte for byte and shows no
+    # change, and a removed snapshot's reference goes.
+    mkdir -p "$SMOKE_REFERENCES"
+    find "$SMOKE_REFERENCES" -name '*.png' -delete
+    cp "$SMOKE_OUT"/approved-run/*.png "$SMOKE_REFERENCES/"
+    echo "snapshots: review the changed images (git status Tests/UISnapshotsSmokeTests), then commit them with the change that caused them"
+    ;;
+
   *)
-    die "usage: scripts/snapshots.sh gate [<k>/<n>] | approve [<run id>]"
+    die "usage: scripts/snapshots.sh gate [<k>/<n>] | approve [<run id>] | smoke | smoke-approve [<run id>]"
     ;;
 esac

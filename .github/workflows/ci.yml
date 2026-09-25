@@ -1,9 +1,10 @@
 name: CI
 
-# Runs on every pull request and every push to main. The slow ui-snapshots
+# Runs on every push to a pull request and to main: build-and-test and the
+# fast UI check, ui-snapshots-smoke. The slow, full-fidelity ui-snapshots
 # check lives in merge-checks.yml, which runs on push to main and for a pull
-# request only with the merge-checks label; both must pass at a pull request's
-# head before it merges (README "Continuous integration").
+# request only with the merge-checks label; the main ruleset requires them at
+# a pull request's head before it merges (README "Continuous integration").
 on:
   push:
     branches: [main]
@@ -29,3 +30,45 @@ jobs:
         run: swift test
       - name: Build app bundle
         run: scripts/bundle.sh release
+
+  ui-snapshots-smoke:
+    # The fast UI check on every push: every snapshot drawn in the test process
+    # with swift-snapshot-testing and compared with its reference image. Its
+    # references were recorded on this image with its newest Xcode, as the
+    # ui-snapshots baselines were (README "UI snapshot smoke test").
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select the newest Xcode on the runner
+        run: |
+          latest="$(ls -d /Applications/Xcode_*.app | sort -V | tail -n1)"
+          echo "Using $latest"
+          sudo xcode-select -s "$latest"
+          sw_vers
+          swift --version
+      - name: Draw every snapshot and compare with its reference
+        timeout-minutes: 20
+        run: make ui-snapshots-smoke
+      - name: Summarize
+        if: always()
+        run: |
+          if [ -f build/snapshots-smoke/summary.md ]; then
+            cat build/snapshots-smoke/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload the approvable set
+        # What `make snapshots-smoke-approve` fetches to approve a drift.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-snapshots-smoke
+          path: build/snapshots-smoke/references
+          if-no-files-found: ignore
+      - name: Upload the drift report
+        # The reference, the new render and their difference, one folder per
+        # drifted snapshot.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-snapshots-smoke-report
+          path: build/snapshots-smoke/drift
+          if-no-files-found: ignore

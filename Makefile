@@ -13,12 +13,12 @@ SETTINGS ?=
 LANE ?= replay
 ## The pid `make measure` samples when several Athinas are running
 PID ?=
-## The CI run whose renders `make snapshots-approve` approves; the newest merge-checks run of HEAD when empty
+## The CI run whose renders `make snapshots-approve` approves, the newest merge-checks run of HEAD when empty, or whose set `make snapshots-smoke-approve` approves, the newest CI run of HEAD when empty
 RUN ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
-.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release xcodeproj xcode-build xcode-archive snapshots-approve
+.PHONY: build mark run run-replay record clear-recordings fixture-status test clean measure release xcodeproj xcode-build xcode-archive snapshots-approve ui-snapshots-smoke snapshots-smoke-approve
 
 ## Build the .app bundle into build/Athina.app
 build:
@@ -123,6 +123,21 @@ test:
 ## that caused them.
 snapshots-approve:
 	scripts/snapshots.sh approve $(RUN)
+
+## Run the UI smoke test, as CI's ui-snapshots-smoke job does: draw every
+## snapshot in the test process with swift-snapshot-testing and fail on any
+## drift from its reference image. The references are the CI runner's, so a Mac
+## on another macOS or display scale drifts everywhere; the output is in
+## build/snapshots-smoke.
+ui-snapshots-smoke:
+	scripts/snapshots.sh smoke
+
+## Approve a UI change for the smoke test: make its references match the set
+## the CI runner published for HEAD (in HEAD's newest CI run, or CI run
+## RUN=<id>), never renders from this Mac, then commit the changed images with
+## the change that caused them.
+snapshots-smoke-approve:
+	scripts/snapshots.sh smoke-approve $(RUN)
 
 ## Sample the running app's CPU and memory for a while (see scripts/measure.sh);
 ## PID=<pid> names the Athina to sample when several are running
