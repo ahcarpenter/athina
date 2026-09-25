@@ -199,8 +199,9 @@ The project has one target, `Athina App Store`, and a scheme of the same name
 whose Archive action builds Release. It compiles `Sources/Athina` against the
 package's `AthinaCore` and `SnapshotDiff`, linking the frameworks the package's
 `Athina` target does (a dependency or framework added to one goes in the other
-too), bundles the same icon and menu bar marks `scripts/bundle.sh` does, and
-signs with
+too, except the `ControlAPI`-conditional `AthinaControl`, which the App Store
+build never carries; see The control API), bundles the same icon and menu bar
+marks `scripts/bundle.sh` does, and signs with
 `Resources/Athina.app-store.entitlements` (the App Sandbox, `network.client`,
 and the microphone keys of both the hardened runtime, `device.audio-input`,
 and the sandbox, `device.microphone`). Its Info.plist is `Resources/Info.plist`
@@ -655,8 +656,8 @@ are on screen too.
 | `understanding-surfaces` | screen | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
 | `debug-panel-access` | api | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed, a click on it is refused, and one forced onto it opens nothing; turned on, the menu gains Debug Panel in a group of its own after Settings…, and it and the button each open the panel; turned off again, the panel closes and the command leaves the menu |
 | `settings-pane-text` | api | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link to that pane rather than Markdown, and a click on the one below the fold is refused until the pane is scrolled to it |
-| `settings-sheet` | api | Settings > Contexts' Add Context… brings up the New Context sheet; while it is up, a click on Add Context… under it is refused as covered, and the sheet's own Cancel lands in the sheet and takes it down |
 | `settings-pane-links` | screen | a real click on each of those links changes the Settings window's pane in place rather than handing the link to the system |
+| `settings-sheet` | api | Settings > Contexts' Add Context… brings up the New Context sheet; while it is up, a click on Add Context… under it is refused as covered, a name typed into the sheet's Name field lands there, and the sheet's own Cancel lands in the sheet and takes it down, adding no context |
 | `debug-timeline` | api | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started and App switch rows appear once each rather than once from the journal load and again from the live stream |
 
 A scenario prints one JSON line: its name, `pass`, `fail` or `skip`, how long
@@ -728,13 +729,13 @@ it.
 | `windows` | Athina's open windows: title, number, frame, level, key and main |
 | `find` | controls in `window=<title>` (every window when it is left out) by `identifier=`, or by `role=`, `subrole=` and `label=` (a control's description or title, whole, ignoring case), read from Athina's own accessibility tree: role, label, identifier, value, enabled, frame |
 | `click` | a left click on the first such control, posted to the app's own event queue and dispatched by AppKit as a real click is after the window server; the answer comes once it has been handled. Refused as `disabled` when the control is dimmed, `offscreen` when a scroll area has it out of sight or it is outside its part of the window (the content, or the whole window for the toolbar and title bar), and `covered` when a sheet is up over its window or the window's own hit test at its centre lands on something else. A control inside a sheet is found under the title of the window the sheet covers, and judged against and clicked in the sheet. `force=true` clicks anyway, for proving a refusal |
-| `type` | `text=` as key presses to the first responder of `window=`, such as the field a click just focused |
+| `type` | `text=` as key presses to the first responder of `window=`, or of the sheet up over it, such as the field a click just focused |
 | `scroll` | the scroll view holding a control scrolls it into view |
 | `menu` | the menu bar extra's menu as the app builds it, without showing it; `press="<title>"`, or `press="<submenu> > <title>"`, runs that item's own action, refused as `missing` or `disabled`, naming the step, when an item or submenu on the way is not there or is dimmed |
 | `settings` | the live settings, or one of them with `key=<path>` |
 | `wait-setting` | waits until `key=<path>` reads `equals=<value>` |
 | `wait-window` | waits until a window titled `window=` is open, or with `present=false` gone |
-| `snapshot` | a checkpoint PNG of one of Athina's windows at `path=`, taken as `--snapshot` takes one; never over an existing file |
+| `snapshot` | a checkpoint PNG of one of Athina's windows at `path=`, taken as `--snapshot` takes one once macOS has finished animating the window open (up to two seconds); never over an existing file |
 
 The waits take `timeout=<seconds>`, 10 unless given, and poll the app's own
 state at a fixed real-time pace; the replay's clock is not involved.

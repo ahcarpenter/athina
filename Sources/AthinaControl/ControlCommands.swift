@@ -166,10 +166,12 @@ final class ControlCommands {
     /// Keys for the window's first responder, such as a text field a click
     /// just focused.
     private func type(_ request: ControlRequest) throws -> ControlReply {
-        guard let title = try request.string("window"), let window = AppAccessibility.windows(titled: title).first else {
+        guard let title = try request.string("window"), var window = AppAccessibility.windows(titled: title).first else {
             return .error("type needs window=<title> of an open window")
         }
         guard let text = try request.string("text") else { return .error("type needs text=<what to type>") }
+        // Keys go where a person's would: to the sheet up over the window.
+        while let sheet = window.attachedSheet { window = sheet }
         let codes: [Character: UInt16] = ["\r": 36, "\n": 36, "\t": 48, "\u{7f}": 51, "\u{1b}": 53]
         let now = ProcessInfo.processInfo.systemUptime
         for character in text {
@@ -351,6 +353,7 @@ final class ControlCommands {
             return .error("snapshot needs path=<an absolute path ending in .png>")
         }
         do {
+            await drawnIn(window)
             let image = try await host.controlCapture(window)
             guard let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else {
                 return .error("the capture could not be written as a PNG")
@@ -360,6 +363,39 @@ final class ControlCommands {
         } catch {
             return .error("snapshot failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Waits, for up to two seconds, until the window server has finished
+    /// drawing `window` in. macOS opens a window with an animation that scales
+    /// and fades it in over a few hundred milliseconds, and a capture taken
+    /// meanwhile is a smaller, washed-out picture of it. It is drawn in once
+    /// the window server's bounds for it match its frame and hold for 100 ms.
+    private func drawnIn(_ window: NSWindow) async {
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(2)
+        var steadySince: ContinuousClock.Instant?
+        while clock.now < deadline {
+            let expected = AppAccessibility.globalFrame(of: window.frame)
+            if let drawn = Self.drawnBounds(of: window),
+               abs(drawn.minX - expected.minX) < 1, abs(drawn.minY - expected.minY) < 1,
+               abs(drawn.width - expected.width) < 1, abs(drawn.height - expected.height) < 1 {
+                let since = steadySince ?? clock.now
+                steadySince = since
+                if clock.now - since >= .milliseconds(100) { return }
+            } else {
+                steadySince = nil
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    /// Where the window server draws `window` now, in top-left global
+    /// coordinates, or nil while it is not on screen.
+    private static func drawnBounds(of window: NSWindow) -> CGRect? {
+        guard let list = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(window.windowNumber)) as? [[String: Any]],
+              let info = list.first, (info[kCGWindowIsOnscreen as String] as? Bool) == true,
+              let bounds = info[kCGWindowBounds as String] as? NSDictionary else { return nil }
+        return CGRect(dictionaryRepresentation: bounds)
     }
 }
 

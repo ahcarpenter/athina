@@ -154,6 +154,7 @@ struct ContextEditor: View {
             Form {
                 Section {
                     TextField("Name", text: $draft.name, prompt: Text("building web apps"))
+                        .accessibilityIdentifier("contextEditor.name")
                         .onSubmit(save)
                         .onChange(of: draft.name) { _, typed in
                             draft.name = ContextRules.capped(typed, to: MentorshipContext.maxNameLength)
