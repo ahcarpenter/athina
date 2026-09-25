@@ -35,11 +35,14 @@ suppression are later phases.
 
 - macOS 26 or later (developed and measured on macOS 27, Apple Silicon)
 - Xcode 26 or later with its command line tools (`swift`, `codesign`)
-- No third-party dependencies: SwiftUI, ScreenCaptureKit, Vision, the
+- The app has no third-party dependencies: SwiftUI, ScreenCaptureKit, Vision, the
   accessibility API, Carbon hotkeys, AVFoundation and Speech for talking
   back, and the system SQLite
 - The Xcode project alone (see The Xcode project) is generated with XcodeGen,
   which SwiftPM fetches and builds, pinned, on first use; nothing else needs it
+- The UI smoke test alone (see UI snapshot smoke test) uses
+  swift-snapshot-testing, which SwiftPM fetches, pinned, only when that test
+  runs; the app never links it
 
 ## Build, run, test
 
@@ -53,6 +56,8 @@ make clear-recordings # deletes the app's own recordings directory
 make fixture-status   # checks that the committed fixtures are current (fails when not), with no network
 make test             # runs the unit tests (swift test), the loop included, with no network
 make snapshots-approve # makes the baselines match the renders CI made of HEAD, after an intended UI change
+make ui-snapshots-smoke # the UI smoke test: every snapshot drawn in process with swift-snapshot-testing and compared with the runner's references
+make snapshots-smoke-approve # makes the smoke test's references match the set CI made of HEAD, after an intended UI change
 make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 make release          # builds, signs, notarizes, and packages a direct-download release into build/release (see Releasing)
 make xcodeproj        # generates Athina.xcodeproj, the Xcode project for the App Store route, from project.yml (see The Xcode project)
@@ -1723,27 +1728,36 @@ particular to this app:
 
 ## Continuous integration
 
-CI runs two jobs on GitHub's `macos-26` runner, which ships Xcode 26 and the
-macOS 26 SDK this package targets: `build-and-test` runs `swift test` and the
-bundle script, and `ui-snapshots` renders every snapshot with `Athina
---snapshot`, replay-mode renders on a scaled clock included, compares the
-renders with the approved baselines, and uploads them, split across four
-runners that each take a quarter of the snapshots (see UI snapshot baselines). The Xcode project's archive check is out
-of CI until the App Store release flow brings it back as part of that flow
-(see The Xcode project).
+CI runs three checks on GitHub's `macos-26` runner, which ships Xcode 26 and
+the macOS 26 SDK this package targets: `build-and-test` runs `swift test` and
+the bundle script; `ui-snapshots-smoke`, the fast UI check, draws every
+snapshot inside a test process with swift-snapshot-testing and compares each
+with its reference image, in about three minutes (see UI snapshot smoke
+test); and `ui-snapshots`, the full-fidelity UI check, renders every snapshot
+with `Athina --snapshot` through the window server, so Liquid Glass and
+materials are in them, replay-mode renders on a scaled clock included,
+compares the renders with the approved baselines, and uploads them, split
+across four runners that each take a quarter of the snapshots (see UI
+snapshot baselines). The two UI checks draw the same list of snapshots, so a
+UI change drifts both, and each has its own approved images:
+`make snapshots-approve` approves the `ui-snapshots` baselines from HEAD's
+merge-checks run and `make snapshots-smoke-approve` the `ui-snapshots-smoke`
+references from HEAD's CI run, both from the runner and never from a Mac. The
+Xcode project's archive check is out of CI until the App Store release flow
+brings it back as part of that flow (see The Xcode project).
 
-Both run on every push to main. On a pull request, `build-and-test`
-(`.github/workflows/ci.yml`) runs on its own, and the slow `ui-snapshots`
-(`.github/workflows/merge-checks.yml`) runs only while the pull request carries
-the `merge-checks` label: adding the label runs it, and so does every push, or
-any other label added, while it is on. Anyone with write access can add it,
+All three run on every push to main. On a pull request, `build-and-test` and
+`ui-snapshots-smoke` (`.github/workflows/ci.yml`) run on every push, and the
+slow `ui-snapshots` (`.github/workflows/merge-checks.yml`) runs only while the
+pull request carries the `merge-checks` label: adding the label runs it, and
+so does every push, or any other label added, while it is on. Anyone with write access can add it,
 from the pull request page or with
 
 ```sh
 gh pr edit <number> --add-label merge-checks
 ```
 
-Both must pass at a pull request's head before it can merge: the `main`
+All three must pass at a pull request's head before it can merge: the `main`
 ruleset requires them, with no bypass, and until `ui-snapshots` has run there,
 the pull request lists it as expected and cannot merge. Two traps shape this.
 A job that an `if` skips still reports a check run, and a skipped check counts
@@ -1885,3 +1899,72 @@ the new image or Xcode, so a real UI change is never approved under it.
 runner's 1x scale, and an approval adds only the images that changed to the
 history, so the repository keeps them as ordinary files rather than in Git LFS,
 which would add a download quota and an extra step to every checkout.
+
+### UI snapshot smoke test
+
+`ui-snapshots-smoke` is the fast UI check, run on every push to a pull request
+and to main. `make ui-snapshots-smoke` (`scripts/snapshots.sh smoke`) runs
+the `UISnapshotsSmokeTests` target, which draws every snapshot `--snapshot`
+renders, from the same list (`Snapshots.specs()`) and the same sample data,
+light and dark, in the same kind of window, settled by the same rule, and
+compares each with its reference image in
+`Tests/UISnapshotsSmokeTests/__Snapshots__/UISnapshotsSmokeTests` with
+[swift-snapshot-testing](https://github.com/pointfreeco/swift-snapshot-testing).
+The two gates cannot drift apart: a snapshot added to the list is in both (and
+needs a line in `SnapshotShard`'s table for `ui-snapshots`' shards).
+
+It draws each window inside the test process, with swift-snapshot-testing's
+view strategy on the window's frame view (the view under the content that
+paints the window's background), rather than capturing it from the window
+server, so it builds and runs in a fraction of the time `ui-snapshots` takes.
+Its pictures leave out what only the window server composites: Liquid Glass
+and materials are not drawn, so a toast shows its words and controls on the
+plain window background, and what sits on glass can take another colour or,
+like the toast's button bezels, close button and microphone in light mode,
+not show at all. Scroll bars follow the runner's own setting, which hides
+them. It catches a changed
+layout, text, colour, control or state; how glass looks is `ui-snapshots`' to
+check. A pixel matches when it is within 2 Delta E of the reference (a
+perceptual precision of 98 percent), the difference the eye cannot see, which
+covers anti-aliasing and nothing a person would notice. A render reads the same
+on every run for the reasons a `--snapshot` render does (see UI snapshot
+baselines), with the test setting UTC itself and the runner's US English
+locale: a fixed clock, animations and Core Animation's clock stopped, a window
+with a fixed backdrop, and captures until two in a row agree, in fresh windows
+until two agree. A window drawn in process is drawn as its layers stand, so
+it skips the wait `--snapshot` gives a fade to end before its first capture.
+
+The test never records a reference. A snapshot with no reference fails, as a
+drifted one does, and a reference no snapshot produces fails until it is
+deleted. For each drifted snapshot the job names it in its summary and uploads
+the `ui-snapshots-smoke-report` artifact: one folder per snapshot with the
+reference (`reference.png`), the new render (`failure.png`) and their
+difference (`difference.png`), or only the render when there is no reference
+yet.
+
+The target and its one dependency sit behind the `UISnapshotsSmoke` package
+trait, which only `make ui-snapshots-smoke` turns on. Without it the target
+has no tests and no dependencies, so a plain `swift test` (what `make test`
+and every local validation run), `build-and-test`, the app, `make release`
+and the Xcode project never fetch, build or run it, and no snapshot is drawn
+or compared on a developer's Mac unless asked for by name. It is pinned to one release in `Package.swift`, and
+the package's `Package.resolved` is not committed, since a committed one would
+have every build fetch every package it names.
+
+**Approving an intended change.** Push the change and let
+`ui-snapshots-smoke` fail on the drift, look at the report, then run `make
+snapshots-smoke-approve` (or `scripts/snapshots.sh smoke-approve`), which
+downloads the set HEAD's newest CI run published and makes the references
+folder match it exactly: the run's render of every snapshot that drifted or
+was new, the reference of every one that matched, which comes back unchanged,
+and nothing else, so a removed snapshot's reference goes. `RUN=<id>` names
+another CI run. A run publishes the set only once every snapshot has rendered,
+it names the source tree it was made from, and approving refuses any tree but
+HEAD's, as `make snapshots-approve` does. A UI change drifts both gates, so
+approve both, each from its own run of HEAD, and commit the images together
+with the change that caused them. References never come from a Mac: they are the
+runner's, rendered at its 1x scale on its macOS, and a Mac on another macOS or
+display scale draws differently everywhere, so `make ui-snapshots-smoke` on a
+Mac only shows how it would draw. The runner's image and newest Xcode are a
+deliberate refresh here too, approved with the baselines in a commit of their
+own.
