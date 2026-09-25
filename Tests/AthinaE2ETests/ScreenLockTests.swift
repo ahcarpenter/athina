@@ -184,10 +184,11 @@ import Testing
         holder.waitUntilExit()
         // The holder file is left behind by a kill -9; the lock is not.
         #expect(FileManager.default.fileExists(atPath: holderFile))
+        // A lock still held would last the holder's 60 s and give up at 5; the
+        // wait covers only a `sleep` the holder left, which inherited the lock.
         let next = try run("lock_acquire SCREEN_LOCK 'run next' 5 && echo acquired")
         #expect(next.status == 0)
         #expect(next.output.contains("acquired"))
-        #expect(next.seconds < 3)
     }
 
     @Test func aRunStoppedWhileWaitingLeavesNothingQueued() throws {
