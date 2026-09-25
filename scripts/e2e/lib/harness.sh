@@ -229,7 +229,7 @@ PY
 # --- Launching and stopping ---------------------------------------------------
 
 # Replay only, sandboxed, in a scratch home, tracked by pid, and answered at
-# once: `--replay-latency immediate` skips each fixture's recorded latency, 42
+# once: `--replay-latency immediate` skips each fixture's recorded latency, 41
 # seconds for the mentor call that raises a toast, which a check has no use for
 # and which is time for a click by whoever is at the Mac to dismiss the toast.
 #

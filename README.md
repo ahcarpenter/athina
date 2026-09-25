@@ -198,13 +198,14 @@ live ones. Test Connection replays the recorded test call.
 **Replay latency.** `--replay-latency immediate` answers every replayed call
 at once instead, for a scripted check that waits on what the calls bring: the
 mentor call that raises the first toast in the committed set was recorded at
-42 seconds, which the end-to-end harness has no use for (see End-to-end
+41 seconds, which the end-to-end harness has no use for (see End-to-end
 harness). `recorded`, the default, names the usual, so `make run-replay` still
-looks like a live session. The flag on a live or recording launch is refused, like the clock flags: nothing there is replayed,
-and the menu's Refused line, the Mentor card, and the log say why. A value
-other than `immediate` or `recorded` is refused in the same places, and the
-replay keeps the recorded latency. `ReplayLatencyMode`
-(`Sources/AthinaCore/System/ReplayLatencyMode.swift`) is the rule, under test.
+looks like a live session. The flag on a live or recording launch is refused,
+like the clock flags: nothing there is replayed, and the menu's Refused line,
+the Mentor card, and the log say why. A value other than `immediate` or
+`recorded` is refused in the same places, and the replay keeps the recorded
+latency. `ReplayLatencyMode` (`Sources/AthinaCore/System/ReplayLatencyMode.swift`)
+is the rule, under test.
 
 **A replay runs against files of its own, seeded from your live settings.** A
 replay, and a replay that was refused, keeps its journal and settings in a data
@@ -250,17 +251,16 @@ iterating on prompts.
 ### A faster clock
 
 Replay takes away the model's cost, and its latency when asked to, not the
-clock. A refresh that
-comes due after fifteen minutes of use, a Not now that lasts an hour, the spend
-hour, and a new day all still take that long. So every time-based behavior in
-Athina reads one time source, `AthinaClock`
+clock. A refresh that comes due after fifteen minutes of use, a Not now that
+lasts an hour, the spend hour, and a new day all still take that long. So every
+time-based behavior in Athina reads one time source, `AthinaClock`
 (`Sources/AthinaCore/System/AthinaClock.swift`): the dates the journal is
 stamped with and the gates compare, the time awake a refresh counts, and every
 wait (a toast's countdown, the callout check, the sensing cadence and idle
-threshold, the talk-back timers, a replayed call's recorded latency). The shipped app
-runs on `SystemClock`, which is `ContinuousClock` and `Date`, so a live run is
-exactly what it was. A replay runs on a clock of its own that a scripted check
-can compress:
+threshold, the talk-back timers, a replayed call's recorded latency). The
+shipped app runs on `SystemClock`, which is `ContinuousClock` and `Date`, so a
+live run is exactly what it was. A replay runs on a clock of its own that a
+scripted check can compress:
 
 ```sh
 make run-replay TIME_SCALE=60
@@ -630,7 +630,7 @@ suite rather than every scenario.
 - **Fast toasts.** Every launch replays with `--replay-latency immediate`
   (see Replay), and the seeded settings put the triage gate at its 5 second
   floor, so a toast comes seconds after the first capture rather than after
-  the recorded 42 second mentor call and a 20 second gate. `wait_toast` looks
+  the recorded 41 second mentor call and a 20 second gate. `wait_toast` looks
   for it every quarter second and nudges sensing every 2 seconds (the helper
   window flips and TextEdit switches windows), pressing Capture Now only after
   30 seconds with no toast; it logs how long it waited and how long since
@@ -641,13 +641,14 @@ suite rather than every scenario.
   first, and a click aborts if the pointer moves off the target, because the
   Mac may have someone at it. A click by that person during the wait dismisses
   the toast through its global listener, which is them using their Mac rather
-  than a failure, so `keep_toast_up` relaunches Athina for a new toast
-  (the earlier launch's journal and watcher logs are kept as
+  than a failure, so `keep_toast_up` relaunches Athina for a new toast (the
+  earlier launch's journal and watcher logs are kept as
   `journal-launch<n>.sqlite` and `<log>-launch<n>.log`, and the watchers start
   again on fresh logs, so the checks read only what the new launch saw) and
-  waits again, up to three times. It relaunches rather than use Show Last Suggestion,
-  which brings the toast back with the dismissal already in the journal, so the
-  checks after it could not tell their answer from the one before.
+  waits again, up to three times. It relaunches rather than use Show Last
+  Suggestion, which brings the toast back with the dismissal already in the
+  journal, so the checks after it could not tell their answer from the one
+  before.
 - **The owner's apps are excluded** in the scratch settings from the start.
   Replay serves fixtures in order whatever is on screen, so a replayed callout
   would otherwise land over the work of whoever is using the Mac.
