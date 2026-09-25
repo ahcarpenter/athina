@@ -318,6 +318,22 @@ import Testing
     #expect(says(output, "acquired"))
   }
 
+  @Test func theLimitCountsTheLockWaitAndEveryRoundAfterIt() throws {
+    let reader = try idleReader(20)
+    let holder = try startHolder("run menubar-keyboard", seconds: 60)
+    defer { holder.terminate() }
+    let (waiter, output) = try process(whenIdle(reader, "2"), checkout: "/checkouts/two")
+    try waitFor("the run to queue for the lock") { says(output, "waiting for the screen lock") }
+    usleep(3_000_000)
+    try setIdle(0, in: reader.file)
+    holder.terminate()
+    waiter.waitUntilExit()
+    #expect(waiter.terminationStatus == 75)
+    #expect(says(output, "gave it back until the Mac is quiet again"))
+    #expect(says(output, "input never went idle for 15s in 2s, so the screen lock was not taken"))
+    #expect(!says(output, "waiting for 15s of idle input"))
+  }
+
   // MARK: The checkout lock
 
   @Test func aSecondRunFromTheSameCheckoutWaitsForTheFirstAndNamesIt() throws {
