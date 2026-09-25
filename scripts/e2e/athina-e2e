@@ -127,6 +127,7 @@ cmd_warm() {
 		log "warm home is already prepared ($(warm_home_stamp)); --force to redo it"
 		return 0
 	fi
+	refuse_while_runs_live warm
 	ensure_app
 	ensure_drive
 	RUN_DIR="$RUNS_ROOT/warm-$(date '+%Y%m%d-%H%M%S')"
@@ -173,9 +174,14 @@ cmd_warm() {
 	# Keep the caches, drop everything the session wrote about itself.
 	rm -rf "$building/Library/Application Support/athina"
 	date '+%Y-%m-%d %H:%M:%S' >"$building/.athina-e2e-warm"
-	rm -rf "$WARM_HOME"
 	mkdir -p "$(dirname "$WARM_HOME")"
+	# Swapped in by rename, so the warm home is missing for no longer than two
+	# renames take.
+	local old="$CACHE_ROOT/warm-home.old"
+	rm -rf "$old"
+	[ ! -e "$WARM_HOME" ] || mv "$WARM_HOME" "$old"
 	mv "$building" "$WARM_HOME"
+	rm -rf "$old"
 	HOME_DIR=""
 	rm -rf "$CACHE_ROOT/warm-home.building"
 	log "warm home ready at $WARM_HOME (cold first capture took ${elapsed}s; clones pay none of it)"
@@ -338,15 +344,6 @@ cmd_journal() {
 	"$DRIVE" journal "$journal" "$query"
 }
 
-cmd_clean() {
-	rm -rf "$RUNS_ROOT"
-	log "removed $RUNS_ROOT"
-	if [ "${1:-}" = "--warm" ]; then
-		rm -rf "$WARM_HOME" "$CACHE_ROOT/warm-home.building"
-		log "removed $WARM_HOME"
-	fi
-}
-
 main() {
 	local command="${1:-}"
 	shift || true
@@ -371,6 +368,10 @@ main() {
 		# Exiting gives the locks back however the run ends; this also takes
 		# down their holder files. warm sets its own trap, which does both.
 		trap locks_release EXIT
+		if [ "$command" = run ]; then
+			live_run_register "$what"
+			trap 'live_run_unregister; locks_release' EXIT
+		fi
 		# Built before the screen lock is taken, so no other checkout waits
 		# on this one's build. The commands build again only if a source file
 		# is saved after this build starts.
@@ -388,7 +389,7 @@ main() {
 	run) cmd_run ${rest[@]+"${rest[@]}"} ;;
 	journal) cmd_journal ${rest[@]+"${rest[@]}"} ;;
 	doctor) cmd_doctor ;;
-	clean) cmd_clean ${rest[@]+"${rest[@]}"} ;;
+	clean) clean_cache ${rest[@]+"${rest[@]}"} ;;
 	"" | -h | --help | help) usage ;;
 	*) usage; exit 64 ;;
 	esac

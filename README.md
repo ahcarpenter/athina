@@ -613,7 +613,11 @@ scenario, pid, since when) and waits. A scenario that sets
 of quiet keyboard and mouse, before it takes the lock rather than
 inside it, so no other checkout waits behind it while someone is at the Mac;
 input that comes back while it waits for the lock gives the lock back until
-the Mac is quiet again.
+the Mac is quiet again. Since a run still reads the warm home and writes its
+evidence between scenarios, it registers itself in
+`~/Library/Caches/athina-e2e/live-runs` for its whole length, and `clean` and
+`warm` refuse, naming each run in progress, while any registered run is still
+alive; `warm` builds the new home beside the old one and swaps it in by rename.
 `--lock-timeout <seconds>` gives up instead; `list`, `doctor`, and `journal`
 never wait. `run` and `warm` build `build/Athina.app` and `athina-drive` when a
 source file was saved after the last build of each started (for athina-drive,

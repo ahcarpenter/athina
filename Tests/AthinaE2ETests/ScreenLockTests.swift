@@ -26,7 +26,10 @@ import Testing
         let seconds: Double
     }
 
-    private func process(_ script: String, checkout: String, arguments: [String] = []) throws -> (Process, URL) {
+    private func process(
+        _ script: String, checkout: String, arguments: [String] = [],
+        environment extra: [String: String] = [:]
+    ) throws -> (Process, URL) {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let output = directory.appendingPathComponent("output-\(UUID().uuidString).txt")
         FileManager.default.createFile(atPath: output.path, contents: nil)
@@ -37,6 +40,7 @@ import Testing
         var environment = ProcessInfo.processInfo.environment
         environment["ATHINA_E2E_SCREEN_LOCK"] = lock
         environment["ROOT"] = checkout
+        environment.merge(extra) { $1 }
         process.environment = environment
         process.standardOutput = handle
         process.standardError = handle
@@ -272,7 +276,7 @@ import Testing
         holder.terminate()
         holder.waitUntilExit()
         try waitFor("the run to give the lock back") {
-            says(output, "giving it back until the Mac is quiet again")
+            says(output, "gave it back until the Mac is quiet again")
         }
         // Given back: another run takes it while this one waits for quiet.
         #expect(try run("lock_acquire SCREEN_LOCK 'run other' 0").status == 0)
@@ -280,6 +284,52 @@ import Testing
         waiter.waitUntilExit()
         #expect(waiter.terminationStatus == 0)
         #expect(says(output, "acquired"))
+    }
+
+    // MARK: Runs in progress
+
+    private static let harness = URL(fileURLWithPath: library)
+        .deletingLastPathComponent()
+        .appendingPathComponent("harness.sh").path
+
+    /// `body` under the harness itself, with its cache at `cache`.
+    private func harnessProcess(_ body: String, cache: URL) throws -> (Process, URL) {
+        try process(
+            "source '\(Self.harness)'\n\(body)", checkout: "/checkouts/one",
+            environment: ["ATHINA_E2E_CACHE": cache.path]
+        )
+    }
+
+    @Test func cleanRefusesWhileARunIsInProgress() throws {
+        let cache = directory.appendingPathComponent("cache", isDirectory: true)
+        let runs = cache.appendingPathComponent("runs/real-screen-1", isDirectory: true)
+        let warm = cache.appendingPathComponent("warm-home", isDirectory: true)
+        try FileManager.default.createDirectory(at: runs, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: warm, withIntermediateDirectories: true)
+        try "2026-09-25 10:00:00\n".write(
+            to: warm.appendingPathComponent(".athina-e2e-warm"), atomically: true, encoding: .utf8)
+        let ready = directory.appendingPathComponent("run-ready").path
+        let (run, _) = try harnessProcess(
+            "live_run_register 'run all'\ntouch '\(ready)'\nsleep 30", cache: cache)
+        defer { run.terminate() }
+        try waitFor("the run to register") { FileManager.default.fileExists(atPath: ready) }
+
+        let (refused, refusedOutput) = try harnessProcess("clean_cache --warm", cache: cache)
+        refused.waitUntilExit()
+        #expect(refused.terminationStatus == 1)
+        #expect(says(refusedOutput, "not running clean while these runs use \(cache.path)"))
+        #expect(says(refusedOutput, "running \"run all\" (pid \(run.processIdentifier)) since "))
+        #expect(FileManager.default.fileExists(atPath: runs.path))
+        #expect(FileManager.default.fileExists(atPath: warm.path))
+
+        // Killed before it could take its registration down, it no longer counts.
+        kill(run.processIdentifier, SIGKILL)
+        run.waitUntilExit()
+        let (cleaned, _) = try harnessProcess("clean_cache --warm", cache: cache)
+        cleaned.waitUntilExit()
+        #expect(cleaned.terminationStatus == 0)
+        #expect(!FileManager.default.fileExists(atPath: runs.path))
+        #expect(!FileManager.default.fileExists(atPath: warm.path))
     }
 
     // MARK: The checkout lock
