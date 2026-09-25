@@ -564,7 +564,7 @@ private struct TimelinePane: View {
                 .labelsHidden()
                 .controlSize(.small)
                 .frame(width: 180)
-                Text(page == .timeline ? Plural.count(state.timeline.count, "entry", "entries") : Plural.count(state.callLog.count, "call", "calls"))
+                Text(page == .timeline ? Plural.count(state.timeline.entries.count, "entry", "entries") : Plural.count(state.callLog.count, "call", "calls"))
                     .foregroundStyle(.secondary)
                     .font(.callout)
                     .monospacedDigit()
@@ -575,14 +575,14 @@ private struct TimelinePane: View {
             Divider()
             switch page {
             case .timeline:
-                List(state.timeline, selection: $selectedID) { entry in
+                List(state.timeline.entries, selection: $selectedID) { entry in
                     TimelineRow(entry: entry)
                         .tag(entry.id)
                         .listRowSeparator(.visible)
                 }
                 .listStyle(.inset)
                 .overlay {
-                    if state.timeline.isEmpty {
+                    if state.timeline.entries.isEmpty {
                         ContentUnavailableView("Nothing Journaled Yet", systemImage: "clock")
                     }
                 }

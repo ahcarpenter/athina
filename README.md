@@ -547,7 +547,7 @@ never wait.
 | `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
 | `debug-panel-access` | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed; turned on, the menu gains Debug Panel in a group of its own after Settings…, and it and the button each open the panel; turned off again, the panel closes and the command leaves the menu |
 | `settings-pane-links` | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link rather than Markdown, and a real click on it changes the Settings window's pane in place rather than handing the link to the system |
-| `debug-timeline` | the debug panel's timeline lists the Started event a launch journals once, as the journal holds it, rather than both from its first read of the journal and again from the event stream |
+| `debug-timeline` | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started and App switch rows appear once each rather than once from the journal load and again from the live stream |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
 every check it made, and the directory holding its evidence (transcript,

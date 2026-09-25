@@ -1,41 +1,67 @@
 # shellcheck shell=bash
 # SCENARIO_* below are read by scripts/e2e/athina-e2e, which sources this file.
 # shellcheck disable=SC2034
-# The debug panel's timeline shows each journaled entry once. Sensing starts,
-# and journals its first events, before the panel's timeline is first read
-# from the journal, so an event that is both in that first read and still on
-# its way to the panel must not be listed twice.
-SCENARIO_SUMMARY="the debug panel's timeline lists each startup event once, as the journal holds it"
+# The debug panel's Timeline lists each journal row once. A timeline that read
+# the journal back after sensing had journaled its first events, Started among
+# them, while the live stream carried the same rows, showed every startup row
+# twice. AppState loads the timeline before pipeline.start(), so the startup
+# rows arrive on the stream alone, and the timeline merges rows by journal id
+# for any later load that overlaps the stream, such as the reload after Clear
+# Journal, and for ids the journal reuses. The panel is open from launch here,
+# which is where a person saw it.
+SCENARIO_SUMMARY="the debug panel's Timeline shows each startup row once"
 SCENARIO_ARGS=(--open debug)
 
-# The id of the first window whose name starts with $1, empty when none is open.
-window_id() {
-	"$DRIVE" windows "$ATHINA_PID" \
-		| awk -v want="$1" 'index($0, "name=\"" want) {sub("id=", "", $1); print $1; exit}' || echo ""
+# Every row the Timeline can show: observations and events together.
+journal_rows() {
+	echo $(($(journal_count observations) + $(journal_count events)))
 }
 
-# How many timeline rows in a texts dump are the event labelled $2. A row reads
-# as its time, its label, and any detail: "12:00:00, Started".
-timeline_rows() {
-	grep -cE "value=\"[0-9:]+, $2(\"|, )" "$RUN_DIR/$1" || true
-}
-
+# Events of one kind with no detail, the rows the Timeline shows as the label
+# alone, and for one app when a second argument names it. Only the startup app
+# switch has no detail, since every later one names the app it came from.
 journal_events() {
-	sqlite3 -readonly "$JOURNAL" "select count(*) from events where kind = '$1'" 2>/dev/null || echo 0
+	sqlite3 -readonly "$JOURNAL" \
+		"select count(*) from events where kind = '$1' and detail is null and ('${2:-}' = '' or app_name = '${2:-}')" 2>/dev/null || echo 0
+}
+
+# The count the Timeline's header shows, "7 entries", as a number.
+header_count() {
+	sed -n 's/.*value="\([0-9][0-9]*\) entr[a-z]*".*/\1/p' "$RUN_DIR/$1" | head -1
+}
+
+# Rows whose text starts with the given label, at any time of day.
+rows_named() {
+	grep -c "value=\"[0-9:]*, $2\"" "$RUN_DIR/$1" || true
 }
 
 scenario_run() {
-	local id
-	for _ in $(seq 1 20); do
-		[ -n "$(window_id "Debug Panel")" ] && break
+	local id before after shown="" startup i
+	wait_first_observation || return 1
+	# Sensing keeps journaling, so the header is compared with a journal that
+	# held still across the read; a row can reach the panel a moment after the
+	# journal, so a few reads are allowed before the two are compared.
+	for i in $(seq 1 10); do
+		before="$(journal_rows)"
+		"$DRIVE" ax "$ATHINA_PID" dump --scope "Debug Panel" >"$RUN_DIR/timeline-dump.txt" 2>&1 || true
+		after="$(journal_rows)"
+		shown="$(header_count timeline-dump.txt)"
+		[ "$before" = "$after" ] && [ "$shown" = "$after" ] && break
 		sleep 0.5
 	done
 	id="$(window_id "Debug Panel")"
-	[ -n "$id" ] || { log "the debug panel never opened"; return 1; }
-	sleep 1
-	"$DRIVE" ax "$ATHINA_PID" texts --scope "Debug Panel" >"$RUN_DIR/timeline-texts.txt" 2>&1 || true
-	"$DRIVE" shot window "$id" "$RUN_DIR/timeline.png" >/dev/null 2>&1 || true
-	check "the journal holds one Started event" "1" "$(journal_events started)"
-	check "the timeline lists Started once" "1" "$(timeline_rows timeline-texts.txt Started)"
+	[ -n "$id" ] && "$DRIVE" shot window "$id" "$RUN_DIR/timeline.png" >/dev/null 2>&1
+	[ -n "$shown" ] || { log "the Debug Panel showed no Timeline header to read"; return 1; }
+	# No startup switch to TextEdit would match no row of it, so a launch with
+	# something else in front is a scenario failure rather than a check that
+	# passes by saying nothing.
+	startup="$(journal_events appSwitch TextEdit)"
+	[ "$startup" -ge 1 ] || { log "TextEdit was not in front at launch, so there is no startup app switch to count"; return 1; }
+
+	check "the Timeline lists each journaled row once" "$after" "$shown"
+	check "Started is listed once for each launch journaled" "$(journal_events started)" \
+		"$(rows_named timeline-dump.txt Started)"
+	check "the startup app switch is listed once" "$startup" \
+		"$(rows_named timeline-dump.txt "App switch · TextEdit")"
 	return 0
 }

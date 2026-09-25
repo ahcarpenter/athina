@@ -529,7 +529,7 @@ public actor Journal {
     public func recentEntries(limit: Int) throws -> [JournalEntry] {
         let observations = try recentObservations(limit: limit).map(JournalEntry.observation)
         let events = try recentEvents(limit: limit).map(JournalEntry.event)
-        return Array((observations + events).sorted { $0.timestamp > $1.timestamp }.prefix(limit))
+        return Array((observations + events).sorted(by: JournalEntry.newerFirst).prefix(limit))
     }
 
     /// Newest first, without thumbnail bytes.
