@@ -32,6 +32,8 @@ struct TranscriptRecord: Equatable {
     var at: Date
     var text: String
     var handling: String
+    /// Which recognizer heard it, or that it was typed.
+    var heardBy: TranscriptOrigin = .typed
 }
 
 /// Main-actor view of everything the pipeline and the mentor loop publish,
@@ -113,8 +115,9 @@ final class AppState {
     private(set) var talkBack: TalkBackState = .idle
     var lastCallout: CalloutRecord?
     var lastTranscript: TranscriptRecord?
-    /// Whether the system recognizer can transcribe the current locale on this Mac.
-    let speechAvailability: SpeechListener.Availability
+    /// Every recognizer's state on this Mac: SpeechAnalyzer's language assets
+    /// and the models Athina has downloaded (`SpeechModels`).
+    let speechModels: SpeechModels
 
     /// Whether the permissions window should open at launch.
     let needsPermissionsOnboarding: Bool
@@ -201,6 +204,12 @@ final class AppState {
     private var listeningLimitTask: Task<Void, Never>?
     /// Finishes the transcript after the key comes up; cancelled with the exchange.
     private var transcriptTask: Task<Void, Never>?
+    /// Told what came of the recording in progress when it was played in
+    /// (`talkBack(audioFile:)`): handed to the exchange its transcript
+    /// becomes, or told the recording was cut short.
+    private var recordingCompletion: (@MainActor (TalkBackRemote.Reply) -> Void)?
+    /// Listens for a script playing a recording into a replay (`TalkBackRemote`).
+    private var talkBackRemoteObserver: (any NSObjectProtocol)?
 
     private init() {
         clientMode = ModelClientMode(arguments: CommandLine.arguments)
@@ -238,6 +247,17 @@ final class AppState {
         journalURL = Journal.defaultURL(in: files.dataDirectory)
         store = files.store
         settingsURL = files.store.url
+        // Speech models live in the launch's own data directory. A replay's
+        // starts with copies of the ones downloaded live, which on APFS cost
+        // nothing, and never writes to the live folder.
+        let speechStore = SpeechModelStore(dataDirectory: files.dataDirectory)
+        if clientMode.isOffline, !Snapshots.isActive {
+            let copied = speechStore.seed(from: SpeechModelStore(dataDirectory: AppPaths.supportDirectory()))
+            if !copied.isEmpty {
+                AppState.log.notice("speech models copied from the live folder: \(copied.map(\.id).joined(separator: ", "), privacy: .public)")
+            }
+        }
+        speechModels = SpeechModels(store: speechStore)
         // Neither a replay nor a snapshot render needs a key, so neither reads
         // the keychain, and its per-build access prompt never blocks them.
         keyStore = clientMode.isOffline || Snapshots.isActive ? InMemoryKeyStore() : KeychainKeyStore()
@@ -248,7 +268,6 @@ final class AppState {
         permissions = status
         undeterminedPermissions = Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
         needsPermissionsOnboarding = !status.allGranted
-        speechAvailability = SpeechListener.availability()
     }
 
     /// A detached state for snapshots and previews: never starts the pipeline.
@@ -256,7 +275,7 @@ final class AppState {
         sampleWithSettings settings: SensingSettings,
         clientMode: ModelClientMode = .live,
         clockMode: ClockMode = .system,
-        speechAvailability: SpeechListener.Availability = .available(locale: "English (US)")
+        speechModels: SpeechModels = SpeechModels(sampleStates: [:])
     ) {
         store = SettingsStore(url: FileManager.default.temporaryDirectory.appendingPathComponent("athina-sample-settings.json"))
         self.clientMode = clientMode
@@ -279,7 +298,7 @@ final class AppState {
         permissions = PermissionStatus(screenRecording: true, accessibility: true)
         undeterminedPermissions = Set(Permission.optional)
         needsPermissionsOnboarding = false
-        self.speechAvailability = speechAvailability
+        self.speechModels = speechModels
         reloadKeyHint()
     }
 
@@ -302,6 +321,16 @@ final class AppState {
                 MainActor.assumeIsolated { self?.advanceClock(onRequest: request, answeringAt: replyURL) }
             }
         }
+        // A script playing a recording into a replay's listener, the same way.
+        if TalkBackRemote.listens(in: clockMode) {
+            talkBackRemoteObserver = DistributedNotificationCenter.default().addObserver(
+                forName: Notification.Name(TalkBackRemote.name), object: ClockRemote.object(for: getpid()), queue: .main
+            ) { [weak self] notification in
+                let file = TalkBackRemote.file(from: notification.userInfo)
+                let replyURL = TalkBackRemote.replyURL(from: notification.userInfo)
+                MainActor.assumeIsolated { self?.playAudioFile(onRequest: file, answeringAt: replyURL) }
+            }
+        }
         // The keychain may put up its prompt on the first read after a
         // rebuild; off the main thread it never freezes the app behind it.
         reloadKeyHint()
@@ -316,6 +345,13 @@ final class AppState {
         }
         registerPauseHotKey()
         registerPushToTalkHotKey()
+        // A download finishing, or a model checked, can turn talking back on
+        // or off, and the toast's hint says which key to hold only when it is on.
+        speechModels.onChange = { [weak self] in
+            guard let self else { return }
+            self.toast.setTalkBackKey(self.talkBackKey)
+        }
+        speechModels.refresh()
 
         // What became of the files the app kept under its old name, before
         // the journal below opens in the folder they moved to.
@@ -431,6 +467,9 @@ final class AppState {
         }
         if let clockRemoteObserver {
             DistributedNotificationCenter.default().removeObserver(clockRemoteObserver)
+        }
+        if let talkBackRemoteObserver {
+            DistributedNotificationCenter.default().removeObserver(talkBackRemoteObserver)
         }
         try? store.save(settings)
         await mentor?.stop()
@@ -639,10 +678,11 @@ final class AppState {
     /// history window, or a transcript. A non-answer (expiry or closing the
     /// toast) is recorded once and never overwrites anything: closing a
     /// re-shown toast just closes it. Tell me more is recorded once too;
-    /// re-expanding a folded toast is only a view change. Returns the task
-    /// that journals the feedback, or nil when nothing was recorded.
+    /// re-expanding a folded toast is only a view change. `heardBy` is the
+    /// recognizer that heard an answer said aloud. Returns the task that
+    /// journals the feedback, or nil when nothing was recorded.
     @discardableResult
-    func respond(to suggestionID: Int64, with feedback: SuggestionFeedback) -> Task<Void, Never>? {
+    func respond(to suggestionID: Int64, with feedback: SuggestionFeedback, heardBy: TranscriptOrigin? = nil) -> Task<Void, Never>? {
         let existing = suggestionHistory.first { $0.id == suggestionID }?.feedback
         if activeSuggestion?.id == suggestionID {
             cancelToastExpiry()
@@ -655,6 +695,7 @@ final class AppState {
         if let index = suggestionHistory.firstIndex(where: { $0.id == suggestionID }) {
             suggestionHistory[index].feedback = feedback
             suggestionHistory[index].feedbackAt = clock.date
+            suggestionHistory[index].feedbackHeardBy = heardBy
         }
         let suggestion = suggestionHistory.first { $0.id == suggestionID }
         switch feedback {
@@ -678,7 +719,7 @@ final class AppState {
             break
         }
         AppState.log.notice("suggestion \(suggestionID) feedback \(feedback.rawValue, privacy: .public)")
-        return Task { await mentor?.recordFeedback(suggestionID: suggestionID, feedback: feedback) }
+        return Task { await mentor?.recordFeedback(suggestionID: suggestionID, feedback: feedback, heardBy: heardBy) }
     }
 
     /// The most recent suggestion that was ever on screen. One that expired
@@ -968,6 +1009,11 @@ final class AppState {
         followUps.filter { $0.suggestionID == suggestionID }.sorted { $0.timestamp != $1.timestamp ? $0.timestamp < $1.timestamp : $0.id < $1.id }
     }
 
+    /// Whether the chosen recognizer can listen right now, and why not.
+    var speechAvailability: SpeechAvailability {
+        speechModels.availability(for: settings.mentor.speech)
+    }
+
     /// The talk-back hotkey for the toast's hint, once everything it needs is in place.
     var talkBackKey: String? {
         guard let key = settings.mentor.pushToTalkHotKey, speechAvailability.isAvailable, permissions.voiceGranted else { return nil }
@@ -981,9 +1027,15 @@ final class AppState {
     }
 
     /// The menu command that sets talking back up, when it is not yet usable
-    /// for a reason the person can fix.
+    /// for a reason the person can fix: no shortcut, no microphone, or a
+    /// recognizer whose model is not downloaded.
     var talkBackAction: MenuStatusAction? {
-        guard speechAvailability.isAvailable else { return nil }
+        switch speechAvailability {
+        case .unavailable(_, let fixable):
+            return fixable ? MenuStatusAction(title: "Set Up Talk Back…", destination: .settings(.general)) : nil
+        case .available:
+            break
+        }
         if settings.mentor.pushToTalkHotKey == nil {
             return MenuStatusAction(title: "Set Up Talk Back…", destination: .settings(.general))
         }
@@ -1001,9 +1053,10 @@ final class AppState {
 
     /// One line for the menu on talking back: how to do it, or what it needs.
     var talkBackLine: String {
-        if case .unavailable = speechAvailability { return "Talk back: no on-device recognition for this language" }
+        if let line = speechModels.menuLine(for: settings.mentor.speech) { return line }
+        if case .unavailable = speechAvailability { return "Talk back: \(speechModels.name(for: settings.mentor.speech)) is not ready" }
         guard let key = settings.mentor.pushToTalkHotKey else { return "Talk back: no shortcut set" }
-        if !permissions.voiceGranted { return "Talk back: needs Microphone and Speech Recognition" }
+        if !permissions.voiceGranted { return "Talk back: needs the microphone" }
         if isRunning, !pushToTalkRegistered { return "Talk back: \(key.displayString) could not be registered" }
         switch talkBack {
         case .listening: return "Talk back: listening…"
@@ -1046,43 +1099,85 @@ final class AppState {
             toast.showNote("Nothing to reply to yet: Athina has not made a suggestion.")
             return
         }
-        if case .unavailable(let reason) = speechAvailability {
+        if case .unavailable(let reason, _) = speechAvailability {
             toast.showNote(reason)
             return
         }
         refreshPermissions()
         guard permissions.voiceGranted else {
-            let missing = Permission.optional.filter { !permissions.isGranted($0) }
-            let asking = missing.contains { undeterminedPermissions.contains($0) }
-            for permission in missing {
-                requestPermission(permission)
-            }
+            let asking = undeterminedPermissions.contains(.microphone)
+            requestPermission(.microphone)
             // The system shows its own request only for a permission it has
             // never asked about; otherwise the answer is in System Settings.
             toast.showNote(asking
-                ? "Athina needs Microphone and Speech Recognition to hear you. Answer the system's request, then hold the shortcut again."
-                : "Athina needs Microphone and Speech Recognition to hear you. Choose Set Up Talk Back in the Athina menu to allow them.")
+                ? "Athina needs the microphone to hear you. Answer the system's request, then hold the shortcut again."
+                : "Athina needs the microphone to hear you. Choose Set Up Talk Back in the Athina menu to allow it.")
             return
         }
+        _ = beginListening(from: MicrophoneInput())
+    }
+
+    /// Plays a recording into the listener as if the talk-back key were held
+    /// for its length, through the chosen recognizer and every step after it:
+    /// the debug panel's Speak Audio File action and, in a replay,
+    /// `scripts/talk-back.sh`. It needs no microphone. `completion` hears
+    /// what came of it, once the transcript has been handled.
+    func talkBack(audioFile url: URL, completion: (@MainActor (TalkBackRemote.Reply) -> Void)? = nil) {
+        func refuse(_ reason: String, note: Bool = true) {
+            AppState.log.notice("audio file not played: \(reason, privacy: .public)")
+            if note { toast.showNote(reason) }
+            completion?(TalkBackRemote.Reply(heard: nil, handling: reason))
+        }
+        guard talkBack.acceptsAQuestion else { return refuse("Athina is already listening or asking.", note: false) }
+        guard activeSuggestion != nil || lastShownSuggestion != nil else {
+            return refuse("Nothing to reply to yet: Athina has not made a suggestion.")
+        }
+        if case .unavailable(let reason, _) = speechAvailability { return refuse(reason) }
+        if !beginListening(from: FileAudioInput(url: url, clock: clock), completion: completion) {
+            completion?(TalkBackRemote.Reply(heard: nil, handling: "the recording could not be played"))
+        }
+    }
+
+    /// Starts a recording from `input` with the chosen recognizer, on the
+    /// suggestion to talk to, with the 30 second cutoff; `completion` is told
+    /// what came of this recording. False when it did not start, with a note
+    /// saying why, and the toast's countdown given back.
+    private func beginListening(
+        from input: any AudioInput,
+        completion: (@MainActor (TalkBackRemote.Reply) -> Void)? = nil
+    ) -> Bool {
         guard mode.isActive else {
             toast.showNote("Athina is \(mode.label.lowercased()), so it is not listening.")
-            return
+            return false
         }
-        guard let suggestion = suggestionToTalkTo() else { return }
+        guard let backend = speechModels.backend(for: settings.mentor.speech) else {
+            if case .unavailable(let reason, _) = speechAvailability {
+                toast.showNote(reason)
+            } else {
+                toast.showNote("\(speechModels.name(for: settings.mentor.speech)) is not ready yet. Hold the shortcut again in a moment.")
+            }
+            return false
+        }
+        guard let suggestion = suggestionToTalkTo() else { return false }
         do {
-            try listener.start { [weak self] partial in
+            try listener.start(backend: backend, input: input) { [weak self] partial in
                 guard let self, case .listening = self.talkBack else { return }
                 self.setTalkBack(.listening(partial: partial))
+            } onInputEnded: { [weak self] in
+                // A recording played in ends by itself, the way a key comes up.
+                self?.pushToTalkReleased()
             }
         } catch {
             AppState.log.error("listening failed to start: \(String(describing: error), privacy: .public)")
             toast.showNote("Could not start listening: \(error).")
-            return
+            settlePress(nil, for: suggestion)
+            return false
         }
-        AppState.log.notice("listening for suggestion \(suggestion.id)")
+        AppState.log.notice("listening for suggestion \(suggestion.id) with \(backend.origin.label, privacy: .public)")
         if case .waiting = talkBack {
             Task { await mentor?.withdrawFollowUp() }
         }
+        recordingCompletion = completion
         setTalkBack(.listening(partial: ""))
         let clock = clock
         listeningLimitTask = Task { [weak self] in
@@ -1090,6 +1185,7 @@ final class AppState {
             guard !Task.isCancelled, let self, case .listening = self.talkBack else { return }
             self.pushToTalkReleased()
         }
+        return true
     }
 
     /// The suggestion a reply is about: the toast that is up, or the most
@@ -1128,21 +1224,23 @@ final class AppState {
         if case .waiting = talkBack {
             Task { await mentor?.withdrawFollowUp() }
         }
-        Task { await act(on: text, for: suggestion) }
+        Task { await act(on: SpeechListener.Heard(text: text, failure: nil, origin: .typed), for: suggestion) }
     }
 
-    /// The key came up: finish the transcript and act on it.
+    /// The key came up: finish the transcript and act on it. A recording ends
+    /// once: the key coming up after the cutoff, or a played-in file running
+    /// out meanwhile, leaves the finish already under way to hear it.
     private func pushToTalkReleased() {
-        guard case .listening = talkBack else { return }
+        guard case .listening = talkBack, transcriptTask == nil else { return }
         listeningLimitTask?.cancel()
         listeningLimitTask = nil
         let suggestion = activeSuggestion
         transcriptTask = Task { [weak self] in
             guard let self else { return }
-            let text = await self.listener.finish()
+            let heard = await self.listener.finish()
             guard !Task.isCancelled else { return }
             self.transcriptTask = nil
-            await self.handleTranscript(text, for: suggestion)
+            await self.handleTranscript(heard, for: suggestion)
         }
     }
 
@@ -1167,6 +1265,9 @@ final class AppState {
             } else {
                 endHold()
             }
+            let completion = recordingCompletion
+            recordingCompletion = nil
+            completion?(TalkBackRemote.Reply(heard: nil, handling: "cut short"))
         case .waiting, .thinking:
             Task { await mentor?.withdrawFollowUp() }
         case .idle:
@@ -1174,13 +1275,16 @@ final class AppState {
         }
     }
 
-    private func handleTranscript(_ text: String?, for suggestion: Suggestion?) async {
+    private func handleTranscript(_ heard: SpeechListener.Heard?, for suggestion: Suggestion?) async {
         guard case .listening = talkBack else { return }
-        guard let suggestion, activeSuggestion?.id == suggestion.id else {
-            setTalkBack(.idle)
+        guard let suggestion, activeSuggestion?.id == suggestion.id, let heard else {
+            cancelTalkBack()
             return
         }
-        await act(on: text, for: suggestion)
+        let completion = recordingCompletion
+        recordingCompletion = nil
+        let reply = await act(on: heard, for: suggestion)
+        completion?(reply)
     }
 
     /// What a transcript, heard or typed, does: one of the toast's answers, or
@@ -1188,40 +1292,60 @@ final class AppState {
     /// the toast a talked-to one that stays up, and holds new suggestions,
     /// until it is closed. A press that heard nothing is not an exchange: the
     /// toast gets back whatever countdown it had, and nothing is held for it.
-    private func act(on text: String?, for suggestion: Suggestion) async {
+    /// The recognizer that heard it is journaled with the exchange. Returns
+    /// what came of this transcript, once it has been handled.
+    @discardableResult
+    private func act(on heard: SpeechListener.Heard, for suggestion: Suggestion) async -> TalkBackRemote.Reply {
+        let text = heard.text
         let match = text.flatMap(TranscriptMatcher.match)
+        let origin = heard.origin
         setTalkBack(.idle)
         settlePress(match, for: suggestion)
         guard let text, let match else {
-            lastTranscript = TranscriptRecord(at: clock.date, text: text ?? "", handling: "nothing heard")
-            toast.showNote("Athina did not catch that.")
-            return
+            lastTranscript = TranscriptRecord(at: clock.date, text: text ?? "", handling: "nothing heard", heardBy: origin)
+            if let failure = heard.failure {
+                toast.showNote("Athina did not catch that: \(failure)")
+            } else {
+                toast.showNote("Athina did not catch that.")
+            }
+            return reply(heard: text, handling: "nothing heard", origin: origin)
         }
         switch match {
         case .answer(let feedback):
-            lastTranscript = TranscriptRecord(at: clock.date, text: text, handling: "answered: \(feedback.label)")
+            let handling = "answered: \(feedback.label)"
+            lastTranscript = TranscriptRecord(at: clock.date, text: text, handling: handling, heardBy: origin)
             AppState.log.notice("transcript answered \(feedback.rawValue, privacy: .public)")
             if feedback == .tellMeMore { toast.expand() }
-            respond(to: suggestion.id, with: feedback)
+            respond(to: suggestion.id, with: feedback, heardBy: origin)
             if activeSuggestion?.id == suggestion.id {
                 Task { await mentor?.setTalkingBack(true) }
             }
+            return reply(heard: text, handling: handling, origin: origin)
         case .question(let question):
-            lastTranscript = TranscriptRecord(at: clock.date, text: text, handling: "asked the mentor")
+            lastTranscript = TranscriptRecord(at: clock.date, text: text, handling: "asked the mentor", heardBy: origin)
             AppState.log.notice("transcript asked the mentor")
             setTalkBack(.thinking(question: question))
             guard let mentor else {
                 setTalkBack(.idle)
-                return
+                return reply(heard: text, handling: "the mentor loop is not running", origin: origin)
             }
-            guard let followUp = await mentor.askFollowUp(about: suggestion, question: question) else { return }
-            upsert(followUp)
-            guard activeSuggestion?.id == suggestion.id,
+            let followUp = await mentor.askFollowUp(about: suggestion, question: question, heardBy: origin)
+            if let followUp { upsert(followUp) }
+            let asked = reply(
+                heard: text, handling: "asked the mentor", origin: origin,
+                answer: followUp?.answer ?? followUp?.error ?? "withdrawn"
+            )
+            guard followUp != nil, activeSuggestion?.id == suggestion.id,
                   talkBack == .thinking(question: question) || talkBack == .waiting(question: question)
-            else { return }
+            else { return asked }
             setTalkBack(.idle)
             toast.setExchange(exchange(for: suggestion.id))
+            return asked
         }
+    }
+
+    private func reply(heard: String?, handling: String, origin: TranscriptOrigin, answer: String? = nil) -> TalkBackRemote.Reply {
+        TalkBackRemote.Reply(heard: heard, handling: handling, backend: origin.journalSource, model: origin.journalModel, answer: answer)
     }
 
     private func upsert(_ followUp: FollowUp) {
@@ -1315,6 +1439,26 @@ final class AppState {
         clockMovedAhead = clockControl.movedAhead.timeInterval
         AppState.log.notice("clock moved ahead \(ClockInterval.description(of: seconds), privacy: .public): \(self.clockLog, privacy: .public)")
         return true
+    }
+
+    /// A replay heard `scripts/talk-back.sh`: plays the recording into the
+    /// listener and answers once its transcript has been handled.
+    private func playAudioFile(onRequest request: Result<URL, ReplayRemote.Refusal>, answeringAt replyURL: URL?) {
+        func answer(_ reply: TalkBackRemote.Reply) {
+            do {
+                try ReplayRemote.write(try reply.encoded(), at: replyURL)
+            } catch {
+                AppState.log.error("talk-back request not answered: \(String(describing: error), privacy: .public)")
+            }
+        }
+        switch request {
+        case .success(let url):
+            AppState.log.notice("talk-back request: playing \(url.lastPathComponent, privacy: .public)")
+            talkBack(audioFile: url) { reply in answer(reply) }
+        case .failure(let refusal):
+            AppState.log.error("talk-back request refused: \(refusal.reason, privacy: .public)")
+            answer(TalkBackRemote.Reply(heard: nil, handling: refusal.reason))
+        }
     }
 
     /// Moves a replay's clock ahead for another process (`ClockRemote`), and

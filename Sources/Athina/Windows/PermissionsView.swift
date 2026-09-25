@@ -21,7 +21,7 @@ struct PermissionsView: View {
                     Text("Athina needs two permissions")
                         .font(.title2.weight(.semibold))
                         .accessibilityAddTraits(.isHeader)
-                    Text("Athina watches what you are doing so it can understand your work. What it senses stays on this Mac, in a journal you control. It connects only to api.anthropic.com, and only after you save an API key.")
+                    Text("Athina watches what you are doing so it can understand your work. What it senses stays on this Mac, in a journal you control. It connects to api.anthropic.com only after you save an API key, and to Hugging Face only when you download a speech model.")
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -40,7 +40,7 @@ struct PermissionsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Optional, for talking back")
                         .accessibilityAddTraits(.isHeader)
-                    Text("Hold the talk-back shortcut, set in General settings, to answer or ask about a suggestion by voice. Everything else works without these.")
+                    Text("Hold the talk-back shortcut, set in General settings, to answer or ask about a suggestion by voice. Everything else works without it.")
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -63,7 +63,7 @@ struct PermissionsView: View {
         .frame(width: 580)
         .task {
             guard !Snapshots.isActive else { return }
-            AppState.log.notice("permissions window opened, granted: screen \(state.permissions.screenRecording) accessibility \(state.permissions.accessibility) microphone \(state.permissions.microphone) speech \(state.permissions.speechRecognition)")
+            AppState.log.notice("permissions window opened, granted: screen \(state.permissions.screenRecording) accessibility \(state.permissions.accessibility) microphone \(state.permissions.microphone)")
             // Grants made in System Settings do not notify apps; poll while visible.
             while !Task.isCancelled {
                 state.refreshPermissions()
@@ -141,7 +141,6 @@ private struct PermissionRow: View {
         case .screenRecording: "rectangle.dashed.badge.record"
         case .accessibility: "accessibility"
         case .microphone: "mic"
-        case .speechRecognition: "waveform"
         }
     }
 }

@@ -180,7 +180,7 @@ private struct SuggestionDetail: View {
                     detailRow("Confidence", String(format: "%.0f%%", suggestion.confidence * 100))
                     detailRow("Model", "\(ModelCatalog.displayName(for: suggestion.model)), prompt v\(suggestion.promptVersion)")
                     if let feedback = suggestion.feedback {
-                        detailRow("Feedback", feedback.label + (suggestion.feedbackAt.map { " at \(Formatting.dayAndTime($0))" } ?? ""))
+                        detailRow("Feedback", feedbackText(feedback))
                     }
                     if let region = suggestion.region {
                         detailRow("Callout", "\(suggestion.calloutShown ? "Shown" : "Not shown"): \"\(region.note)\" at \(Formatting.rect(region.rect)) px of the frame")
@@ -199,6 +199,12 @@ private struct SuggestionDetail: View {
                         ForEach(exchange) { entry in
                             VStack(alignment: .leading, spacing: 4) {
                                 exchangeLine("You", entry.question, at: entry.timestamp)
+                                if let origin = entry.heardBy {
+                                    Text(Self.source(origin))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.leading, 58)
+                                }
                                 if let answer = entry.answer {
                                     exchangeLine("Athina", answer, at: nil)
                                 } else {
@@ -220,6 +226,26 @@ private struct SuggestionDetail: View {
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    /// How a reply reached Athina: "Heard by OpenAI Whisper Base, English",
+    /// or "Typed in the debug panel".
+    static func source(_ origin: TranscriptOrigin) -> String {
+        switch origin {
+        case .typed: "Typed in the debug panel"
+        case .heard: "Heard by \(origin.label)"
+        }
+    }
+
+    /// "Tell Me More at 14:02, heard by OpenAI Whisper Base, English".
+    private func feedbackText(_ feedback: SuggestionFeedback) -> String {
+        var text = feedback.label
+        if let at = suggestion.feedbackAt { text += " at \(Formatting.dayAndTime(at))" }
+        if let origin = suggestion.feedbackHeardBy {
+            let source = Self.source(origin)
+            text += ", " + source.prefix(1).lowercased() + source.dropFirst()
+        }
+        return text
     }
 
     private func exchangeLine(_ speaker: String, _ text: String, at time: Date?) -> some View {

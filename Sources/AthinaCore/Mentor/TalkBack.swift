@@ -90,8 +90,9 @@ public enum TranscriptMatcher {
 }
 
 /// What a press of the talk-back key means for the toast it was about,
-/// once the recording has ended: by a transcript, by nothing being heard, or
-/// by being cut short (pausing, or bringing a toast back mid-recording).
+/// once the recording has ended: by a transcript, by nothing being heard, by
+/// being cut short (pausing, or bringing a toast back mid-recording), or by
+/// failing to start.
 ///
 /// A toast counts as talked to only once a transcript was matched to an
 /// answer or a question was asked; from then on it stays up, holding new
@@ -107,9 +108,9 @@ public enum TalkBackPress {
         case notAnExchange(countdown: TimeInterval?)
     }
 
-    /// `match` is nil when nothing usable was heard or the recording was cut
-    /// short; `countdownRemaining` is what was left of the toast's countdown
-    /// when the key went down, nil when it had none.
+    /// `match` is nil when nothing usable was heard, the recording was cut
+    /// short, or it could not start; `countdownRemaining` is what was left of
+    /// the toast's countdown when the key went down, nil when it had none.
     public static func outcome(match: TranscriptMatcher.Match?, toastTalkedTo: Bool, countdownRemaining: TimeInterval?) -> Outcome {
         if match != nil || toastTalkedTo { return .talkedTo }
         return .notAnExchange(countdown: countdownRemaining)
@@ -201,6 +202,9 @@ public struct FollowUp: Codable, Equatable, Sendable, Identifiable {
     public var error: String?
     public var model: String
     public var promptVersion: Int
+    /// Which recognizer heard the question, or that it was typed; nil for
+    /// an exchange journaled before this was kept.
+    public var heardBy: TranscriptOrigin?
 
     public init(
         id: Int64 = 0,
@@ -210,7 +214,8 @@ public struct FollowUp: Codable, Equatable, Sendable, Identifiable {
         answer: String? = nil,
         error: String? = nil,
         model: String,
-        promptVersion: Int
+        promptVersion: Int,
+        heardBy: TranscriptOrigin? = nil
     ) {
         self.id = id
         self.suggestionID = suggestionID
@@ -220,5 +225,6 @@ public struct FollowUp: Codable, Equatable, Sendable, Identifiable {
         self.error = error
         self.model = model
         self.promptVersion = promptVersion
+        self.heardBy = heardBy
     }
 }
