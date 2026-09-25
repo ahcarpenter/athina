@@ -450,8 +450,14 @@ TEXT
 	local already
 	already="$(pgrep -x TextEdit || true)"
 	open -a TextEdit "$first" "$second" || { log "could not open TextEdit"; return 1; }
-	sleep 3
-	TEXTEDIT_PID="$(pgrep -n -x TextEdit || true)"
+	# TextEdit has been seen to take over 20 seconds to come up on a busy Mac,
+	# so this waits for the document's window rather than a fixed time: a run
+	# that went on without it would watch whatever else was in front.
+	for _ in $(seq 1 30); do
+		TEXTEDIT_PID="$(pgrep -n -x TextEdit || true)"
+		[ -n "$TEXTEDIT_PID" ] && "$DRIVE" windows "$TEXTEDIT_PID" 2>/dev/null | grep -q 'name="notes.txt' && break
+		sleep 1
+	done
 	[ -n "$TEXTEDIT_PID" ] || { log "TextEdit did not start"; return 1; }
 	if [ -n "$already" ]; then
 		# The owner had TextEdit open and `open -a` reused it. Quitting it
@@ -488,6 +494,12 @@ stage_excluded_app() {
 raise_window() {
 	"$DRIVE" raise "$1" "${2:-}" >>"$RUN_DIR/transcript.log" 2>&1 || log "could not raise ${2:-a window} of pid $1"
 	return 0
+}
+
+# The id of the first window whose name starts with $1, empty when none is open.
+window_id() {
+	"$DRIVE" windows "$ATHINA_PID" \
+		| awk -v want="$1" 'index($0, "name=\"" want) {sub("id=", "", $1); print $1; exit}' || echo ""
 }
 
 # --- The menu bar -------------------------------------------------------------
