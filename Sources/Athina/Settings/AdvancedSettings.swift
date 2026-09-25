@@ -4,7 +4,8 @@ import SwiftUI
 
 /// The Advanced pane: tools for looking inside Athina, off until the person
 /// turns them on, as Safari's Advanced pane offers its features for web
-/// developers. The debug panel opens from here and nowhere else in the app
+/// developers. Turned on, the debug panel opens from here and from the menu
+/// bar menu's Debug Panel command, as Safari's switch adds its Develop menu
 /// (`DebugPanelAccess`).
 struct AdvancedSettings: View {
     @Environment(AppState.self) private var state

@@ -26,6 +26,7 @@ enum Snapshots {
         let atCap = AppState.sampleAtContextCap()
         let noSpeech = AppState.sample(speechAvailability: .unavailable(reason: "On-device speech recognition is not available for Welsh, so talking back is off."))
         let noUnderstanding = AppState.sampleUnderstanding(.none)
+        let debugPanelOn = AppState.sample(showDebugPanel: true)
         let pane = CGSize(width: SettingsView.paneWidth, height: 640)
         // The debug panel's Now pane is this wide, so the card wraps as it does there.
         func card(_ height: CGFloat) -> CGSize { CGSize(width: 340, height: height) }
@@ -61,7 +62,7 @@ enum Snapshots {
             ("settings-privacy", pane, AnyView(PrivacySettings().formStyle(.grouped)), state),
             // Off, as every install starts, and enabled, with its button live.
             ("settings-advanced", CGSize(width: SettingsView.paneWidth, height: 180), AnyView(AdvancedSettings().formStyle(.grouped)), state),
-            ("settings-advanced-on", CGSize(width: SettingsView.paneWidth, height: 180), AnyView(AdvancedSettings().formStyle(.grouped)), AppState.sample(showDebugPanel: true)),
+            ("settings-advanced-on", CGSize(width: SettingsView.paneWidth, height: 180), AnyView(AdvancedSettings().formStyle(.grouped)), debugPanelOn),
             // The side-effect suggestion, so the goal it was judged against shows.
             ("history", CGSize(width: 860, height: 520), AnyView(HistoryView(initialSelection: 5)), state),
             ("history-empty", CGSize(width: 860, height: 520), AnyView(HistoryView()), empty),

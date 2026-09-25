@@ -78,10 +78,11 @@ public struct SensingSettings: Codable, Equatable, Sendable {
 
     // MARK: Advanced
 
-    /// Settings > Advanced > Enable debug panel: whether that pane offers the
-    /// debug panel. Off until the person turns it on, including on an install
-    /// from before it existed; a replay or recording opens the panel with
-    /// `--open debug` whatever this says (`DebugPanelAccess`).
+    /// Settings > Advanced > Enable debug panel: whether that pane and the menu
+    /// bar menu offer the debug panel. Off until the person turns it on,
+    /// including on an install from before it existed; a replay or recording
+    /// opens the panel with `--open debug` whatever this says
+    /// (`DebugPanelAccess`).
     public var showDebugPanel = false
 
     public init() {}
