@@ -7,7 +7,9 @@
 # A run clicks, types, moves focus, reads the menu bar, and captures the
 # screen, and so does every other checkout's run: two at once collide, and
 # each reports the other's clicks as its own failures. So every command that
-# touches the screen or the shared warm home first takes the screen lock.
+# touches the screen or the shared warm home takes the screen lock first: run
+# for each scenario, and a real-screen scenario only once input is idle, so
+# other checkouts' runs go between scenarios and none waits on someone typing.
 #
 # A run also builds its checkout's app bundle and drive tool, before it takes
 # the screen lock so no other checkout waits on the build, and then runs from
@@ -65,11 +67,22 @@ lock_var() {
 
 lock_set() { printf -v "$1$2" '%s' "$3"; }
 
-# The commands that launch the app, drive input, or change the shared warm
-# home. list, doctor, and journal touch none of them and never wait.
+# The commands that take the screen lock for as long as they run: those that
+# launch the app or change the shared warm home. run takes it for each
+# scenario instead (screen_lock_per_scenario), so other checkouts' runs can
+# go between them. list, doctor, and journal touch none of them and never wait.
 screen_lock_needed() {
 	case "$1" in
-	run | warm | clean) return 0 ;;
+	warm | clean) return 0 ;;
+	*) return 1 ;;
+	esac
+}
+
+# The commands that take the screen lock once for each scenario they run, and
+# give it back between them.
+screen_lock_per_scenario() {
+	case "$1" in
+	run) return 0 ;;
 	*) return 1 ;;
 	esac
 }
@@ -263,6 +276,43 @@ lock_acquire() {
 	lock_set "$lock" _OWNER "$$"
 	lock_note "$lock" "$what"
 	return 0
+}
+
+# Take the lock once the keyboard and mouse have been quiet for `need` seconds,
+# as the command `idle` prints them, waiting up to `limit` seconds for that
+# (900 unless given). A run that needs a quiet Mac waits for one before it
+# holds the screen, so no other checkout waits behind it while someone is at
+# the Mac. When input came back while the lock was being waited for, the lock
+# is given back and the wait for quiet starts again; a lock a parent holds
+# cannot be given back, so it is kept. Returns 75, as a lock wait that gave up
+# does, when the Mac never went quiet.
+lock_acquire_when_idle() {
+	local lock="$1" what="$2" timeout="$3" need="$4" idle="$5" limit="${6:-900}" label status waited seconds
+	label="$(lock_var "$lock" _LABEL)"
+	while :; do
+		waited=0
+		while :; do
+			seconds="$("$idle")"
+			[ "${seconds:-0}" -ge "$need" ] && break
+			if [ "$waited" -ge "$limit" ]; then
+				lock_say "input never went idle for ${need}s in ${limit}s, so the $label was not taken"
+				return 75
+			fi
+			[ "$waited" = 0 ] && lock_say "waiting for ${need}s of idle input before taking the $label"
+			sleep 1
+			waited=$((waited + 1))
+		done
+		lock_say "input idle for ${seconds}s"
+		status=0
+		lock_acquire "$lock" "$what" "$timeout" || status=$?
+		[ "$status" = 0 ] || return "$status"
+		seconds="$("$idle")"
+		if [ "${seconds:-0}" -ge "$need" ] || [ "$(lock_var "$lock" _STATE)" != 1 ]; then
+			return 0
+		fi
+		lock_say "input came back while this run waited for the $label (idle ${seconds}s); giving it back until the Mac is quiet again"
+		lock_release "$lock"
+	done
 }
 
 # Take this checkout's lock, which comes before the screen lock. Under a screen
