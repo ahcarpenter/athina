@@ -1,14 +1,13 @@
 import Foundation
 
-/// What a reviewer looks at when snapshots drift: for each one, the approved
-/// image, the new render and where they differ, at real size, in a folder CI
-/// uploads, with a page that shows them side by side and a Markdown table for
-/// the job summary.
+/// What a reviewer looks at when snapshots differ: for each one, its two
+/// images and where they differ, at real size, in a folder CI uploads, with a
+/// page that shows them side by side and a Markdown table for the job summary.
 public enum SnapshotReport {
     /// Writes `index.html`, `summary.md`, and a folder per drifted snapshot
     /// holding `before.png`, `after.png` and, when both have one size,
     /// `diff.png`. Replaces whatever `directory` held.
-    public static func write(_ comparison: SnapshotComparison, baseline: URL, actual: URL, to directory: URL, heading: String) throws {
+    public static func write(_ comparison: SnapshotComparison, baseline: URL, actual: URL, to directory: URL) throws {
         let files = FileManager.default
         if files.fileExists(atPath: directory.path) {
             try files.removeItem(at: directory)
@@ -30,41 +29,43 @@ public enum SnapshotReport {
                     .writePNG(to: folder.appendingPathComponent("diff.png"))
             }
         }
-        try html(comparison, heading: heading).write(to: directory.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
-        try markdown(comparison, heading: heading).write(to: directory.appendingPathComponent("summary.md"), atomically: true, encoding: .utf8)
+        try html(comparison).write(to: directory.appendingPathComponent("index.html"), atomically: true, encoding: .utf8)
+        try markdown(comparison).write(to: directory.appendingPathComponent("summary.md"), atomically: true, encoding: .utf8)
     }
 
-    public static func markdown(_ comparison: SnapshotComparison, heading: String) -> String {
-        var lines = ["### \(heading)", ""]
+    public static func markdown(_ comparison: SnapshotComparison) -> String {
+        let kind = comparison.kind
+        var lines = ["### \(kind.heading)", ""]
         let drift = comparison.drift
         if drift.isEmpty {
-            lines.append("All \(comparison.results.count) snapshots match their baselines (tolerance \(comparison.tolerance) of 255 per channel).")
+            lines.append("All \(comparison.results.count) snapshots \(kind.agree) (tolerance \(comparison.tolerance) of 255 per channel).")
             return lines.joined(separator: "\n") + "\n"
         }
-        lines.append("\(drift.count) of \(comparison.results.count) snapshots drifted (tolerance \(comparison.tolerance) of 255 per channel). Before, after and difference images are in the report artifact.")
+        lines.append("\(drift.count) of \(comparison.results.count) snapshots \(kind.differ) (tolerance \(comparison.tolerance) of 255 per channel). Each one's two images and their difference are in the report artifact.")
         lines.append("")
         lines.append("| Snapshot | What changed |")
         lines.append("| --- | --- |")
         for result in drift {
-            lines.append("| `\(result.name)` | \(result.status.summary) |")
+            lines.append("| `\(result.name)` | \(result.status.summary(in: kind)) |")
         }
         return lines.joined(separator: "\n") + "\n"
     }
 
-    public static func html(_ comparison: SnapshotComparison, heading: String) -> String {
+    public static func html(_ comparison: SnapshotComparison) -> String {
+        let kind = comparison.kind
         let drift = comparison.drift
-        var body = "<h1>\(escape(heading))</h1>\n"
+        var body = "<h1>\(escape(kind.heading))</h1>\n"
         if drift.isEmpty {
-            body += "<p>All \(comparison.results.count) snapshots match their baselines.</p>\n"
+            body += "<p>All \(comparison.results.count) snapshots \(kind.agree).</p>\n"
         } else {
-            body += "<p>\(drift.count) of \(comparison.results.count) snapshots drifted, tolerance \(comparison.tolerance) of 255 per channel. Changed pixels are red in the difference image.</p>\n"
+            body += "<p>\(drift.count) of \(comparison.results.count) snapshots \(kind.differ), tolerance \(comparison.tolerance) of 255 per channel. Changed pixels are red in the difference image.</p>\n"
         }
         for result in drift {
             let name = escape(result.name)
-            body += "<section>\n<h2>\(name)</h2>\n<p>\(escape(result.status.summary))</p>\n<div class=\"row\">\n"
+            body += "<section>\n<h2>\(name)</h2>\n<p>\(escape(result.status.summary(in: kind)))</p>\n<div class=\"row\">\n"
             var columns: [(String, String)] = []
-            if result.status != .added { columns.append(("Before (approved)", "before.png")) }
-            if result.status != .removed { columns.append(("After (this render)", "after.png")) }
+            if result.status != .added { columns.append((kind.captions.before, "before.png")) }
+            if result.status != .removed { columns.append((kind.captions.after, "after.png")) }
             if case .changed = result.status { columns.append(("Difference", "diff.png")) }
             for (title, file) in columns {
                 body += "<figure><figcaption>\(title)</figcaption><img src=\"\(name)/\(file)\" alt=\"\(name) \(title)\"></figure>\n"

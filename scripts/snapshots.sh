@@ -53,16 +53,14 @@ case "$command" in
     render "$OUT/render-again"
     # Two renders of one build must be the same picture, by the rule the
     # baselines are held to, or a baseline could never be trusted to hold still.
-    if ! diff_tool compare "$OUT/render-first" "$OUT/render-again" \
-      --report "$OUT/determinism" --heading "Two renders of one build that differ"; then
+    if ! diff_tool agree "$OUT/render-first" "$OUT/render-again" --report "$OUT/determinism"; then
       echo "snapshots: two renders of the same build differ; the renderer is not deterministic (see build/snapshots/determinism)" >&2
       exit 1
     fi
     rm -rf "$OUT/determinism"
     git -C "$ROOT" rev-parse 'HEAD^{tree}' > "$OUT/render-first/source-tree"
     mv "$OUT/render-first" "$OUT/render"
-    diff_tool compare "$BASELINES" "$OUT/render" \
-      --report "$OUT/report" --heading "UI snapshots against the approved baselines"
+    diff_tool compare "$BASELINES" "$OUT/render" --report "$OUT/report"
     ;;
 
   approve)

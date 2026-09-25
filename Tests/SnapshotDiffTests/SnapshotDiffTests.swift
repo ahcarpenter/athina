@@ -149,24 +149,46 @@ import Testing
         let actual = try directory("actual", ["changed-light.png": Self.darker, "added-light.png": Self.grey])
         let comparison = try SnapshotComparison.compare(baseline: baseline, actual: actual)
         let report = root.appendingPathComponent("report", isDirectory: true)
-        try SnapshotReport.write(comparison, baseline: baseline, actual: actual, to: report, heading: "UI <snapshots>")
+        try SnapshotReport.write(comparison, baseline: baseline, actual: actual, to: report)
 
         func exists(_ path: String) -> Bool { FileManager.default.fileExists(atPath: report.appendingPathComponent(path).path) }
         #expect(exists("changed-light/before.png") && exists("changed-light/after.png") && exists("changed-light/diff.png"))
         #expect(exists("added-light/after.png") && !exists("added-light/before.png") && !exists("added-light/diff.png"))
         #expect(exists("removed-light/before.png") && !exists("removed-light/after.png"))
         let html = try String(contentsOf: report.appendingPathComponent("index.html"), encoding: .utf8)
-        #expect(html.contains("UI &lt;snapshots&gt;"))
+        #expect(html.contains("<h1>UI snapshots against the approved baselines</h1>"))
+        #expect(html.contains("Before (approved)") && html.contains("After (this render)"))
         #expect(html.contains("changed-light/diff.png"))
         let markdown = try String(contentsOf: report.appendingPathComponent("summary.md"), encoding: .utf8)
         #expect(markdown.contains("3 of 3 snapshots drifted"))
         #expect(markdown.contains("| `removed-light` | no longer rendered, baseline still committed |"))
     }
 
+    @Test func twoRendersThatDifferAreReportedAsRendersNotAsBaselines() throws {
+        let first = try directory("first", ["changed-light.png": Self.grey, "first-only-light.png": Self.grey])
+        let second = try directory("second", ["changed-light.png": Self.darker, "second-only-light.png": Self.grey])
+        let comparison = try SnapshotComparison.compare(baseline: first, actual: second, kind: .renders)
+        let report = root.appendingPathComponent("determinism", isDirectory: true)
+        try SnapshotReport.write(comparison, baseline: first, actual: second, to: report)
+
+        let html = try String(contentsOf: report.appendingPathComponent("index.html"), encoding: .utf8)
+        let markdown = try String(contentsOf: report.appendingPathComponent("summary.md"), encoding: .utf8)
+        #expect(html.contains("<h1>Two renders of one build</h1>"))
+        #expect(html.contains("First render") && html.contains("Second render"))
+        #expect(markdown.contains("3 of 3 snapshots differ between the two renders"))
+        #expect(markdown.contains("| `first-only-light` | only in the first render |"))
+        #expect(markdown.contains("| `second-only-light` | only in the second render |"))
+        for text in [html, markdown] {
+            #expect(!text.contains("approved") && !text.contains("baseline"))
+        }
+    }
+
     @Test func aMatchingSetSaysSo() throws {
         let baseline = try directory("baseline", ["toast-dark.png": Self.grey])
         let comparison = try SnapshotComparison.compare(baseline: baseline, actual: baseline)
         #expect(comparison.matches)
-        #expect(SnapshotReport.markdown(comparison, heading: "UI snapshots").contains("All 1 snapshots match"))
+        #expect(SnapshotReport.markdown(comparison).contains("All 1 snapshots match their baselines"))
+        let renders = try SnapshotComparison.compare(baseline: baseline, actual: baseline, kind: .renders)
+        #expect(SnapshotReport.markdown(renders).contains("All 1 snapshots are the same picture in both renders"))
     }
 }
