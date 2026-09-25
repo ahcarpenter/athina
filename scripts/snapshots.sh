@@ -19,6 +19,12 @@
 #                   make the smoke test's references match the sets CI run <run>
 #                   published, every shard's together, by default the newest CI
 #                   run of HEAD
+#   smoke-local [<base>]
+#                   what local validation runs: draw the smoke set on this Mac
+#                   at HEAD and at <base> (by default HEAD's merge-base with
+#                   origin/main) and report every screen that changed, was
+#                   added or was removed; fails only when a snapshot could not
+#                   be drawn
 #
 # Output lands in build/snapshots: render-first/ and render-again/ hold the two
 # renders; render/ holds the first once both finished and agree, with
@@ -34,6 +40,12 @@
 # drift/ holds the reference, the render and the difference of each snapshot
 # that drifted; summary.md names them.
 #
+# smoke-local writes the same to build/snapshots-smoke-local/pass-<n>, one
+# folder a pass, with the base commit's render as each reference, and
+# summary.md; it keeps the base renders in
+# ~/Library/Caches/athina-snapshots-smoke/<commit>, so every later run off the
+# same base draws only HEAD.
+#
 # ATHINA_APP names the app to render with (build/Athina.app by default).
 # Exit: 0 match, 1 drift or renders that differ, 2 bad usage or a step that
 # could not run.
@@ -46,7 +58,38 @@ SMOKE_REFERENCES="$ROOT/Tests/UISnapshotsSmokeTests/__Snapshots__/UISnapshotsSmo
 SMOKE_OUT="$ROOT/build/snapshots-smoke"
 APP="${ATHINA_APP:-$ROOT/build/Athina.app}"
 
+SMOKE_LOCAL_OUT="$ROOT/build/snapshots-smoke-local"
+SMOKE_CACHE="$HOME/Library/Caches/athina-snapshots-smoke"
+# The longest a smoke test run may take, its build included, before it counts
+# as hung.
+SMOKE_TIME_LIMIT=1800
+
 die() { echo "snapshots: $*" >&2; exit 2; }
+
+# Runs the smoke test in the package at <root>: in UTC, as `--snapshot` renders,
+# comparing with the images in <against> when that is set and writing to <out>
+# when that is. Stopped, the whole process group, after SMOKE_TIME_LIMIT.
+smoke_test() {
+  local root="$1" shard="$2" against="$3" out="$4" waited=0 pid
+  set -m
+  (cd "$root" && TZ=UTC SNAPSHOT_ARTIFACTS="${out:-$root/build/snapshots-smoke}/artifacts" \
+    UI_SNAPSHOTS_SMOKE_SHARD="$shard" UI_SNAPSHOTS_SMOKE_AGAINST="$against" \
+    UI_SNAPSHOTS_SMOKE_OUTPUT="$out" \
+    swift test --traits UISnapshotsSmoke --filter UISnapshotsSmokeTests) &
+  pid=$!
+  set +m
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$waited" -ge "$SMOKE_TIME_LIMIT" ]; then
+      echo "snapshots: the smoke test in $root ran past ${SMOKE_TIME_LIMIT}s; stopping it" >&2
+      kill -TERM -- "-$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      return 1
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  wait "$pid"
+}
 
 diff_tool() {
   (cd "$ROOT" && swift build -c release --product snapshot-diff >&2) || die "could not build snapshot-diff"
@@ -143,8 +186,7 @@ case "$command" in
     # test reads the shard from UI_SNAPSHOTS_SMOKE_SHARD, since swift test
     # passes a test no arguments.
     status=0
-    (cd "$ROOT" && SNAPSHOT_ARTIFACTS="$SMOKE_OUT/artifacts" UI_SNAPSHOTS_SMOKE_SHARD="$shard" \
-      swift test --traits UISnapshotsSmoke --filter UISnapshotsSmokeTests) || status=1
+    smoke_test "$ROOT" "$shard" "" "" || status=1
     if [ -d "$SMOKE_OUT/references" ]; then
       git -C "$ROOT" rev-parse 'HEAD^{tree}' > "$SMOKE_OUT/references/source-tree"
       if [ -n "$shard" ]; then echo "$shard" > "$SMOKE_OUT/references/shard"; fi
@@ -208,7 +250,113 @@ case "$command" in
     echo "snapshots: review the changed images (git status Tests/UISnapshotsSmokeTests), then commit them with the change that caused them"
     ;;
 
+  smoke-local)
+    [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh smoke-local [<base commit>]"
+    started=$(date +%s)
+    if [ -n "${2:-}" ]; then
+      base="$(git -C "$ROOT" rev-parse --verify "${2}^{commit}")" || die "no commit $2"
+    else
+      base="$(git -C "$ROOT" merge-base HEAD origin/main)" || die "no merge-base of HEAD and origin/main"
+    fi
+    cache="$SMOKE_CACHE/$base"
+    # A few details, such as a dark switch's knob or a text field laid out a
+    # point off, settle one of two ways in one process and hold it through
+    # every draw there. So the base is drawn in several processes and a
+    # snapshot matches when it matches any of their sets, and one that differs
+    # from all of them is drawn again in fresh processes, changed only when it
+    # differs in every one of the passes.
+    sets=3
+    passes=3
+    compared=1
+    if ! git -C "$ROOT" show "$base:Tests/UISnapshotsSmokeTests/UISnapshotsSmokeTests.swift" 2>/dev/null \
+      | grep -q UI_SNAPSHOTS_SMOKE_ONLY; then
+      # A base from before this mode cannot draw its set for comparing, so
+      # HEAD is drawn alone, which still fails on a snapshot it cannot draw.
+      compared=0
+    elif [ ! -f "$cache/complete" ]; then
+      # The base's own sources, from git archive rather than a worktree, so
+      # nothing is added to the repository every checkout shares.
+      mkdir -p "$SMOKE_CACHE"
+      work="$(mktemp -d "$SMOKE_CACHE/base.XXXXXX")"
+      trap 'rm -rf "$work"' EXIT
+      git -C "$ROOT" archive "$base" | tar -x -C "$work" || die "could not unpack $base"
+      mkdir -p "$work/none" "$work/sets"
+      echo "snapshots: drawing the smoke set of the base, $base, in $sets processes, once for this base"
+      for k in $(seq 1 "$sets"); do
+        smoke_test "$work" "" "$work/none" "$work/out" \
+          || { echo "snapshots: the base, $base, could not draw every snapshot" >&2; exit 1; }
+        mv "$work/out/references" "$work/sets/$k"
+      done
+      touch "$work/sets/complete"
+      # Another run may have drawn the same base meanwhile; either will do.
+      [ -f "$cache/complete" ] || { rm -rf "$cache"; mv "$work/sets" "$cache"; }
+    fi
+    rm -rf "$SMOKE_LOCAL_OUT"
+    mkdir -p "$SMOKE_LOCAL_OUT/none"
+    against="$SMOKE_LOCAL_OUT/none"
+    if [ "$compared" -eq 1 ]; then
+      against="$(seq -f "$cache/%g" -s : 1 "$sets")"
+    fi
+    status=0
+    smoke_test "$ROOT" "" "$against" "$SMOKE_LOCAL_OUT/pass-1" || status=1
+    drawn="$SMOKE_LOCAL_OUT/pass-1/references"
+    changed=()
+    added=()
+    removed=()
+    last="$SMOKE_LOCAL_OUT/pass-1"
+    if [ "$status" -eq 0 ] && [ "$compared" -eq 1 ]; then
+      for snapshot in "$SMOKE_LOCAL_OUT"/pass-1/drift/*; do
+        [ -d "$snapshot" ] || continue
+        if [ -f "$snapshot/reference.png" ]; then
+          changed+=("$(basename "$snapshot")")
+        else
+          added+=("$(basename "$snapshot")")
+        fi
+      done
+      for file in "$cache"/1/*.png; do
+        [ -f "$drawn/$(basename "$file")" ] || removed+=("$(basename "$file" .png)")
+      done
+      pass=1
+      while [ "${#changed[@]}" -gt 0 ] && [ "$pass" -lt "$passes" ]; do
+        pass=$((pass + 1))
+        last="$SMOKE_LOCAL_OUT/pass-$pass"
+        only="$(IFS=,; echo "${changed[*]}")"
+        UI_SNAPSHOTS_SMOKE_ONLY="$only" smoke_test "$ROOT" "" "$against" "$last" || { status=1; break; }
+        still=()
+        for name in "${changed[@]}"; do
+          [ -d "$last/drift/$name" ] && still+=("$name")
+        done
+        changed=(${still[@]+"${still[@]}"})
+      done
+    fi
+    {
+      echo "## UI smoke screens on this Mac, HEAD against $base"
+      echo
+      if [ "$status" -ne 0 ]; then
+        echo "HEAD could not draw every snapshot; see the test output."
+      elif [ "$compared" -eq 0 ]; then
+        echo "HEAD drew all $(find "$drawn" -name '*.png' | wc -l | tr -d ' ') snapshots. The base comes from before this comparison, so there is nothing to compare them with."
+      else
+        echo "Changed: ${#changed[@]}, added: ${#added[@]}, removed: ${#removed[@]}, of $(find "$drawn" -name '*.png' | wc -l | tr -d ' ') drawn."
+        [ "$((${#changed[@]} + ${#added[@]} + ${#removed[@]}))" -eq 0 ] || echo
+        for name in ${changed[@]+"${changed[@]}"}; do
+          echo "- changed \`$name\`: base $last/drift/$name/reference.png, HEAD $last/drift/$name/failure.png, difference $last/drift/$name/difference.png"
+        done
+        for name in ${added[@]+"${added[@]}"}; do
+          echo "- added \`$name\`: HEAD $SMOKE_LOCAL_OUT/pass-1/drift/$name/failure.png"
+        done
+        for name in ${removed[@]+"${removed[@]}"}; do
+          echo "- removed \`${name#snapshot.}\`: base $cache/1/$name.png"
+        done
+      fi
+      echo
+      echo "Took $(($(date +%s) - started)) s."
+    } > "$SMOKE_LOCAL_OUT/summary.md"
+    cat "$SMOKE_LOCAL_OUT/summary.md"
+    exit "$status"
+    ;;
+
   *)
-    die "usage: scripts/snapshots.sh gate [<k>/<n>] | approve [<run id>] | smoke [<k>/<n>] | smoke-approve [<run id>]"
+    die "usage: scripts/snapshots.sh gate [<k>/<n>] | approve [<run id>] | smoke [<k>/<n>] | smoke-approve [<run id>] | smoke-local [<base commit>]"
     ;;
 esac

@@ -161,6 +161,10 @@ enum Snapshots {
         /// until it ends; a window drawn in process is drawn as its layers
         /// stand, which the settled captures that follow already wait for.
         let firstCaptureDelay: Duration
+        /// The scale the window draws at whatever display it is on, or nil for
+        /// the display's own. The UI smoke test pins 1, the runner's scale, so
+        /// a Retina Mac draws the pictures the runner's references hold.
+        var backingScale: CGFloat? = nil
         /// The picture, or nil when it could not be taken this time and should
         /// be taken again.
         let take: @MainActor (_ window: NSWindow, _ hosting: NSView) async throws -> CGImage?
@@ -211,6 +215,9 @@ enum Snapshots {
         let still = view
             .environment(\.drawsStill, true)
             .transaction { $0.disablesAnimations = true }
+            .transformEnvironment(\.displayScale) { scale in
+                if let pinned = capture.backingScale { scale = pinned }
+            }
         let hosting = NSHostingView(rootView: still)
         hosting.sizingOptions = []
         hosting.wantsLayer = true
@@ -218,10 +225,11 @@ enum Snapshots {
         // bezels, but below the desktop picture, so nothing appears on a screen
         // someone else is using. ScreenCaptureKit captures a window whatever
         // covers it.
-        let window = NSWindow(
+        let window = FixedScaleWindow(
             contentRect: CGRect(origin: CGPoint(x: 40, y: 80), size: size),
             styleMask: [.borderless], backing: .buffered, defer: false
         )
+        window.fixedScale = capture.backingScale
         window.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
         window.ignoresMouseEvents = true
         window.collectionBehavior = [.stationary, .ignoresCycle]
@@ -251,6 +259,13 @@ enum Snapshots {
         hosting.layer?.speed = 0
         hosting.layer?.timeOffset = 0
         return try await settledCapture(window: window, hosting: hosting, capture: capture)
+    }
+
+    /// A window that reports a fixed backing scale when one is set, so AppKit
+    /// and SwiftUI draw its views at that scale rather than the display's.
+    private final class FixedScaleWindow: NSWindow {
+        var fixedScale: CGFloat?
+        override var backingScaleFactor: CGFloat { fixedScale ?? super.backingScaleFactor }
     }
 
     /// Captures until two captures in a row are the same picture, so a view
