@@ -1853,9 +1853,10 @@ with its reference image (see UI snapshot smoke test); and `ui-snapshots`, the
 full-fidelity UI check, renders every snapshot with `Athina --snapshot`
 through the window server, so Liquid Glass and materials are in them,
 replay-mode renders on a scaled clock included, compares the renders with the
-approved baselines, and uploads them, split across four runners that each take
-a quarter of the snapshots (see UI snapshot baselines). The two UI checks draw
-the same list of snapshots, so a UI change drifts both, and each has its own approved images:
+approved baselines, and uploads them (see UI snapshot baselines). Both UI
+checks are split across four runners that each take a quarter of the
+snapshots, by the same `SnapshotShard` table, and draw the same list of
+snapshots, so a UI change drifts both, and each has its own approved images:
 `make snapshots-approve` approves the `ui-snapshots` baselines from HEAD's
 merge-checks run and `make snapshots-smoke-approve` the `ui-snapshots-smoke`
 references from HEAD's CI run, both from the runner and never from a Mac. The
@@ -2026,8 +2027,17 @@ light and dark, in the same kind of window, settled by the same rule, and
 compares each with its reference image in
 `Tests/UISnapshotsSmokeTests/__Snapshots__/UISnapshotsSmokeTests` with
 [swift-snapshot-testing](https://github.com/pointfreeco/swift-snapshot-testing).
-The two gates cannot drift apart: a snapshot added to the list is in both (and
-needs a line in `SnapshotShard`'s table for `ui-snapshots`' shards).
+The two gates cannot drift apart: a snapshot added to the list is in both, and
+needs a line in `SnapshotShard`'s table, which splits both.
+
+In CI it runs on four runners, like `ui-snapshots`: the
+`ui-snapshots-smoke shard 1` to `4` jobs each run `make ui-snapshots-smoke
+SHARD=<k>/4`, which draws and compares only the snapshots `SnapshotShard`
+gives shard k (the test reads the shard from `UI_SNAPSHOTS_SMOKE_SHARD`), and
+the `ui-snapshots-smoke` job, the check the ruleset requires, passes only when
+all four ran and passed. Its name is an expression that reads
+`ui-snapshots-smoke` only when the job runs, so a skipped one never passes the
+required check. Without `SHARD`, the target draws every snapshot.
 
 It draws each window inside the test process, with swift-snapshot-testing's
 view strategy on the window's frame view (the view under the content that
@@ -2052,8 +2062,8 @@ it skips the wait `--snapshot` gives a fade to end before its first capture.
 
 The test never records a reference. A snapshot with no reference fails, as a
 drifted one does, and a reference no snapshot produces fails until it is
-deleted. For each drifted snapshot the job names it in its summary and uploads
-the `ui-snapshots-smoke-report` artifact: one folder per snapshot with the
+deleted. For each drifted snapshot its shard names it in its summary and
+uploads the `ui-snapshots-smoke-report-shard-<k>` artifact: one folder per snapshot with the
 reference (`reference.png`), the new render (`failure.png`) and their
 difference (`difference.png`), or only the render when there is no reference
 yet.
@@ -2070,12 +2080,14 @@ have every build fetch every package it names.
 **Approving an intended change.** Push the change and let
 `ui-snapshots-smoke` fail on the drift, look at the report, then run `make
 snapshots-smoke-approve` (or `scripts/snapshots.sh smoke-approve`), which
-downloads the set HEAD's newest CI run published and makes the references
-folder match it exactly: the run's render of every snapshot that drifted or
+downloads the sets HEAD's newest CI run published, one from each shard
+(`ui-snapshots-smoke-shard-<k>`), refuses unless all four are there, since a
+missing shard's snapshots would read as removed, and makes the references
+folder match them together exactly: the run's render of every snapshot that drifted or
 was new, the reference of every one that matched, which comes back unchanged,
 and nothing else, so a removed snapshot's reference goes. `RUN=<id>` names
-another CI run. A run publishes the set only once every snapshot has rendered,
-it names the source tree it was made from, and approving refuses any tree but
+another CI run. A shard publishes its set only once every snapshot it draws
+has rendered, each set names its shard and the source tree it was made from, and approving refuses any tree but
 HEAD's, as `make snapshots-approve` does. A UI change drifts both gates, so
 approve both, each from its own run of HEAD, and commit the images together
 with the change that caused them. References never come from a Mac: they are the

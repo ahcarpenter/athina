@@ -14,7 +14,9 @@
   ///
   /// It never records a reference. A missing one fails like a changed one, and the render that
   /// would replace it goes to `build/snapshots-smoke/references`, which CI uploads for
-  /// `make snapshots-smoke-approve` to take.
+  /// `make snapshots-smoke-approve` to take. With `UI_SNAPSHOTS_SMOKE_SHARD` set to `k/n`, as each
+  /// of CI's four runners sets it, it draws and checks only the snapshots `SnapshotShard` gives
+  /// shard k, the same split `ui-snapshots` uses.
   @MainActor
   @Suite(.serialized, .snapshots(record: .never))
   struct UISnapshotsSmokeTests {
@@ -43,6 +45,26 @@
       }
     }
 
+    /// The shard this run checks, or nil for every snapshot. A value that is not a shard
+    /// `SnapshotShard` accepts fails the run rather than checking some other set.
+    private static func shard() throws -> SnapshotShard? {
+      guard let value = ProcessInfo.processInfo.environment["UI_SNAPSHOTS_SMOKE_SHARD"],
+        !value.isEmpty
+      else { return nil }
+      guard let shard = SnapshotShard(parsing: value) else {
+        throw ShardError(value: value)
+      }
+      return shard
+    }
+
+    private struct ShardError: Error, CustomStringConvertible {
+      let value: String
+      var description: String {
+        let count = SnapshotShard.count
+        return "UI_SNAPSHOTS_SMOKE_SHARD is \(value), not k/\(count) with k from 1 to \(count)"
+      }
+    }
+
     init() {
       // What `scripts/snapshots.sh` gives `--snapshot`: every clock time and date reads the same
       // whatever the machine is set to. The runner's locale is already US English.
@@ -59,8 +81,8 @@
       let fileManager = FileManager.default
       // The set a run publishes for approving: the reference of every snapshot that matched and
       // the new render of every other one. It is filled beside its final place and moved there
-      // only once every snapshot has rendered, so an unfinished run never publishes a partial set
-      // that approving would take for the whole one.
+      // only once every snapshot it draws has rendered, so an unfinished run never publishes a partial
+      // set that approving would take for the whole one.
       let partial = Self.output.appending(path: "references-partial", directoryHint: .isDirectory)
       let approvable = Self.output.appending(path: "references", directoryHint: .isDirectory)
       let drift = Self.output.appending(path: "drift", directoryHint: .isDirectory)
@@ -70,7 +92,13 @@
       }
       try fileManager.createDirectory(at: partial, withIntermediateDirectories: true)
 
-      let specs = Snapshots.specs()
+      let shard = try Self.shard()
+      let allSpecs = Snapshots.specs()
+      if let mismatch = SnapshotShard.mismatch(with: allSpecs.map(\.name)) {
+        Issue.record(Comment(rawValue: mismatch))
+        return
+      }
+      let specs = allSpecs.filter { shard?.renders($0.name) ?? true }
       for appearance in Snapshots.appearances {
         for spec in specs {
           let name = spec.fileName(in: appearance)
@@ -96,11 +124,19 @@
     }
 
     /// A reference no snapshot produces fails until it is deleted, as approving deletes it, so the
-    /// references are only ever the ones the test compares.
+    /// references are only ever the ones the test compares. Each shard checks the files of its own
+    /// snapshots, and one whose snapshot has no shard falls to the first.
     @Test func everyReferenceHasASnapshot() throws {
+      let shard = try Self.shard()
       let expected = Set(Self.referenceFiles(of: Snapshots.specs()))
+      let prefix = "\(Self.testName)."
       let present = try FileManager.default.contentsOfDirectory(atPath: Self.references.path)
         .filter { !$0.hasPrefix(".") }
+        .filter { file in
+          shard?.compares(
+            file: file.hasPrefix(prefix) ? String(file.dropFirst(prefix.count)) : file)
+            ?? true
+        }
       for file in present.sorted() where !expected.contains(file) {
         Issue.record("\(file) is the reference of no snapshot; delete it")
       }

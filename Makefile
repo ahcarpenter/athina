@@ -15,6 +15,8 @@ LANE ?= replay
 PID ?=
 ## The CI run whose renders `make snapshots-approve` approves, the newest merge-checks run of HEAD when empty, or whose set `make snapshots-smoke-approve` approves, the newest CI run of HEAD when empty
 RUN ?=
+## The shard `make ui-snapshots-smoke` draws, k/n, as each of CI's runners passes it; every snapshot when empty
+SHARD ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
@@ -130,7 +132,7 @@ snapshots-approve:
 ## on another macOS or display scale drifts everywhere; the output is in
 ## build/snapshots-smoke.
 ui-snapshots-smoke:
-	scripts/snapshots.sh smoke
+	scripts/snapshots.sh smoke $(SHARD)
 
 ## Approve a UI change for the smoke test: make its references match the set
 ## the CI runner published for HEAD (in HEAD's newest CI run, or CI run

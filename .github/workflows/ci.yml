@@ -42,11 +42,19 @@ jobs:
           swift build -c release --product Athina
           scripts/check-no-control-api.sh "$(swift build -c release --product Athina --show-bin-path)/Athina"
 
-  ui-snapshots-smoke:
-    # The fast UI check on every push: every snapshot drawn in the test process
-    # with swift-snapshot-testing and compared with its reference image. Its
-    # references were recorded on this image with its newest Xcode, as the
-    # ui-snapshots baselines were (README "UI snapshot smoke test").
+  ui-snapshots-smoke-shard:
+    # The fast UI check, split across four runners like ui-snapshots and by
+    # the same SnapshotShard table: each draws its quarter of the snapshots in
+    # the test process with swift-snapshot-testing and compares each with its
+    # reference image. The references were recorded on this image with its
+    # newest Xcode, as the ui-snapshots baselines were (README "UI snapshot
+    # smoke test").
+    name: ui-snapshots-smoke shard ${{ matrix.shard }}
+    strategy:
+      # Every shard runs to the end, so one drift never hides another's.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -57,9 +65,11 @@ jobs:
           sudo xcode-select -s "$latest"
           sw_vers
           swift --version
-      - name: Draw every snapshot and compare with its reference
+      - name: Draw this shard's snapshots and compare with their references
+        # The matrix size goes with the shard, so a matrix that no longer
+        # matches SnapshotShard.count fails every shard.
         timeout-minutes: 20
-        run: make ui-snapshots-smoke
+        run: make ui-snapshots-smoke SHARD="${{ matrix.shard }}/${{ strategy.job-total }}"
       - name: Summarize
         if: always()
         run: |
@@ -67,11 +77,12 @@ jobs:
             cat build/snapshots-smoke/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Upload the approvable set
-        # What `make snapshots-smoke-approve` fetches to approve a drift.
+        # What `make snapshots-smoke-approve` fetches, every shard's together,
+        # to approve a drift.
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-snapshots-smoke
+          name: ui-snapshots-smoke-shard-${{ matrix.shard }}
           path: build/snapshots-smoke/references
           if-no-files-found: ignore
       - name: Upload the drift report
@@ -80,6 +91,22 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ui-snapshots-smoke-report
+          name: ui-snapshots-smoke-report-shard-${{ matrix.shard }}
           path: build/snapshots-smoke/drift
           if-no-files-found: ignore
+
+  ui-snapshots-smoke:
+    # The one check the main ruleset requires: passes only when every shard
+    # ran and passed. A job that an `if` skips still reports a check run, and
+    # a skipped check counts as passed for a required one; GitHub names a
+    # skipped job after its unevaluated name expression, so only a run of this
+    # job ever reports ui-snapshots-smoke.
+    name: ${{ 'ui-snapshots-smoke' }}
+    needs: ui-snapshots-smoke-shard
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every shard passed
+        run: |
+          echo "The shards: ${{ needs.ui-snapshots-smoke-shard.result }}"
+          [ "${{ needs.ui-snapshots-smoke-shard.result }}" = success ]

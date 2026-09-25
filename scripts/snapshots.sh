@@ -11,12 +11,14 @@
 #   approve [<run>] make the baselines match the renders of CI run <run>, every
 #                   shard's together, by default the newest CI run of this
 #                   checkout's HEAD commit
-#   smoke           what CI's ui-snapshots-smoke runs: draw every snapshot in
+#   smoke [<k>/<n>] what CI's ui-snapshots-smoke runs: draw every snapshot in
 #                   the test process with swift-snapshot-testing and fail on any
-#                   drift from its reference image
+#                   drift from its reference image; with k/n, only the snapshots
+#                   CI shard k of n draws, by the same SnapshotShard table
 #   smoke-approve [<run>]
-#                   make the smoke test's references match the set CI run <run>
-#                   published, by default the newest CI run of HEAD
+#                   make the smoke test's references match the sets CI run <run>
+#                   published, every shard's together, by default the newest CI
+#                   run of HEAD
 #
 # Output lands in build/snapshots: render-first/ and render-again/ hold the two
 # renders; render/ holds the first once both finished and agree, with
@@ -27,7 +29,8 @@
 #
 # The smoke test's output lands in build/snapshots-smoke: references/ holds the
 # set approving takes, every matching snapshot's reference and every other
-# one's new render, with source-tree as above, once every snapshot has rendered;
+# one's new render, with source-tree and shard as above, once every snapshot
+# the run draws has rendered;
 # drift/ holds the reference, the render and the difference of each snapshot
 # that drifted; summary.md names them.
 #
@@ -131,22 +134,26 @@ case "$command" in
     ;;
 
   smoke)
-    [ "$#" -eq 1 ] || die "usage: scripts/snapshots.sh smoke"
+    [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh smoke [<k>/<n>]"
+    shard="${2:-}"
     rm -rf "$SMOKE_OUT"
     mkdir -p "$SMOKE_OUT"
     # SNAPSHOT_ARTIFACTS keeps swift-snapshot-testing's own copy of each
-    # failing render in this checkout rather than the temporary folder.
+    # failing render in this checkout rather than the temporary folder; the
+    # test reads the shard from UI_SNAPSHOTS_SMOKE_SHARD, since swift test
+    # passes a test no arguments.
     status=0
-    (cd "$ROOT" && SNAPSHOT_ARTIFACTS="$SMOKE_OUT/artifacts" \
+    (cd "$ROOT" && SNAPSHOT_ARTIFACTS="$SMOKE_OUT/artifacts" UI_SNAPSHOTS_SMOKE_SHARD="$shard" \
       swift test --traits UISnapshotsSmoke --filter UISnapshotsSmokeTests) || status=1
     if [ -d "$SMOKE_OUT/references" ]; then
       git -C "$ROOT" rev-parse 'HEAD^{tree}' > "$SMOKE_OUT/references/source-tree"
+      if [ -n "$shard" ]; then echo "$shard" > "$SMOKE_OUT/references/shard"; fi
     fi
     {
-      echo "## UI snapshot smoke test"
+      echo "## UI snapshot smoke test${shard:+, shard $shard}"
       echo
       if [ -d "$SMOKE_OUT/drift" ] && [ -n "$(ls -A "$SMOKE_OUT/drift")" ]; then
-        echo "Drifted from its reference, or has none yet (the ui-snapshots-smoke-report artifact holds each one's images):"
+        echo "Drifted from its reference, or has none yet (the shard's ui-snapshots-smoke-report artifact holds each one's images):"
         echo
         for snapshot in "$SMOKE_OUT"/drift/*; do echo "- \`$(basename "$snapshot")\`"; done
       elif [ "$status" -eq 0 ]; then
@@ -169,17 +176,32 @@ case "$command" in
         || die "could not list the CI runs of HEAD ($head)"
       [ -n "$run" ] || die "no finished CI run of HEAD ($head); push it and let CI finish, or name a run"
     fi
-    rm -rf "$SMOKE_OUT/approved-run"
-    gh run download "$run" --name ui-snapshots-smoke --dir "$SMOKE_OUT/approved-run" \
-      || die "CI run $run has no ui-snapshots-smoke artifact to approve; a run publishes one only once every snapshot has rendered"
-    run_tree="$(cat "$SMOKE_OUT/approved-run/source-tree" 2>/dev/null)" \
-      || die "CI run $run does not name the source tree it rendered, so its renders cannot be matched to HEAD"
-    [ "$run_tree" = "$tree" ] \
-      || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into the references; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
-    ls "$SMOKE_OUT"/approved-run/*.png >/dev/null 2>&1 || die "the approved set holds no images"
-    # The set is every reference the test compares, so it replaces the folder
-    # whole: a matching snapshot's file comes back byte for byte and shows no
-    # change, and a removed snapshot's reference goes.
+    # Each shard uploads the set for its own snapshots as
+    # ui-snapshots-smoke-shard-<k>; approving takes them all together, and only
+    # when every shard's is there, since a missing shard's snapshots would read
+    # as removed and have their references deleted.
+    rm -rf "$SMOKE_OUT/approved-run" "$SMOKE_OUT/approved-shards"
+    gh run download "$run" --pattern 'ui-snapshots-smoke-shard-*' --dir "$SMOKE_OUT/approved-shards" \
+      || die "could not download the sets of CI run $run"
+    first="$(cat "$SMOKE_OUT/approved-shards/ui-snapshots-smoke-shard-1/shard" 2>/dev/null)" \
+      || die "CI run $run has no set from shard 1 to approve; a shard publishes one only once every snapshot it draws has rendered"
+    count="${first#*/}"
+    mkdir -p "$SMOKE_OUT/approved-run"
+    for k in $(seq 1 "$count"); do
+      dir="$SMOKE_OUT/approved-shards/ui-snapshots-smoke-shard-$k"
+      [ "$(cat "$dir/shard" 2>/dev/null)" = "$k/$count" ] \
+        || die "CI run $run has no set from shard $k of $count to approve; a shard publishes one only once every snapshot it draws has rendered"
+      run_tree="$(cat "$dir/source-tree" 2>/dev/null)" \
+        || die "shard $k of CI run $run does not name the source tree it rendered, so its renders cannot be matched to HEAD"
+      [ "$run_tree" = "$tree" ] \
+        || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into the references; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
+      cp "$dir"/*.png "$SMOKE_OUT/approved-run/"
+    done
+    extra="$(find "$SMOKE_OUT/approved-shards" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+    [ "$extra" -eq "$count" ] || die "CI run $run has sets from $extra shards, not $count"
+    # The shards' sets together are every reference the test compares, so they
+    # replace the folder whole: a matching snapshot's file comes back byte for
+    # byte and shows no change, and a removed snapshot's reference goes.
     mkdir -p "$SMOKE_REFERENCES"
     find "$SMOKE_REFERENCES" -name '*.png' -delete
     cp "$SMOKE_OUT"/approved-run/*.png "$SMOKE_REFERENCES/"
@@ -187,6 +209,6 @@ case "$command" in
     ;;
 
   *)
-    die "usage: scripts/snapshots.sh gate [<k>/<n>] | approve [<run id>] | smoke | smoke-approve [<run id>]"
+    die "usage: scripts/snapshots.sh gate [<k>/<n>] | approve [<run id>] | smoke [<k>/<n>] | smoke-approve [<run id>]"
     ;;
 esac
