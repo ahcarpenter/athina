@@ -26,7 +26,11 @@ struct AdvancedSettings: View {
         Toggle(isOn: $state.settings.showDebugPanel) {
           Text("Enable debug panel")
           Text(
-            "A window for troubleshooting Athina: the latest capture and the text read from it, each model call and why it was made, and what Athina understands you to be working toward."
+            """
+            A window for troubleshooting Athina: the latest capture and the text read from \
+            it, each model call and why it was made, and what Athina understands you to be \
+            working toward.
+            """
           )
         }
         .accessibilityIdentifier("advanced.enableDebugPanel")

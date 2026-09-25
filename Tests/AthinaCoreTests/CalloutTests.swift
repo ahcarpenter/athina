@@ -234,7 +234,8 @@ import Testing
   }
 
   @Test func aLaterFrameMustStillShowTheFramedTextInPlace() {
-    // The fixture's blocks sit at y 0, 20, ... in 100 by 12 px boxes; the region frames the second line.
+    // The fixture's blocks sit at y 0, 20, ... in 100 by 12 px boxes; the region frames the
+    // second line.
     let original = Fixtures.observation(id: 7, at: t0, text: "one\ntwo\nthree")
     let spot = CGRect(x: 6, y: 16, width: 108, height: 20)
     let same = Fixtures.observation(id: 8, at: t0 + 5, text: "one\ntwo\nthree")

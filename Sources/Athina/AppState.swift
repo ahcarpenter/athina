@@ -528,7 +528,10 @@ final class AppState {
       controlMode.isHermetic
       ? settings.pauseHotKey.isUsable : hotKeys.register(settings.pauseHotKey, for: .pause)
     AppState.log.notice(
-      "pause hotkey \(self.settings.pauseHotKey.displayString, privacy: .public) registered: \(self.hotKeyRegistered)"
+      """
+      pause hotkey \(self.settings.pauseHotKey.displayString, privacy: .public) registered: \
+      \(self.hotKeyRegistered)
+      """
     )
   }
 
@@ -538,7 +541,10 @@ final class AppState {
       controlMode.isHermetic
       ? key?.isUsable == true : hotKeys.register(key, for: .pushToTalk)
     AppState.log.notice(
-      "talk-back hotkey \(key?.displayString ?? "unset", privacy: .public) registered: \(self.pushToTalkRegistered)"
+      """
+      talk-back hotkey \(key?.displayString ?? "unset", privacy: .public) registered: \
+      \(self.pushToTalkRegistered)
+      """
     )
   }
 
@@ -1061,7 +1067,10 @@ final class AppState {
           if !shown {
             shown = true
             AppState.log.notice(
-              "callout shown for suggestion \(suggestion.id) at \(Formatting.rect(placement.screenRect), privacy: .public)"
+              """
+              callout shown for suggestion \(suggestion.id) at \
+              \(Formatting.rect(placement.screenRect), privacy: .public)
+              """
             )
             if !suggestion.calloutShown {
               await self.noteCalloutShown(suggestionID: suggestion.id)
@@ -1339,8 +1348,14 @@ final class AppState {
       // never asked about; otherwise the answer is in System Settings.
       toast.showNote(
         asking
-          ? "Athina needs Microphone and Speech Recognition to hear you. Answer the system's request, then hold the shortcut again."
-          : "Athina needs Microphone and Speech Recognition to hear you. Choose Set Up Talk Back in the Athina menu to allow them."
+          ? """
+          Athina needs Microphone and Speech Recognition to hear you. Answer the system's \
+          request, then hold the shortcut again.
+          """
+          : """
+          Athina needs Microphone and Speech Recognition to hear you. Choose Set Up Talk \
+          Back in the Athina menu to allow them.
+          """
       )
       return
     }
@@ -1597,7 +1612,11 @@ final class AppState {
     case .system: "real time"
     case .refused(let reason): "real time, refused: \(reason)"
     case .replay(let scale, _, let refusal):
-      "replay clock at \(Formatting.multiplier(scale)) real time, moved ahead \(ClockInterval.description(of: clockMovedAhead)), now \(ClockFormat.dayAndTime(clock.date))"
+      """
+      replay clock at \(Formatting.multiplier(scale)) real time, moved ahead \
+      \(ClockInterval.description(of: clockMovedAhead)), now \
+      \(ClockFormat.dayAndTime(clock.date))
+      """
         + (refusal.map { ", refused: \($0)" } ?? "")
     }
   }
@@ -1614,7 +1633,10 @@ final class AppState {
     clockControl.advance(by: .seconds(seconds))
     clockMovedAhead = clockControl.movedAhead.timeInterval
     AppState.log.notice(
-      "clock moved ahead \(ClockInterval.description(of: seconds), privacy: .public): \(self.clockLog, privacy: .public)"
+      """
+      clock moved ahead \(ClockInterval.description(of: seconds), privacy: .public): \
+      \(self.clockLog, privacy: .public)
+      """
     )
     return true
   }
@@ -1657,7 +1679,10 @@ final class AppState {
       AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
     } catch {
       AppState.log.error(
-        "could not answer the clock request at \(replyURL?.path ?? "", privacy: .public): \(String(describing: error), privacy: .public)"
+        """
+        could not answer the clock request at \(replyURL?.path ?? "", privacy: .public): \
+        \(String(describing: error), privacy: .public)
+        """
       )
     }
   }
@@ -1689,7 +1714,11 @@ final class AppState {
   /// For the log at launch.
   private var launchFilesLog: String {
     var line =
-      "data in \(launchFiles.dataDirectory.path)\(clientMode.isOffline ? " (this launch only)" : ""), settings from \(launchFiles.settingsSource.path)"
+      """
+      data in \
+      \(launchFiles.dataDirectory.path)\(clientMode.isOffline ? " (this launch only)" : ""), \
+      settings from \(launchFiles.settingsSource.path)
+      """
     if !launchFiles.refusals.isEmpty {
       line += ", refused: \(launchFiles.refusals.joined(separator: "; "))"
     }
@@ -1730,7 +1759,10 @@ final class AppState {
         recordingUnavailableReason.map { "refused: \($0)" }
           ?? "live, recording to \(directory.path)"
       case .replay(let directory, let allowStale):
-        "replaying from \(directory.path)\(allowStale ? ", stale fixtures allowed" : ""), \(replayLatency.latency.rawValue) latency"
+        """
+        replaying from \(directory.path)\(allowStale ? ", stale fixtures allowed" : ""), \
+        \(replayLatency.latency.rawValue) latency
+        """
       case .invalid(let reason): "refused: \(reason)"
       }
     if let refusal = replayLatency.refusal { line += ", refused: \(refusal)" }
@@ -1751,7 +1783,10 @@ final class AppState {
       }
       if mentorStatus.isCadenceSlowed {
         return
-          "Mentor: \(spend) of \(cap) this hour, slowed \(Formatting.multiplier(mentorStatus.cadenceMultiplier))"
+          """
+          Mentor: \(spend) of \(cap) this hour, slowed \
+          \(Formatting.multiplier(mentorStatus.cadenceMultiplier))
+          """
       }
       return "Mentor: \(spend) of \(cap) this hour"
     case .disabled: return "Mentor: off"

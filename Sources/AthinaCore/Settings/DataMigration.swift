@@ -105,7 +105,10 @@ public enum DataMigration {
       switch self {
       case .nothingToMove, .alreadyMoved: nil
       case .moved(let names):
-        "Moved \(Plural.count(names.count, "item", "items")) from the folder Mentor used: \(names.joined(separator: ", "))."
+        """
+        Moved \(Plural.count(names.count, "item", "items")) from the folder Mentor used: \
+        \(names.joined(separator: ", ")).
+        """
       case .refused(let reason), .inUse(let reason), .failed(let reason): reason
       }
     }
@@ -165,10 +168,11 @@ public enum DataMigration {
     guard isDirectory(old, manager), old.standardizedFileURL != new.standardizedFileURL else {
       return .nothingToMove
     }
-    let untouched =
-      "What Mentor kept in \(old.path) is untouched, and the next launch tries the move again. "
-      + "If this keeps happening, move that folder somewhere else and Athina starts with an empty journal, "
-      + "leaving that copy intact where you put it."
+    let untouched = """
+      What Mentor kept in \(old.path) is untouched, and the next launch tries the move again. \
+      If this keeps happening, move that folder somewhere else and Athina starts with an empty \
+      journal, leaving that copy intact where you put it.
+      """
     if manager.fileExists(atPath: new.appendingPathComponent(markerName).path) {
       try? manager.removeItem(at: new.appendingPathComponent(pendingName))
       return .alreadyMoved
@@ -177,15 +181,20 @@ public enum DataMigration {
       try takeBackUnfinishedMove(in: new, manager: manager)
     } catch {
       return .failed(
-        "Could not clear the unfinished move in \(new.path): \(sentence(error.localizedDescription)) \(untouched)"
+        """
+        Could not clear the unfinished move in \(new.path): \
+        \(sentence(error.localizedDescription)) \(untouched)
+        """
       )
     }
     let found = ownersData(in: new, manager: manager)
     guard found.isEmpty else {
       return .refused(
-        "\(new.path) already holds \(found.joined(separator: ", ")), and \(old.path) holds what Mentor kept, so both hold "
-          + "data. Athina is using \(new.lastPathComponent) and has left \(old.lastPathComponent) untouched. "
-          + "Keep the one you want and move the other away."
+        """
+        \(new.path) already holds \(found.joined(separator: ", ")), and \(old.path) holds what \
+        Mentor kept, so both hold data. Athina is using \(new.lastPathComponent) and has left \
+        \(old.lastPathComponent) untouched. Keep the one you want and move the other away.
+        """
       )
     }
 
@@ -196,12 +205,17 @@ public enum DataMigration {
         source = try lockedJournal(at: journal, manager: manager)
       } catch let error as SQLiteError where error.code & 0xff == SQLITE_BUSY {
         return .inUse(
-          "Could not move \(old.path) to \(new.path): \(journal.path) is open in Mentor or another copy of the app. "
-            + "Quit it, then open Athina again. \(untouched)"
+          """
+          Could not move \(old.path) to \(new.path): \(journal.path) is open in Mentor or another \
+          copy of the app. Quit it, then open Athina again. \(untouched)
+          """
         )
       } catch {
         return .failed(
-          "Could not move \(old.path) to \(new.path): \(journal.path) would not open: \(sentence(String(describing: error))) \(untouched)"
+          """
+          Could not move \(old.path) to \(new.path): \(journal.path) would not open: \
+          \(sentence(String(describing: error))) \(untouched)
+          """
         )
       }
     }
@@ -551,6 +565,9 @@ extension DataMigration {
   public static func skipReason(in environment: RuntimeEnvironment) -> String? {
     guard environment.isSandboxed else { return nil }
     return
-      "Nothing is copied from Mentor: this build runs in the App Sandbox, which keeps the files, preferences and API key Mentor kept out of its reach."
+      """
+      Nothing is copied from Mentor: this build runs in the App Sandbox, which keeps the \
+      files, preferences and API key Mentor kept out of its reach.
+      """
   }
 }

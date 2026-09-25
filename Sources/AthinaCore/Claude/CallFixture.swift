@@ -206,8 +206,8 @@ public enum CallFixtureFiles {
     let kind = String(
       fixture.identity.kind.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" }
     )
-    return
-      "\(formatter.string(from: Date(timeIntervalSince1970: second))).\(fraction)Z-\(kind)-\(suffix).json"
+    let stamp = formatter.string(from: Date(timeIntervalSince1970: second))
+    return "\(stamp).\(fraction)Z-\(kind)-\(suffix).json"
   }
 
   /// The stamp for a call made at `now` after a call stamped `previous`.

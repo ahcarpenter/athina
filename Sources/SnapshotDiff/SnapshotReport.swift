@@ -58,12 +58,19 @@ public enum SnapshotReport {
     let drift = comparison.drift
     if drift.isEmpty {
       lines.append(
-        "All \(comparison.results.count) snapshots \(kind.agree) (tolerance \(comparison.tolerance) of 255 per channel)."
+        """
+        All \(comparison.results.count) snapshots \(kind.agree) (tolerance \
+        \(comparison.tolerance) of 255 per channel).
+        """
       )
       return lines.joined(separator: "\n") + "\n"
     }
     lines.append(
-      "\(drift.count) of \(comparison.results.count) snapshots \(kind.differ) (tolerance \(comparison.tolerance) of 255 per channel). Each one's two images and their difference are in the report artifact."
+      """
+      \(drift.count) of \(comparison.results.count) snapshots \(kind.differ) (tolerance \
+      \(comparison.tolerance) of 255 per channel). Each one's two images and their \
+      difference are in the report artifact.
+      """
     )
     lines.append("")
     lines.append("| Snapshot | What changed |")
@@ -82,19 +89,29 @@ public enum SnapshotReport {
       body += "<p>All \(comparison.results.count) snapshots \(kind.agree).</p>\n"
     } else {
       body +=
-        "<p>\(drift.count) of \(comparison.results.count) snapshots \(kind.differ), tolerance \(comparison.tolerance) of 255 per channel. Changed pixels are red in the difference image.</p>\n"
+        """
+        <p>\(drift.count) of \(comparison.results.count) snapshots \(kind.differ), tolerance \
+        \(comparison.tolerance) of 255 per channel. Changed pixels are red in the difference \
+        image.</p>\n
+        """
     }
     for result in drift {
       let name = escape(result.name)
       body +=
-        "<section>\n<h2>\(name)</h2>\n<p>\(escape(result.status.summary(in: kind)))</p>\n<div class=\"row\">\n"
+        """
+        <section>\n<h2>\(name)</h2>\n<p>\(escape(result.status.summary(in: kind)))</p>\n<div \
+        class=\"row\">\n
+        """
       var columns: [(String, String)] = []
       if result.status != .added { columns.append((kind.captions.before, "before.png")) }
       if result.status != .removed { columns.append((kind.captions.after, "after.png")) }
       if case .changed = result.status { columns.append(("Difference", "diff.png")) }
       for (title, file) in columns {
         body +=
-          "<figure><figcaption>\(title)</figcaption><img src=\"\(name)/\(file)\" alt=\"\(name) \(title)\"></figure>\n"
+          """
+          <figure><figcaption>\(title)</figcaption><img src=\"\(name)/\(file)\" \
+          alt=\"\(name) \(title)\"></figure>\n
+          """
       }
       body += "</div>\n</section>\n"
     }
@@ -114,7 +131,8 @@ public enum SnapshotReport {
       figure { margin: 0; }
       figcaption { font-size: 12px; opacity: .7; margin-bottom: 4px; }
       /* Real size: one image pixel to one CSS pixel, never smoothed. */
-      img { display: block; image-rendering: pixelated; max-width: none; outline: 1px solid var(--checker); }
+      img { display: block; image-rendering: pixelated; max-width: none; outline: 1px solid \
+      var(--checker); }
       </style>
       </head>
       <body>

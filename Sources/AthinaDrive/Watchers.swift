@@ -46,7 +46,10 @@ enum Watchers {
       let under = event.getIntegerValueField(.mouseEventWindowUnderMousePointer)
       let sourcePid = event.getIntegerValueField(.eventSourceUnixProcessID)
       print(
-        "\(stamp()) type=\(type.rawValue) at=\(event.location) sourcePid=\(sourcePid) under=\(under) [\(windowOwner(of: under))]"
+        """
+        \(stamp()) type=\(type.rawValue) at=\(event.location) sourcePid=\(sourcePid) \
+        under=\(under) [\(windowOwner(of: under))]
+        """
       )
       fflush(stdout)
       return Unmanaged.passUnretained(event)

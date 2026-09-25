@@ -274,7 +274,12 @@ public actor SensingPipeline {
               timestamp: now,
               kind: .permissionsChanged,
               detail:
-                "screen \(fresh.screenRecording ? "granted" : "denied"), accessibility \(fresh.accessibility ? "granted" : "denied"), microphone \(fresh.microphone ? "granted" : "denied"), speech \(fresh.speechRecognition ? "granted" : "denied")"
+                """
+                screen \(fresh.screenRecording ? "granted" : "denied"), accessibility \
+                \(fresh.accessibility ? "granted" : "denied"), microphone \
+                \(fresh.microphone ? "granted" : "denied"), speech \
+                \(fresh.speechRecognition ? "granted" : "denied")
+                """
             )
           )
         }
@@ -289,7 +294,10 @@ public actor SensingPipeline {
       let result = try await journal.applyRetention(RetentionPolicy(settings: settings), now: now)
       if result.deletedAnything {
         var detail =
-          "removed \(result.thumbnailsDeleted) thumbnails, \(result.observationsDeleted) observations, \(result.eventsDeleted) events"
+          """
+          removed \(result.thumbnailsDeleted) thumbnails, \(result.observationsDeleted) \
+          observations, \(result.eventsDeleted) events
+          """
         if result.suggestionsDeleted + result.modelCallsDeleted > 0 {
           detail +=
             ", \(result.suggestionsDeleted) suggestions, \(result.modelCallsDeleted) model calls"

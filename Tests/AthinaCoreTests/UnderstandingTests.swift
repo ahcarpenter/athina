@@ -27,8 +27,10 @@ import Testing
 
   @Test func decodesWhatTheModelWritesWithSnakeCaseKeys() throws {
     let json = """
-      {"goals": [{"goal": "ship the feature", "evidence": "two hours in the same file", "confidence": 0.8}],
-       "timeline": ["opened the editor"], "mentor_history": ["suggested a filter"], "open_concerns": ["no tests yet"]}
+      {"goals": [{"goal": "ship the feature", "evidence": "two hours in the same file", \
+      "confidence": 0.8}],
+       "timeline": ["opened the editor"], "mentor_history": ["suggested a filter"], \
+      "open_concerns": ["no tests yet"]}
       """
     let decoded = try JSONDecoder().decode(Understanding.self, from: Data(json.utf8))
     #expect(decoded.goals.count == 1)

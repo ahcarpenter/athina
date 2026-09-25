@@ -70,7 +70,10 @@ func run(_ invocation: DriveInvocation) throws {
     usleep(400_000)
     let front = NSWorkspace.shared.frontmostApplication
     say(
-      "activate -> \(activated); frontmost now \"\(front?.localizedName ?? "?")\" pid=\(front?.processIdentifier ?? -1)"
+      """
+      activate -> \(activated); frontmost now \"\(front?.localizedName ?? "?")\" \
+      pid=\(front?.processIdentifier ?? -1)
+      """
     )
 
   case "ax":
