@@ -59,6 +59,8 @@ make snapshots-approve # makes the baselines match the renders CI made of HEAD, 
 make ui-snapshots-smoke # the UI smoke test: every snapshot drawn in process with swift-snapshot-testing and compared with the runner's references
 make ui-snapshots-smoke-local # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported, as local validation runs it
 make snapshots-smoke-approve # makes the smoke test's references match the set CI made of HEAD, after an intended UI change
+make format           # formats every Swift file in place to Google's Swift style (see Code style)
+make lint             # checks every Swift file against that style without changing it, as CI does
 make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 make release          # builds, signs, notarizes, and packages a direct-download release into build/release (see Releasing)
 make xcodeproj        # generates Athina.xcodeproj, the Xcode project for the App Store route, from project.yml (see The Xcode project)
@@ -1925,13 +1927,83 @@ particular to this app:
   interface says keyboard shortcut rather than hotkey, names panes and places
   plainly, and speaks of Athina in the third person, never "we".
 
+## Code style
+
+Every Swift file follows [Google's Swift Style Guide](https://google.github.io/swift/),
+Apple's API Design Guidelines included. The part a tool can apply is
+`.swift-format`, the configuration for the swift-format that ships with
+Xcode, so nothing needs installing: two-space indents, a 100-column limit,
+line wrapping in one direction, and the guide's naming, documentation and
+programming-practice rules that swift-format checks. `make format` rewrites
+every Swift file to it, `make lint` fails on anything it would change and on
+every rule it can only report, and CI runs `make lint` on every push. The
+configuration was checked against the swift-format in Xcode 27.0 (Swift 6.4)
+and in Xcode 26.6 (Swift 6.3.3), the `macos-26` runner's, which format this
+code identically; Xcode's swift-format reports its version as `main`, so CI
+prints the Swift version beside it.
+
+`make lint` cannot see every rule. By hand, and in review:
+
+- Every public declaration gets a `///` comment that opens with a
+  one-sentence summary; the linter asks for it, the words are yours. A
+  comment that repeats the name says nothing: define the term instead.
+- A parameterized attribute (`@Environment(...)`, `@Suite(...)`) goes on its
+  own line above its declaration.
+- A call with one closure argument, last, passes it as a trailing closure
+  (except in an `if`, `guard` or `while` condition); a call with several
+  closure arguments passes them all inside the parentheses, labeled, with no
+  trailing closure. SwiftUI's `Button(action:label:)`,
+  `Section(content:header:)` and the like are written that way; only an API
+  whose body is unlabeled after a defaulted argument, such as
+  `withKnownIssue`, keeps its trailing closures.
+- A wrapped list, conditions included, puts every element on its own line;
+  swift-format keeps those breaks but does not add them.
+- Initializers, and functions that share a name, sit next to each other.
+- A string that runs past 100 columns is wrapped as a multi-line string
+  literal with `\` at each line end, which leaves the string itself as it was.
+- Outside tests, a force unwrap, force cast or `try!` carries a comment
+  saying why it cannot fail, unless the line alone makes that plain.
+- Each file imports every module it uses by name (Foundation and
+  CoreGraphics too, not through AppKit or SwiftUI), and nothing else.
+
+### Rebasing a branch across the reformat
+
+The reformat is one commit on `main` that changes nothing but formatting, named
+in `.git-blame-ignore-revs`, which `git blame` skips once `git config
+blame.ignoreRevsFile .git-blame-ignore-revs` is set (GitHub reads it itself).
+The commit before it adds `.swift-format` and `make format`. A branch started
+earlier formats itself with them first and then crosses the reformat, so that
+only real changes conflict:
+
+```sh
+git fetch origin
+reformat=$(git show origin/main:.git-blame-ignore-revs | grep -v '^#' | grep . | head -n1)
+# 1. Catch up to just before the reformat, resolving real conflicts as usual.
+git rebase "$reformat~1"
+# 2. Format every commit of the branch where it stands.
+git rebase --exec 'make format && git commit -a --amend --no-edit --allow-empty' "$reformat~1"
+# 3. Cross the reformat. Both sides are formatted now, so every conflict is
+#    formatting the branch already has right: -X theirs keeps the branch's side.
+git rebase -X theirs "$reformat"
+# 4. Carry on to the tip of main, resolving real conflicts as usual.
+git rebase origin/main
+make lint
+```
+
+`-X theirs` in step 3 is safe only because step 1 settled every real conflict
+and the reformat commit holds nothing but formatting; replaying `main`'s own
+two commits before it this way reproduces the reformat's tree exactly. A branch
+with a merge commit in it is flattened by a rebase; give every step
+`--rebase-merges` instead.
+
 ## Continuous integration
 
-CI runs three checks on GitHub's `macos-26` runner, which ships Xcode 26 and
+CI runs four checks on GitHub's `macos-26` runner, which ships Xcode 26 and
 the macOS 26 SDK this package targets: `build-and-test` runs `swift test`, the
 bundle script, and `scripts/check-no-control-api.sh` (which must find the
 control API in the development bundle and none in a build without the
-`ControlAPI` trait); `ui-snapshots-smoke`, the fast UI check, draws every
+`ControlAPI` trait); `lint` runs `make lint` (see Code style) and fails on any
+finding; `ui-snapshots-smoke`, the fast UI check, draws every
 snapshot inside a test process with swift-snapshot-testing and compares each
 with its reference image (see UI snapshot smoke test); and `ui-snapshots`, the
 full-fidelity UI check, renders every snapshot with `Athina --snapshot`
@@ -1947,8 +2019,8 @@ references from HEAD's CI run, both from the runner and never from a Mac. The
 Xcode project's archive check is out of CI until the App Store release flow
 brings it back as part of that flow (see The Xcode project).
 
-All three run on every push to main. On a pull request, `build-and-test` and
-`ui-snapshots-smoke` (`.github/workflows/ci.yml`) run on every push, and the
+All four run on every push to main. On a pull request, `build-and-test`, `lint`
+and `ui-snapshots-smoke` (`.github/workflows/ci.yml`) run on every push, and the
 slow `ui-snapshots` (`.github/workflows/merge-checks.yml`) runs only while the
 pull request carries the `merge-checks` label: adding the label runs it, and
 so does every push, or any other label added, while it is on. Anyone with write access can add it,
@@ -1958,7 +2030,7 @@ from the pull request page or with
 gh pr edit <number> --add-label merge-checks
 ```
 
-All three must pass at a pull request's head before it can merge: the `main`
+All four must pass at a pull request's head before it can merge: the `main`
 ruleset requires them, with no bypass, and until `ui-snapshots` has run there,
 the pull request lists it as expected and cannot merge. Two traps shape this.
 A job that an `if` skips still reports a check run, and a skipped check counts
