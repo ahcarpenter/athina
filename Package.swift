@@ -75,9 +75,10 @@ let package = Package(
         .testTarget(name: "SnapshotDiffTests", dependencies: ["SnapshotDiff"]),
         .testTarget(
             // AthinaCore so the harness's journal queries are checked against a
-            // journal the app itself just created, not a hand-written schema.
+            // journal the app itself just created, not a hand-written schema;
+            // AthinaControlProtocol for the name a bundle with the control API carries.
             name: "AthinaE2ETests",
-            dependencies: ["AthinaE2E", "AthinaCore"]
+            dependencies: ["AthinaE2E", "AthinaCore", "AthinaControlProtocol"]
         ),
         .testTarget(
             name: "AthinaControlTests",

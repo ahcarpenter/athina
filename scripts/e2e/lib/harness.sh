@@ -141,22 +141,38 @@ ensure_drive() {
 
 # A check of a stale bundle proves nothing, so the app is rebuilt when a source
 # file was saved after its last build started, which scripts/bundle.sh stamps
-# for every build, `make build` included. Never while something is running
-# from it, though: scripts/bundle.sh deletes the bundle first, and another
-# lane, or the owner, may be using this one.
+# for every build, `make build` included. The harness's own bundle is the
+# development one, so it is rebuilt too when it carries no control API, as
+# after `scripts/bundle.sh --no-control`, rather than skip the API tier. Never
+# while something is running from it, though: scripts/bundle.sh deletes the
+# bundle first, and another lane, or the owner, may be using this one.
+#
+# Sets CONTROL_API to whether the API tier runs: always on the harness's own
+# bundle, and on an ATHINA_E2E_APP bundle only when it carries the control API,
+# which no release build does, so there each API-tier scenario is skipped.
+# CONTROL_API is read by the entry point.
+# shellcheck disable=SC2034
 ensure_app() {
+	CONTROL_API=yes
 	if [ -n "${ATHINA_E2E_APP:-}" ]; then
 		[ -x "$APP_BINARY" ] || die "ATHINA_E2E_APP names $APP, which holds no Athina executable"
 		sources_newer_than "$APP_BINARY" "$ROOT/Sources" && log "WARNING: a source file is newer than $APP, which is checked as it is"
+		bundle_has_control_api || CONTROL_API=no
 		return 0
 	fi
+	local why
 	if sources_newer_than_build "$APP_BINARY" "$APP_BUILT" "$ROOT/Sources"; then
-		if pgrep -f "$APP_BINARY" >/dev/null 2>&1; then
-			die "$APP may be out of date and something is running from it; rebuild it when nothing is"
-		fi
-		log "building $APP $(build_when)"
-		(cd "$ROOT" && scripts/bundle.sh release >/dev/null 2>&1) || die "could not build the app bundle"
+		why="may be out of date"
+	elif ! bundle_has_control_api; then
+		why="is the development bundle but carries no control API"
+	else
+		return 0
 	fi
+	if pgrep -f "$APP_BINARY" >/dev/null 2>&1; then
+		die "$APP $why and something is running from it; rebuild it when nothing is"
+	fi
+	log "building $APP $(build_when), since it $why"
+	(cd "$ROOT" && scripts/bundle.sh release >/dev/null 2>&1) || die "could not build the app bundle"
 }
 
 # What was run, for whoever reads the evidence later.

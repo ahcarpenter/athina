@@ -180,8 +180,6 @@ cmd_run() {
 	ensure_app
 	ensure_drive
 	have_warm_home || die "no warm home yet: run scripts/e2e/athina-e2e warm first"
-	CONTROL_API=yes
-	bundle_has_control_api || CONTROL_API=no
 	for name in "${names[@]}"; do
 		outcome=0
 		run_scenario "$name" || outcome=$?

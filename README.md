@@ -599,7 +599,9 @@ the harness then checks as it is rather than rebuilding. A bundle without the
 control API, as every release build is (`scripts/check-no-control-api.sh`
 decides), cannot run the API tier, so each API-tier scenario reports `skip`
 with that reason, neither passed nor failed, and the run's tally counts it
-apart.
+apart. Only such a bundle skips: `build/Athina.app` is the development bundle,
+so when it carries no control API, as after `scripts/bundle.sh --no-control`,
+the harness rebuilds it with the trait, or stops when something runs from it.
 
 Runs are serialized machine-wide: `run`, `warm`, and `clean` first take one
 exclusive lock, `~/Library/Caches/athina-e2e/screen.lock`, so only one
