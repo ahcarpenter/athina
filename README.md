@@ -191,9 +191,10 @@ or build XcodeGen.
 
 The project has one target, `Athina App Store`, and a scheme of the same name
 whose Archive action builds Release. It compiles `Sources/Athina` against the
-package's `AthinaCore`, linking the frameworks the package's `Athina` target
-does (a dependency or framework added to one goes in the other too), bundles
-the same icon and menu bar marks `scripts/bundle.sh` does, and signs with
+package's `AthinaCore` and `SnapshotDiff`, linking the frameworks the package's
+`Athina` target does (a dependency or framework added to one goes in the other
+too), bundles the same icon and menu bar marks `scripts/bundle.sh` does, and
+signs with
 `Resources/Athina.app-store.entitlements` (the App Sandbox, `network.client`,
 and the microphone keys of both the hardened runtime, `device.audio-input`,
 and the sandbox, `device.microphone`). Its Info.plist is `Resources/Info.plist`

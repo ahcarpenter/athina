@@ -7,6 +7,8 @@ let package = Package(
     products: [
         .executable(name: "Athina", targets: ["Athina"]),
         .library(name: "AthinaCore", targets: ["AthinaCore"]),
+        // A product so project.yml's App Store target can link it, as the Athina target does.
+        .library(name: "SnapshotDiff", targets: ["SnapshotDiff"]),
         // The end-to-end harness's drive tool (scripts/e2e, see README "End-to-end harness").
         .executable(name: "athina-drive", targets: ["AthinaDrive"]),
         // Compares UI snapshot renders with the approved baselines (scripts/snapshots.sh, see README "UI snapshot baselines").
@@ -28,7 +30,7 @@ let package = Package(
             ]
         ),
         // project.yml's App Store target compiles these same sources against
-        // AthinaCore: a dependency or framework added here goes there too.
+        // AthinaCore and SnapshotDiff: a dependency or framework added here goes there too.
         .executableTarget(
             name: "Athina",
             // SnapshotDiff so `--snapshot` judges two captures the same picture
