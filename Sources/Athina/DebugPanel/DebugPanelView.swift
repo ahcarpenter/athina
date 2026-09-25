@@ -798,8 +798,9 @@ private struct MentorCard: View {
         }
     }
 
-    /// A replay's own files and the settings it started from, and any file
-    /// flag that was refused; nothing for a live launch that was given none.
+    /// A replay's own files and the settings it started from, and any launch
+    /// flag that was refused (`AppState.launchRefusals`); nothing for a live
+    /// launch that was given none.
     private var launchFilesFields: [ModeField] {
         let files = state.launchFiles
         var fields: [ModeField] = []
@@ -810,8 +811,8 @@ private struct MentorCard: View {
                 label: "Settings", value: files.settingsGiven ? "from \(Formatting.path(files.settingsSource))" : "from the live settings", truncation: .middle
             ))
         }
-        if !files.refusals.isEmpty {
-            fields.append(ModeField(label: "Refused", value: files.refusals.joined(separator: "\n"), lineLimit: 4))
+        if !state.launchRefusals.isEmpty {
+            fields.append(ModeField(label: "Refused", value: state.launchRefusals.joined(separator: "\n"), lineLimit: 4))
         }
         return fields
     }

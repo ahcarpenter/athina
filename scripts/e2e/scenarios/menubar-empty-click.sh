@@ -10,16 +10,15 @@ scenario_run() {
 	local suggestion empty x y
 	stage_flip_window
 	wait_toast >/dev/null || return 1
+	keep_toast_up 15 || return 1
 	suggestion="$(newest_suggestion_id)"
 
+	# Read after the wait, which may have relaunched Athina and so moved its item.
 	empty="$("$DRIVE" bar | sed -n 's/^empty=//p')"
 	[ -n "$empty" ] && [ "$empty" != none ] || { log "no empty menu bar space to click"; return 1; }
 	x="${empty%%,*}"
 	y="${empty##*,}"
 	log "empty menu bar space at $x,$y"
-
-	wait_idle_input 15 || return 1
-	require_toast || return 1
 	snapshot_state "before"
 
 	"$DRIVE" click at "$x" "$y" --shot "$RUN_DIR/bar-at-click.png" >>"$RUN_DIR/transcript.log" 2>&1 || {

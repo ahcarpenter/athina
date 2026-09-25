@@ -49,10 +49,13 @@ options:
   --keep-home        keep the scratch home after a run, to look inside it
   --time-scale <n>   run the replay clock n times faster (see README)
   --lock-timeout <s> give up after s seconds when another run holds the
-                     screen (default: wait for as long as it takes)
+                     screen or this checkout (default: wait for as long as
+                     it takes)
 
-run, warm, and clean take one machine-wide lock first, so only one run is on
-the screen at a time across every checkout (README "End-to-end harness").
+run and warm first take this checkout's lock, so only one of them runs from a
+checkout at a time, then build, then take one machine-wide lock, as clean does,
+so only one run is on the screen at a time across every checkout (README
+"End-to-end harness").
 TEXT
 }
 
@@ -85,7 +88,8 @@ cmd_doctor() {
 	printf 'fixtures         %s\n' "$([ -d "$FIXTURES" ] && echo "$FIXTURES" || echo "missing")"
 	printf 'warm home        %s\n' "$(have_warm_home && echo "$WARM_HOME (warmed $(warm_home_stamp))" || echo "not prepared: run athina-e2e warm")"
 	"$DRIVE" permissions | sed 's/^/permission       /'
-	printf 'screen lock      %s, %s\n' "$SCREEN_LOCK" "$(screen_lock_status)"
+	printf 'screen lock      %s, %s\n' "$SCREEN_LOCK" "$(lock_status SCREEN_LOCK)"
+	printf 'checkout lock    %s, %s\n' "$CHECKOUT_LOCK" "$(lock_status CHECKOUT_LOCK)"
 	local tool
 	for tool in sqlite3 python3 sandbox-exec screencapture; do
 		command -v "$tool" >/dev/null || { printf 'missing tool     %s\n' "$tool"; ok=1; }
@@ -116,7 +120,7 @@ cmd_warm() {
 	# Keep the half-built home if this fails: its journal is the only place
 	# that says why no capture arrived.
 	KEEP_HOME=1
-	trap 'cleanup; screen_lock_release' EXIT
+	trap 'cleanup; locks_release' EXIT
 	prefs_save
 
 	local building="$CACHE_ROOT/warm-home.building"
@@ -195,7 +199,7 @@ run_scenario() (
 
 	RUN_DIR="${OUT_ROOT:-$RUNS_ROOT}/$name-$(date '+%Y%m%d-%H%M%S')"
 	mkdir -p "$RUN_DIR"
-	screen_lock_note "run $name"
+	lock_note SCREEN_LOCK "run $name"
 	log "=== $name: $SCENARIO_SUMMARY"
 	log "evidence: $RUN_DIR"
 
@@ -280,13 +284,25 @@ main() {
 		esac
 	done
 	mkdir -p "$RUNS_ROOT"
-	if screen_lock_needed "$command"; then
-		local status=0
-		screen_lock_acquire "$command${rest[*]:+ ${rest[*]}}" "$LOCK_TIMEOUT" || status=$?
+	local what="$command${rest[*]:+ ${rest[*]}}" status=0
+	if checkout_lock_needed "$command"; then
+		# Held to the end, so a second run from this checkout waits here
+		# rather than build over the bundle this one runs from.
+		checkout_lock_acquire "$what" "$LOCK_TIMEOUT" || status=$?
 		[ "$status" = 0 ] || exit "$status"
-		# Exiting gives the lock back however the run ends; this also takes
-		# down the holder file. warm sets its own trap, which does both.
-		trap screen_lock_release EXIT
+		# Exiting gives the locks back however the run ends; this also takes
+		# down their holder files. warm sets its own trap, which does both.
+		trap locks_release EXIT
+		# Built before the screen lock is taken, so no other checkout waits
+		# on this one's build. The commands build again only if a source file
+		# changes while they wait for the screen lock.
+		ensure_app
+		ensure_drive
+	fi
+	if screen_lock_needed "$command"; then
+		lock_acquire SCREEN_LOCK "$what" "$LOCK_TIMEOUT" || status=$?
+		[ "$status" = 0 ] || exit "$status"
+		trap locks_release EXIT
 	fi
 	case "$command" in
 	list) cmd_list ;;

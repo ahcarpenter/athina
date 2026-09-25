@@ -10,9 +10,8 @@ scenario_run() {
 	local suggestion before_feedback after_feedback
 	stage_flip_window
 	wait_toast >/dev/null || return 1
+	keep_toast_up 15 || return 1
 	suggestion="$(newest_suggestion_id)"
-	wait_idle_input 15 || return 1
-	require_toast || return 1
 	snapshot_state "before"
 
 	"$DRIVE" click item "$ATHINA_PID" --shot "$RUN_DIR/bar-at-click.png" >>"$RUN_DIR/transcript.log" 2>&1 || {

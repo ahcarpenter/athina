@@ -145,8 +145,10 @@ enum WindowID {
 /// `--open settings:models` opens Settings on that pane (`SettingsPane`), `--snapshot <dir>`
 /// is handled by `Snapshots`, `--replay <dir>`, `--allow-stale-fixtures`, and
 /// `--record [<dir>]` choose where model calls go (`ModelClientMode`), and
-/// `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock (`ClockMode`), and
-/// `--settings <path>` chooses the settings a replay starts from (`LaunchFiles`).
+/// `--time-scale <n>` and `--advance-clock <interval>` set a replay's clock (`ClockMode`),
+/// `--replay-latency immediate|recorded` sets how long a replayed call takes
+/// (`ReplayLatencyMode`), and `--settings <path>` chooses the settings a replay
+/// starts from (`LaunchFiles`).
 /// Where a replay keeps its files is never an argument: it makes a directory of
 /// its own and says which on the line it writes when it starts.
 enum LaunchArguments {
@@ -261,7 +263,7 @@ struct MenuBarContent: View {
         if let line = state.clockLine {
             Text(line)
         }
-        if let line = state.launchFilesLine {
+        if let line = state.launchRefusalsLine {
             Text(line)
         }
         if let action = state.menuStatusAction {

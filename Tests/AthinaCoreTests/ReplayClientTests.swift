@@ -277,9 +277,13 @@ import Testing
         let replay = try #require(replaying.client as? ReplayClaudeClient)
         #expect(replay.entries.count == 1)
         #expect(replay.allowStale)
+        #expect(replay.latency == .immediate)
         #expect(replay.unavailableReason == nil)
         #expect(replaying.replay?.countsByKind == ["triage": 1])
         #expect(ModelClientMode.replay(directory: directory, allowStale: false).isOffline)
+        // Unless a launch asks otherwise, a replay waits out what was recorded.
+        let lifelike = ModelClientMode.replay(directory: directory, allowStale: false).makeClient(prices: .defaults, live: live)
+        #expect((lifelike.client as? ReplayClaudeClient)?.latency == .recorded)
 
         let missing = directory.appendingPathComponent("missing")
         let broken = ModelClientMode.replay(directory: missing, allowStale: false).makeClient(prices: .defaults, live: live)

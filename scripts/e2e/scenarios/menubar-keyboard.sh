@@ -13,6 +13,9 @@ scenario_run() {
 	local suggestion
 	stage_flip_window
 	wait_toast >/dev/null || return 1
+	# No idle wait here, but a click by whoever is at the Mac still dismisses
+	# the toast, so it is checked, and brought back if it went, right before.
+	keep_toast_up || return 1
 	suggestion="$(newest_suggestion_id)"
 	snapshot_state "before"
 
