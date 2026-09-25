@@ -21,6 +21,11 @@ fi
 APP_BINARY="$APP/Contents/MacOS/Athina"
 # When the build of the bundle now in $APP started (scripts/bundle.sh).
 APP_BUILT="$APP.built"
+# The API tier runs a copy of $APP under an identifier of its own, so its
+# preferences are its own domain, never the owner's (ensure_e2e_app).
+E2E_APP="$ROOT/build/e2e/Athina.app"
+E2E_BINARY="$E2E_APP/Contents/MacOS/Athina"
+E2E_BUNDLE_ID="com.ahcarpenter.athina.e2e"
 DRIVE="$ROOT/.build/debug/athina-drive"
 # When the build that last brought athina-drive up to date started (ensure_drive).
 DRIVE_BUILT="$ROOT/build/athina-drive.built"
@@ -32,6 +37,15 @@ SETTINGS_SEED="$E2E_DIR/lib/settings.json"
 LIVE_SUPPORT="$HOME/Library/Application Support/athina"
 LEGACY_SUPPORT="$HOME/Library/Application Support/mentor"
 PREFS_DOMAIN="com.ahcarpenter.athina"
+
+# How many API-tier scenarios `run` runs at once (--jobs), read by the entry
+# point.
+# shellcheck disable=SC2034
+JOBS=1
+# 1 leaves an API-tier run's windows on screen (--show-windows).
+SHOW_WINDOWS=0
+# Before every line a scenario logs while others run beside it.
+LOG_TAG=""
 
 # Homes and evidence live outside the repository: a warm home holds caches that
 # must not be committed, and a run holds screenshots of the real screen.
@@ -67,7 +81,7 @@ CHECK_LINES=()
 
 log() {
 	local line
-	line="$(date '+%H:%M:%S') $*"
+	line="$(date '+%H:%M:%S') $LOG_TAG$*"
 	printf '%s\n' "$line" >&2
 	[ -n "$RUN_DIR" ] && printf '%s\n' "$line" >>"$RUN_DIR/log.txt"
 	return 0
@@ -150,9 +164,15 @@ ensure_drive() {
 # Sets CONTROL_API to whether the API tier runs: always on the harness's own
 # bundle, and on an ATHINA_E2E_APP bundle only when it carries the control API,
 # which no release build does, so there each API-tier scenario is skipped.
-# CONTROL_API is read by the entry point.
+# CONTROL_API is read by the entry point. When it is yes, the API tier's
+# hermetic copy is brought up to date too (ensure_e2e_app).
 # shellcheck disable=SC2034
 ensure_app() {
+	ensure_app_bundle
+	[ "$CONTROL_API" = no ] || ensure_e2e_app
+}
+
+ensure_app_bundle() {
 	CONTROL_API=yes
 	if [ -n "${ATHINA_E2E_APP:-}" ]; then
 		[ -x "$APP_BINARY" ] || die "ATHINA_E2E_APP names $APP, which holds no Athina executable"
@@ -173,6 +193,37 @@ ensure_app() {
 	fi
 	log "building $APP $(build_when), since it $why"
 	(cd "$ROOT" && scripts/bundle.sh release >/dev/null 2>&1) || die "could not build the app bundle"
+}
+
+# The API tier's copy of $APP (README "Hermetic runs"): the same binary under
+# the identifier $E2E_BUNDLE_ID, re-signed ad hoc with a requirement on that
+# identifier as scripts/bundle.sh signs the development bundle. Its
+# preferences are then a domain of its own, so a run never writes to the
+# owner's com.ahcarpenter.athina, which AppKit writes to whatever the app does
+# (a replay under CFFIXED_USER_HOME still did). Made again whenever $APP's
+# binary is not the one it was made from, which $E2E_APP.source records, and
+# never while something runs from it.
+ensure_e2e_app() {
+	local source
+	source="$(shasum -a 256 "$APP_BINARY" | cut -d ' ' -f 1)" || die "could not read $APP_BINARY"
+	if [ -x "$E2E_BINARY" ] && [ "$(cat "$E2E_APP.source" 2>/dev/null)" = "$source" ]; then
+		return 0
+	fi
+	if pgrep -f "$E2E_BINARY" >/dev/null 2>&1; then
+		die "$E2E_APP is out of date and something is running from it; run again when nothing is"
+	fi
+	log "copying $APP to $E2E_APP as $E2E_BUNDLE_ID $(build_when)"
+	rm -rf "$E2E_APP" "$E2E_APP.source"
+	mkdir -p "$(dirname "$E2E_APP")"
+	cp -R "$APP" "$E2E_APP" || die "could not copy $APP"
+	/usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $E2E_BUNDLE_ID" "$E2E_APP/Contents/Info.plist" \
+		|| die "could not set the identifier of $E2E_APP"
+	codesign --force --sign - --identifier "$E2E_BUNDLE_ID" \
+		--entitlements "$ROOT/Resources/Athina.entitlements" --timestamp=none \
+		--requirements "=designated => identifier \"$E2E_BUNDLE_ID\"" "$E2E_APP" >/dev/null 2>&1 \
+		|| die "could not sign $E2E_APP"
+	codesign --verify --deep --strict "$E2E_APP" || die "$E2E_APP does not verify"
+	printf '%s\n' "$source" >"$E2E_APP.source"
 }
 
 # What was run, for whoever reads the evidence later.
@@ -232,6 +283,13 @@ have_warm_home() { [ -s "$WARM_HOME/.athina-e2e-warm" ]; }
 # journal shows events with no observations.
 new_home() {
 	local dest="$1"
+	# A hermetic run captures nothing, so it needs no text-recognition cache,
+	# and it never reads the warm home that `warm` may be rebuilding.
+	if [ "${SCENARIO_TIER:-screen}" = api ]; then
+		rm -rf "$dest"
+		mkdir -p "$dest/Library/Application Support/athina"
+		return 0
+	fi
 	have_warm_home || die "no warm home yet: run scripts/e2e/athina-e2e warm first"
 	rm -rf "$dest"
 	cp -c -R "$WARM_HOME" "$dest" || die "could not clone the warm home into $dest"
@@ -286,15 +344,19 @@ PY
 launch_athina() {
 	local home="$1"
 	shift
-	local profile="$RUN_DIR/isolate.sb"
+	local profile="$RUN_DIR/isolate.sb" binary="$APP_BINARY"
+	# An API-tier run is hermetic (README "Hermetic runs"), from the copy with
+	# preferences of its own.
+	[ "${SCENARIO_TIER:-screen}" = api ] && binary="$E2E_BINARY"
 	# `8>&- 9>&-` here and on every helper started in the background: the
 	# locks' descriptors (lib/lock.sh) stay with the harness, so nothing that
 	# outlives a killed run can keep a lock.
 	sed -e "s#__LIVE_SUPPORT__#$LIVE_SUPPORT#" -e "s#__LEGACY_SUPPORT__#$LEGACY_SUPPORT#" "$E2E_DIR/lib/isolate.sb" >"$profile"
 	CFFIXED_USER_HOME="$home" HOME="$home" \
-		sandbox-exec -f "$profile" "$APP_BINARY" --replay "$FIXTURES" --replay-latency immediate "$@" \
+		sandbox-exec -f "$profile" "$binary" --replay "$FIXTURES" --replay-latency immediate "$@" \
 		>>"$RUN_DIR/app.log" 2>&1 8>&- 9>&- &
 	ATHINA_PID=$!
+	[ "${SCENARIO_TIER:-screen}" = api ] && watch_hermetic
 	LAUNCH_ARGS=("$@")
 	LAUNCHED_AT=$(date +%s)
 	JOURNAL=""
@@ -309,13 +371,14 @@ launch_athina() {
 	done
 	[ -n "$JOURNAL" ] || die "Athina never said where it keeps its journal; see $RUN_DIR/app.log"
 	log "journal at $JOURNAL"
+	# A hermetic run has no menu bar extra to be ready by; the control API
+	# answering (control_wait) is its readiness.
+	[ "${SCENARIO_TIER:-screen}" = api ] && return 0
 	for i in $(seq 1 90); do
 		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited during launch; see $RUN_DIR/app.log"
 		if "$DRIVE" ready "$ATHINA_PID" 2>/dev/null | grep -q READY; then
 			log "Athina ready after $((i / 2))s"
-			# An API-tier run posts no input of its own unless a scenario that
-			# needs sensing asks for it (wait_first_observation does).
-			[ "${SCENARIO_TIER:-screen}" = api ] || wake_input
+			wake_input
 			return 0
 		fi
 		# A macOS consent prompt can stall a launch silently; say so rather than
@@ -382,6 +445,7 @@ cleanup() {
 	stop_pid "$ATHINA_PID"
 	[ -n "${CONTROL_DIR:-}" ] && rm -rf "$CONTROL_DIR"
 	prefs_restore
+	rm -f "$RUN_DIR/.running"
 	if [ -n "$HOME_DIR" ] && [ "${KEEP_HOME:-0}" != 1 ]; then
 		rm -rf "$HOME_DIR"
 	fi
@@ -738,6 +802,51 @@ wait_item_title() {
 }
 
 # --- Watchers -----------------------------------------------------------------
+
+# A hermetic run shows nothing, and this is what says so: from the moment the
+# app starts to the moment it stops, Athina's windows above the desktop picture
+# are counted five times a second, and its items in the menu bar as often as
+# reading the bar allows, about once every two seconds. Both counts must stay
+# at 0 (hermetic_checks). The windows seen, if any, are named in the log.
+watch_hermetic() {
+	local pid="$ATHINA_PID"
+	(
+		local seen
+		while kill -0 "$pid" 2>/dev/null; do
+			seen="$("$DRIVE" windows "$pid" 2>/dev/null || true)"
+			printf '%s %s %s\n' "$(date '+%H:%M:%S')" "$(printf '%s' "$seen" | grep -c . || true)" "$(printf '%s' "$seen" | tr '\n' ' ')"
+			sleep 0.2
+		done
+	) >"$RUN_DIR/hermetic-windows.log" 2>&1 8>&- 9>&- &
+	track_helper $!
+	(
+		while kill -0 "$pid" 2>/dev/null; do
+			printf '%s %s\n' "$(date '+%H:%M:%S')" "$("$DRIVE" bar 2>/dev/null | grep -c "^extra .*pid=$pid " || true)"
+		done
+	) >"$RUN_DIR/hermetic-bar.log" 2>&1 8>&- 9>&- &
+	track_helper $!
+}
+
+# The checks every API-tier run ends with, over what watch_hermetic saw.
+hermetic_checks() {
+	local file what
+	for file in windows bar; do
+		# --show-windows leaves them on screen on purpose.
+		[ "$file" = windows ] && [ "$SHOW_WINDOWS" = 1 ] && continue
+		# A look at the bar takes seconds, longer than the shortest scenarios.
+		for _ in $(seq 1 100); do
+			[ -s "$RUN_DIR/hermetic-$file.log" ] && break
+			sleep 0.1
+		done
+		[ -s "$RUN_DIR/hermetic-$file.log" ] || { check "the $file were looked at during the run" "yes" "no"; continue; }
+		case "$file" in
+		windows) what="an Athina window above the desktop picture" ;;
+		bar) what="an Athina item in the menu bar" ;;
+		esac
+		check "looks during the run that found $what" "0" \
+			"$(awk '$2 > 0 { n++ } END { print n + 0 }' "$RUN_DIR/hermetic-$file.log")"
+	done
+}
 
 watch_announcements() {
 	"$DRIVE" announce "$ATHINA_PID" >"$RUN_DIR/announcements.log" 2>&1 8>&- 9>&- &

@@ -14,6 +14,25 @@ public protocol ControlHost: AnyObject {
     var controlSettings: ControlValue { get }
     /// A picture of one of the app's windows, taken the way `--snapshot` takes one.
     func controlCapture(_ window: NSWindow) async throws -> CGImage
+    /// The menu bar item's menu as the app builds it.
+    var controlMenu: MenuModel { get }
+    /// Runs one of the menu's commands, as choosing it does.
+    func controlPerform(_ command: MenuModel.Command)
+    /// A mouse-down outside the app's windows at `location`, in screen
+    /// coordinates, for the suggestion toast as its global monitor would see
+    /// it; false when no toast was up to hear it.
+    func controlOutsideClick(at location: CGPoint) -> Bool
+    /// One of the app's hot keys going down or coming up, as Carbon reports it.
+    func controlHotKey(_ key: ControlHotKey, isDown: Bool)
+    /// Words for talking back to hear while its key is down; false when
+    /// nothing was listening.
+    func controlHear(_ words: String) -> Bool
+}
+
+/// The hot keys a person sets in Settings > General.
+public enum ControlHotKey: String, CaseIterable, Sendable {
+    case pause
+    case talkBack = "talk-back"
 }
 
 @MainActor

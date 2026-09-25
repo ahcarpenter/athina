@@ -34,6 +34,32 @@ extension AppState: ControlHost {
         }
         throw ControlCaptureError(window: window.title)
     }
+
+    var controlMenu: MenuModel { menuModel }
+
+    func controlPerform(_ command: MenuModel.Command) {
+        perform(command)
+    }
+
+    func controlOutsideClick(at location: CGPoint) -> Bool {
+        clickOutside(at: location)
+    }
+
+    func controlHotKey(_ key: ControlHotKey, isDown: Bool) {
+        let slot: HotKeyCenter.Slot = switch key {
+        case .pause: .pause
+        case .talkBack: .pushToTalk
+        }
+        if isDown {
+            hotKeyPressed(slot)
+        } else {
+            hotKeyReleased(slot)
+        }
+    }
+
+    func controlHear(_ words: String) -> Bool {
+        hear(words)
+    }
 }
 
 /// ScreenCaptureKit missed the window every time it was asked for it.

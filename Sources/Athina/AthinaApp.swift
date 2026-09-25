@@ -8,12 +8,18 @@ import SwiftUI
 @main
 struct AthinaApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
     private let state = AppState.shared
 
     var body: some Scene {
-        // A snapshot run renders the label itself, off screen, and puts no
-        // item in the real menu bar.
-        MenuBarExtra(isInserted: .constant(!Snapshots.isActive)) {
+        // The app's own actions, so the menu's commands open windows with no
+        // menu bar extra up, as in a hermetic run.
+        let _ = state.windows.connect(openWindow: openWindow, openSettings: openSettings)
+        // A snapshot run renders the label itself, off screen, and a hermetic
+        // run keeps out of the menu bar every other app shares; neither puts an
+        // item there.
+        MenuBarExtra(isInserted: .constant(!Snapshots.isActive && !state.controlMode.isHermetic)) {
             MenuBarContent()
                 .environment(state)
         } label: {
@@ -138,6 +144,30 @@ enum WindowID {
     static let history = "history"
 }
 
+/// Opens Athina's windows from code outside any view, with the actions the
+/// app itself has (`AthinaApp` connects them): the menu's commands run here,
+/// including in a hermetic run, which has no menu bar extra to run them from.
+@MainActor
+final class WindowOpener {
+    private var openWindow: OpenWindowAction?
+    private var openSettingsAction: OpenSettingsAction?
+
+    func connect(openWindow: OpenWindowAction, openSettings: OpenSettingsAction) {
+        self.openWindow = openWindow
+        openSettingsAction = openSettings
+    }
+
+    func open(_ id: String) {
+        AppActivation.request()
+        openWindow?(id: id)
+    }
+
+    func openSettings() {
+        AppActivation.request()
+        openSettingsAction?()
+    }
+}
+
 /// Developer aids on the command line: `Athina --open debug|settings|permissions|history`
 /// presents that window at launch, the debug panel on a live launch only while
 /// Settings > Advanced turns it on (`DebugPanelAccess`) (for example
@@ -176,6 +206,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Chosen before any scene is built, so the Settings window opens on it.
         LaunchArguments.settingsPane?.select()
+        // Watching before any window opens, so the first one is parked too.
+        if AppState.shared.controlMode.parksWindows {
+            WindowParking.start()
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -195,7 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 alert.messageText = "Athina did not start"
                 alert.informativeText = refusal
                 alert.addButton(withTitle: "Quit")
-                NSApp.activate()
+                AppActivation.request()
                 alert.runModal()
             }
             exit(2)
@@ -273,118 +307,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// The menu bar extra's menu: what Athina is doing, then its commands, then
-/// its windows, then Quit. Status rows are dimmed text; a status that needs
-/// something from the person is a command that goes there.
+/// The menu bar extra's menu, drawn from the app's `MenuModel`, whose
+/// commands it runs through the handler the control API uses too.
 struct MenuBarContent: View {
     @Environment(AppState.self) private var state
-    @Environment(\.openWindow) private var openWindow
-    @Environment(\.openSettings) private var openSettings
 
     var body: some View {
-        Text(state.statusLine)
-        if let line = state.clientModeLine {
-            Text(line)
-        }
-        if let line = state.clockLine {
-            Text(line)
-        }
-        if let line = state.launchRefusalsLine {
-            Text(line)
-        }
-        if let line = state.controlLine {
-            Text(line)
-        }
-        if let action = state.menuStatusAction {
-            Button(action.title) { perform(action) }
-        } else {
-            Text(state.mentorLine)
-        }
-        if let context = state.mentorContextLine {
-            Text(context)
-        }
-        if let understandingLine = state.understandingLine {
-            Text(understandingLine)
-        }
-        if let action = state.talkBackAction {
-            Button(action.title) { perform(action) }
-        } else {
-            Text(state.talkBackLine)
-        }
-        Divider()
-        Button(state.isPaused ? "Resume Watching" : "Pause Watching") {
-            state.togglePause()
-        }
-        .optionalKeyboardShortcut(Formatting.keyboardShortcut(for: state.settings.pauseHotKey))
-        Button("Capture Now") {
-            state.captureNow()
-        }
-        .disabled(!state.mode.capturesFrames)
-        Divider()
-        Button("Show Last Suggestion") { state.showLastSuggestion() }
-            .disabled(state.lastShownSuggestion == nil)
-        // The suggestion never takes keyboard focus, so its answers are here
-        // too, where the keyboard and VoiceOver reach them. The submenu stays
-        // in the menu, its items dimmed, while no suggestion is up.
-        Menu("Answer Suggestion") {
-            Group {
-                Button("Tell Me More") { state.answerActiveSuggestion(.tellMeMore) }
-                Button("Not Now") { state.answerActiveSuggestion(.notNow) }
-                Button("Never for This") { state.answerActiveSuggestion(.never) }
-                Divider()
-                Button("Close Suggestion") { state.answerActiveSuggestion(.dismissed) }
-            }
-            .disabled(state.activeSuggestion == nil)
-        }
-        Divider()
-        Button("Suggestions") { open(WindowID.history) }
-        Button("Permissions…") { open(WindowID.permissions) }
-        Button("Settings…") {
-            NSApp.activate()
-            openSettings()
-        }
-        .keyboardShortcut(",")
-        // A builder's tool, in a group of its own after the everyday windows,
-        // as Safari's Develop menu follows its everyday menus, and only while
-        // Settings > Advanced turns it on, in every mode.
-        if state.settings.showDebugPanel {
-            Divider()
-            Button("Debug Panel") { open(WindowID.debug) }
-        }
-        Divider()
-        // Athina has no app menu, so its menu carries the app menu's About and Quit.
-        Button("About Athina") {
-            NSApp.activate()
-            NSApp.orderFrontStandardAboutPanel(nil)
-        }
-        Button("Quit Athina") { NSApp.terminate(nil) }
-            .keyboardShortcut("q")
-    }
-
-    private func open(_ id: String) {
-        NSApp.activate()
-        openWindow(id: id)
-    }
-
-    private func perform(_ action: MenuStatusAction) {
-        switch action.destination {
-        case .settings(let pane):
-            pane.select()
-            NSApp.activate()
-            openSettings()
-        case .permissions:
-            open(WindowID.permissions)
-        }
+        MenuItems(items: state.menuModel.items)
     }
 }
 
-/// A menu status that asks for something, shown as the command that does it.
-struct MenuStatusAction: Equatable {
-    enum Destination: Equatable {
-        case settings(SettingsPane)
-        case permissions
+/// Rows of the menu or of one of its submenus.
+private struct MenuItems: View {
+    let items: [MenuModel.Item]
+    @Environment(AppState.self) private var state
+
+    var body: some View {
+        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+            switch item {
+            case .status(let line):
+                Text(line)
+            case .command(let title, let command, let enabled, let shortcut):
+                Button(title) { state.perform(command) }
+                    .disabled(!enabled)
+                    .optionalKeyboardShortcut(shortcut.flatMap(Self.keyboardShortcut))
+            case .separator:
+                Divider()
+            case .submenu(let title, let children, let enabled):
+                Menu(title) { MenuItems(items: children) }
+                    .disabled(!enabled)
+            }
+        }
     }
 
-    var title: String
-    var destination: Destination
+    private static func keyboardShortcut(_ shortcut: MenuModel.Shortcut) -> KeyboardShortcut? {
+        switch shortcut {
+        case .hotKey(let hotKey): Formatting.keyboardShortcut(for: hotKey)
+        case .command(let character): KeyboardShortcut(KeyEquivalent(character))
+        }
+    }
 }

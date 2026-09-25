@@ -29,7 +29,7 @@ public enum ControlProtocol {
     /// The parameters that take something other than text, and what each
     /// takes; every other one is text.
     public static let kinds: [String: Kind] = [
-        "force": .bool, "present": .bool, "timeout": .number, "equals": .json,
+        "force": .bool, "present": .bool, "timeout": .number, "equals": .json, "x": .number, "y": .number,
     ]
 }
 

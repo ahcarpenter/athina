@@ -86,7 +86,7 @@ struct VoiceSection: View {
                 HStack {
                     Spacer()
                     Button("Show Permissions…") {
-                        NSApp.activate()
+                        AppActivation.request()
                         openWindow(id: WindowID.permissions)
                     }
                 }

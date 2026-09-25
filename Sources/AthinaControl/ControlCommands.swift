@@ -1,5 +1,6 @@
 import AppKit
 import AthinaControlProtocol
+import AthinaCore
 
 /// The control API's commands, run on the main actor one at a time.
 ///
@@ -23,6 +24,7 @@ final class ControlCommands {
 
     static let commands = [
         "ping", "windows", "find", "click", "type", "scroll", "menu", "settings", "wait-setting", "wait-window", "snapshot",
+        "outside-click", "hotkey",
     ]
 
     /// Answers a request; a parameter of the wrong type is answered with an
@@ -41,6 +43,8 @@ final class ControlCommands {
             case "wait-setting": return try await waitSetting(request)
             case "wait-window": return try await waitWindow(request)
             case "snapshot": return try await snapshot(request)
+            case "outside-click": return try await outsideClick(request)
+            case "hotkey": return try await hotKey(request)
             default: return .error("no command \"\(request.command)\"; the commands are \(Self.commands.joined(separator: ", "))")
             }
         } catch {
@@ -224,92 +228,76 @@ final class ControlCommands {
 
     // MARK: - The menu bar extra's menu
 
-    /// The status item's menu as the app builds it, read without showing it;
-    /// `press=<title>`, or `press="<submenu> > <title>"`, runs an item's own
-    /// action, as choosing it from the open menu does (`target(_:in:)`). Only
-    /// the real menu bar can show that macOS draws and opens the menu; that
-    /// stays a real-screen check.
+    /// The status item's menu as the app builds it (`MenuModel`), read
+    /// without showing it; `press=<title>`, or `press="<submenu> > <title>"`,
+    /// runs an item's command through the handler choosing it from the open
+    /// menu runs (`MenuModel.target`). Only the real menu bar can show that
+    /// macOS draws and opens the menu; that stays a real-screen check.
     private func menu(_ request: ControlRequest) async throws -> ControlReply {
-        guard let menu = statusMenu() else {
-            return .error("the status item's menu is out of reach")
-        }
-        Self.refresh(menu)
-        var fields: [String: ControlValue] = ["items": items(of: menu)]
+        let menu = host.controlMenu
+        var fields: [String: ControlValue] = ["items": Self.items(menu.items)]
         guard let press = try request.string("press") else { return .ok(fields) }
-        switch Self.target(press, in: menu) {
+        switch menu.target(press) {
         case .refused(let reason, let message):
             return .refused(reason, message, fields)
-        case .item(let holder, let index):
-            holder.performActionForItem(at: index)
+        case .command(let command):
+            host.controlPerform(command)
             fields["dispatched"] = .bool(await EventFlush.flush())
             return .ok(fields)
         }
     }
 
-    enum MenuTarget: Equatable {
-        /// The item, as its menu and its place there.
-        case item(NSMenu, Int)
-        case refused(reason: String, message: String)
-    }
-
-    /// The item a `press=` path names: titles from the top of the menu,
-    /// joined by " > ", each submenu brought up to date on the way as opening
-    /// it does. Refused by the step's name when it is not there or is dimmed,
-    /// since a person could neither choose it nor open the submenu it heads.
-    static func target(_ path: String, in menu: NSMenu) -> MenuTarget {
-        var steps = path.components(separatedBy: " > ")
-        let last = steps.removeLast()
-        var current = menu
-        var place = "the menu"
-        for step in steps {
-            let found = item(step, in: current, place)
-            guard case .item(_, let index) = found else { return found }
-            guard let submenu = current.items[index].submenu else {
-                return .refused(reason: "missing", message: "\"\(step)\" has no submenu")
-            }
-            refresh(submenu)
-            current = submenu
-            place = "\"\(step)\""
-        }
-        return item(last, in: current, place)
-    }
-
-    private static func item(_ title: String, in menu: NSMenu, _ place: String) -> MenuTarget {
-        guard let index = menu.items.firstIndex(where: { $0.title == title }) else {
-            return .refused(reason: "missing", message: "\(place) has no item \"\(title)\"")
-        }
-        guard menu.items[index].isEnabled else {
-            return .refused(reason: "disabled", message: "\"\(title)\" is dimmed")
-        }
-        return .item(menu, index)
-    }
-
-    /// The menu SwiftUI's MenuBarExtra gave its status item. Nothing public
-    /// leads from the app to that item, so it is reached through the status
-    /// bar window that holds it; slice 3's menu model replaces this.
-    private func statusMenu() -> NSMenu? {
-        for window in NSApp.windows where window.responds(to: NSSelectorFromString("statusItem")) {
-            if let item = window.value(forKey: "statusItem") as? NSStatusItem, let menu = item.menu { return menu }
-        }
-        return nil
-    }
-
-    static func refresh(_ menu: NSMenu) {
-        menu.delegate?.menuNeedsUpdate?(menu)
-        menu.update()
-    }
-
-    private func items(of menu: NSMenu) -> ControlValue {
-        .array(menu.items.map { item in
+    /// The rows as the menu shows them: a status row is a dimmed item.
+    static func items(_ items: [MenuModel.Item]) -> ControlValue {
+        .array(items.map { item in
             var fields: [String: ControlValue] = [
-                "title": .string(item.title), "enabled": .bool(item.isEnabled), "separator": .bool(item.isSeparatorItem),
+                "title": .string(item.title), "enabled": .bool(item.isEnabled), "separator": .bool(item == .separator),
             ]
-            if let submenu = item.submenu {
-                Self.refresh(submenu)
-                fields["items"] = items(of: submenu)
+            if case .submenu(_, let children, _) = item {
+                fields["items"] = Self.items(children)
             }
             return .object(fields)
         })
+    }
+
+    // MARK: - Input from outside the app
+
+    /// A click outside Athina's windows at `x`, `y` (top-left global
+    /// coordinates, as `windows` and `find` give frames), handed to the
+    /// suggestion toast as its global monitor would hand it one: a hermetic
+    /// run has no such monitor, so the owner's own clicks never reach it.
+    private func outsideClick(_ request: ControlRequest) async throws -> ControlReply {
+        guard let x = try request.number("x"), let y = try request.number("y") else {
+            return .error("outside-click needs x=<points> and y=<points> from the top left of the main display")
+        }
+        let location = AppAccessibility.screenRect(of: CGRect(x: x, y: y, width: 0, height: 0)).origin
+        let heard = host.controlOutsideClick(at: location)
+        return .ok(["heard": .bool(heard), "dispatched": .bool(await EventFlush.flush())])
+    }
+
+    /// One of the hot keys set in Settings > General, through the handler
+    /// Carbon calls: `key=pause` or `key=talk-back`, pressed and let go, or
+    /// only `phase=down` or `phase=up`. `heard=<words>` is what talking back
+    /// hears while its key is down, since a hermetic run opens no microphone.
+    private func hotKey(_ request: ControlRequest) async throws -> ControlReply {
+        let names = ControlHotKey.allCases.map(\.rawValue).joined(separator: " or ")
+        guard let name = try request.string("key"), let key = ControlHotKey(rawValue: name) else {
+            return .error("hotkey needs key=\(names)")
+        }
+        let phase = try request.string("phase") ?? "press"
+        guard ["press", "down", "up"].contains(phase) else {
+            return .error("hotkey phase= is press, down, or up, not \(phase)")
+        }
+        let words = try request.string("heard")
+        if words != nil, key != .talkBack {
+            return .error("heard= goes with key=talk-back")
+        }
+        var fields: [String: ControlValue] = [:]
+        if phase != "up" { host.controlHotKey(key, isDown: true) }
+        if let words { fields["heard"] = .bool(host.controlHear(words)) }
+        if phase != "down" { host.controlHotKey(key, isDown: false) }
+        fields["dispatched"] = .bool(await EventFlush.flush())
+        return .ok(fields)
     }
 
     // MARK: - Settings

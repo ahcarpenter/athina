@@ -32,6 +32,26 @@ import Testing
         #expect(served.refusal == nil)
     }
 
+    @Test func aServedLaunchIsHermeticAndParksItsWindows() {
+        let served = mode(["--replay", "/fixtures", "--control", "/tmp/athina-ctl.abc"])
+        #expect(served.isHermetic)
+        #expect(served.parksWindows)
+    }
+
+    @Test func showWindowsLeavesAHermeticRunsWindowsOnScreen() {
+        let shown = mode(["--replay", "/fixtures", "--control", "/tmp/athina-ctl.abc", "--show-windows"])
+        #expect(shown.isHermetic)
+        #expect(!shown.parksWindows)
+    }
+
+    /// A refused `--control` leaves the launch as it would be without it, so
+    /// a live launch given the flag still senses and shows itself.
+    @Test func onlyAServedLaunchIsHermetic() {
+        #expect(!ControlMode.off.isHermetic)
+        #expect(!mode(["--control", "/tmp/c"], client: .live).isHermetic)
+        #expect(!mode(["--control", "/tmp/c", "--show-windows"], compiledIn: false).parksWindows)
+    }
+
     @Test func aBuildWithoutTheTraitRefusesWhateverElseIsTrue() {
         let refused = mode(["--control", "/tmp/c"], compiledIn: false)
         #expect(refused.refusal?.contains("built without the control API") == true)
