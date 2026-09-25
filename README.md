@@ -142,6 +142,25 @@ tccutil reset Accessibility com.ahcarpenter.athina
 tccutil reset ScreenCapture com.ahcarpenter.athina
 ```
 
+### A sandboxed build
+
+The same binary can run in the App Sandbox, which a Mac App Store edition
+needs; no such build is made yet. At launch `RuntimeEnvironment` reads the
+process's own `com.apple.security.app-sandbox` entitlement, which the direct
+and development builds carry set to false, so they run exactly as described
+everywhere else in this README. A sandboxed run differs in three ways:
+
+- Its files are in its container, its preferences domain and its keychain
+  service are its own bundle identifier rather than `com.ahcarpenter.athina`
+  (`AppPaths`), so it never shares preferences or a key with the direct build.
+- It moves nothing from Mentor, neither files, preferences nor the API key
+  (see Coming from Mentor), since all three are out of its reach, and says so
+  once in the log.
+- `--replay` and `--settings` may name only a path inside its container or its
+  own bundle, and `--record`, `--snapshot` and a clock request's reply
+  (`scripts/advance-clock.sh`) only one inside its container. Anything else is
+  refused with one line naming the path and where it could have been.
+
 ## Iterating without the network
 
 Working on Athina needs no live call to Anthropic to build, test, or verify.
@@ -263,9 +282,10 @@ open -n build/Athina.app --args --replay <dir> --time-scale 60 --advance-clock 1
   directory and outside the live data folder, and refuses anything else into
   the log: otherwise a request would be a way for any process in the login
   session to create or replace a file the user can write, the live settings
-  among them. It exits 0 with what the clock now reads, 1 when no
-  answer arrives inside `ATHINA_CLOCK_TIMEOUT` (10 seconds by default), naming
-  the pid, and 3 when the replay refused the interval.
+  among them. A request it cannot answer moves nothing, so a retry after no
+  answer never moves the clock twice. It exits 0 with what the clock now
+  reads, 1 when no answer arrives inside `ATHINA_CLOCK_TIMEOUT` (10 seconds by
+  default), naming the pid, and 3 when the replay refused the interval.
 - The debug panel's Mentor card has an **Advance** field (accessibility label
   "Advance clock"): type an interval and press Return, and the clock moves
   ahead at once, as if that much time went by with the Mac awake in the mode
@@ -526,6 +546,7 @@ never wait.
 | `understanding-surfaces` | the understanding a mentor call writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link opens the Journal pane in place; and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
 | `debug-panel-access` | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed; turned on, that button opens the panel (the menu still offers none), and turned off again, the panel closes |
 | `settings-pane-links` | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link rather than Markdown, and a real click on it changes the Settings window's pane in place rather than handing the link to the system |
+| `debug-timeline` | the debug panel's timeline lists the Started event a launch journals once, as the journal holds it, rather than both from its first read of the journal and again from the event stream |
 
 A scenario prints one JSON line: its name, `pass` or `fail`, how long it took,
 every check it made, and the directory holding its evidence (transcript,
@@ -879,7 +900,8 @@ Sources/AthinaCore            library, fully testable
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
-                              and ClockRemote (moving a replay's clock from a script)
+                              and ClockRemote (moving a replay's clock from a script), RuntimeEnvironment
+                              (whether the process is sandboxed, and which app bundle it runs from)
 Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swift cannot make (it is variadic),
                               so `DataMigration` can read the old journal without altering it
 Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),

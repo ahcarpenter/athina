@@ -236,11 +236,20 @@ public enum ClockRemote {
         }
     }
 
-    /// Answers the request at the path it named, and only where a request may
-    /// make a replay write: a file that does not exist yet, inside the system
-    /// temporary directory, never inside the live data folder. Does nothing
-    /// when the request named none, and throws rather than writing otherwise,
-    /// which the caller logs.
+    /// Carries out a request: creates the file it named to answer at, and
+    /// only then hands the request to `move`, which moves the clock or refuses
+    /// the interval and returns the answer written there. A request that
+    /// cannot be answered throws its `Refusal` before `move` is called, which
+    /// the caller logs, so it moves nothing: the script that sent it sees no
+    /// answer and fails, and a clock that moved anyway would move again on
+    /// every retry. Any other error comes from writing the answer, after
+    /// `move`.
+    ///
+    /// A request is answered only where it may make a replay write: a file
+    /// that does not exist yet, inside the system temporary directory, never
+    /// inside the live data folder, and inside the container when the replay
+    /// is sandboxed. A request that named no file, or a relative path, cannot
+    /// be answered at all.
     ///
     /// Nothing authenticates this channel. The notification name is a
     /// constant and a replay's pid is in `ps`, so any process in the login
@@ -252,30 +261,51 @@ public enum ClockRemote {
     /// that it has already removed, in the per-user temporary directory
     /// (`getconf DARWIN_USER_TEMP_DIR`) that `NSTemporaryDirectory` names.
     ///
-    /// The path is resolved once and that one path is both checked and written
-    /// to. Checking what was asked for and writing to it are not the same
+    /// The path is resolved once and that one path is both checked and
+    /// created. Checking what was asked for and writing to it are not the same
     /// thing: `..` after a symlink means one path to `AppPaths.resolvedPath`,
     /// which folds `..` away before resolving links, and another to the
     /// kernel, which follows the link first. A request could name
     /// `<temp>/link-into-the-live-folder/../file` and pass a check that read
-    /// `<temp>/file` while the write landed in the live data folder.
+    /// `<temp>/file` while the write landed in the live data folder. The
+    /// answer then goes through the file created, never the path again, so
+    /// nothing done to the path while the clock moves can redirect it.
     public static func answer(
-        _ reply: Reply,
+        _ request: Result<TimeInterval, Refusal>,
         at url: URL?,
         temporaryDirectory: URL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true),
-        supportDirectory: URL = AppPaths.supportDirectory()
+        supportDirectory: URL = AppPaths.supportDirectory(),
+        environment: RuntimeEnvironment = .current,
+        moving move: (Result<TimeInterval, Refusal>) -> Reply
     ) throws {
-        guard let url else { return }
+        let file = try create(url, temporaryDirectory: temporaryDirectory, supportDirectory: supportDirectory, environment: environment)
+        defer { try? file.close() }
+        try file.write(contentsOf: move(request).encoded())
+    }
+
+    /// The file a request named, created and open to write its answer, or the
+    /// reason it may not be.
+    private static func create(_ url: URL?, temporaryDirectory: URL, supportDirectory: URL, environment: RuntimeEnvironment) throws -> FileHandle {
+        guard let url else { throw Refusal(reason: "no absolute \(replyKey) path in the request") }
         let target = URL(fileURLWithPath: AppPaths.resolvedPath(url))
+        // A sandboxed replay's temporary directory is inside its container,
+        // so the check below would refuse this too, but without saying why.
+        if let refusal = environment.refusal(writing: target, for: "the clock request") {
+            throw Refusal(reason: refusal)
+        }
         guard AppPaths.isAt(target, orInside: temporaryDirectory),
               !AppPaths.isAt(target, orInside: supportDirectory) else {
             throw Refusal(reason: "\(target.path) is not somewhere a clock request may be answered: it must be inside \(temporaryDirectory.path) and outside \(supportDirectory.path)")
         }
-        do {
-            try reply.encoded().write(to: target, options: .withoutOverwriting)
-        } catch let error as CocoaError where error.code == .fileWriteFileExists {
-            throw Refusal(reason: "\(target.path) already exists, and a clock request never replaces a file")
+        let descriptor = open(target.path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0o666)
+        guard descriptor >= 0 else {
+            let code = errno
+            if code == EEXIST {
+                throw Refusal(reason: "\(target.path) already exists, and a clock request never replaces a file")
+            }
+            throw Refusal(reason: "\(target.path) could not be created: \(String(cString: strerror(code)))")
         }
+        return FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
     }
 
     public struct Refusal: Error, Equatable {

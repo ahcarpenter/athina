@@ -137,6 +137,9 @@ final class AppState {
     /// panel, because a move that was refused is the owner's to settle; one
     /// that could not be finished stops the launch (`startupRefusal`).
     let dataMigration: DataMigration.Outcome
+    /// Why this live launch moves nothing from Mentor at all, for the log:
+    /// it runs in the App Sandbox (`DataMigration.skipReason`).
+    private let migrationSkipReason: String?
     /// Whether this launch copies the API key saved under the old name
     /// (`KeyMigration`). Only a launch that reads the keychain at all does:
     /// never a replay, and never a snapshot render.
@@ -212,12 +215,15 @@ final class AppState {
         // recordings and understanding the app kept while it was called
         // Mentor move to the folder it keeps them in now. A replay's files
         // are its own and never the live ones, and a snapshot render reads
-        // neither, so neither moves anything.
-        let dataMigration: DataMigration.Outcome = clientMode.isOffline || Snapshots.isActive ? .nothingToMove : DataMigration.run()
+        // neither, so neither moves anything. A sandboxed build can reach
+        // nothing Mentor kept, and says so once as it starts.
+        migrationSkipReason = clientMode.isOffline || Snapshots.isActive ? nil : DataMigration.skipReason(in: .current)
+        let movesFromMentor = !(clientMode.isOffline || Snapshots.isActive || migrationSkipReason != nil)
+        let dataMigration: DataMigration.Outcome = movesFromMentor ? DataMigration.run() : .nothingToMove
         self.dataMigration = dataMigration
         // The preferences follow the files, so a launch that stops here
         // leaves both for the next one.
-        let copiesFromMentor = !(clientMode.isOffline || Snapshots.isActive || dataMigration.stopsLaunch)
+        let copiesFromMentor = movesFromMentor && !dataMigration.stopsLaunch
         if copiesFromMentor { PreferencesMigration.run() }
         var files = LaunchFiles(arguments: CommandLine.arguments, clientMode: clientMode)
         // The settings first, so that a --settings file that is there but is
@@ -268,6 +274,7 @@ final class AppState {
         // A fixed per-launch name, so a replay render reads the same every time.
         launchFiles = LaunchFiles(arguments: [], clientMode: clientMode, launchName: "launch-4242-5a1e0c9d")
         dataMigration = .nothingToMove
+        migrationSkipReason = nil
         dataDirectoryLock = nil
         startupRefusal = nil
         journalURL = Journal.defaultURL(in: launchFiles.dataDirectory)
@@ -319,6 +326,9 @@ final class AppState {
 
         // What became of the files the app kept under its old name, before
         // the journal below opens in the folder they moved to.
+        if let migrationSkipReason {
+            AppState.log.notice("from Mentor: \(migrationSkipReason, privacy: .public)")
+        }
         if let note = dataMigration.note {
             if dataMigration.needsAttention {
                 AppState.log.error("data from Mentor: \(note, privacy: .public)")
@@ -372,11 +382,14 @@ final class AppState {
                 settings: mentorSettings, journal: journal, client: clientSetup.client, keyStore: keyStore, events: mentorStream,
                 clock: clock
             )
+            // The timeline is read before anything this launch journals, which
+            // arrives on the streams instead, so no entry is listed twice.
+            await self?.loadInitialTimeline(from: journal)
             // Sensing starts before the loop attaches: the loop's first key
             // read can wait on the keychain prompt, and its stream buffers.
             await pipeline.start()
             await self?.attach(mentor: mentor, journal: journal)
-            await self?.loadInitialTimeline(from: journal)
+            await self?.refreshJournalStats()
             for await event in stream {
                 guard let self else { return }
                 self.handle(event)
@@ -1319,24 +1332,26 @@ final class AppState {
 
     /// Moves a replay's clock ahead for another process (`ClockRemote`), and
     /// answers the request where it asked, so the script that made it knows it
-    /// was heard rather than assuming so.
+    /// was heard rather than assuming so. A request that cannot be answered
+    /// there moves nothing.
     private func advanceClock(onRequest request: Result<TimeInterval, ClockRemote.Refusal>, answeringAt replyURL: URL?) {
-        var reply: ClockRemote.Reply
-        switch request {
-        case .success(let seconds):
-            if advanceClock(by: seconds) {
-                reply = ClockRemote.Reply(moved: true, movedAhead: clockMovedAhead, now: clock.date)
-            } else {
-                let reason = "this launch has no replay clock"
-                AppState.log.error("clock advance request refused: \(reason, privacy: .public)")
-                reply = ClockRemote.Reply(moved: false, reason: reason, movedAhead: clockMovedAhead, now: clock.date)
-            }
-        case .failure(let refusal):
-            AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
-            reply = ClockRemote.Reply(moved: false, reason: refusal.reason, movedAhead: clockMovedAhead, now: clock.date)
-        }
         do {
-            try ClockRemote.answer(reply, at: replyURL)
+            try ClockRemote.answer(request, at: replyURL) { request in
+                switch request {
+                case .success(let seconds):
+                    if advanceClock(by: seconds) {
+                        return ClockRemote.Reply(moved: true, movedAhead: clockMovedAhead, now: clock.date)
+                    }
+                    let reason = "this launch has no replay clock"
+                    AppState.log.error("clock advance request refused: \(reason, privacy: .public)")
+                    return ClockRemote.Reply(moved: false, reason: reason, movedAhead: clockMovedAhead, now: clock.date)
+                case .failure(let refusal):
+                    AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
+                    return ClockRemote.Reply(moved: false, reason: refusal.reason, movedAhead: clockMovedAhead, now: clock.date)
+                }
+            }
+        } catch let refusal as ClockRemote.Refusal {
+            AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
         } catch {
             AppState.log.error("could not answer the clock request at \(replyURL?.path ?? "", privacy: .public): \(String(describing: error), privacy: .public)")
         }
@@ -1365,7 +1380,7 @@ final class AppState {
             if let reason = recordingUnavailableReason { return "Recording unavailable: \(reason)" }
             return "Recording model calls to \(Formatting.path(directory))"
         case .invalid(let reason):
-            return "Replay unavailable: \(reason)"
+            return "Calls refused: \(reason)"
         case .replay:
             guard let summary = replaySummary else { return "Replay mode" }
             if let reason = summary.unavailableReason { return "Replay unavailable: \(reason)" }
@@ -1518,7 +1533,6 @@ final class AppState {
         if let entries = try? await journal.recentEntries(limit: AppState.timelineLimit) {
             timeline = entries
         }
-        journalStats = try? await journal.stats()
     }
 
     private func scheduleSettingsSave() {

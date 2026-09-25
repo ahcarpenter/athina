@@ -427,7 +427,7 @@ public enum PreferencesMigration {
     @discardableResult
     public static func run(
         from old: String = AppPaths.legacyBundleIdentifier,
-        to new: String = AppPaths.bundleIdentifier,
+        to new: String = AppPaths.preferencesDomain,
         in defaults: UserDefaults = .standard
     ) -> Outcome {
         var current = defaults.persistentDomain(forName: new) ?? [:]
@@ -437,5 +437,21 @@ public enum PreferencesMigration {
         current[doneKey] = true
         defaults.setPersistentDomain(current, forName: new)
         return existing.isEmpty ? .nothingToMove : .copied(existing.keys.sorted())
+    }
+}
+
+extension DataMigration {
+    /// Why none of the moves from Mentor runs in `environment`, this one,
+    /// `PreferencesMigration` and `KeyMigration`, or nil when they all run as
+    /// they always have.
+    ///
+    /// A sandboxed build is the App Store build, under an identifier of its
+    /// own: Mentor's folder, its preferences domain and its keychain item are
+    /// all outside the container. The moves could find nothing, and reading
+    /// the old keychain item would put up the system's access prompt for no
+    /// key at all, so that build starts fresh instead and says so once.
+    public static func skipReason(in environment: RuntimeEnvironment) -> String? {
+        guard environment.isSandboxed else { return nil }
+        return "Nothing is copied from Mentor: this build runs in the App Sandbox, which keeps the files, preferences and API key Mentor kept out of its reach."
     }
 }
