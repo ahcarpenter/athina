@@ -25,6 +25,8 @@ let package = Package(
                 .linkedFramework("Speech"),
             ]
         ),
+        // project.yml's App Store target compiles these same sources against
+        // AthinaCore: a dependency or framework added here goes there too.
         .executableTarget(
             name: "Athina",
             dependencies: ["AthinaCore"],

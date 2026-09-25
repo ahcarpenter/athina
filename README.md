@@ -38,6 +38,8 @@ suppression are later phases.
 - No third-party dependencies: SwiftUI, ScreenCaptureKit, Vision, the
   accessibility API, Carbon hotkeys, AVFoundation and Speech for talking
   back, and the system SQLite
+- The Xcode project alone (see The Xcode project) is generated with XcodeGen,
+  which SwiftPM fetches and builds, pinned, on first use; nothing else needs it
 
 ## Build, run, test
 
@@ -52,6 +54,9 @@ make fixture-status   # checks that the committed fixtures are current (fails wh
 make test             # runs the unit tests (swift test), the loop included, with no network
 make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 make release          # builds, signs, notarizes, and packages a direct-download release into build/release (see Releasing)
+make xcodeproj        # generates Athina.xcodeproj, the Xcode project for the App Store route, from project.yml (see The Xcode project)
+make xcode-build      # generates it and builds its sandboxed App Store target into build/xcode
+make xcode-archive    # generates it and archives that target into build/xcode/Athina.xcarchive
 ```
 
 None of the launch targets quits an Athina it did not start: each one stops
@@ -65,10 +70,12 @@ start while another live Athina runs and names it; a build from before the
 rename, running as Mentor, counts as one. Nothing stops a person
 launching a second copy from Finder, which was equally true before.
 
-There is no Xcode project. `Package.swift` defines the targets and
-`scripts/bundle.sh` wraps the release binary in an app bundle with
-`Resources/Info.plist` and `Resources/Athina.entitlements`, then signs it.
-`swift build` and `swift test` work directly too.
+`Package.swift` defines the targets and `scripts/bundle.sh` wraps the release
+binary in an app bundle with `Resources/Info.plist` and
+`Resources/Athina.entitlements`, then signs it. `swift build` and `swift test`
+work directly too. The one Xcode project, for the Mac App Store route, wraps
+this package rather than replacing it, and nothing above uses it (see The
+Xcode project).
 
 `Athina --snapshot <dir>` renders every window with sample data to PNG files
 (light and dark) without starting the pipeline or calling any model. It is how
@@ -146,10 +153,12 @@ tccutil reset ScreenCapture com.ahcarpenter.athina
 ### A sandboxed build
 
 The same binary can run in the App Sandbox, which a Mac App Store edition
-needs; no such build is made yet. At launch `RuntimeEnvironment` reads the
-process's own `com.apple.security.app-sandbox` entitlement, which the direct
-and development builds carry set to false, so they run exactly as described
-everywhere else in this README. A sandboxed run differs in three ways:
+needs; the Xcode project's `Athina App Store` target builds it, signed with
+`Resources/Athina.app-store.entitlements` (see The Xcode project). At launch
+`RuntimeEnvironment` reads the process's own `com.apple.security.app-sandbox`
+entitlement, which the direct and development builds carry set to false, so
+they run exactly as described everywhere else in this README. A sandboxed run
+differs in three ways:
 
 - Its files are in its container, its preferences domain and its keychain
   service are its own bundle identifier rather than `com.ahcarpenter.athina`
@@ -161,6 +170,46 @@ everywhere else in this README. A sandboxed run differs in three ways:
   own bundle, and `--record`, `--snapshot` and a clock request's reply
   (`scripts/advance-clock.sh`) only one inside its container. Anything else is
   refused with one line naming the path and where it could have been.
+
+### The Xcode project
+
+The Mac App Store route needs what only an Xcode project gives: automatic
+signing with provisioning profiles, archiving, and uploading to App Store
+Connect. `project.yml` is its committed spec, and `make xcodeproj` generates
+`Athina.xcodeproj` from it with XcodeGen, pinned by version in
+`Tools/XcodeGenTool` (its `Package.resolved` is committed), which SwiftPM
+builds on first use, so nothing is installed and every Mac and CI generate the
+same project. The generated project is not committed, so no `project.pbxproj`
+is ever merged by hand: change `project.yml` and regenerate. Opening the
+project in Xcode starts with `make xcodeproj`, then `open Athina.xcodeproj`;
+run it again after changing `project.yml` or adding or removing a source file.
+The tools package is not part of the app's package, so `make build`, `make
+test`, `scripts/bundle.sh`, `make release` and the package CI job never fetch
+or build XcodeGen.
+
+The project has one target, `Athina App Store`, and a scheme of the same name
+whose Archive action builds Release. It compiles `Sources/Athina` against the
+package's `AthinaCore`, linking the frameworks the package's `Athina` target
+does (a dependency or framework added to one goes in the other too), bundles
+the same icon and menu bar marks `scripts/bundle.sh` does, and signs with
+`Resources/Athina.app-store.entitlements` (the App Sandbox, `network.client`,
+and the microphone keys of both the hardened runtime, `device.audio-input`,
+and the sandbox, `device.microphone`). Its Info.plist is `Resources/Info.plist`
+with `CFBundleIdentifier` rewritten at build time to the target's
+`PRODUCT_BUNDLE_IDENTIFIER`, so the version and every other key are still set
+in one place. That id is set only in `project.yml`, and is the development id
+`com.ahcarpenter.athina.appstore.dev` until the permanent App Store id is
+chosen, which can never change once a build is uploaded. Signing is automatic
+and `DEVELOPMENT_TEAM` is left empty: until a team id is filled in there, the
+target signs to run locally, which is how `make xcode-build` and `make
+xcode-archive` build it and CI archives it; with one, Xcode signs with that
+team's Apple Development certificate and Product > Archive feeds the
+Organizer's App Store Connect upload. The built app is sandboxed, so it keeps
+its files in its own container and runs as A sandboxed build describes. The
+App Store build is archived and uploaded through this project, while the
+direct Developer ID release keeps `scripts/release.sh` (see Releasing); the
+earlier plan to package the App Store build from the package build with
+`productbuild` and `altool` is superseded.
 
 ## Iterating without the network
 
@@ -1624,8 +1673,11 @@ particular to this app:
 `.github/workflows/ci.yml` runs `swift test`, the bundle script, and `Athina
 --snapshot` on GitHub's `macos-26` runner, which ships Xcode 26 and the macOS
 26 SDK this package targets, and uploads the rendered PNGs, replay-mode renders
-on a scaled clock included, as the `ui-snapshots` artifact. No test waits on
-real time (see A faster clock). The tests exercise the pure parts
+on a scaled clock included, as the `ui-snapshots` artifact. A second job
+generates the Xcode project, archives its App Store target, and checks that
+the archived app carries the target's bundle id and the App Sandbox (see The
+Xcode project). No test waits on real time (see A faster clock). The tests
+exercise the pure parts
 (hashing, cadence, journal, retention and its in-place migration, settings, the
 mentor scheduler and every gate, mentorship context rules and placement, spend
 accounting, snooze and never-for-this rules per category, the rolling window,
