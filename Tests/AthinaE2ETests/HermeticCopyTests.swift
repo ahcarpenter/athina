@@ -5,7 +5,7 @@ import Testing
 ///
 /// It is the same binary under an identifier of its own, so a hermetic run's
 /// preferences are never the owner's, signed so it runs, and made again only
-/// when the binary it was made from changes. Each test works on a checkout of
+/// when the bundle it was made from changes. Each test works on a checkout of
 /// its own with a small real bundle.
 @Suite struct HermeticCopyTests {
   private static let repository = URL(fileURLWithPath: #filePath)
@@ -106,7 +106,7 @@ import Testing
     #expect(try identifier(of: app) == "com.ahcarpenter.athina")
   }
 
-  @Test func theCopyIsMadeAgainOnlyWhenTheBinaryChanges() throws {
+  @Test func theCopyIsMadeAgainOnlyWhenTheBundleChanges() throws {
     defer { try? FileManager.default.removeItem(at: root) }
     try bundle()
     try ensureCopy()
@@ -119,5 +119,21 @@ import Testing
     try FileManager.default.copyItem(at: URL(fileURLWithPath: "/usr/bin/false"), to: binary)
     #expect(try ensureCopy() == 0)
     #expect(!FileManager.default.fileExists(atPath: marker.path))
+  }
+
+  @Test func theCopyIsMadeAgainWhenAResourceChangesAndTheBinaryDoesNot() throws {
+    defer { try? FileManager.default.removeItem(at: root) }
+    try bundle()
+    try ensureCopy()
+    let marker = copy.appendingPathComponent("Contents/Resources-kept")
+    try Data().write(to: marker)
+
+    let resources = app.appendingPathComponent("Contents/Resources", isDirectory: true)
+    try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+    try Data("new".utf8).write(to: resources.appendingPathComponent("AppIcon.icns"))
+    #expect(try ensureCopy() == 0)
+    #expect(!FileManager.default.fileExists(atPath: marker.path))
+    let icon = copy.appendingPathComponent("Contents/Resources/AppIcon.icns")
+    #expect(FileManager.default.contents(atPath: icon.path) == Data("new".utf8))
   }
 }

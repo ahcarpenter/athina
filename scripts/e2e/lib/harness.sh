@@ -200,12 +200,13 @@ ensure_app_bundle() {
 # identifier as scripts/bundle.sh signs the development bundle. Its
 # preferences are then a domain of its own, so a run never writes to the
 # owner's com.ahcarpenter.athina, which AppKit writes to whatever the app does
-# (a replay under CFFIXED_USER_HOME still did). Made again whenever $APP's
-# binary is not the one it was made from, which $E2E_APP.source records, and
-# never while something runs from it.
+# (a replay under CFFIXED_USER_HOME still did). Made again whenever any file
+# in $APP, its resources as well as its binary, is not the one it was made
+# from, which $E2E_APP.source records, and never while something runs from it.
 ensure_e2e_app() {
 	local source
-	source="$(shasum -a 256 "$APP_BINARY" | cut -d ' ' -f 1)" || die "could not read $APP_BINARY"
+	source="$(cd "$APP" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 shasum -a 256 | shasum -a 256 | cut -d ' ' -f 1)" \
+		|| die "could not read $APP"
 	if [ -x "$E2E_BINARY" ] && [ "$(cat "$E2E_APP.source" 2>/dev/null)" = "$source" ]; then
 		return 0
 	fi
@@ -807,44 +808,66 @@ wait_item_title() {
 # app starts to the moment it stops, Athina's windows above the desktop picture
 # are counted five times a second, and its items in the menu bar as often as
 # reading the bar allows, about once every two seconds. Both counts must stay
-# at 0 (hermetic_checks). The windows seen, if any, are named in the log.
+# at 0 (hermetic_checks). The windows seen, if any, are named in the log. A
+# look that could not be made is logged as failed rather than as 0, and each
+# look at the bar logs every app's items it saw beside Athina's, since a drive
+# macOS does not trust reads a bar with nothing in it.
 watch_hermetic() {
 	local pid="$ATHINA_PID"
 	(
 		local seen
 		while kill -0 "$pid" 2>/dev/null; do
-			seen="$("$DRIVE" windows "$pid" 2>/dev/null || true)"
-			printf '%s %s %s\n' "$(date '+%H:%M:%S')" "$(printf '%s' "$seen" | grep -c . || true)" "$(printf '%s' "$seen" | tr '\n' ' ')"
+			if seen="$("$DRIVE" windows "$pid" 2>/dev/null)"; then
+				printf '%s %s %s\n' "$(date '+%H:%M:%S')" "$(printf '%s' "$seen" | grep -c . || true)" "$(printf '%s' "$seen" | tr '\n' ' ')"
+			else
+				printf '%s failed\n' "$(date '+%H:%M:%S')"
+			fi
 			sleep 0.2
 		done
 	) >"$RUN_DIR/hermetic-windows.log" 2>&1 8>&- 9>&- &
 	track_helper $!
 	(
+		local seen
 		while kill -0 "$pid" 2>/dev/null; do
-			printf '%s %s\n' "$(date '+%H:%M:%S')" "$("$DRIVE" bar 2>/dev/null | grep -c "^extra .*pid=$pid " || true)"
+			if seen="$("$DRIVE" bar 2>/dev/null)"; then
+				printf '%s %s %s\n' "$(date '+%H:%M:%S')" \
+					"$(printf '%s\n' "$seen" | grep -c "^extra .*pid=$pid " || true)" \
+					"$(printf '%s\n' "$seen" | grep -c '^extra ' || true)"
+			else
+				printf '%s failed\n' "$(date '+%H:%M:%S')"
+			fi
+			sleep 0.2
 		done
 	) >"$RUN_DIR/hermetic-bar.log" 2>&1 8>&- 9>&- &
 	track_helper $!
 }
 
-# The checks every API-tier run ends with, over what watch_hermetic saw.
+# The checks every API-tier run ends with, over what watch_hermetic saw: every
+# look was made, none found Athina, and the bar was really read.
 hermetic_checks() {
-	local file what
+	local file what log
 	for file in windows bar; do
 		# --show-windows leaves them on screen on purpose.
 		[ "$file" = windows ] && [ "$SHOW_WINDOWS" = 1 ] && continue
+		log="$RUN_DIR/hermetic-$file.log"
 		# A look at the bar takes seconds, longer than the shortest scenarios.
 		for _ in $(seq 1 100); do
-			[ -s "$RUN_DIR/hermetic-$file.log" ] && break
+			[ -s "$log" ] && break
 			sleep 0.1
 		done
-		[ -s "$RUN_DIR/hermetic-$file.log" ] || { check "the $file were looked at during the run" "yes" "no"; continue; }
+		[ -s "$log" ] || { check "the $file were looked at during the run" "yes" "no"; continue; }
 		case "$file" in
 		windows) what="an Athina window above the desktop picture" ;;
 		bar) what="an Athina item in the menu bar" ;;
 		esac
+		check "looks at the $file during the run that failed" "0" \
+			"$(awk '$2 == "failed" { n++ } END { print n + 0 }' "$log")"
 		check "looks during the run that found $what" "0" \
-			"$(awk '$2 > 0 { n++ } END { print n + 0 }' "$RUN_DIR/hermetic-$file.log")"
+			"$(awk '$2 != "failed" && $2 > 0 { n++ } END { print n + 0 }' "$log")"
+		if [ "$file" = bar ]; then
+			check "looks at the bar that saw any app's item in it" "yes" \
+				"$(awk '$3 > 0 { n++ } END { print (n > 0 ? "yes" : "no") }' "$log")"
+		fi
 	done
 }
 

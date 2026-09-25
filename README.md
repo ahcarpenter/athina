@@ -753,7 +753,7 @@ it.
 | `wait-window` | waits until a window titled `window=` is open, or with `present=false` gone |
 | `snapshot` | a checkpoint PNG of one of Athina's windows at `path=`, taken as `--snapshot` takes one once macOS has finished animating the window open (up to two seconds); never over an existing file |
 | `outside-click` | a click outside Athina's windows at `x=`, `y=` (points from the top left of the main display, as frames are given), handed to the suggestion toast as its system-wide listener would hand it one, which a hermetic run does not have; `heard` says whether a toast was up |
-| `hotkey` | `key=pause` or `key=talk-back` through the handler Carbon calls, pressed and let go, or only `phase=down` or `phase=up`; `heard=<words>` is what talking back hears while its key is down, since a hermetic run opens no microphone |
+| `hotkey` | `key=pause` or `key=talk-back` through the handler Carbon calls, pressed and let go, or only `phase=down` or `phase=up`; `heard=<words>` is what talking back hears while its key is down, since a hermetic run opens no microphone; refused as `disabled` when the key is not registered (unset, unusable, or taken), as Carbon then never reports it |
 
 The waits take `timeout=<seconds>`, 10 unless given, and poll the app's own
 state at a fixed real-time pace; the replay's clock is not involved.
@@ -858,7 +858,9 @@ serves.
   run's windows above the desktop picture five times a second and its items
   in the menu bar every couple of seconds (`athina-drive windows` and `bar`,
   into `hermetic-windows.log` and `hermetic-bar.log`); every API-tier run ends
-  with two checks that both counts stayed at 0.
+  with checks that both counts stayed at 0, that no look failed, and that the
+  bar was really read: some look saw another app's items in it, which a drive
+  macOS does not trust for Accessibility never does.
 
 `--show-windows`, given to the harness (`run --show-windows <scenario>`) and
 passed on to the app beside `--hermetic`, leaves a hermetic run's windows

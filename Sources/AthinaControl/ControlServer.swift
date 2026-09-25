@@ -22,6 +22,9 @@ public protocol ControlHost: AnyObject {
     /// coordinates, for the suggestion toast as its global monitor would see
     /// it; false when no toast was up to hear it.
     func controlOutsideClick(at location: CGPoint) -> Bool
+    /// Whether one of the app's hot keys is registered, so a person could
+    /// press it: set and usable, as Settings > General reports it.
+    func controlHotKeyRegistered(_ key: ControlHotKey) -> Bool
     /// One of the app's hot keys going down or coming up, as Carbon reports it.
     func controlHotKey(_ key: ControlHotKey, isDown: Bool)
     /// Words for talking back to hear while its key is down; false when

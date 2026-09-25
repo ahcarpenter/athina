@@ -45,15 +45,25 @@ extension AppState: ControlHost {
         clickOutside(at: location)
     }
 
+    func controlHotKeyRegistered(_ key: ControlHotKey) -> Bool {
+        switch key {
+        case .pause: hotKeyRegistered
+        case .talkBack: pushToTalkRegistered
+        }
+    }
+
     func controlHotKey(_ key: ControlHotKey, isDown: Bool) {
-        let slot: HotKeyCenter.Slot = switch key {
+        if isDown {
+            hotKeyPressed(Self.slot(of: key))
+        } else {
+            hotKeyReleased(Self.slot(of: key))
+        }
+    }
+
+    private static func slot(of key: ControlHotKey) -> HotKeyCenter.Slot {
+        switch key {
         case .pause: .pause
         case .talkBack: .pushToTalk
-        }
-        if isDown {
-            hotKeyPressed(slot)
-        } else {
-            hotKeyReleased(slot)
         }
     }
 

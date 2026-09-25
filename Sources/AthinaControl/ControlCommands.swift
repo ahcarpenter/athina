@@ -279,6 +279,8 @@ final class ControlCommands {
     /// Carbon calls: `key=pause` or `key=talk-back`, pressed and let go, or
     /// only `phase=down` or `phase=up`. `heard=<words>` is what talking back
     /// hears while its key is down, since a hermetic run opens no microphone.
+    /// Refused as `disabled` when the key is not registered, since Carbon
+    /// never reports a key it does not hold.
     private func hotKey(_ request: ControlRequest) async throws -> ControlReply {
         let names = ControlHotKey.allCases.map(\.rawValue).joined(separator: " or ")
         guard let name = try request.string("key"), let key = ControlHotKey(rawValue: name) else {
@@ -291,6 +293,9 @@ final class ControlCommands {
         let words = try request.string("heard")
         if words != nil, key != .talkBack {
             return .error("heard= goes with key=talk-back")
+        }
+        guard host.controlHotKeyRegistered(key) else {
+            return .refused("disabled", "the \(name) hot key is not registered")
         }
         var fields: [String: ControlValue] = [:]
         if phase != "up" { host.controlHotKey(key, isDown: true) }
