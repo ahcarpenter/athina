@@ -278,27 +278,29 @@ lock_acquire() {
 
 # Take the lock once the keyboard and mouse have been quiet for `need` seconds,
 # as the command `idle` prints them, waiting up to `limit` seconds in all for
-# that, the lock waits between included (900 unless given). A run that needs a
-# quiet Mac waits for one before it holds the screen, so no other checkout
-# waits behind it while someone is at the Mac. When input came back while the lock was being waited for, the lock
-# is given back and the wait for quiet starts again; a lock a parent holds
-# cannot be given back, so it is kept. Returns 75, as a lock wait that gave up
+# that (900 unless given); the lock waits between count only against the lock
+# timeout. A run that needs a quiet Mac waits for one before it holds the
+# screen, so no other checkout waits behind it while someone is at the Mac.
+# When input came back while the lock was being waited for, the lock is given
+# back and the wait for quiet starts again, on what is left of `limit`; a lock
+# a parent holds cannot be given back, so it is kept. Returns 75, as a lock wait that gave up
 # does, when the Mac never went quiet.
 lock_acquire_when_idle() {
-	local lock="$1" what="$2" timeout="$3" need="$4" idle="$5" limit="${6:-900}" label status said seconds started=$SECONDS
+	local lock="$1" what="$2" timeout="$3" need="$4" idle="$5" limit="${6:-900}" label status said seconds waited=0
 	label="$(lock_var "$lock" _LABEL)"
 	while :; do
 		said=0
 		while :; do
 			seconds="$("$idle")"
 			[ "${seconds:-0}" -ge "$need" ] && break
-			if [ $((SECONDS - started)) -ge "$limit" ]; then
+			if [ "$waited" -ge "$limit" ]; then
 				lock_say "input never went idle for ${need}s in ${limit}s, so the $label was not taken"
 				return 75
 			fi
 			[ "$said" = 0 ] && lock_say "waiting for ${need}s of idle input before taking the $label"
 			said=1
 			sleep 1
+			waited=$((waited + 1))
 		done
 		lock_say "input idle for ${seconds}s"
 		status=0
