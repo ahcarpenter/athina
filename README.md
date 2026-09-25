@@ -1003,7 +1003,8 @@ Sources/AthinaCore            library, fully testable
                               ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
                               and ClockRemote (moving a replay's clock from a script), RuntimeEnvironment
-                              (whether the process is sandboxed, and which app bundle it runs from)
+                              (whether the process is sandboxed, and which app bundle it runs from),
+                              ControlMode (whether a launch serves the control API, see The control API)
 Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swift cannot make (it is variadic),
                               so `DataMigration` can read the old journal without altering it
 Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
@@ -1572,13 +1573,15 @@ The builder's paths reach it without changing the owner's setting:
   panel's Talk back field (see The committed fixtures).
 - **The end-to-end harness**: a scenario that needs the panel puts
   `--open debug` in its `SCENARIO_ARGS` (`understanding-surfaces` does), and
-  `athina-drive ax ... --scope "Debug Panel"` reaches its controls. Capture Now
-  is the menu's own command, not the panel's.
+  `athina-drive ax ... --scope "Debug Panel"` reaches its controls, or on the
+  API tier `athina-drive api ... window="Debug Panel"` (`debug-timeline`).
+  Capture Now is the menu's own command, not the panel's.
 - **Snapshots**: `--snapshot` draws the panel's view directly
   (`debug-panel*`) and the Advanced pane with the switch off and on
   (`settings-advanced`, `settings-advanced-on`). A menu opens only on screen,
-  so the `debug-panel-access` scenario screenshots the real menu without and
-  with the Debug Panel command.
+  so `--snapshot` draws none; the `debug-panel-access` scenario reads the
+  menu's items as the app builds them, without and with the Debug Panel
+  command, through the control API (see The control API).
 - **A live launch** given `--open debug` opens the panel only while the switch
   is on.
 
