@@ -46,6 +46,44 @@ import Testing
     #expect(decoded.excludedBundleIDs == ExcludedApps.defaults)
   }
 
+  /// A new install pauses on Control-Option-Command-P; the person can clear
+  /// it, it stays cleared from one launch to the next, and recording one
+  /// sets it again.
+  @Test func thePauseShortcutClearsAndStaysCleared() throws {
+    #expect(SensingSettings().pauseHotKey == .defaultPause)
+    let store = SettingsStore(url: temporaryURL())
+    var settings = SensingSettings()
+    settings.pauseHotKey = nil
+    try store.save(settings)
+    #expect(store.load().pauseHotKey == nil)
+    #expect(store.load() == settings)
+    let chosen = HotKey(keyCode: 1, modifiers: [.control, .option])
+    settings.pauseHotKey = chosen
+    try store.save(settings)
+    #expect(store.load().pauseHotKey == chosen)
+  }
+
+  /// Every earlier build reads `pauseHotKey` as a combination that is always
+  /// set, and nothing else about it: a cleared shortcut keeps its last
+  /// combination there, so an earlier build reads the file and pauses on
+  /// that combination, and a file an earlier build wrote reads as set.
+  @Test func anEarlierBuildReadsAClearedPauseShortcutAsItsLastCombination() throws {
+    let chosen = HotKey(keyCode: 1, modifiers: [.control, .option])
+    var settings = SensingSettings()
+    settings.pauseHotKey = chosen
+    settings.pauseHotKey = nil
+    let file = try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings))
+    let stored = try #require((file as? [String: Any])?["pauseHotKey"])
+    let earlier = try JSONDecoder().decode(
+      HotKey.self,
+      from: JSONSerialization.data(withJSONObject: stored)
+    )
+    #expect(earlier == chosen)
+
+    let written = Data(#"{"pauseHotKey": {"keyCode": 1, "modifiers": 3}}"#.utf8)
+    #expect(try JSONDecoder().decode(SensingSettings.self, from: written).pauseHotKey == chosen)
+  }
+
   /// The debug panel is something the person turns on: a new install and a
   /// settings file written before the switch existed both start with it off,
   /// and turning it on is kept.

@@ -475,7 +475,7 @@ struct PrivacySettings: View {
             },
             label: {
               Text("Pause shortcut")
-              if state.isRunning, !state.hotKeyRegistered {
+              if state.isRunning, state.settings.pauseHotKey != nil, !state.hotKeyRegistered {
                 StatusLabel(
                   """
                   Another app uses this combination, or it lacks Control, Option, or Command. \
