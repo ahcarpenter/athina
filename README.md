@@ -41,9 +41,11 @@ suppression are later phases.
   the end-to-end harness's real-screen tier, Screen Recording and
   Accessibility granted to the terminal that runs it (see Permissions).
   `make doctor` names whatever is missing
-- The app has no third-party dependencies: SwiftUI, ScreenCaptureKit, Vision, the
-  accessibility API, Carbon hotkeys, AVFoundation and Speech for talking
-  back, and the system SQLite
+- The app has one third-party dependency, KeyboardShortcuts, for its global
+  keyboard shortcuts and their recorder (see Keyboard shortcuts), which
+  SwiftPM fetches, pinned; the rest is the system's: SwiftUI,
+  ScreenCaptureKit, Vision, the accessibility API, AVFoundation and Speech
+  for talking back, and the system SQLite
 - The Xcode project alone (see The Xcode project) is generated with XcodeGen,
   which SwiftPM fetches and builds, pinned, on first use; nothing else needs it
 - The UI smoke test alone (see UI snapshot smoke test) uses
@@ -213,7 +215,8 @@ Store release flow brings it back as part of that flow.
 
 The project has one target, `Athina App Store`, and a scheme of the same name
 whose Archive action builds Release. It compiles `Sources/Athina` against the
-package's `AthinaCore` and `SnapshotDiff`, linking the frameworks the package's
+package's `AthinaCore` and `SnapshotDiff` and the KeyboardShortcuts package, at
+the version `Package.swift` pins, linking the frameworks the package's
 `Athina` target does (a dependency or framework added to one goes in the other
 too, except the `ControlAPI`-conditional `AthinaControl`, which the App Store
 build never carries; see The control API), bundles the same icon and menu bar
@@ -814,7 +817,7 @@ it.
 | `journal` | one of the harness's named journal queries (`journal - queries` in the drive helpers lists them), `query=<name>`, answered from the app's own journal connection, which refuses any statement that writes: the `columns`, and the `rows` as objects keyed by column |
 | `advance` | moves the replay's clock `seconds=` ahead, or `interval=` as the debug panel's Advance field takes it (`15m`, `2h`, `1d12h`), as that field does, and answers with the clock's time and how far it has been moved ahead in all |
 | `open-link` | follows a link in the app's own text, found as `click` finds a control, through the handler a click on it runs, with the URL SwiftUI carries as its identifier (`open-link window=Models identifier=athina-settings:journal`). It proves where the link goes and that the app handles it; that a click reaches it stays a real-screen check. Refused as `missing` when the control is not a link and `unhandled` when the app has no handler for its URL |
-| `hotkey` | `key=pause` or `key=talk-back` through the handler Carbon calls, pressed and let go, or only `phase=down` or `phase=up`; `heard=<words>` is what talking back hears while its key is down, since a hermetic run opens no microphone; refused as `disabled` when the key is not registered (unset, unusable, or taken), as Carbon then never reports it |
+| `hotkey` | `key=pause` or `key=talk-back` through the handler a press of the shortcut calls, pressed and let go, or only `phase=down` or `phase=up`; `heard=<words>` is what talking back hears while its key is down, since a hermetic run opens no microphone; refused as `disabled` when the key is not registered (unset, unusable, or held by another app), as the app then never hears it |
 
 The waits take `timeout=<seconds>`, 10 unless given, and poll the app's own
 state at a fixed real-time pace; the replay's clock is not involved.
@@ -903,8 +906,8 @@ serves.
   gives it and opens no microphone.
 - **It listens to nothing outside itself.** The toast has no system-wide
   click listener, so the owner's clicks cannot dismiss a toast they cannot
-  see, and no hot key is registered with Carbon, where it would take the
-  combination from every other app. The API's `outside-click` and `hotkey`
+  see, and no keyboard shortcut is registered with the system, where every
+  press of it by the owner would reach the run. The API's `outside-click` and `hotkey`
   run the same handlers instead.
 - **It writes nothing to the owner's preferences.** The API tier runs
   `build/e2e/Athina.app`, a copy of the development bundle the harness makes
@@ -1324,7 +1327,8 @@ Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swif
                               so `DataMigration` can read the old journal without altering it
 Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
-                              (on-device speech recognition), HotKeyCenter (Carbon, press and release),
+                              (on-device speech recognition), HotKeyCenter (the global keyboard shortcuts,
+                              press and release), Settings/ShortcutRecorder (the recorder in Settings),
                               Snapshots
 Tests/AthinaCoreTests         Swift Testing suites for the pure parts, with JSON fixtures under Fixtures/
 ```
@@ -1543,13 +1547,49 @@ records for each suggestion whether one was drawn, and the debug panel's
 Mentor card shows the last callout decision with the region in frame pixels
 and in screen points.
 
+### Keyboard shortcuts
+
+The pause shortcut (Settings > Privacy, Control-Option-Command-P unless
+changed) and the talk-back shortcut (Settings > General, unset until chosen)
+work from any app. Both run on
+[KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts), the
+app's one third-party package (MIT), pinned exactly in `Package.swift` and
+`project.yml`. It registers each combination with the system's Carbon hot
+keys, which report the press and the release and need no permission; while a
+menu is open, when the system holds those back, it reads the keys itself, so
+the shortcuts still work; and its recorder, the field in each pane, names
+keys by the current keyboard layout and holds the shortcuts off while it
+records, so pressing one there records it instead of running it.
+`ShortcutRecorder` puts that recorder in the panes. It refuses, with an alert
+that says why, a combination the system or the app's menu already uses
+(offering Use Anyway for a system one) and the other shortcut's combination,
+and beeps at one without Control, Option or Command unless its key is a
+function key. Delete or the field's clear button removes the talk-back
+shortcut; the pause shortcut is always set, so clearing it keeps its
+combination. The recorder's strings are in the package's resource bundle,
+which `scripts/bundle.sh` copies into the app.
+
+settings.json keeps each shortcut in the form every earlier build wrote
+(`HotKey`: the key's virtual key code and modifier bits of Athina's own), so
+a saved shortcut keeps working and an older build still reads the file;
+`HotKey.shortcut` is the same combination as the package has it, and a test
+holds the two forms to the combination earlier builds registered.
+
+Any number of apps can register a combination the way the package does, and
+every one of them hears it, so that registration never fails and the package
+reports none. Only an app that registers a combination exclusively takes it
+from the rest, so before the package registers one, `HotKeyCenter` makes a
+trial exclusive registration of it and lets it go at once: refused means
+another app holds it, and the pane says so under the field. A hermetic run
+registers nothing with the system (see Hermetic runs).
+
 ### Talking back
 
-A push-to-talk hotkey (the talk-back shortcut), recorded in Settings > General
-the same way as the pause shortcut in Settings > Privacy and unset by default,
-captures the microphone only while it is held. Carbon's hotkey registration
-delivers both `kEventHotKeyPressed` and `kEventHotKeyReleased` for a
-combination it registered, so `HotKeyCenter` hears the key go down and up
+A push-to-talk keyboard shortcut (the talk-back shortcut), recorded in
+Settings > General the same way as the pause shortcut in Settings > Privacy
+and unset by default, captures the microphone only while it is held.
+KeyboardShortcuts reports both the press and the release of a combination
+(see Keyboard shortcuts), so `HotKeyCenter` hears the key go down and up
 without Input Monitoring or any other permission beyond the two optional ones.
 The same combination cannot be both the pause and the talk-back key; the
 recorder refuses it and validation clears it. A recording is cut off after 30
@@ -2296,7 +2336,7 @@ refresh call in flight, and after a failed refresh, the Understanding settings
 section with and without a record, the callout over the sample frame, the toast
 collapsed, expanded, listening, thinking, answered, and as a note, the context
 editor with a duplicate name, the transient status messages (a connection test,
-a refused or recording shortcut, on-device recognition unavailable), and every
+a shortcut another app holds, on-device recognition unavailable), and every
 variant of the menu bar mark, at the size the bar draws it, with the word a
 replay puts beside it, and enlarged.
 

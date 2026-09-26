@@ -1,116 +1,89 @@
 import AthinaCore
 import Carbon
+import KeyboardShortcuts
 
-/// Registers Athina's global hotkeys with Carbon, which needs no permission and
-/// reports both the press and the release of a registered combination.
+/// Registers Athina's global keyboard shortcuts through KeyboardShortcuts,
+/// which needs no permission and reports both the press and the release of a
+/// combination.
 ///
 /// The release is what makes push-to-talk possible without Input Monitoring:
-/// Carbon delivers `kEventHotKeyReleased` for a hotkey it registered, so the
-/// app hears the key go up without watching keyboard events at all.
+/// the package hears the key go up without watching keyboard events at all.
+/// It also keeps the shortcuts working while a menu is open, when the system
+/// holds them back, and holds them off while one of its recorders records, so
+/// pressing a shortcut there records it instead of running it.
 @MainActor
 final class HotKeyCenter {
-  /// One registration each; the raw value is the Carbon hotkey id.
-  enum Slot: UInt32, CaseIterable {
-    case pause = 1
-    case pushToTalk = 2
+  /// One registration each.
+  enum Slot: CaseIterable {
+    case pause
+    case pushToTalk
   }
 
   var onPress: ((Slot) -> Void)?
   var onRelease: ((Slot) -> Void)?
 
-  private var refs: [Slot: EventHotKeyRef] = [:]
-  private var handlerRef: EventHandlerRef?
-  private static let signature: OSType = 0x4D4E_5452  // "MNTR"
+  /// Each slot's listener; ending it unregisters the combination.
+  private var listeners: [Slot: Task<Void, Never>] = [:]
 
-  /// Registers the hotkey for the slot, replacing any previous one; nil
+  /// Registers the combination for the slot, replacing any previous one; nil
   /// unregisters it.
   ///
-  /// Returns false when the combination is unusable, not set, or another app
-  /// already holds it.
+  /// Returns false when the combination is unset or unusable, or another app
+  /// holds it for itself, so pressing it never reaches Athina.
   @discardableResult
   func register(_ hotKey: HotKey?, for slot: Slot) -> Bool {
     unregister(slot)
     guard let hotKey, hotKey.isUsable else { return false }
-    installHandlerIfNeeded()
-    let id = EventHotKeyID(signature: HotKeyCenter.signature, id: slot.rawValue)
-    var ref: EventHotKeyRef?
-    let status = RegisterEventHotKey(
-      hotKey.keyCode,
-      HotKeyCenter.carbonModifiers(hotKey.modifiers),
-      id,
-      GetApplicationEventTarget(),
-      0,
-      &ref
-    )
-    guard status == noErr, let ref else { return false }
-    refs[slot] = ref
-    return true
+    let shortcut = hotKey.shortcut
+    let heldElsewhere = HotKeyCenter.isHeldExclusively(shortcut)
+    // Made here rather than in the task, so the combination is registered now.
+    let events = KeyboardShortcuts.events(for: shortcut)
+    listeners[slot] = Task { [weak self] in
+      for await event in events {
+        switch event {
+        case .keyDown: self?.onPress?(slot)
+        case .keyUp: self?.onRelease?(slot)
+        }
+      }
+    }
+    return !heldElsewhere
   }
 
   func unregister(_ slot: Slot) {
-    if let ref = refs.removeValue(forKey: slot) {
-      UnregisterEventHotKey(ref)
-    }
+    listeners.removeValue(forKey: slot)?.cancel()
   }
 
   func unregisterAll() {
     for slot in Slot.allCases { unregister(slot) }
   }
 
-  private func installHandlerIfNeeded() {
-    guard handlerRef == nil else { return }
-    var specs = [
-      EventTypeSpec(
-        eventClass: OSType(kEventClassKeyboard),
-        eventKind: UInt32(kEventHotKeyPressed)
-      ),
-      EventTypeSpec(
-        eventClass: OSType(kEventClassKeyboard),
-        eventKind: UInt32(kEventHotKeyReleased)
-      ),
-    ]
-    let userData = Unmanaged.passUnretained(self).toOpaque()
-    InstallEventHandler(
-      GetApplicationEventTarget(),
-      { _, event, userData in
-        guard let userData, let event else { return noErr }
-        var id = EventHotKeyID()
-        GetEventParameter(
-          event,
-          EventParamName(kEventParamDirectObject),
-          EventParamType(typeEventHotKeyID),
-          nil,
-          MemoryLayout<EventHotKeyID>.size,
-          nil,
-          &id
-        )
-        guard id.signature == HotKeyCenter.signature, let slot = Slot(rawValue: id.id) else {
-          return noErr
-        }
-        let released = GetEventKind(event) == UInt32(kEventHotKeyReleased)
-        let center = Unmanaged<HotKeyCenter>.fromOpaque(userData).takeUnretainedValue()
-        MainActor.assumeIsolated {
-          if released {
-            center.onRelease?(slot)
-          } else {
-            center.onPress?(slot)
-          }
-        }
-        return noErr
-      },
-      specs.count,
-      &specs,
-      userData,
-      &handlerRef
+  /// Whether another app registered the combination for itself alone, which
+  /// takes every press of it from the rest.
+  ///
+  /// Any number of apps can register a combination the way KeyboardShortcuts
+  /// does, and all of them hear it, so its registration never fails and it
+  /// reports none. Only an exclusive registration takes a combination from
+  /// the others, and a trial exclusive one is refused exactly when another
+  /// app holds it that way.
+  ///
+  /// The system also refuses it when this app already holds the combination,
+  /// as it may for a moment after a slot lets go of one (the package lets go
+  /// on its next turn), so the package's own registrations are held off while
+  /// the trial runs.
+  private static func isHeldExclusively(_ shortcut: KeyboardShortcuts.Shortcut) -> Bool {
+    let wasEnabled = KeyboardShortcuts.isEnabled
+    KeyboardShortcuts.isEnabled = false
+    defer { KeyboardShortcuts.isEnabled = wasEnabled }
+    var ref: EventHotKeyRef?
+    let status = RegisterEventHotKey(
+      UInt32(shortcut.carbonKeyCode),
+      UInt32(shortcut.carbonModifiers),
+      EventHotKeyID(signature: 0x4154_4850, id: 1),  // "ATHP"
+      GetEventDispatcherTarget(),
+      OptionBits(kEventHotKeyExclusive),
+      &ref
     )
-  }
-
-  static func carbonModifiers(_ modifiers: HotKey.Modifiers) -> UInt32 {
-    var flags: UInt32 = 0
-    if modifiers.contains(.command) { flags |= UInt32(cmdKey) }
-    if modifiers.contains(.option) { flags |= UInt32(optionKey) }
-    if modifiers.contains(.control) { flags |= UInt32(controlKey) }
-    if modifiers.contains(.shift) { flags |= UInt32(shiftKey) }
-    return flags
+    if let ref { UnregisterEventHotKey(ref) }
+    return status == eventHotKeyExistsErr
   }
 }
