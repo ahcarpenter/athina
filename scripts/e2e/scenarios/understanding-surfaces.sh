@@ -42,7 +42,9 @@ window_texts() {
 
 has_text() { grep -qF -- "$2" "$RUN_DIR/$1" && echo yes || echo no; }
 
-checkpoint() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no checkpoint of $1"; }
+# Pictures kept as evidence: these windows show what changes from run to run
+# or move on their own, so they are not checkpoints (README "Checkpoints").
+picture() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no picture of $1"; }
 
 # The x a duration row's amount field starts at in the Models pane. Two rows
 # in one section are in line only when their fields start at the same x,
@@ -54,15 +56,20 @@ field_value() { api find window=Models identifier="$1" --field elements.0.value;
 # Type an amount into a duration row and end the edit with Tab, the way a
 # person moves on to the next field. The field is emptied first from wherever
 # the click put the insertion point. The amount the row is left showing is
-# what it committed.
+# what it committed, which it can take a moment to show once the edit ends
+# on a busy Mac, so it is read until it is the amount expected, `want`, or
+# that moment has passed.
 type_duration() {
-	local field="$1" typed="$2" clear=""
+	local field="$1" typed="$2" want="$3" clear=""
 	for _ in 1 2 3 4 5 6; do clear+=$'\x7f'; done
 	api scroll window=Models identifier="$field" >/dev/null || return 1
 	api click window=Models identifier="$field" >/dev/null || return 1
 	api type window=Models text="$clear$typed"$'\t' >/dev/null || return 1
-	field_value "$field"
+	DURATION_FIELD="$field"
+	settled "$want" duration_field_value
 }
+
+duration_field_value() { field_value "$DURATION_FIELD"; }
 
 # The confirmation's Cancel button, once it is up over the debug panel.
 cancel_button() { api find window="Debug Panel" role=AXButton label=Cancel --field elements.0.label; }
@@ -92,7 +99,7 @@ scenario_run() {
 	# The card sits under the Mentor loop card in the Now pane, below the fold.
 	api scroll window="Debug Panel" identifier=understanding.reset >/dev/null || log "the card could not be scrolled to"
 	window_texts "Debug Panel" card
-	checkpoint "Debug Panel" card
+	picture "Debug Panel" card
 	check "the card shows the goal" "yes" "$(has_text card-texts.txt "$goal")"
 	check "the card names the refresh interval" "yes" "$(has_text card-texts.txt "of active use")"
 	check "the card offers Reset Understanding" "yes" "$(has_text card-texts.txt "Reset Understanding…")"
@@ -102,7 +109,7 @@ scenario_run() {
 	check "a click on the Models toolbar item lands" "true" "$(api click window=General label=Models --field ok)"
 	api wait-window window=Models timeout=5 >/dev/null || { log "the Models pane never showed"; return 1; }
 	window_texts Models settings
-	checkpoint Models models
+	picture Models models
 	check "Settings shows the current goal" "yes" "$(has_text settings-texts.txt "$goal")"
 
 	# The section's two duration rows show different unit words, minutes beside
@@ -122,12 +129,12 @@ scenario_run() {
 	# that and moving on leaves the nearest one it allows rather than a figure
 	# validated() would quietly clamp behind the person.
 	check "a refresh below the range settles at the shortest allowed" "5" \
-		"$(type_duration understanding.refreshInterval 1)"
+		"$(type_duration understanding.refreshInterval 1 5)"
 	check "the setting holds the shortest refresh" "300" "$(settled 300 refresh_interval)"
 	check "a refresh above the range settles at the longest allowed" "720" \
-		"$(type_duration understanding.refreshInterval 1000)"
+		"$(type_duration understanding.refreshInterval 1000 720)"
 	check "the setting holds the longest refresh" "43200" "$(settled 43200 refresh_interval)"
-	check "an allowed refresh is left as typed" "20" "$(type_duration understanding.refreshInterval 20)"
+	check "an allowed refresh is left as typed" "20" "$(type_duration understanding.refreshInterval 20 20)"
 	check "the setting holds the refresh typed" "1200" "$(settled 1200 refresh_interval)"
 
 	# The footer names the Journal pane by linking to it, and the link opens it
@@ -136,7 +143,7 @@ scenario_run() {
 		"$(api open-link window=Models identifier=athina-settings:journal --field url)"
 	check "the footer link opens the Journal pane in place" "yes" \
 		"$(api wait-window window=Journal timeout=5 >/dev/null && echo yes || echo no)"
-	checkpoint Journal journal-pane
+	picture Journal journal-pane
 	api click window=Journal subrole=AXCloseButton >/dev/null
 	api wait-window window=Journal present=false timeout=5 >/dev/null || log "Settings would not close"
 
@@ -149,7 +156,7 @@ scenario_run() {
 		"$(api press window="Debug Panel" identifier=understanding.reset --field ok)"
 	check "the confirmation comes up" "Cancel" "$(settled Cancel cancel_button)"
 	window_texts "Debug Panel" confirmation
-	checkpoint "Debug Panel" confirmation
+	picture "Debug Panel" confirmation
 	check "the confirmation asks before resetting" "yes" "$(has_text confirmation-texts.txt "Reset the understanding?")"
 	check "the confirmation says it cannot be undone" "yes" "$(has_text confirmation-texts.txt "You can't undo this action.")"
 	check "a click on Cancel lands" "true" "$(api click window="Debug Panel" role=AXButton label=Cancel --field ok)"
@@ -165,7 +172,7 @@ scenario_run() {
 	check "Reset Understanding forgets every revision" "0" "$(revisions)"
 	check "the reset is journaled once" "1" "$(reset_events)"
 	window_texts "Debug Panel" card-after-reset
-	checkpoint "Debug Panel" card-after-reset
+	picture "Debug Panel" card-after-reset
 	check "the card says there is no understanding yet" "yes" "$(has_text card-after-reset-texts.txt "No understanding yet.")"
 
 	menu_titles after-reset

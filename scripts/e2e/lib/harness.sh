@@ -44,6 +44,12 @@ PREFS_DOMAIN="com.ahcarpenter.athina"
 JOBS=1
 # 1 leaves an API-tier run's windows on screen (--show-windows).
 SHOW_WINDOWS=0
+# How an API-tier run's app is launched (--launch): sandbox, exec'd under
+# sandbox-exec from the harness, or open, through LaunchServices (launch_athina).
+LAUNCH_WITH=sandbox
+# Where an API-tier run's checkpoints go (--checkpoints), each scenario's in a
+# folder named after it; the run's own evidence directory when empty.
+CHECKPOINTS_ROOT=""
 # Before every line a scenario logs while others run beside it.
 LOG_TAG=""
 
@@ -360,19 +366,35 @@ launch_athina() {
 	local home="$1"
 	shift
 	local profile="$RUN_DIR/isolate.sb" binary="$APP_BINARY"
-	# An API-tier run is hermetic (README "Hermetic runs"), from the copy with
-	# preferences of its own.
-	[ "${SCENARIO_TIER:-screen}" = api ] && binary="$E2E_BINARY"
+	LAUNCH_ARGS=("$@")
+	local args=(--replay "$FIXTURES" --replay-latency immediate) zone=()
+	if [ "${SCENARIO_TIER:-screen}" = api ]; then
+		# An API-tier run is hermetic (README "Hermetic runs"), from the copy
+		# with preferences of its own, and draws dates, times, numbers and
+		# scroll bars as the UI snapshots do, whatever this Mac is set to, so
+		# its checkpoints read the same on every run (scripts/snapshots.sh).
+		# Ahead of the scenario's own arguments: AppKit reads every argument
+		# after `-Name value` pairs as a document to open, and an app asked to
+		# open one at launch opens none of its windows, so each pair has to
+		# come before a flag that takes no value, such as --hermetic.
+		binary="$E2E_BINARY"
+		zone=(TZ=UTC)
+		args+=(-AppleLocale en_US -AppleLanguages '(en-US)' -AppleICUForce24HourTime NO -AppleShowScrollBars Always)
+	fi
+	args+=("$@")
+	if [ "${SCENARIO_TIER:-screen}" = api ] && [ "$LAUNCH_WITH" = open ]; then
+		launch_athina_open "$home" "${args[@]}"
+		return
+	fi
 	# `8>&- 9>&-` here and on every helper started in the background: the
 	# locks' descriptors (lib/lock.sh) stay with the harness, so nothing that
 	# outlives a killed run can keep a lock.
 	sed -e "s#__LIVE_SUPPORT__#$LIVE_SUPPORT#" -e "s#__LEGACY_SUPPORT__#$LEGACY_SUPPORT#" "$E2E_DIR/lib/isolate.sb" >"$profile"
-	CFFIXED_USER_HOME="$home" HOME="$home" \
-		sandbox-exec -f "$profile" "$binary" --replay "$FIXTURES" --replay-latency immediate "$@" \
+	env ${zone[@]+"${zone[@]}"} CFFIXED_USER_HOME="$home" HOME="$home" \
+		sandbox-exec -f "$profile" "$binary" "${args[@]}" \
 		>>"$RUN_DIR/app.log" 2>&1 8>&- 9>&- &
 	ATHINA_PID=$!
 	[ "${SCENARIO_TIER:-screen}" = api ] && watch_hermetic
-	LAUNCH_ARGS=("$@")
 	LAUNCHED_AT=$(date +%s)
 	JOURNAL=""
 	log "launched Athina pid=$ATHINA_PID (replay, sandboxed, home=$home)"
@@ -405,6 +427,48 @@ launch_athina() {
 	done
 	die "Athina never became ready; see $RUN_DIR/app.log"
 }
+
+# An API-tier launch through LaunchServices (--launch open), for the CI runner.
+# A process exec'd from a job step inherits the grants the runner image gives
+# the step's shell, Accessibility among them, so the app would run trusted and
+# the run could never catch a change that made the API tier need a grant it
+# does not have on a Mac; opened, it is its own responsible process, as
+# untrusted as it is on the owner's Mac. `open` gives no pid and runs the app
+# outside sandbox-exec, so the pid comes from the line the app writes as it
+# starts, and the harness refuses this on a Mac with Athina data of its own.
+# open hands the app's output to two files of its own, and on the runner the
+# app's stderr lines, that one among them, land in the stdout one, so the
+# harness reads both (app_output).
+launch_athina_open() {
+	local home="$1"
+	shift
+	[ ! -e "$LIVE_SUPPORT" ] && [ ! -e "$LEGACY_SUPPORT" ] \
+		|| die "--launch open runs the app outside the sandbox, so it is only for a machine with no Athina data, such as a CI runner; this one has $LIVE_SUPPORT"
+	open -n -g --env CFFIXED_USER_HOME="$home" --env HOME="$home" --env TZ=UTC \
+		--stdout "$RUN_DIR/app-stdout.log" --stderr "$RUN_DIR/app.log" "$E2E_APP" --args "$@" \
+		|| die "open could not launch $E2E_APP"
+	LAUNCHED_AT=$(date +%s)
+	JOURNAL=""
+	ATHINA_PID=""
+	local i started
+	for i in $(seq 1 90); do
+		started="$(app_output | grep -m 1 -E '^Athina started: pid [0-9]+ in ' || true)"
+		if [ -n "$started" ]; then
+			ATHINA_PID="$(printf '%s\n' "$started" | sed -E 's/^Athina started: pid ([0-9]+) in .*/\1/')"
+			JOURNAL="${started#* in }/journal.sqlite"
+			break
+		fi
+		sleep 0.5
+	done
+	[ -n "$ATHINA_PID" ] || die "Athina never said it started; see $RUN_DIR/app.log"
+	watch_hermetic
+	log "launched Athina pid=$ATHINA_PID (replay, through open, home=$home)"
+	log "journal at $JOURNAL"
+}
+
+# Everything the run's app has written: app.log, and app-stdout.log beside it
+# for a launch through open.
+app_output() { cat "$RUN_DIR"/app.log "$RUN_DIR"/app-stdout.log 2>/dev/null || true; }
 
 stop_pid() {
 	local pid="$1" i
@@ -754,7 +818,7 @@ control_wait() {
 			log "control API answering after $((i / 10)).$((i % 10))s"
 			return 0
 		fi
-		refusal="$(grep -m 1 -E '^control API (refused|failed): ' "$RUN_DIR/app.log" 2>/dev/null || true)"
+		refusal="$(app_output | grep -m 1 -E '^control API (refused|failed): ' || true)"
 		[ -n "$refusal" ] && die "$refusal"
 		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited before its control API answered; see $RUN_DIR/app.log"
 		sleep 0.1
@@ -843,6 +907,27 @@ scripted_toast() {
 api_feedback() {
 	json_eval "$(api journal query=suggestions)" \
 		'next(("none" if s["feedback"] == "-" else s["feedback"] for s in r["rows"] if s["id"] == a[0]), "missing")' "$1"
+}
+
+# A checkpoint: pictures of one of Athina's windows at a step of an API-tier
+# scenario, in light and in dark, as <scenario>/<step>-light.png and
+# <step>-dark.png under the run's checkpoints folder (--checkpoints, or
+# checkpoints/ in its evidence). CI compares each with its approved baseline in
+# Tests/Checkpoints, as ui-snapshots compares a snapshot (README "Checkpoints");
+# on a Mac they are evidence only, since a Mac draws them otherwise. A window
+# that shows something that changes from run to run, a time, a path, a pid,
+# never gives the same picture twice, so a scenario keeps its picture as plain
+# evidence with `api snapshot path=` instead.
+checkpoint() {
+	local window="$1" step="$2" dir appearance file
+	dir="${CHECKPOINTS_ROOT:-$RUN_DIR/checkpoints}/$SCENARIO_NAME"
+	mkdir -p "$dir"
+	for appearance in light dark; do
+		file="$dir/$step-$appearance.png"
+		# Settled, or it would not be the same picture on the next run.
+		check "checkpoint $SCENARIO_NAME/$step-$appearance of $window is taken, settled" "true" \
+			"$(api snapshot window="$window" path="$file" appearance="$appearance" --field settled)"
+	done
 }
 
 # --- Watchers -----------------------------------------------------------------

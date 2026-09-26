@@ -6,7 +6,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help build run test check lint format test-e2e doctor test-snapshots \
-	all run-live record snapshots-approve snapshots-smoke-approve test-snapshots-ci \
+	all run-live record snapshots-approve snapshots-smoke-approve checkpoints-approve test-snapshots-ci \
 	icons measure release xcodeproj clean swift-format-version
 
 ##@ Everyday
@@ -57,6 +57,9 @@ snapshots-approve: ## take Tests/Snapshots from CI's merge-checks renders of HEA
 snapshots-smoke-approve: ## take the smoke references from CI's renders of HEAD
 	scripts/snapshots.sh smoke-approve $(RUN_ID)
 
+checkpoints-approve: ## take Tests/Checkpoints from CI's e2e-api checkpoints of HEAD
+	scripts/snapshots.sh checkpoints-approve $(RUN_ID)
+
 test-snapshots-ci: ## the UI smoke test as CI runs it; drifts on a Mac unlike the runner
 	scripts/snapshots.sh smoke $(SHARD)
 
@@ -101,7 +104,7 @@ JOBS ?= 1
 BASE ?=
 ## SHARD        test-snapshots-ci: the shard to draw, k/n, by the full gate's table; all when empty
 SHARD ?=
-## RUN_ID       snapshots-approve, snapshots-smoke-approve: the CI run to take; HEAD's newest
+## RUN_ID       the *-approve targets: the CI run to take; HEAD's newest
 RUN_ID ?=
 ## PID          measure: the Athina to sample when several run
 PID ?=
