@@ -31,6 +31,12 @@ PAUSE='{"keyCode": 35, "modifiers": 11}'
 field() { api find window="$1" identifier="$2" --field elements.0.value; }
 talk_back_field() { field General voice.talkBackShortcut; }
 pause_field() { field Privacy privacy.pauseShortcut; }
+# The window level of Athina's General window, which a hermetic run keeps
+# below the desktop picture whatever the app asks for, such as the modal level
+# AppKit raises a window to while an alert's sheet runs on it.
+general_level() {
+	json_eval "$(api windows)" 'next(int(w["level"]) for w in r["windows"] if w["title"] == "General")'
+}
 sheet_count() { json_eval "$(api find window=General role=AXSheet)" 'len(r["elements"])'; }
 setting() { json_eval "$(api settings key="$1")" 'json.dumps(r["value"], sort_keys=True)'; }
 # The menu's Pause Watching or Resume Watching, whichever it offers.
@@ -58,6 +64,7 @@ scenario_run() {
 	check "the recorder shows it" "⌃⌥⌘T" "$(settled "⌃⌥⌘T" talk_back_field)"
 
 	step "2 the pause shortcut's combination is refused with an alert"
+	parked=$(general_level)
 	check "a click on the talk-back recorder lands" "true" \
 		"$(api click window=General identifier=voice.talkBackShortcut --field ok)"
 	api key window=General code=$KEY_P modifiers=$CONTROL_OPTION_COMMAND >/dev/null
@@ -65,9 +72,11 @@ scenario_run() {
 	check "the alert says the pause shortcut has it" "True" \
 		"$(json_eval "$(api find window=General role=AXStaticText)" \
 			'any(e["value"] == "This keyboard shortcut is already the pause shortcut." for e in r["elements"])')"
+	check "the pane stays parked while the alert is up" "$parked" "$(general_level)"
 	checkpoint General talk-back-refused
 	check "a click on the alert's OK lands" "true" "$(api click window=General role=AXButton label=OK --field ok)"
 	check "the alert goes" "0" "$(settled 0 sheet_count)"
+	check "the pane stays parked once it has gone" "$parked" "$(general_level)"
 	check "the settings keep the talk-back shortcut" "$TALK_BACK" "$(setting mentor.pushToTalkHotKey)"
 	check "the recorder still shows it" "⌃⌥⌘T" "$(talk_back_field)"
 
@@ -99,6 +108,7 @@ scenario_run() {
 		"$(api hotkey key=pause --field refused)"
 	check "watching goes on" "Pause Watching" "$(menu_toggle)"
 	api key window=Privacy code=$KEY_ESCAPE >/dev/null
+	api snapshot window=Privacy path="$RUN_DIR/pause-cleared.png" >/dev/null || log "no picture of the Privacy pane"
 
 	step "5 the pause recorder records it again"
 	check "a click on the pause recorder lands" "true" \
