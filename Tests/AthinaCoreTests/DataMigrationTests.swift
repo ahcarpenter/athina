@@ -175,6 +175,31 @@ import Testing
     withExtendedLifetime(writer) {}
   }
 
+  /// A journal with no write-ahead log beside it, as one copied on its own
+  /// leaves, gains none: the old folder stays exactly as it was, after a move
+  /// and after one that fails.
+  @Test func aJournalWithNoLogBesideItGainsNone() throws {
+    let files = try support()
+    defer { try? manager.removeItem(at: files.root) }
+    try writeMentorData(at: files.old)
+    for sidecar in ["journal.sqlite-wal", "journal.sqlite-shm"] {
+      let url = files.old.appendingPathComponent(sidecar)
+      if manager.fileExists(atPath: url.path) { try manager.removeItem(at: url) }
+    }
+    let before = try everyByte(in: files.old)
+    #expect(before["journal.sqlite-wal"] == nil)
+
+    let unreadable = files.old.appendingPathComponent("settings.json")
+    try manager.setAttributes([.posixPermissions: 0o000], ofItemAtPath: unreadable.path)
+    defer { try? manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: unreadable.path) }
+    #expect(DataMigration.run(from: files.old, to: files.new).stopsLaunch)
+    try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: unreadable.path)
+    #expect(try everyByte(in: files.old) == before)
+
+    #expect(DataMigration.run(from: files.old, to: files.new) == .moved(moved))
+    #expect(try everyByte(in: files.old) == before)
+  }
+
   /// Per-launch replay directories are the app's own throwaway files, so
   /// they stay behind rather than being copied into the new folder.
   @Test func theReplayDirectoriesAreNotMoved() throws {
