@@ -1,51 +1,35 @@
 # no-mistakes repository configuration (read from the default branch).
-# The test step runs these exact commands instead of having an agent derive
-# scenarios against the built app, which needs permissions no runner has:
-# the tests, then the UI smoke set drawn at HEAD and at main on this Mac and
-# compared (README "UI snapshot smoke test").
+# Local validation runs the make targets people run, and together its lint and
+# test steps run exactly what `make check` composes (README "Continuous
+# integration"): `make lint`, as CI's lint job runs it, `make test`, as CI's
+# build-and-test runs it, and `make test-snapshots`, which draws the UI smoke
+# set at HEAD and at main on this Mac and compares them (README "UI snapshot
+# smoke test"), where CI's ui-snapshots-smoke runs `make test-snapshots-ci`
+# against the runner's references. The comparison stays in the test command
+# so its summary is fresh when the test step's evidence pass reads it.
 commands:
-  test: "swift test && make test-snapshots"
-# test.instructions steers the agent-driven evidence pass that follows it.
+  lint: "make lint"
+  test: "make test && make test-snapshots"
+# test.instructions steers the agent-driven evidence pass of the test step.
 test:
   instructions: |
     Hard rule: never run the Xcode project steps (make xcodeproj, or
-    xcodebuild on the generated project),
-    the full ui-snapshots gate (scripts/snapshots.sh gate, `Athina
-    --snapshot`), the checkpoint gate (scripts/snapshots.sh checkpoints), or
-    any approve command (make approve, or scripts/snapshots.sh
-    baselines-approve, smoke-approve or checkpoints-approve, which change
-    the references) in this validation. CI's ui-snapshots, ui-snapshots-smoke
-    and e2e-api jobs prove those.
+    xcodebuild on the generated project), the full ui-snapshots gate
+    (scripts/snapshots.sh gate, `Athina --snapshot`), the checkpoint gate
+    (scripts/snapshots.sh checkpoints) or any approve command (make
+    approve, or scripts/snapshots.sh baselines-approve, smoke-approve or
+    checkpoints-approve) in this validation. CI's ui-snapshots,
+    ui-snapshots-smoke and e2e-api jobs prove those.
 
-    The test command ends with make test-snapshots, whose summary
-    (build/snapshots-smoke-local/summary.md) lists every UI smoke screen the
-    change altered, added or removed against main, drawn on this Mac, with
-    the base, new and difference images of each. Read it and explain each
-    screen in your evidence: a changed screen the change did not intend is
-    a finding.
+    The test command ends with make test-snapshots, whose summary,
+    build/snapshots-smoke-local/summary.md, lists every UI smoke screen the
+    change altered, added or removed against main, with the base, new and
+    difference images of each. Explain each screen in your evidence: a
+    changed screen the change did not intend is a finding.
 
-    Standing Athina up for evidence (README "End-to-end harness" and
-    "Iterating without the network"):
-    - Use the development build (`make build`, build/Athina.app).
-    - Replays only: never a live launch and never a live model call, which
-      spends the owner's API credits. Never `make run-live` or `make
-      record`; `make run` is a replay.
-    - Drive it with the e2e harness, `scripts/e2e/athina-e2e run`
-      (`list` names the scenarios, README "End-to-end harness"); call it
-      bare, never wrapped in lockf.
-
-    Which tier the evidence runs, by what the change touches:
-    - API tier, for anything in Athina's own windows (the menu as the app
-      builds it, the toast and its buttons, Settings, the debug panel, the
-      About panel): `scripts/e2e/athina-e2e run --tier api --jobs 4`, or the
-      API-tier scenarios the change touches by name. It is hermetic, holds
-      no lock and shows nothing on the owner's screen.
-    - Real-screen tier, only for a change to the menu bar item, toast
-      dismissal, the Settings links or sensing: `scripts/e2e/athina-e2e run
-      real-screen` for the first three, and `scripts/e2e/athina-e2e run
-      --tier screen`, which adds capture-race, for sensing. It takes the
-      shared screen lock and waits for the owner's keyboard and mouse to go
-      quiet, because the owner may be using the Mac.
-    - A change that touches none of those four runs no real-screen scenario:
-      its evidence takes no screen time. Say in the evidence which tier ran
-      and why.
+    Evidence runs a replay of the development build (`make build`), never a
+    live launch or model call, driven by `scripts/e2e/athina-e2e run`,
+    called bare: the API tier (`--tier api --jobs 4`) for anything in
+    Athina's own windows, and the real-screen tier only for a change to the
+    menu bar item, toast dismissal, the Settings links or sensing (AGENTS.md
+    and README "End-to-end harness"). Say which tier ran and why.

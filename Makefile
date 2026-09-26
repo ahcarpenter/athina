@@ -20,8 +20,8 @@ build: ## the development bundle, build/Athina.app (it carries the control API)
 run: build ## build and launch a replay: recorded fixtures, no key, no spend
 	@scripts/launch.sh replay --lane "$(LANE)" $(if $(REPLAY_DIR),--fixtures "$(REPLAY_DIR)") $(if $(SETTINGS),--settings "$(SETTINGS)") $(if $(TIME_SCALE),--time-scale "$(TIME_SCALE)") $(if $(ALLOW_STALE),--allow-stale)
 
-test: ## swift test, the replayed loop and the fixture freshness check included
-	swift test $(if $(FILTER),--filter "$(FILTER)")
+test: ## swift test, then no control API in a build without the trait, as CI runs it
+	scripts/test.sh "$(FILTER)"
 
 test-e2e: ## run end-to-end scenarios on the app, replays only (SCENARIO=, JOBS=)
 	scripts/e2e/athina-e2e run $(SCENARIO) --jobs $(JOBS)
@@ -29,7 +29,7 @@ test-e2e: ## run end-to-end scenarios on the app, replays only (SCENARIO=, JOBS=
 test-snapshots: ## draw the UI smoke set here at HEAD and at BASE; report every change
 	scripts/snapshots.sh smoke-local $(BASE)
 
-check: ## lint, test and test-snapshots: what local validation runs
+check: ## lint, test and test-snapshots, what local validation runs (CI: test-snapshots-ci)
 	$(MAKE) --no-print-directory lint && $(MAKE) --no-print-directory test && $(MAKE) --no-print-directory test-snapshots
 
 approve: ## take the ui-snapshots, smoke and checkpoint images CI made of HEAD, all or none
