@@ -39,7 +39,7 @@ enum ControlAvailability {
         if let image = try await Snapshots.capture(window: window, hosting: hosting) {
           return ControlCapture(image: image, settled: false)
         }
-        try await Task.sleep(for: .milliseconds(150))
+        try await Task.sleep(until: .now + .milliseconds(150), clock: .continuous)
       }
       throw ControlCaptureError(window: window.title)
     }

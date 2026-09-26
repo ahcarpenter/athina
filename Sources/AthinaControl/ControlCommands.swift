@@ -555,7 +555,7 @@ final class ControlCommands {
     while true {
       if condition() { return true }
       if clock.now >= deadline { return false }
-      try? await Task.sleep(for: .milliseconds(20))
+      try? await Task.sleep(until: .now + .milliseconds(20), clock: .continuous)
     }
   }
 
@@ -631,7 +631,7 @@ final class ControlCommands {
       } else {
         steadySince = nil
       }
-      try? await Task.sleep(for: .milliseconds(20))
+      try? await Task.sleep(until: .now + .milliseconds(20), clock: .continuous)
     }
   }
 
@@ -713,7 +713,7 @@ enum PostedClicks {
       {
         return true
       }
-      try? await Task.sleep(for: .milliseconds(5))
+      try? await Task.sleep(until: .now + .milliseconds(5), clock: .continuous)
     }
     return false
   }
@@ -774,7 +774,7 @@ enum EventFlush {
       waiting[token] = continuation
       NSApp.postEvent(marker, atStart: false)
       Task { @MainActor in
-        try? await Task.sleep(for: timeout)
+        try? await Task.sleep(until: .now + timeout, clock: .continuous)
         finish(token, dispatched: false)
       }
     }
