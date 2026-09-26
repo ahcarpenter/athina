@@ -72,6 +72,12 @@ fi
 # AthinaMark.svg. Both are committed, so a plain build needs nothing but the
 # repository.
 cp "$ROOT"/Resources/Mark/MenuBarMark-*.pdf "$APP/Contents/Resources/"
+# KeyboardShortcuts' strings for its shortcut recorder. Swift Build (Xcode
+# 27's default, and every universal build) makes the package look for them in
+# the app's resources, and without them showing a recorder stops the app;
+# SwiftPM's native build, a single-architecture one with Xcode 26, looks in the
+# build directory instead, which is there on the Mac that built it.
+cp -R "$(dirname "$BIN")/KeyboardShortcuts_KeyboardShortcuts.bundle" "$APP/Contents/Resources/"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 if [ "$SIGN" = 0 ]; then

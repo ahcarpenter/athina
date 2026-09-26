@@ -398,13 +398,13 @@ final class ControlCommands {
     return .ok(["heard": .bool(heard), "dispatched": .bool(await EventFlush.flush())])
   }
 
-  /// One of the hot keys set in Settings > General, through the handler Carbon
+  /// One of the hot keys set in Settings, through the handler a press of it
   /// calls: `key=pause` or `key=talk-back`, pressed and let go, or only
   /// `phase=down` or `phase=up`.
   ///
   /// `heard=<words>` is what talking back hears while its key is down, since a
   /// hermetic run opens no microphone. Refused as `disabled` when the key is
-  /// not registered, since Carbon never reports a key it does not hold.
+  /// not registered, since the app then never hears it.
   private func hotKey(_ request: ControlRequest) async throws -> ControlReply {
     let names = ControlHotKey.allCases.map(\.rawValue).joined(separator: " or ")
     guard let name = try request.string("key"), let key = ControlHotKey(rawValue: name) else {

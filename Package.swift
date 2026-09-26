@@ -35,18 +35,26 @@ let package = Package(
     .trait(name: "UISnapshotsSmoke"),
   ],
   dependencies: [
+    // The global keyboard shortcuts and their recorder, in the app itself
+    // (README "Keyboard shortcuts"). Pinned exactly; it depends on no other
+    // package.
+    .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", exact: "3.1.0"),
     // Only for the UI smoke test, and fetched only with its trait on. Pinned
     // exactly, and no Package.resolved is committed, since a committed one
     // has every build fetch every package it names; the one product used,
     // SnapshotTesting, depends on no other package.
-    .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.6")
+    .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.6"),
   ],
   targets: [
     // The one SQLite call Swift cannot make for itself (see the header).
     .target(name: "AthinaSQLiteShim", linkerSettings: [.linkedLibrary("sqlite3")]),
     .target(
       name: "AthinaCore",
-      dependencies: ["AthinaSQLiteShim"],
+      // KeyboardShortcuts for the stored shortcut's own form of the combination.
+      dependencies: [
+        "AthinaSQLiteShim",
+        .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
+      ],
       linkerSettings: [
         .linkedLibrary("sqlite3"),
         .linkedFramework("ScreenCaptureKit"),
@@ -67,6 +75,7 @@ let package = Package(
       dependencies: [
         "AthinaCore",
         "SnapshotDiff",
+        .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
         .target(name: "AthinaControl", condition: .when(traits: ["ControlAPI"])),
       ],
       linkerSettings: [
@@ -107,7 +116,10 @@ let package = Package(
     ),
     .testTarget(
       name: "AthinaCoreTests",
-      dependencies: ["AthinaCore"],
+      dependencies: [
+        "AthinaCore",
+        .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
+      ],
       resources: [.copy("Fixtures")]
     ),
     .testTarget(
