@@ -29,8 +29,22 @@ test:
     - Use the development build (`make build`, build/Athina.app).
     - Replays only: never a live launch and never a live model call, which
       spends the owner's API credits. Never `make run` or `make record`.
-    - Drive it with the e2e harness, `scripts/e2e/athina-e2e run <scenario>`
-      (`list` names them), preferring API-tier scenarios. Screen-tier
-      scenarios take the shared screen lock per run and wait for idle input,
-      because the owner may be using the Mac; call the harness bare, never
-      wrapped in lockf.
+    - Drive it with the e2e harness, `scripts/e2e/athina-e2e run`
+      (`list` names the scenarios, README "End-to-end harness"); call it
+      bare, never wrapped in lockf.
+
+    Which tier the evidence runs, by what the change touches:
+    - API tier, for anything in Athina's own windows (the menu as the app
+      builds it, the toast and its buttons, Settings, the debug panel, the
+      About panel): `scripts/e2e/athina-e2e run --tier api --jobs 4`, or the
+      API-tier scenarios the change touches by name. It is hermetic, holds
+      no lock and shows nothing on the owner's screen.
+    - Real-screen tier, only for a change to the menu bar item, toast
+      dismissal, the Settings links or sensing: `scripts/e2e/athina-e2e run
+      real-screen` for the first three, and `scripts/e2e/athina-e2e run
+      --tier screen`, which adds capture-race, for sensing. It takes the
+      shared screen lock and waits for the owner's keyboard and mouse to go
+      quiet, because the owner may be using the Mac.
+    - A change that touches none of those four runs no real-screen scenario:
+      its evidence takes no screen time. Say in the evidence which tier ran
+      and why.
