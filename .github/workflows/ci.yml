@@ -29,21 +29,17 @@ jobs:
       - uses: ./.github/actions/swiftpm-cache
         with:
           name: build-and-test
-      - name: Unit tests
-        # The suite runs on a test clock and takes seconds once built; a wait
-        # that never ends fails the job here rather than at the six-hour limit.
-        timeout-minutes: 20
-        run: swift test
-      - name: A build without the ControlAPI trait carries no control API
-        # scripts/release.sh refuses a release binary that carries it (docs/e2e.md
-        # "The control API"). The debug Athina the unit tests' build already
-        # made is such a build, so this checks it rather than compiling the
-        # package again; `swift build` only confirms it is current. The
+      - name: Test
+        # make test, as people and local validation run it: swift test, then
+        # the check that a build without the ControlAPI trait carries no
+        # control API, on the debug Athina the tests' build already made, so
+        # this job compiles the package once (scripts/test.sh). The
         # development bundle, which must carry it, is e2e-api's to build and
-        # check, so this job compiles the package once.
-        run: |
-          swift build --product Athina
-          scripts/check-no-control-api.sh "$(swift build --show-bin-path)/Athina"
+        # check. The suite runs on a test clock and takes seconds once built;
+        # a wait that never ends fails the job here rather than at the
+        # six-hour limit.
+        timeout-minutes: 20
+        run: make test
 
   lint:
     # Google's Swift style (docs/code-style.md): swift-format from the Xcode

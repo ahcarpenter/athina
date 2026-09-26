@@ -9,7 +9,7 @@ API tier's checkpoints with images CI approved ([Continuous integration](ci.md))
 | Layer | Proves | Runs |
 | --- | --- | --- |
 | Lint, `make lint` | one Swift style, public declarations' doc comments included ([Code style](code-style.md)) | `make check`; CI's `lint` on every push |
-| Unit tests, `make test` | the pure logic, the whole loop against the committed replay fixtures, and that those fixtures are current ([below](#what-the-tests-and-snapshots-cover)) | `make check`; CI's `build-and-test` on every push |
+| Unit tests, `make test` | the pure logic, the whole loop against the committed replay fixtures, and that those fixtures are current ([below](#what-the-tests-and-snapshots-cover)); then that a build without the `ControlAPI` trait carries no control API | `make check`; CI's `build-and-test` on every push |
 | API-tier end-to-end, `athina-e2e run --tier api` | what a person does in Athina's own windows works, driven through the control API in a hermetic replay; in CI, also that its checkpoints did not drift | a change's evidence, where checkpoints are pictures only; CI's `e2e-api` on every push |
 | UI smoke pixels, `make test-snapshots` and `make test-snapshots-ci` | layout, text, colour and state did not drift, every snapshot drawn in a test process | `make check` draws them at HEAD and at main on this Mac and reports each change; CI's `ui-snapshots-smoke` (`make test-snapshots-ci`) fails on a drift from its approved references, on every push |
 | Full pixels, `ui-snapshots` | the same snapshots as the window server draws them, glass and materials included | CI, on four runners, at merge (the `merge-checks` label) and on every push to main |

@@ -37,7 +37,7 @@ with `--force` after a macOS upgrade (see
 make                         # lists every command and variable, grouped Everyday and Occasional
 make build                   # builds build/Athina.app, the development bundle (make all is the same)
 make run                     # builds and launches a replay: recorded fixtures, no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
-make test                    # runs swift test, the replayed loop and the fixture freshness check included (FILTER=<name> for some)
+make test                    # runs swift test, the replayed loop and the fixture freshness check included (FILTER=<name> for some), then checks a build without the ControlAPI trait carries no control API, as CI's build-and-test does
 make test-e2e                # runs the end-to-end scenarios, replays only (SCENARIO=<name>, JOBS=<n>; see docs/e2e.md)
 make test-snapshots          # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported
 make check                   # lint, test and test-snapshots: what local validation runs before a push

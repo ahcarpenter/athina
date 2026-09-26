@@ -1,7 +1,7 @@
 # Continuous integration
 
 CI runs five checks on GitHub's `macos-26` runner, which ships Xcode 26 and
-the macOS 26 SDK this package targets: `build-and-test` runs `swift test` and
+the macOS 26 SDK this package targets: `build-and-test` runs `make test`: `swift test`, then
 `scripts/check-no-control-api.sh`, which must find no control API in a build
 without the `ControlAPI` trait, for which it takes the debug `Athina` the
 tests' build already made rather than compiling the package again; `lint` runs `make lint` (see [Code style](code-style.md)) and fails on any
