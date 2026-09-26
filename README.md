@@ -53,27 +53,27 @@ suppression are later phases.
 ## Build, run, test
 
 ```sh
-make                  # lists every command and variable, grouped Everyday and Occasional
-make build            # builds build/Athina.app, the development bundle
-make run              # builds and launches a replay: recorded fixtures, no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
-make test             # runs swift test, the replayed loop and the fixture freshness check included (FILTER=<name> for some)
-make check            # lint, test and ui-snapshots-smoke-local: what local validation runs before a push
-make lint             # checks every Swift file against the style without changing it, as CI does
-make format           # formats every Swift file in place to Google's Swift style (see Code style)
-make e2e              # runs the end-to-end scenarios, replays only (SCENARIO=<name>, JOBS=<n>; see End-to-end harness)
-make doctor           # names what this Mac is missing: Xcode, bash 4, python3, gh, the grants, the warm e2e home
-make ui-snapshots-smoke-local # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported
+make                         # lists every command and variable, grouped Everyday and Occasional
+make build                   # builds build/Athina.app, the development bundle (make all is the same)
+make run                     # builds and launches a replay: recorded fixtures, no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
+make test                    # runs swift test, the replayed loop and the fixture freshness check included (FILTER=<name> for some)
+make test-e2e                # runs the end-to-end scenarios, replays only (SCENARIO=<name>, JOBS=<n>; see End-to-end harness)
+make test-snapshots          # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported
+make check                   # lint, test and test-snapshots: what local validation runs before a push
+make lint                    # checks every Swift file against the style without changing it, as CI does
+make format                  # formats every Swift file in place to Google's Swift style (see Code style)
+make doctor                  # names what this Mac is missing: Xcode, bash 4, python3, gh, the grants, the warm e2e home
 
-make run-live         # builds and launches the live app, replacing only the copy this checkout's run-live or record launched (spends API credits)
-make record           # the same, writing every model call to a fixture file (spends API credits)
-make snapshots-approve # makes the baselines match the renders CI made of HEAD, after an intended UI change
+make run-live                # builds and launches the live app, replacing only the copy this checkout's run-live or record launched (spends API credits)
+make record                  # the same, writing every model call to a fixture file (spends API credits)
+make snapshots-approve       # makes the baselines match the renders CI made of HEAD, after an intended UI change (RUN_ID=<id> for another run)
 make snapshots-smoke-approve # makes the smoke test's references match the set CI made of HEAD, after an intended UI change
-make ui-snapshots-smoke # the UI smoke test as CI runs it, compared with the runner's references
-make mark             # rebuilds the app icon and this README's copy of it from AthinaMark.svg, and the menu bar mark from AthinaOwl.svg (their outputs are committed, so a plain build never needs it)
-make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
-make release          # builds, signs, notarizes, and packages a direct-download release into build/release (see Releasing)
-make xcodeproj        # generates Athina.xcodeproj, the Xcode project for the App Store route, from project.yml (see The Xcode project)
-make clean            # removes every build product and the generated Xcode project
+make test-snapshots-ci       # the UI smoke test as CI runs it, compared with the runner's references
+make icons                   # rebuilds the app icon and this README's copy of it from AthinaMark.svg, and the menu bar mark from AthinaOwl.svg (their outputs are committed, so a plain build never needs it)
+make measure                 # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
+make release                 # builds, signs, notarizes, and packages a direct-download release into build/release (see Releasing)
+make xcodeproj               # generates Athina.xcodeproj, the Xcode project for the App Store route, from project.yml (see The Xcode project)
+make clean                   # removes every build product and the generated Xcode project
 ```
 
 None of the launch targets quits an Athina it did not start: each one stops
@@ -1911,13 +1911,13 @@ particular to this app:
   Corinthian helmet over a flat cream circle, square and hexagon, in the
   reference bitmap's own coordinates, with the line art and the cream shapes in
   separate groups so either stands alone. Ink is `#332C2B` and cream `#F1DEB7`,
-  both sampled from the drawing rather than chosen. `make mark`
+  both sampled from the drawing rather than chosen. `make icons`
   (`scripts/mark-assets.swift`) builds the app icon from it, the icon at the
   top of this README from that icon (as macOS itself draws it, masked and
   shadowed), and the menu bar mark from the second master, the owl below;
   their outputs are committed, so a plain `make build` needs nothing else, and
   `MarkAssetTests` fails when either master or the script changes without
-  `make mark` being run. The script is in
+  `make icons` being run. The script is in
   that record because most of the drawing lives there rather than in the
   masters: the menu bar inset, the eye treatments, the z's and the per-size
   thickening are all constants in it.
@@ -2287,7 +2287,7 @@ fail on the drift, look at the report, then run `make snapshots-approve` (or
 shards of HEAD's newest merge-checks run, the `ui-snapshots-shard-<k>`
 artifacts, and makes `Tests/Snapshots` match them: a changed or new
 snapshot's render replaces its baseline, a removed snapshot's baseline is
-deleted, and every other file is left alone. `RUN=<id>` names another CI run.
+deleted, and every other file is left alone. `RUN_ID=<id>` names another CI run.
 A shard publishes its renders only once both its renders finished and agree,
 and approve refuses a run unless every shard did, since a missing shard's
 snapshots would read as removed; so a run that failed, timed out or was
@@ -2316,7 +2316,7 @@ which would add a download quota and an extra step to every checkout.
 ### UI snapshot smoke test
 
 `ui-snapshots-smoke` is the fast UI check, run on every push to a pull request
-and to main. `make ui-snapshots-smoke` (`scripts/snapshots.sh smoke`) runs
+and to main. `make test-snapshots-ci` (`scripts/snapshots.sh smoke`) runs
 the `UISnapshotsSmokeTests` target, which draws every snapshot `--snapshot`
 renders, from the same list (`Snapshots.specs()`) and the same sample data,
 light and dark, in the same kind of window, settled by the same rule, and
@@ -2326,11 +2326,11 @@ compares each with its reference image in
 The two gates cannot drift apart: a snapshot added to the list is in both.
 
 In CI it runs on one runner, the `ui-snapshots-smoke` job, the check the
-ruleset requires, which runs `make ui-snapshots-smoke` and draws every
+ruleset requires, which runs `make test-snapshots-ci` and draws every
 snapshot. Most of that job is fetching and compiling; drawing all 76 images
 takes about a minute and a half, so it ends inside `build-and-test`, where
 four runners each compiled the test again for a quarter of the drawing.
-`make ui-snapshots-smoke SHARD=<k>/4` still draws only the snapshots
+`make test-snapshots-ci SHARD=<k>/4` still draws only the snapshots
 `SnapshotShard` gives shard k (the test reads the shard from
 `UI_SNAPSHOTS_SMOKE_SHARD`), should it be split again.
 
@@ -2364,7 +2364,7 @@ difference (`difference.png`), or only the render when there is no reference
 yet.
 
 The target and its one dependency sit behind the `UISnapshotsSmoke` package
-trait, which only `make ui-snapshots-smoke` and `make ui-snapshots-smoke-local`
+trait, which only `make test-snapshots-ci` and `make test-snapshots`
 turn on. Without it the target
 has no tests and no dependencies, so a plain `swift test` (what `make test`
 runs), `build-and-test`, the app, `make release` and the Xcode project never
@@ -2379,7 +2379,7 @@ downloads the set HEAD's newest CI run published (`ui-snapshots-smoke-set`)
 and makes the references folder match it exactly: the run's render of every
 snapshot that drifted or was new, the reference of every one that matched,
 which comes back unchanged, and nothing else, so a removed snapshot's
-reference goes. `RUN=<id>` names another CI run. The job publishes the set
+reference goes. `RUN_ID=<id>` names another CI run. The job publishes the set
 only once every snapshot has rendered, the set names the source tree it was
 made from, and approving refuses any tree but HEAD's, as `make
 snapshots-approve` does, and a set that names a shard, which holds only that
@@ -2387,14 +2387,14 @@ shard's snapshots. A UI change drifts both gates, so
 approve both, each from its own run of HEAD, and commit the images together
 with the change that caused them. References never come from a Mac: they are the
 runner's, rendered at its 1x scale on its macOS, and a Mac on another macOS or
-display scale draws differently everywhere, so `make ui-snapshots-smoke` on a
+display scale draws differently everywhere, so `make test-snapshots-ci` on a
 Mac only shows how it would draw. The runner's image and the pinned Xcode are a
 deliberate refresh here too, approved with the baselines in a commit of their
 own.
 
 **On a Mac, against main.** Since a Mac cannot match the runner's references,
 local validation compares a change with main on the same Mac instead: `make
-ui-snapshots-smoke-local` (`scripts/snapshots.sh smoke-local`) draws the smoke
+test-snapshots` (`scripts/snapshots.sh smoke-local`) draws the smoke
 set at HEAD and at its merge-base with `origin/main` (or `BASE=<commit>`) and
 compares each pair by the same 98 percent rule. A few details, such as a dark
 switch's knob or a text field laid out a point off, settle one of two ways in

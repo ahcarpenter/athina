@@ -4,7 +4,7 @@
 # the tests, then the UI smoke set drawn at HEAD and at main on this Mac and
 # compared (README "UI snapshot smoke test").
 commands:
-  test: "swift test && make ui-snapshots-smoke-local"
+  test: "swift test && make test-snapshots"
 # test.instructions steers the agent-driven evidence pass that follows it.
 test:
   instructions: |
@@ -15,7 +15,7 @@ test:
     snapshots-smoke-approve, which change the references) in this
     validation. CI's ui-snapshots and ui-snapshots-smoke jobs prove those.
 
-    The test command ends with make ui-snapshots-smoke-local, whose summary
+    The test command ends with make test-snapshots, whose summary
     (build/snapshots-smoke-local/summary.md) lists every UI smoke screen the
     change altered, added or removed against main, drawn on this Mac, with
     the base, new and difference images of each. Read it and explain each

@@ -8,7 +8,7 @@ import Foundation
 /// a template image, so macOS tints it with the menu bar's own foreground
 /// colour like every other extra rather than drawing it in a colour of its
 /// own. They are built from `Resources/Mark/AthinaOwl.svg` by
-/// `scripts/mark-assets.swift` (`make mark`).
+/// `scripts/mark-assets.swift` (`make icons`).
 @MainActor
 enum MenuBarMarkImage {
   private static var loaded: [MenuBarMark: NSImage] = [:]
@@ -16,7 +16,7 @@ enum MenuBarMarkImage {
   /// The folder the variants are read from: the app bundle's resources.
   ///
   /// The UI smoke test runs in a test process, whose bundle is the test
-  /// runner's, so it points this at `Resources/Mark`, where `make mark` writes
+  /// runner's, so it points this at `Resources/Mark`, where `make icons` writes
   /// them.
   static var directory = Bundle.main.resourceURL
 

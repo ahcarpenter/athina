@@ -41,7 +41,7 @@ import Testing
       let url = markDirectory.appendingPathComponent("MenuBarMark-\(mark.rawValue).pdf")
       #expect(
         FileManager.default.fileExists(atPath: url.path),
-        "no menu bar file for \(mark.rawValue); run `make mark`"
+        "no menu bar file for \(mark.rawValue); run `make icons`"
       )
     }
   }
@@ -73,11 +73,11 @@ import Testing
     let files = try FileManager.default.contentsOfDirectory(atPath: markDirectory.path)
       .filter { $0.hasPrefix("MenuBarMark-") }
     let expected = Set(MenuBarMark.allCases.map { "MenuBarMark-\($0.rawValue).pdf" })
-    #expect(Set(files) == expected, "run `make mark` after changing the set")
+    #expect(Set(files) == expected, "run `make icons` after changing the set")
   }
 
   /// The check that catches the one mistake that matters: a master or the
-  /// script that draws it was edited and `make mark` was not run, so the icon
+  /// script that draws it was edited and `make icons` was not run, so the icon
   /// and the mark in the bundle are of an older drawing.
   ///
   /// It compares what the assets were built from rather than rebuilding
@@ -102,7 +102,7 @@ import Testing
       let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
       #expect(
         record.contains("\(url.lastPathComponent) \(digest)"),
-        "\(url.lastPathComponent) has changed since the assets were built; run `make mark`"
+        "\(url.lastPathComponent) has changed since the assets were built; run `make icons`"
       )
     }
     // And the set it was built for is the set the code can ask for.
@@ -114,7 +114,7 @@ import Testing
       .map(String.init) ?? []
     #expect(
       Set(variants) == Set(MenuBarMark.allCases.map(\.rawValue)),
-      "the variant set has changed since the assets were built; run `make mark`"
+      "the variant set has changed since the assets were built; run `make icons`"
     )
   }
 
@@ -189,7 +189,7 @@ import Testing
     guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
       let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
     else {
-      Issue.record("cannot read ReadmeIcon.png; run `make mark`")
+      Issue.record("cannot read ReadmeIcon.png; run `make icons`")
       return
     }
     #expect(
@@ -232,7 +232,7 @@ import Testing
   /// resample one from another and show a soft icon.
   @Test func theAppIconCarriesEverySize() {
     let url = root.appendingPathComponent("Resources/AppIcon.icns")
-    #expect(FileManager.default.fileExists(atPath: url.path), "no app icon; run `make mark`")
+    #expect(FileManager.default.fileExists(atPath: url.path), "no app icon; run `make icons`")
     guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
       Issue.record("cannot read AppIcon.icns")
       return

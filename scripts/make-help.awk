@@ -1,8 +1,10 @@
 # Prints the Makefile's help, what plain `make` shows: each `##@` line starts a
 # group, a target's `## ` text is its line in that group, and any other line
-# starting `## ` is printed as it stands (the Variables group).
+# starting `## ` is printed as it stands (the Variables group), all under one
+# usage line.
+BEGIN { print "Usage: make <target> [NAME=value]" }
 /^##@ / {
-	if (groups++) print ""
+	print ""
 	print substr($0, 5)
 	next
 }

@@ -73,7 +73,7 @@ jobs:
       - uses: ./.github/actions/select-xcode
       - name: Draw every snapshot and compare with its reference
         timeout-minutes: 20
-        run: make ui-snapshots-smoke
+        run: make test-snapshots-ci
       - name: Summarize
         if: always()
         run: |
