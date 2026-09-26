@@ -1,7 +1,7 @@
 # Commits that only restyle, changing no behavior, which git blame skips:
 # GitHub reads this file itself, and locally `git config blame.ignoreRevsFile
-# .git-blame-ignore-revs` turns it on (README "Code style"). The reformat stays
-# first: the README's rebase recipe takes the first commit named here.
+# .git-blame-ignore-revs` turns it on (docs/code-style.md). The reformat stays
+# first: the rebase recipe in docs/code-style.md takes the first commit named here.
 
 # style(athina): format all Swift to Google's Swift style
 1f4c77892bfffc154599a136a59f412eeb34c951

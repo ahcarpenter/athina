@@ -1,7 +1,7 @@
 import Foundation
 
 /// Whether this launch serves the end-to-end harness's control API, chosen once
-/// at launch from `--control <directory>` (README "The control API").
+/// at launch from `--control <directory>` (docs/e2e.md "The control API").
 ///
 /// The API lets a scenario find Athina's controls, click and type in its own
 /// windows, and read its state, so it must never reach a person's copy of the
@@ -26,10 +26,10 @@ import Foundation
 ///
 /// A launch that serves the API is otherwise a replay like any other, on the
 /// screen, in the menu bar, and sensing, so a real-screen check can drive it
-/// too. With `--hermetic` as well it is a hermetic run (README "Hermetic
+/// too. With `--hermetic` as well it is a hermetic run (docs/e2e.md "Hermetic
 /// runs"): it takes nothing from the real world and leaves nothing in it, so
 /// any number can run beside each other and beside whoever is at the Mac. It
-/// senses only what the API's `observe` scripts (README "Scripted sensing"),
+/// senses only what the API's `observe` scripts (docs/e2e.md "Scripted sensing"),
 /// listens to no global input, never activates itself, keeps
 /// its item out of the menu bar, and parks every window it opens below the
 /// desktop picture, or, with `--show-windows` too, leaves them where a person

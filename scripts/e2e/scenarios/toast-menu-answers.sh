@@ -7,7 +7,7 @@
 # from there opens the toast's explanation and keeps it up, and Not Now
 # answers it and takes it down.
 #
-# On the API tier, with the toast brought up by scripted sensing (README
+# On the API tier, with the toast brought up by scripted sensing (docs/e2e.md
 # "Scripted sensing") and each answer chosen through the handler the menu runs.
 # That an accessibility press on the menu bar item opens the menu and keeps
 # the toast up is macOS's routing, which the real-screen tier proves.
@@ -25,7 +25,7 @@ answer_enabled() { answers | sed -n "s/^$1=//p"; }
 toast_up() { api wait-window window="Athina suggestion" present="$1" timeout=5 >/dev/null && echo yes || echo no; }
 
 # Pictures kept as evidence: these windows show what changes from run to run
-# or move on their own, so they are not checkpoints (README "Checkpoints").
+# or move on their own, so they are not checkpoints (docs/ci.md "Checkpoints").
 picture() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no picture of $1"; }
 
 scenario_run() {

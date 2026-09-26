@@ -10,7 +10,7 @@
 #   scripts/e2e/athina-e2e doctor        what is missing before a run
 #
 # Every run is replay only: no API key is read, no network is reachable, and
-# nothing is billed. See README, "End-to-end harness".
+# nothing is billed. See docs/e2e.md.
 set -euo pipefail
 
 # mapfile and the array forms below need bash 4; macOS still ships 3.2 as
@@ -50,7 +50,7 @@ usage: scripts/e2e/athina-e2e <command> [options]
 options:
   --out <dir>        where evidence goes (default: a dated directory per run)
   --keep-home        keep the scratch home after a run, to look inside it
-  --time-scale <n>   run the replay clock n times faster (see README)
+  --time-scale <n>   run the replay clock n times faster (see docs/replay.md)
   --jobs <n>         run up to n API-tier scenarios at once, beside the
                      real-screen ones (default 1: one scenario at a time)
   --tier <api|screen|all>
@@ -62,7 +62,7 @@ options:
                      rather than in each run's evidence
   --launch open      launch the API tier's app through LaunchServices rather
                      than sandbox-exec, as CI does; refused on a Mac with
-                     Athina data of its own (README "Checkpoints")
+                     Athina data of its own (docs/ci.md "Checkpoints")
   --lock-timeout <s> give up after s seconds when another run holds the
                      screen or this checkout (default: wait for as long as
                      it takes)
@@ -72,8 +72,7 @@ checkout at a time, then build. An API-tier scenario is hermetic and takes no
 other lock. A real-screen scenario takes one machine-wide lock for as long as
 it runs, as warm and clean do for theirs, so only one run is on the screen at a
 time across every checkout, and one that says SCENARIO_IDLE_FIRST=yes only
-once the keyboard and mouse have been quiet for 15 seconds (README "End-to-end
-harness").
+once the keyboard and mouse have been quiet for 15 seconds (docs/e2e.md).
 TEXT
 }
 
@@ -272,7 +271,7 @@ run_scenario() (
 	SCENARIO_ARGS=()
 	SCENARIO_SETTINGS='{}'
 	# screen: driven from outside, with the real pointer and accessibility;
-	# api: driven through the app's control API (README "The control API").
+	# api: driven through the app's control API (docs/e2e.md "The control API").
 	SCENARIO_TIER=screen
 	# A real-screen scenario that also reads Athina through its control API,
 	# to set what macOS shows beside what the app built, says yes. It gets one
@@ -342,7 +341,7 @@ run_scenario() (
 	scenario_stage
 	if [ "$SCENARIO_TIER" = api ]; then
 		control_prepare
-		# Hermetic (README "Hermetic runs"), which --control alone is not.
+		# Hermetic (docs/e2e.md "Hermetic runs"), which --control alone is not.
 		args+=(--control "$CONTROL_DIR" --hermetic)
 		[ "$SHOW_WINDOWS" = 1 ] && args+=(--show-windows)
 		launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
@@ -417,7 +416,7 @@ cmd_clean() {
 	log "removed the runs in $RUNS_ROOT$([ "$kept" = 0 ] || echo ", except $kept still running")"
 	# What the hermetic copy leaves behind outside the runs: its preferences
 	# domain, and the Accessibility row macOS writes, denied, the first time an
-	# app it has not seen asks whether it is trusted (README "Hermetic runs").
+	# app it has not seen asks whether it is trusted (docs/e2e.md "Hermetic runs").
 	if [ "$kept" = 0 ]; then
 		defaults delete "$E2E_BUNDLE_ID" >/dev/null 2>&1 && log "removed the $E2E_BUNDLE_ID preferences"
 		tccutil reset Accessibility "$E2E_BUNDLE_ID" >/dev/null 2>&1 && log "reset $E2E_BUNDLE_ID's Accessibility entry"

@@ -10,7 +10,7 @@ import Foundation
 
 /// Whether this build carries the end-to-end harness's control API: only a
 /// build with the ControlAPI package trait, which the development bundle turns
-/// on and the release and App Store builds never do (README "The control API").
+/// on and the release and App Store builds never do (docs/e2e.md "The control API").
 enum ControlAvailability {
   #if ControlAPI
     static let compiledIn = true

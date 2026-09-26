@@ -6,7 +6,7 @@ Review. `make release` (`scripts/release.sh`) does all of it:
 
 1. Builds the Release configuration for Apple silicon and Intel in one binary,
    without the end-to-end harness's control API, and fails if the binary
-   carries any of it (`scripts/check-no-control-api.sh`, see The control API).
+   carries any of it (`scripts/check-no-control-api.sh`, see [The control API](e2e.md#the-control-api)).
 2. Signs it under the hardened runtime, which notarization requires, with a
    secure timestamp and `Resources/Athina.entitlements`, whose comments say
    why each entitlement is there (only `device.audio-input` today, for the
@@ -117,14 +117,14 @@ Athina runs,
 wherever it was installed.
 
 - **Coming from Mentor.** The move of `~/Library/Application Support/mentor`,
-  the preferences and the key (Coming from Mentor) runs on the first live
+  the preferences and the key ([Coming from Mentor](coming-from-mentor.md)) runs on the first live
   launch of whichever Athina comes first, released or development, and only
   once.
 - **Grants.** A grant made to a released copy is recorded against its Developer
   ID requirement, so every later release keeps it. Grants made earlier to an
   ad-hoc development build, recorded against the bundle identifier alone,
   hold for a released copy too; the reverse does not, and an ad-hoc build
-  then reports the permission missing (Code signing). Once the Developer ID
+  then reports the permission missing ([Code signing](#code-signing)). Once the Developer ID
   certificate is in the keychain, `make build` signs development builds with
   it as well when it is the identity `scripts/bundle.sh` picks (the first
   Apple Development or Developer ID Application one the keychain lists), or
@@ -153,7 +153,7 @@ grant made once stays valid. The trade-off is that any ad-hoc binary claiming
 that identifier would inherit the grants, which is acceptable on a development
 machine and is exactly what a development certificate fixes. This is the
 development signature, without the hardened runtime or a timestamp; a release
-is signed by `make release` instead (see Releasing).
+is signed by `make release` instead (see [Releasing](#releasing)).
 
 The keychain is stricter than TCC: for an app that is not Apple-signed it
 trusts a keychain item's readers by the hash of the exact binary, so the
@@ -177,17 +177,17 @@ tccutil reset ScreenCapture com.ahcarpenter.athina
 
 The same binary can run in the App Sandbox, which a Mac App Store edition
 needs; the Xcode project's `Athina App Store` target builds it, signed with
-`Resources/Athina.app-store.entitlements` (see The Xcode project). At launch
+`Resources/Athina.app-store.entitlements` (see [The Xcode project](#the-xcode-project)). At launch
 `RuntimeEnvironment` reads the process's own `com.apple.security.app-sandbox`
 entitlement, which the direct and development builds carry set to false, so
-they run exactly as described everywhere else in this README. A sandboxed run
+they run exactly as described everywhere else in these docs. A sandboxed run
 differs in three ways:
 
 - Its files are in its container, its preferences domain and its keychain
   service are its own bundle identifier rather than `com.ahcarpenter.athina`
   (`AppPaths`), so it never shares preferences or a key with the direct build.
 - It moves nothing from Mentor, neither files, preferences nor the API key
-  (see Coming from Mentor), since all three are out of its reach, and says so
+  (see [Coming from Mentor](coming-from-mentor.md)), since all three are out of its reach, and says so
   once in the log.
 - `--replay` and `--settings` may name only a path inside its container or its
   own bundle, and `--record`, `--snapshot` and a clock request's reply
@@ -218,7 +218,7 @@ whose Archive action builds Release. It compiles `Sources/Athina` against the
 package's `AthinaCore` and `SnapshotDiff`, linking the frameworks the package's
 `Athina` target does (a dependency or framework added to one goes in the other
 too, except the `ControlAPI`-conditional `AthinaControl`, which the App Store
-build never carries; see The control API), bundles the same icon and menu bar
+build never carries; see [The control API](e2e.md#the-control-api)), bundles the same icon and menu bar
 marks `scripts/bundle.sh` does, and signs with
 `Resources/Athina.app-store.entitlements` (the App Sandbox, `network.client`,
 and the microphone keys of both the hardened runtime, `device.audio-input`,
@@ -233,8 +233,8 @@ target signs to run locally, as `xcodebuild` or Xcode builds and archives it;
 with one, Xcode signs with that
 team's Apple Development certificate and Product > Archive feeds the
 Organizer's App Store Connect upload. The built app is sandboxed, so it keeps
-its files in its own container and runs as A sandboxed build describes. The
+its files in its own container and runs as [A sandboxed build](#a-sandboxed-build) describes. The
 App Store build is archived and uploaded through this project, while the
-direct Developer ID release keeps `scripts/release.sh` (see Releasing); the
+direct Developer ID release keeps `scripts/release.sh` (see [Releasing](#releasing)); the
 earlier plan to package the App Store build from the package build with
 `productbuild` and `altool` is superseded.

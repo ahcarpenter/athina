@@ -8,11 +8,11 @@
 #   --no-sign     leave the bundle unsigned, for scripts/release.sh to sign
 #   --no-control  leave out the end-to-end harness's control API, as a release
 #                 does; every other bundle is a development one and carries it
-#                 (the ControlAPI package trait, README "The control API")
+#                 (the ControlAPI package trait, docs/e2e.md "The control API")
 #
 # The version is Resources/Info.plist's own (CFBundleShortVersionString and
 # CFBundleVersion), copied as it is: the one place either number is set
-# (README "Releasing").
+# (docs/releasing.md).
 #
 # Signing: uses $ATHINA_SIGN_IDENTITY when set, otherwise the first
 # "Apple Development" or "Developer ID Application" identity in the keychain,

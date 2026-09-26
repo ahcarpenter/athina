@@ -35,6 +35,18 @@ suppression are later phases.
 
 - macOS 26 or later (developed and measured on macOS 27, Apple Silicon)
 
+## Install
+
+A release is a notarized download from outside the App Store: open
+`Athina-<version>.dmg` and drag Athina onto Applications, or unzip
+`Athina-<version>.zip` into Applications. There are no automatic updates yet:
+a new version is downloaded and dragged over the old one. A released copy
+uses the same journal, settings and keychain item as a development build (see
+[A released copy and your data, grants, and key](docs/releasing.md#a-released-copy-and-your-data-grants-and-key)),
+and the first live launch of either moves what an earlier Mentor kept (see
+[Coming from Mentor](docs/coming-from-mentor.md)). To build Athina from source
+instead, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Setup: the Anthropic API key
 
 The mentor loop needs an Anthropic API key. Open Settings > Models (the menu's
@@ -70,4 +82,46 @@ the system has asked) or first hold the talk-back shortcut.
 Idle detection uses `CGEventSource.secondsSinceLastEventType`, which needs no
 permission. Input Monitoring is never requested. The only network connection
 the app ever opens is to `api.anthropic.com`, from the mentor loop, and only
-when a key is saved (see Privacy model).
+when a key is saved (see [Privacy model](docs/privacy.md)).
+
+## Privacy
+
+- The journal, settings and audio stay on this Mac; the only network peer is
+  `api.anthropic.com`, and only the mentor loop reaches it.
+- A model call carries text read from the screen (the app, the window title,
+  the focused element, the recognized text), a summary of recent events and
+  the standing understanding the model wrote about your work. The mentor tier
+  also gets, by default, the latest screenshot thumbnail; a question you talk
+  back is sent as a follow-up; and while mentorship contexts are enforced,
+  their names and descriptions go too. File names, keystrokes and the key are
+  never sent.
+- Excluded apps (Keychain Access, Passwords and common password managers by
+  default) and secure text fields are never read.
+- Pause stops all sensing. Thumbnails expire after 6 hours and text after 7
+  days by default, and the journal can be cleared at any time.
+
+The [privacy model](docs/privacy.md) says exactly what each tier receives and
+what is kept.
+
+## Develop
+
+Athina builds with SwiftPM, and the app has no third-party dependencies. Plain
+`make` lists every command, `make run` starts a replay that needs no key and
+spends nothing, and `make check` is what a change passes before it is pushed.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers setup, the daily loop, the rules and
+how a change reaches `main`; `docs/` holds the reference:
+
+| Doc | Covers |
+| --- | --- |
+| [architecture.md](docs/architecture.md) | the source layout, the sensing loop, the journal, the subscription point |
+| [mentor-loop.md](docs/mentor-loop.md) | triage and mentor calls, callouts, talking back, mentorship contexts, the standing understanding, spend control |
+| [privacy.md](docs/privacy.md) | what leaves the Mac, what is kept, and for how long |
+| [debug-panel.md](docs/debug-panel.md) | the debug panel |
+| [design.md](docs/design.md) | the design conventions, the app icon and the menu bar mark |
+| [code-style.md](docs/code-style.md) | the Swift style, the pinned swift-format, rebasing across the reformat |
+| [testing.md](docs/testing.md) | each test layer's job, where it runs, and what the tests and snapshots cover |
+| [replay.md](docs/replay.md) | replay, the faster clock, replays side by side, recording, the committed fixtures |
+| [e2e.md](docs/e2e.md) | the end-to-end harness, its scenarios and tiers, the control API, hermetic runs |
+| [ci.md](docs/ci.md) | the CI checks, the merge-checks label, the UI snapshot gates, checkpoints |
+| [releasing.md](docs/releasing.md) | releases, code signing, the sandboxed build, the Xcode project |
+| [coming-from-mentor.md](docs/coming-from-mentor.md) | what moves from Mentor on the first launch |

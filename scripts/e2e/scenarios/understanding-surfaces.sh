@@ -7,7 +7,7 @@
 # Models, and then through Reset Understanding, which asks before it forgets
 # every revision.
 #
-# On the API tier: the suggestion comes from scripted sensing (README
+# On the API tier: the suggestion comes from scripted sensing (docs/e2e.md
 # "Scripted sensing"), every control is clicked or typed into through
 # Athina's own event path, and the journal is read through the app. The
 # footer's link to the Journal pane is followed through the handler a click
@@ -43,7 +43,7 @@ window_texts() {
 has_text() { grep -qF -- "$2" "$RUN_DIR/$1" && echo yes || echo no; }
 
 # Pictures kept as evidence: these windows show what changes from run to run
-# or move on their own, so they are not checkpoints (README "Checkpoints").
+# or move on their own, so they are not checkpoints (docs/ci.md "Checkpoints").
 picture() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no picture of $1"; }
 
 # The x a duration row's amount field starts at in the Models pane. Two rows

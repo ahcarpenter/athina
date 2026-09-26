@@ -4,18 +4,18 @@ CI runs five checks on GitHub's `macos-26` runner, which ships Xcode 26 and
 the macOS 26 SDK this package targets: `build-and-test` runs `swift test` and
 `scripts/check-no-control-api.sh`, which must find no control API in a build
 without the `ControlAPI` trait, for which it takes the debug `Athina` the
-tests' build already made rather than compiling the package again; `lint` runs `make lint` (see Code style) and fails on any
+tests' build already made rather than compiling the package again; `lint` runs `make lint` (see [Code style](code-style.md)) and fails on any
 finding; `e2e-api` builds the development bundle with the bundle script,
 checks that it carries the control API, runs every API-tier scenario of the
 end-to-end harness and compares their checkpoints with approved baselines (see
-Checkpoints);
+[Checkpoints](#checkpoints));
 `ui-snapshots-smoke`, the fast UI check, draws every
 snapshot inside a test process with swift-snapshot-testing and compares each
-with its reference image (see UI snapshot smoke test); and `ui-snapshots`, the
+with its reference image (see [UI snapshot smoke test](#ui-snapshot-smoke-test)); and `ui-snapshots`, the
 full-fidelity UI check, renders every snapshot with `Athina --snapshot`
 through the window server, so Liquid Glass and materials are in them,
 replay-mode renders on a scaled clock included, compares the renders with the
-approved baselines, and uploads them (see UI snapshot baselines).
+approved baselines, and uploads them (see [UI snapshot baselines](#ui-snapshot-baselines)).
 `ui-snapshots` is split across four runners that each take a quarter of the
 snapshots, by the `SnapshotShard` table, and `ui-snapshots-smoke` draws them
 all on one. Both draw the same list of snapshots, so a UI change drifts both,
@@ -31,7 +31,7 @@ missing and why. `scripts/snapshots.sh baselines-approve`, `smoke-approve`
 and `checkpoints-approve` each take one alone, from HEAD's newest run or the
 run id given, for a change that drifts only some. The
 Xcode project's archive check is out of CI until the App Store release flow
-brings it back as part of that flow (see The Xcode project).
+brings it back as part of that flow (see [The Xcode project](releasing.md#the-xcode-project)).
 
 All five run on every push to main. On a pull request, `build-and-test`, `lint`,
 `e2e-api` and `ui-snapshots-smoke` (`.github/workflows/ci.yml`) run on every push, and the
@@ -92,7 +92,7 @@ naming the Xcodes the runner has, when neither exists, and fails when that
 Xcode reports another version. So a new runner image changes no build, render
 or formatting by itself: moving the pin is one deliberate commit that
 refreshes both sets of approved images and runs `make format` with the new
-swift-format (see Code style and UI snapshot baselines). When GitHub's macOS
+swift-format (see [Code style](code-style.md) and [UI snapshot baselines](#ui-snapshot-baselines)). When GitHub's macOS
 27 image leaves preview, CI moves to it in such a commit.
 
 **Superseded runs.** A new push to a pull request cancels that pull request's
@@ -105,7 +105,7 @@ Local validation, the no-mistakes pipeline a change goes through before its
 pull request, never runs the Xcode project steps, the full `ui-snapshots` gate,
 the checkpoint gate (`scripts/snapshots.sh checkpoints`) or `make approve`
 (or any other approve command), which only CI proves, and compares the UI smoke set
-with main's on the Mac itself (see UI snapshot smoke test);
+with main's on the Mac itself (see [UI snapshot smoke test](#ui-snapshot-smoke-test));
 `test.instructions` in `.no-mistakes.yaml` carries that rule to its test step.
 
 ## UI snapshot baselines
@@ -175,9 +175,9 @@ where it was made:
   that fails is taken again, never drawn the other way.
 
 **Approving an intended change.** Push the change, with the `merge-checks`
-label on its pull request (see Continuous integration), and let `ui-snapshots`
+label on its pull request (see [Continuous integration](#continuous-integration)), and let `ui-snapshots`
 fail on the drift, look at the report, then run `make approve` (see
-Continuous integration; `scripts/snapshots.sh baselines-approve [<run id>]`
+[Continuous integration](#continuous-integration); `scripts/snapshots.sh baselines-approve [<run id>]`
 takes these alone), which downloads the renders of all four
 shards of HEAD's newest merge-checks run, the `ui-snapshots-shard-<k>`
 artifacts, and makes `Tests/Snapshots` match them: a changed or new
@@ -197,8 +197,8 @@ edges and glass differently everywhere, so only the runner's renders are
 compared or approved.
 
 **A runner change is a deliberate refresh.** The baselines depend on the
-runner's macOS image and the Xcode that `.xcode-version` pins (see Continuous
-integration). Moving to a new image or a new pin changes the renders with no
+runner's macOS image and the Xcode that `.xcode-version` pins (see [Continuous
+integration](#continuous-integration)). Moving to a new image or a new pin changes the renders with no
 change to the app; approve them from a CI run of an unchanged commit, in a
 commit of their own that names the new image or Xcode, so a real UI change is
 never approved under it.
@@ -223,7 +223,7 @@ The two gates cannot drift apart: a snapshot added to the list is in both.
 In CI it runs on one runner, the `ui-snapshots-smoke` job, the check the
 ruleset requires, which runs `make test-snapshots-ci` and draws every
 snapshot. Most of that job is fetching and compiling, which the build cache
-cuts to what changed (see Continuous integration); drawing all 76 images takes
+cuts to what changed (see [Continuous integration](#continuous-integration)); drawing all 76 images takes
 about a minute, where four runners each compiled the test again for a quarter
 of the drawing.
 `make test-snapshots-ci SHARD=<k>/4` still draws only the snapshots
@@ -244,8 +244,8 @@ layout, text, colour, control or state; how glass looks is `ui-snapshots`' to
 check. A pixel matches when it is within 2 Delta E of the reference (a
 perceptual precision of 98 percent), the difference the eye cannot see, which
 covers anti-aliasing and nothing a person would notice. A render reads the same
-on every run for the reasons a `--snapshot` render does (see UI snapshot
-baselines), in UTC and the runner's US English locale, drawn at the runner's
+on every run for the reasons a `--snapshot` render does (see [UI snapshot
+baselines](#ui-snapshot-baselines)), in UTC and the runner's US English locale, drawn at the runner's
 1x scale whatever the display's: a fixed clock, animations and Core Animation's clock stopped, a window
 with a fixed backdrop, and captures until two in a row agree, in fresh windows
 until two agree. A window drawn in process is drawn as its layers stand, so
@@ -330,7 +330,7 @@ the two runs took different pictures (reported in its
 `checkpoints-report` artifact as `determinism/`, like two `--snapshot`
 renders that differ), and on any drift of a checkpoint from its approved
 baseline in `Tests/Checkpoints/<scenario>/`, by the rule and in the report
-`ui-snapshots` uses (see UI snapshot baselines): a changed, new or removed
+`ui-snapshots` uses (see [UI snapshot baselines](#ui-snapshot-baselines)): a changed, new or removed
 checkpoint fails until approved. The job, from a clean runner to the answer,
 takes about four minutes with the build cache, so it runs on every push to a
 pull request. On the runner, whose display is 1024 by 768, it hides the Dock

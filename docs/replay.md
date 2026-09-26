@@ -33,8 +33,8 @@ live ones. Test Connection replays the recorded test call.
 **Replay latency.** `--replay-latency immediate` answers every replayed call
 at once instead, for a scripted check that waits on what the calls bring: the
 mentor call that raises the first toast in the committed set was recorded at
-41 seconds, which the end-to-end harness has no use for (see End-to-end
-harness). `recorded`, the default, names the usual, so `make run` still
+41 seconds, which the end-to-end harness has no use for (see [End-to-end
+harness](e2e.md)). `recorded`, the default, names the usual, so `make run` still
 looks like a live session. The flag on a live or recording launch is refused,
 like the clock flags: nothing there is replayed, and the menu's Refused line,
 the Mentor card, and the log say why. A value other than `immediate` or
@@ -46,7 +46,7 @@ is the rule, under test.
 replay, and a replay that was refused, keeps its journal and settings in a data
 directory of its own rather than beside the live ones: a new one for each
 launch, `~/Library/Application Support/athina/replay/launch-<pid>-<random>`,
-which it names as it starts (see Replays side by side). Every replay launch
+which it names as it starts (see [Replays side by side](#replays-side-by-side)). Every replay launch
 starts from your live settings, read and never written (or from the defaults
 when there are none), unless `--settings` names another file, so the apps you
 excluded stay excluded, and your retention and sensing choices hold, exactly as
@@ -78,8 +78,8 @@ recorded with. A fixture whose version differs from the current one is stale:
 on its turn the app refuses it with a message naming the file and both
 versions, and the call is logged as an error. The tests replay the committed
 set just as strictly and fail on a stale fixture, so a change that bumps the
-prompt version re-records the committed set live in the same change (see The
-committed fixtures). `--allow-stale-fixtures` (`make run ALLOW_STALE=1`)
+prompt version re-records the committed set live in the same change (see [The
+committed fixtures](#the-committed-fixtures)). `--allow-stale-fixtures` (`make run ALLOW_STALE=1`)
 serves stale fixtures anyway, and is only for replaying locally while
 iterating on prompts.
 
@@ -246,7 +246,7 @@ scripts/advance-clock.sh "$(cat build/a.pid)" 2h  # moves only lane a's clock, a
 ```
 
   An on-screen check drives the app through `scripts/e2e/athina-e2e` (see
-  End-to-end harness) rather than launching it itself: the harness already runs
+  [End-to-end harness](e2e.md)) rather than launching it itself: the harness already runs
   each check in a scratch home, excludes the owner's apps, and stops only the
   pids it started. A launch outside make uses `open -n` (a plain `open` can
   bring an already running Athina forward instead of starting one) and finds
@@ -288,7 +288,7 @@ the order a replay serves each kind in, is always the order the calls were made.
 Any call the loop makes through its single call path (`MentorLoop.perform`) is
 recorded under its tier's raw value and replayed by that name, and neither
 client knows the list of kinds. The periodic understanding refresh (tier
-`understanding`, see Standing understanding) and the follow-up question about a
+`understanding`, see [Standing understanding](mentor-loop.md#standing-understanding)) and the follow-up question about a
 suggestion (tier `followUp`) are recorded and replayed that way with no change
 to either client, and so is any call a later phase adds: each needs only a
 fixture of its kind in the replay directory, and a replay without one refuses

@@ -35,7 +35,7 @@ Sources/AthinaCore            library, fully testable
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
                               and ClockRemote (moving a replay's clock from a script), RuntimeEnvironment
                               (whether the process is sandboxed, and which app bundle it runs from),
-                              ControlMode (whether a launch serves the control API, see The control API)
+                              ControlMode (whether a launch serves the control API, see docs/e2e.md)
 Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swift cannot make (it is variadic),
                               so `DataMigration` can read the old journal without altering it
 Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
@@ -95,7 +95,7 @@ pointed at if any, and whether a callout was drawn), `model_calls` (one row per
 API call: tier, model, prompt version and size, token counts, estimated cost,
 latency, outcome, the model's one-line reason, and whether it was replayed;
 never the prompt text), `understanding` (one row per revision of the standing
-understanding, see below), `refresh_period` (a single row: the active use
+understanding, see [Standing understanding](mentor-loop.md#standing-understanding)), `refresh_period` (a single row: the active use
 counted toward the next understanding refresh), and `follow_ups` (one row per
 question talked back: the transcript, the answer or why there is none, and the
 model). A moment held at the context boundary is recorded in `model_calls` as
@@ -108,7 +108,7 @@ added or dropped, so nothing has to be thrown away.
 Settings live next to it in `settings.json`; missing or unknown keys fall back
 to defaults so older files keep working. A replay keeps both files in a data
 directory of its own and starts from the live settings or the file `--settings`
-names (see Replays side by side).
+names (see [Replays side by side](replay.md#replays-side-by-side)).
 
 ## Subscription point
 

@@ -32,7 +32,7 @@ each kept observation it runs, in order:
    judged_goal, region}, "updated_understanding": {...}}`. A null suggestion is
    the normal outcome, and a null region is the normal suggestion; the region is
    filled only when the suggestion is about one specific spot visible in the
-   attached screenshot (see Callouts). The understanding comes back on every
+   attached screenshot (see [Callouts](#callouts)). The understanding comes back on every
    call.
 
    Each tier has its own model and effort in Settings > Models. Effort (low,
@@ -44,7 +44,7 @@ each kept observation it runs, in order:
 
 5. **Delivery.** A suggestion under `minimumConfidence`, in a snoozed or
    never-for-this category, with an empty title or body, or in a goal category
-   with no goal to judge against (see Standing understanding) is logged and
+   with no goal to judge against (see [Standing understanding](#standing-understanding)) is logged and
    dropped. Otherwise it is journaled and shown as a toast: a floating,
    non-activating panel under the menu bar that never takes keyboard focus and
    auto-dismisses after `toastTimeout` (60 s;
@@ -351,4 +351,4 @@ default) both minimum intervals and the refresh interval stretch by
 quarters. At the cap no call is made until the next clock hour. The hour's total is seeded from the journal at launch, so
 relaunching does not reset it. Spend this hour shows in the menu, the debug
 panel status bar, and the Mentor card. Replayed calls cost nothing and are never
-counted (see Iterating without the network).
+counted (see [Iterating without the network](replay.md)).

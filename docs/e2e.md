@@ -24,9 +24,9 @@ Every run is replay only: no API key is read, no network is reachable inside
 the sandbox, and nothing is billed. The real-screen tier needs a person's
 screen and runs only on a Mac; CI's `e2e-api` job runs every API-tier scenario
 on the runner, and compares their checkpoints with approved baselines (see
-Checkpoints), and CI runs the harness's unit tests with the rest of the suite.
+[Checkpoints](ci.md#checkpoints)), and CI runs the harness's unit tests with the rest of the suite.
 `ATHINA_E2E_APP=<bundle>` runs the scenarios against another bundle than
-`build/Athina.app`, such as the hardened release build (see Releasing), which
+`build/Athina.app`, such as the hardened release build (see [Releasing](releasing.md)), which
 the harness then checks as it is rather than rebuilding. A bundle without the
 control API, as every release build is (`scripts/check-no-control-api.sh`
 decides), cannot run the API tier, so each API-tier scenario reports `skip`
@@ -50,7 +50,7 @@ the Mac is quiet again. After 15 minutes of waiting for quiet in all (the
 lock waits between do not count), the scenario fails with "could not take the
 screen lock". `--lock-timeout <seconds>` gives up instead; `list`, `doctor`,
 and `journal` never wait. An API-tier scenario is
-hermetic (see Hermetic runs) and takes no lock at all, so any number run at
+hermetic (see [Hermetic runs](#hermetic-runs)) and takes no lock at all, so any number run at
 once, beside each other, beside a real-screen run, and beside whoever is using
 the Mac: `run --jobs <n>` runs up to `n` of them at a time, with the
 real-screen scenarios one at a time beside them, and each scenario's log lines
@@ -75,13 +75,13 @@ it.
 
 Scenarios come in two tiers, which each scenario names in `SCENARIO_TIER`:
 
-- **API** (`api`): the harness drives Athina through its control API (see The
-  control API). The app finds a control in its own accessibility tree and
+- **API** (`api`): the harness drives Athina through its control API (see [The
+  control API](#the-control-api)). The app finds a control in its own accessibility tree and
   clicks or types into it through its own event path, so the check still
   proves the control can be hit and is wired, with no real pointer and no wait
-  for the keyboard and mouse to go quiet. The run is hermetic (see Hermetic
-  runs): it stages nothing, posts no input, shows nothing, senses only what
-  the scenario scripts (see Scripted sensing), and takes no lock.
+  for the keyboard and mouse to go quiet. The run is hermetic (see [Hermetic
+  runs](#hermetic-runs)): it stages nothing, posts no input, shows nothing, senses only what
+  the scenario scripts (see [Scripted sensing](#scripted-sensing)), and takes no lock.
 - **Real screen** (`screen`, the default): real HID clicks and presses through
   accessibility from outside, for what only macOS's own routing can prove: the
   menu bar item and the menu the system runs for it, clicks in other apps that
@@ -108,7 +108,7 @@ A change that touches none of those takes no screen time.
 | `toast-menu-answers` | api | with a suggestion up from scripted sensing, the menu's Answer Suggestion offers every answer; Tell Me More from it opens the explanation and keeps the toast up, Not Now is recorded and takes the toast down, and the answers are dimmed, and refused, once no suggestion is up |
 | `toast-buttons` | api | clicks on the toast's own buttons: Tell Me More opens the explanation and is recorded once however often Show Less folds it; Close takes it down without writing over the answer; Not Now and Never for This are recorded and add a snooze and a never rule for that kind of suggestion in that app; and a click outside Athina's windows takes a toast brought back by Show Last Suggestion down |
 | `about-panel` | api | About Athina, from the menu, opens the About panel, which shows the app's name |
-| `capture-race` | screen | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see "A faster clock"); a sensing scenario, kept apart from `real-screen`, for a change to sensing or its scheduling |
+| `capture-race` | screen | counts the change moments kept and dropped while captures are in flight, on a scaled clock (see [A faster clock](replay.md#a-faster-clock)); a sensing scenario, kept apart from `real-screen`, for a change to sensing or its scheduling |
 | `understanding-surfaces` | api | the understanding the mentor call behind a scripted suggestion writes reaches the menu, the debug panel's card, and Settings > Models; the section's duration rows line up and hold a typed amount to the range the setting accepts; its footer link's target opens the Journal pane in place (`open-link`); and Reset Understanding… asks first, keeps everything on Cancel, and forgets every revision on Reset |
 | `debug-panel-access` | api | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed, a click on it is refused, and one forced onto it opens nothing; turned on, the menu gains Debug Panel in a group of its own after Settings…, and it and the button each open the panel; turned off again, the panel closes and the command leaves the menu |
 | `settings-pane-text` | api | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link to that pane rather than Markdown, and a click on the one below the fold is refused until the pane is scrolled to it |
@@ -119,7 +119,7 @@ A scenario prints one JSON line: its name, `pass`, `fail` or `skip`, how long
 it took, every check it made, and the directory holding its evidence (transcript,
 screenshots, event taps, announcements, and the journal as TSV and as a copy;
 for an API-tier run, every request and answer in `api.log`, its checkpoints
-in `checkpoints/<scenario>/` (see Checkpoints) and the other pictures it took
+in `checkpoints/<scenario>/` (see [Checkpoints](ci.md#checkpoints)) and the other pictures it took
 of Athina's windows, and what the harness saw of the screen in
 `hermetic-windows.log` and `hermetic-bar.log`). A scenario that runs several
 steps, as `real-screen` does, names each (`step`), so each check carries its
@@ -201,7 +201,7 @@ it.
 | `wait-window` | waits until a window titled `window=` is open, or with `present=false` gone |
 | `snapshot` | a PNG of one of Athina's windows at `path=`, taken as `--snapshot` takes one once macOS has finished animating the window open (up to two seconds): once three of the display's frames in a row changed nothing in it, captured until two captures in a row are the same picture, or, for a window that moves on its own, its last capture with `settled` false; never over an existing file. `appearance=light` or `dark` draws the app in that appearance for the picture and gives it its own back after |
 | `outside-click` | a click outside Athina's windows at `x=`, `y=` (points from the top left of the main display, as frames are given), handed to the suggestion toast as its system-wide listener would hand it one, which a hermetic run does not have; `heard` says whether a toast was up |
-| `observe` | what a hermetic run senses next (see Scripted sensing): `app=` and `bundle=` in front, in `window=`, showing `text=`, captured at once; or `idle=true` or `idle=false` alone, input going idle or coming back. `kept` says whether the capture was journaled, `why` why not, and `after` is the newest event's sequence before it, for a `wait-event` on what it brings. Refused as `unscripted` in a run that senses the real Mac |
+| `observe` | what a hermetic run senses next (see [Scripted sensing](#scripted-sensing)): `app=` and `bundle=` in front, in `window=`, showing `text=`, captured at once; or `idle=true` or `idle=false` alone, input going idle or coming back. `kept` says whether the capture was journaled, `why` why not, and `after` is the newest event's sequence before it, for a `wait-event` on what it brings. Refused as `unscripted` in a run that senses the real Mac |
 | `wait-event` | waits for the first event named `name=` after the sequence `after=` (every event since launch when left out) whose fields hold every other argument: `wait-event name=feedback feedback=notNow`. The names are what the sensing pipeline and the mentor loop publish, each logged once the app has acted on it: `observation`, `focus`, `mode`, `event` (a journaled event, by `kind`), `status` (with the understanding's `revision` as `understanding`), `suggestion` (logged once its toast is up), `feedback`, `followUp` and `call` (by `tier` and `outcome`); the answer carries the event's `sequence` and fields |
 | `journal` | one of the harness's named journal queries (`journal - queries` in the drive helpers lists them), `query=<name>`, answered from the app's own journal connection, which refuses any statement that writes: the `columns`, and the `rows` as objects keyed by column |
 | `advance` | moves the replay's clock `seconds=` ahead, as the debug panel's Advance field does, and answers with the clock's time and how far it has been moved ahead in all |
@@ -288,7 +288,7 @@ serves.
   `SensingSource.hermetic`: no focus tracking, no read of input or
   permissions, and no capture, so a run never journals the screen of whoever
   is at the Mac, and never asks macOS about a permission; it has them all,
-  and watches, sensing only what a scenario scripts (see Scripted sensing),
+  and watches, sensing only what a scenario scripts (see [Scripted sensing](#scripted-sensing)),
   until it is paused. Talking back hears only the words the API's `hotkey`
   gives it and opens no microphone.
 - **It listens to nothing outside itself.** The toast has no system-wide
@@ -363,10 +363,10 @@ the event it needs (`wait-event`) rather than on a fixed time or the journal.
 
 - **The warm home**, above: no run pays the cold OCR stall again.
 - **Fast toasts.** Every launch replays with `--replay-latency immediate`
-  (see Replay), and the seeded settings put the triage gate at its 5 second
+  (see [Replay](replay.md#replay)), and the seeded settings put the triage gate at its 5 second
   floor, so a toast comes seconds after the first capture rather than after
   the recorded 41 second mentor call and a 20 second gate. An API-tier
-  scenario scripts its toast (see Scripted sensing). On the real screen,
+  scenario scripts its toast (see [Scripted sensing](#scripted-sensing)). On the real screen,
   `wait_toast` looks for it every quarter second and nudges sensing every 2
   seconds (the helper window flips and TextEdit switches windows), pressing
   Capture Now only after 30 seconds with no toast; it logs how long it waited
@@ -396,10 +396,10 @@ the event it needs (`wait-event`) rather than on a fixed time or the journal.
   not UserDefaults, so a run still writes through cfprefsd into the real
   `com.ahcarpenter.athina` domain. Every real-screen run saves that domain and
   restores it, even on failure. An API-tier run never touches it: it runs a
-  copy of the app with a domain of its own (see Hermetic runs).
+  copy of the app with a domain of its own (see [Hermetic runs](#hermetic-runs)).
 - **Nothing is stopped by name.** The harness launches the binary directly and
   stops only the pids it started, never an Athina it did not launch (the make
-  targets stop only their own lane, see Replays side by side).
+  targets stop only their own lane, see [Replays side by side](replay.md#replays-side-by-side)).
 - **A sandbox** denies the real `~/Library/Application Support/athina`, the
   `mentor` folder beside it that the app kept before the rename, and all
   outbound network, so no run can reach live data or make a live call.
@@ -425,7 +425,7 @@ Runs land in `~/Library/Caches/athina-e2e/runs/<scenario>-<stamp>/`, or under
 `--out <dir>`; `--keep-home` keeps the scratch home to look inside it.
 Each run has its own home, and `launch_athina` in `scripts/e2e/lib/harness.sh`
 learns where that run's journal is rather than dictating it: the replay makes a
-directory for each launch (see Replays side by side), which is what keeps two
+directory for each launch (see [Replays side by side](replay.md#replays-side-by-side)), which is what keeps two
 replays apart when they share a home, and names it on the line it writes as it
 starts. The harness waits for that line in `app.log`, matching its own pid so a
 relaunch never reads the last one's, and takes the path from it.

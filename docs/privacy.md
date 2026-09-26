@@ -83,14 +83,14 @@
 - **Pause** from the menu or with the global hotkey (default ⌃⌥⌘P) stops all
   sensing; the menu bar owl drops a lid over its eyes. Idle closes them and two
   z's drift off it, an excluded app looks away, missing permissions is a wide
-  stare, and a held mentor tier winks (see Design conventions).
+  stare, and a held mentor tier winks (see [Design conventions](design.md)).
 - Thumbnails expire after 6 hours and text after 7 days by default; the journal
   is capped at 500 MB; all three are adjustable, and the journal can be cleared
   at any time. A replay senses the real screen too, and a finished replay's
   journal is never opened again, so nothing can age it in place: the next
   replay launch removes its whole per-launch directory instead, once that
   directory has gone unwritten for longer than the thumbnail window (see
-  Replays side by side).
+  [Replays side by side](replay.md#replays-side-by-side)).
 - **Delete `~/Library/Application Support/athina/replay` yourself if you ran a
   replay on a build before this one.** Those builds kept one shared
   `journal.sqlite` there, holding thumbnails and recognized text from your real

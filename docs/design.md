@@ -23,12 +23,12 @@ particular to this app:
   separate groups so either stands alone. Ink is `#332C2B` and cream `#F1DEB7`,
   both sampled from the drawing rather than chosen. `make icons`
   (`scripts/mark-assets.swift`) builds the app icon from it, the icon at the
-  top of this README from that icon (as macOS itself draws it, masked and
+  top of the [README](../README.md) from that icon (as macOS itself draws it, masked and
   shadowed), and the menu bar mark from the second master, the owl below;
   their outputs are committed, so a plain `make build` needs nothing else, and
   `MarkAssetTests` fails when either master or the script changes without
-  `make icons` being run. The script is in
-  that record because most of the drawing lives there rather than in the
+  `make icons` being run, since `make icons` records all three in
+  `Resources/Mark/built-from.txt`. The script is in that record because most of the drawing lives there rather than in the
   masters: the menu bar inset, the eye treatments, the z's and the per-size
   thickening are all constants in it.
 - **The app icon is the full artwork, full bleed.** macOS 26 masks a legacy

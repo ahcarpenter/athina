@@ -62,7 +62,7 @@ and a key you delete in Settings is never copied back. So expect a third thing
 on that first launch, after the two grants: the system's keychain prompt,
 "Athina wants to use your confidential information stored in
 com.ahcarpenter.mentor", since the login keychain trusts an item's readers by
-the exact binary (see Code signing). Always Allow copies the key across; Deny
+the exact binary (see [Code signing](releasing.md#code-signing)). Always Allow copies the key across; Deny
 leaves it where it is, and you can paste the key into Settings > Models
 instead. The copy runs off the main thread, so the app keeps sensing while the
 prompt waits.

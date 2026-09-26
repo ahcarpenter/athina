@@ -11,7 +11,7 @@
 E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="$(cd "$E2E_DIR/../.." && pwd)"
 # ATHINA_E2E_APP runs the scenarios against another bundle, such as the
-# hardened release build `make release` leaves in build/release (README
+# hardened release build `make release` leaves in build/release (docs/releasing.md
 # "Releasing"); the harness then checks that bundle as it is and never rebuilds it.
 APP="$ROOT/build/Athina.app"
 if [ -n "${ATHINA_E2E_APP:-}" ]; then
@@ -33,7 +33,7 @@ FIXTURES="$ROOT/Tests/AthinaCoreTests/Fixtures/Replay"
 SETTINGS_SEED="$E2E_DIR/lib/settings.json"
 
 # The owner's real data, which every run is sandboxed away from: where the app
-# keeps it now, and where it kept it as Mentor (README "Coming from Mentor").
+# keeps it now, and where it kept it as Mentor (docs/coming-from-mentor.md).
 LIVE_SUPPORT="$HOME/Library/Application Support/athina"
 LEGACY_SUPPORT="$HOME/Library/Application Support/mentor"
 PREFS_DOMAIN="com.ahcarpenter.athina"
@@ -261,7 +261,7 @@ ensure_app_bundle() {
 	(cd "$ROOT" && scripts/bundle.sh release >/dev/null 2>&1) || die "could not build the app bundle"
 }
 
-# The API tier's copy of $APP (README "Hermetic runs"): the same binary under
+# The API tier's copy of $APP (docs/e2e.md "Hermetic runs"): the same binary under
 # the identifier $E2E_BUNDLE_ID, re-signed ad hoc with a requirement on that
 # identifier as scripts/bundle.sh signs the development bundle. Its
 # preferences are then a domain of its own, so a run never writes to the
@@ -405,7 +405,7 @@ PY
 # other lanes' and the owner's own.
 #
 # Where the run's journal is, is the app's to say: a replay makes a directory
-# per launch inside the home's `replay` (README "Replays side by side") and
+# per launch inside the home's `replay` (docs/replay.md "Replays side by side") and
 # names it on the line it writes when it starts, which app.log catches. Reading
 # it from there rather than dictating it means the path is known only once it
 # is real, and the run never guesses at a directory the app did not make.
@@ -416,7 +416,7 @@ launch_athina() {
 	LAUNCH_ARGS=("$@")
 	local args=(--replay "$FIXTURES" --replay-latency immediate) zone=()
 	if [ "${SCENARIO_TIER:-screen}" = api ]; then
-		# An API-tier run is hermetic (README "Hermetic runs"), from the copy
+		# An API-tier run is hermetic (docs/e2e.md "Hermetic runs"), from the copy
 		# with preferences of its own, and draws dates, times, numbers and
 		# scroll bars as the UI snapshots do, whatever this Mac is set to, so
 		# its checkpoints read the same on every run (scripts/snapshots.sh).
@@ -825,7 +825,7 @@ window_id() {
 # --- The control API ----------------------------------------------------------
 
 # An API-tier scenario (SCENARIO_TIER=api) drives Athina through its control
-# API (README "The control API") rather than the pointer and accessibility from
+# API (docs/e2e.md "The control API") rather than the pointer and accessibility from
 # outside: the app finds its own controls and clicks them through its own event
 # path, so no step waits for idle input.
 
@@ -906,7 +906,7 @@ api() {
 # --- Scripted sensing ---------------------------------------------------------
 
 # A hermetic run senses only what a scenario scripts through the API's
-# `observe` (README "Scripted sensing"). These script the moments the committed
+# `observe` (docs/e2e.md "Scripted sensing"). These script the moments the committed
 # fixtures were recorded at, from the documents in their scenario/ folder,
 # each shown as a TextEdit window of its own.
 
@@ -960,7 +960,7 @@ api_feedback() {
 # scenario, in light and in dark, as <scenario>/<step>-light.png and
 # <step>-dark.png under the run's checkpoints folder (--checkpoints, or
 # checkpoints/ in its evidence). CI compares each with its approved baseline in
-# Tests/Checkpoints, as ui-snapshots compares a snapshot (README "Checkpoints");
+# Tests/Checkpoints, as ui-snapshots compares a snapshot (docs/ci.md "Checkpoints");
 # on a Mac they are evidence only, since a Mac draws them otherwise. A window
 # that shows something that changes from run to run, a time, a path, a pid,
 # never gives the same picture twice, so a scenario keeps its picture as plain

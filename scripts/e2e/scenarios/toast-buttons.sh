@@ -12,7 +12,7 @@
 # On the API tier: each button is clicked through AppKit's own event path in
 # the toast's panel, parked below the desktop picture, so a click that lands
 # proves the button can be hit and is wired. The toast comes from scripted
-# sensing (README "Scripted sensing"); that a real click in another app
+# sensing (docs/e2e.md "Scripted sensing"); that a real click in another app
 # reaches it is the real-screen tier's to prove.
 SCENARIO_SUMMARY="the toast's Tell Me More, Show Less, Close, Not Now and Never for This buttons each do what they say when clicked, and a click outside Athina takes it down"
 SCENARIO_TIER=api
@@ -32,7 +32,7 @@ rules_for_textedit() {
 }
 
 # Pictures kept as evidence: these windows show what changes from run to run
-# or move on their own, so they are not checkpoints (README "Checkpoints").
+# or move on their own, so they are not checkpoints (docs/ci.md "Checkpoints").
 picture() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no picture of $1"; }
 
 scenario_run() {

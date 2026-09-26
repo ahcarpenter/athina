@@ -45,7 +45,7 @@ public struct KeyStoreError: Error, CustomStringConvertible, Equatable, Sendable
 /// The keychain trusts a non-Apple-signed app by the hash of its binary, not by
 /// the designated requirement that keeps the TCC grants, so the first read
 /// after an ad-hoc rebuild shows the system's keychain prompt once; Always
-/// Allow adds that build to the item's list (README, "Code signing").
+/// Allow adds that build to the item's list (docs/releasing.md, "Code signing").
 public struct KeychainKeyStore: KeyStore {
   /// The service Athina's key is saved under: the running app's bundle
   /// identifier.

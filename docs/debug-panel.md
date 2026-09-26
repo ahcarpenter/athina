@@ -21,7 +21,7 @@ The builder's paths reach it without changing the owner's setting:
   own settings file.
 - **A recording**: `make record` passes `--open debug`, which a recording
   honours whatever the switch says, for the follow-up question typed into the
-  panel's Talk back field (see The committed fixtures).
+  panel's Talk back field (see [The committed fixtures](replay.md#the-committed-fixtures)).
 - **The end-to-end harness**: a scenario that needs the panel puts
   `--open debug` in its `SCENARIO_ARGS` (`understanding-surfaces` does), and
   `athina-drive ax ... --scope "Debug Panel"` reaches its controls, or on the
@@ -32,7 +32,7 @@ The builder's paths reach it without changing the owner's setting:
   (`settings-advanced`, `settings-advanced-on`). A menu opens only on screen,
   so `--snapshot` draws none; the `debug-panel-access` scenario reads the
   menu's items as the app builds them, without and with the Debug Panel
-  command, through the control API (see The control API).
+  command, through the control API (see [The control API](e2e.md#the-control-api)).
 - **A live launch** given `--open debug` opens the panel only while the switch
   is on.
 
@@ -61,7 +61,7 @@ Recording badge, the card says where calls go (for a replay, the fixtures by
 kind and their directory, and any stale ones), and each replayed call in the
 log is tagged Replay and not billed. In a replay the Mentor card shows what the
 clock reads and has the Advance field that moves it ahead, and the badge says
-how much faster the clock runs when it does (Replay 60x; see A faster clock).
+how much faster the clock runs when it does (Replay 60x; see [A faster clock](replay.md#a-faster-clock)).
 A replay's card also shows its own data directory and the settings it started
 from, and on any launch the card says why a `--settings` or `--replay-latency`
-flag was refused (see Replays side by side and Replay).
+flag was refused (see [Replays side by side](replay.md#replays-side-by-side) and [Replay](replay.md#replay)).

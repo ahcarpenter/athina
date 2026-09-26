@@ -5,7 +5,7 @@
 # Usage: scripts/release.sh   (or `make release`)
 #
 # Apple credentials are never committed; two environment variables name them
-# (README "Releasing" has the one-time steps that create both):
+# (docs/releasing.md has the one-time steps that create both):
 #
 #   ATHINA_RELEASE_IDENTITY  the Developer ID Application identity to sign with,
 #                            by its name or SHA-1; by default the only one in the
@@ -210,7 +210,7 @@ fi
 app_args=(--identifier "$BUNDLE_ID" --entitlements "$entitlements")
 if [ -z "$IDENTITY" ]; then
 	# As scripts/bundle.sh does, so the Screen Recording and Accessibility grants
-	# of a development build hold for this one too (README "Code signing").
+	# of a development build hold for this one too (docs/releasing.md "Code signing").
 	app_args+=(--requirements "=designated => identifier \"$BUNDLE_ID\"")
 fi
 codesign "${sign_args[@]}" "${app_args[@]}" "$APP"
@@ -379,7 +379,7 @@ for file in "$APP" "$DMG" "$ZIP" "$DSYM_ZIP" "$NOTES"; do say "  $(basename "$fi
 if [ "${#SKIPPED[@]}" -gt 0 ]; then
 	say "skipped ${#SKIPPED[@]} step(s) that need Apple credentials:"
 	for line in "${SKIPPED[@]}"; do say "  - $line"; done
-	say "every other step passed; this build is for checking, not for distribution (README \"Releasing\")"
+	say "every other step passed; this build is for checking, not for distribution (docs/releasing.md)"
 	exit 1
 fi
 say "Athina $VERSION is signed, notarized, stapled, and verified; publish $(basename "$DMG") and tag it: git tag $TAG"

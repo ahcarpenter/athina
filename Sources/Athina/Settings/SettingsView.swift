@@ -75,7 +75,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 /// preferences.
 ///
 /// A hermetic run keeps it to itself instead: every such run shares one
-/// preferences domain (README "Hermetic runs"), which would carry one run's
+/// preferences domain (docs/e2e.md "Hermetic runs"), which would carry one run's
 /// choice of pane into every other run's open Settings window.
 @MainActor
 @Observable
@@ -881,7 +881,7 @@ struct DurationRow: View {
   let range: ClosedRange<TimeInterval>?
   var help: String?
   /// The amount field's accessibility identifier, for the end-to-end
-  /// harness (README "The control API").
+  /// harness (docs/e2e.md "The control API").
   var identifier: String?
 
   private enum Unit: String, CaseIterable, Identifiable {

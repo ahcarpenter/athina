@@ -14,7 +14,7 @@ A newer swift-format can format the same code differently, so the one CI runs
 is pinned: `.xcode-version` names the Xcode every CI job runs, and so the
 swift-format it ships with, as `xcodebuild -version` prints it (26.6 today:
 Swift 6.3.3, swift-format 6.3.0). The `lint` job selects that Xcode by its
-exact path, as every job does (see Continuous integration), and prints the
+exact path, as every job does (see [Continuous integration](ci.md)), and prints the
 Swift and swift-format versions that ran. `make format` and `make lint` read the same file and warn when the
 selected Xcode is another; `DEVELOPER_DIR=<path to that Xcode.app>`
 runs either with the pinned one. Xcode 27.0's swift-format, which reports its
