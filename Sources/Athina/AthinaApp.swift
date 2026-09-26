@@ -20,6 +20,11 @@ struct AthinaApp: App {
 
   private let state = AppState.shared
 
+  init() {
+    // Before AppKit reads the command line as it finishes launching.
+    LaunchArguments.keepFromOpeningAsDocuments()
+  }
+
   var body: some Scene {
     // The app's own actions, so the menu's commands open windows with no
     // menu bar extra up, as in a hermetic run.
@@ -216,6 +221,19 @@ final class WindowOpener {
 /// Where a replay keeps its files is never an argument: it makes a directory of
 /// its own and says which on the line it writes when it starts.
 enum LaunchArguments {
+  /// Stops AppKit reading any of the command line as documents to open.
+  ///
+  /// AppKit takes each argument that starts with a dash, and the one after it,
+  /// as a `-Name value` pair, and asks the app to open any argument left over
+  /// as a document; an app asked to open one at launch opens none of its
+  /// windows. A flag that takes no value, such as `--allow-stale-fixtures`,
+  /// pairs with the flag after it, so without this
+  /// `--allow-stale-fixtures --open settings:advanced` opened no window at
+  /// all. Athina opens no documents, so nothing on its command line is one.
+  static func keepFromOpeningAsDocuments() {
+    UserDefaults.standard.register(defaults: ["NSTreatUnknownArgumentsAsOpen": false])
+  }
+
   private static var openArgument: String? {
     let arguments = CommandLine.arguments
     guard let index = arguments.firstIndex(of: "--open"), index + 1 < arguments.count else {

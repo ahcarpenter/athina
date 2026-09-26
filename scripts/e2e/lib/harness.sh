@@ -420,10 +420,6 @@ launch_athina() {
 		# with preferences of its own, and draws dates, times, numbers and
 		# scroll bars as the UI snapshots do, whatever this Mac is set to, so
 		# its checkpoints read the same on every run (scripts/snapshots.sh).
-		# Ahead of the scenario's own arguments: AppKit reads every argument
-		# after `-Name value` pairs as a document to open, and an app asked to
-		# open one at launch opens none of its windows, so each pair has to
-		# come before a flag that takes no value, such as --hermetic.
 		binary="$E2E_BINARY"
 		zone=(TZ=UTC)
 		args+=(-AppleLocale en_US -AppleLanguages '(en-US)' -AppleICUForce24HourTime NO -AppleShowScrollBars Always)
