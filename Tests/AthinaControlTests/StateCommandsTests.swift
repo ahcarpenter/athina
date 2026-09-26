@@ -5,8 +5,8 @@ import Testing
 
 @testable import AthinaControl
 
-/// The control API's commands over the app's state: scripted sensing, the
-/// events it has handled, its journal and its clock.
+/// The control API's commands over the app's state: its settings, scripted
+/// sensing, the events it has handled, its journal and its clock.
 @MainActor
 @Suite struct StateCommandsTests {
   let date = Date(timeIntervalSince1970: 1_800_000_000)
@@ -137,5 +137,17 @@ import Testing
     let refused = await host.handle("advance", ["seconds": .number(90)])
     #expect(refused["error"] == .string("this launch has no replay clock"))
     #expect(host.advanced == [90])
+  }
+
+  @Test func anUnsetSettingReadsAndIsWaitedForAsNull() async {
+    let host = ControlTestHost()
+    host.controlSettings = .object(["mentor": .object([:])])
+    let read = await host.handle("settings", ["key": .string("mentor.pushToTalkHotKey")])
+    #expect(read["value"] == .null)
+    let waited = await host.handle(
+      "wait-setting",
+      ["key": .string("mentor.pushToTalkHotKey"), "equals": .null, "timeout": .number(0)]
+    )
+    #expect(waited.ok)
   }
 }

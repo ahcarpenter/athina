@@ -39,6 +39,7 @@ public enum ControlProtocol {
     "x": .number,
     "y": .number,
     "after": .number, "seconds": .number, "idle": .bool,
+    "code": .number,
   ]
 }
 

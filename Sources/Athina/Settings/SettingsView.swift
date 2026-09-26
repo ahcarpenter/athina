@@ -467,6 +467,7 @@ struct PrivacySettings: View {
             content: {
               ShortcutRecorder(
                 title: "Pause shortcut",
+                identifier: "privacy.pauseShortcut",
                 hotKey: $state.settings.pauseHotKey,
                 conflicts: [state.settings.mentor.pushToTalkHotKey].compactMap { $0 },
                 conflictNote: "This keyboard shortcut is already the talk-back shortcut."
