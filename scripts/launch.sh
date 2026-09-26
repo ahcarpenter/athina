@@ -3,11 +3,22 @@
 # same lane launched before from this checkout: never an Athina from another
 # checkout, another lane, or anything started some other way.
 #
-# Usage: scripts/launch.sh <lane> [--live] [-- app arguments...]
+# Usage:
+#   scripts/launch.sh replay [--lane <name>] [--fixtures <dir>] [--settings <file>]
+#                            [--time-scale <n>] [--allow-stale]
+#   scripts/launch.sh live
+#   scripts/launch.sh record [<dir>]
 #
-# <lane> names the pid file, build/<lane>.pid. `make run` and `make record`
-# share the lane "live", since both use the live journal and settings;
-# `make run-replay` uses "replay" unless given LANE=<name>.
+# `replay` (`make run`) answers every model call from the fixtures in <dir>,
+# the committed set unless given: no network, no key, no spend. `live`
+# (`make run-live`) is the live app, and `record` (`make record`) the live app
+# writing every model call to a fixture file, into <dir> or the app's own
+# recordings directory, with the debug panel open; both spend API credits.
+# A leading ~ in a path is expanded here, because zsh leaves it after `=`.
+#
+# Each lane has a pid file, build/<lane>.pid. `live` and `record` share the
+# lane "live", since both use the live journal and settings; `replay` uses
+# "replay" unless given --lane <name>.
 #
 # The instance is identified exactly, not guessed: the launch carries
 # `--launch-token <id>`, a unique argument the app ignores, and the pid is the
@@ -20,29 +31,93 @@
 # request. Elapsed time is never taken as proof: on a loaded Mac the app can
 # still be short of that point after seconds.
 #
-# `--live` guards the live files. Before this script, every launch target began
-# with `pkill -x Athina`, so two live instances were impossible; two of them
-# share one journal, both write the whole settings file when they quit, and
-# both bill the API. A live launch therefore refuses to start while another
+# A live launch guards the live files. Before this script, every launch target
+# began with `pkill -x Athina`, so two live instances were impossible; two of
+# them share one journal, both write the whole settings file when they quit,
+# and both bill the API. A live launch therefore refuses to start while another
 # live Athina runs, naming it. A replay needs no such guard: its data
 # directory is its own.
 set -euo pipefail
 
-[ "$#" -ge 1 ] || { echo "usage: scripts/launch.sh <lane> [--live] [-- app arguments...]" >&2; exit 2; }
-LANE="$1"
-shift
-LIVE=0
-while [ "$#" -gt 0 ]; do
-	case "$1" in
-	--live) LIVE=1; shift ;;
-	--) shift; break ;;
-	*) break ;;
-	esac
-done
+usage() {
+	cat >&2 <<'TEXT'
+usage: scripts/launch.sh replay [--lane <name>] [--fixtures <dir>] [--settings <file>]
+                                [--time-scale <n>] [--allow-stale]
+       scripts/launch.sh live
+       scripts/launch.sh record [<dir>]
+TEXT
+	exit 2
+}
 
 # The physical path, because that is the one `ps` reports for the running
 # process, and both pid searches below match on it.
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+
+# `$1` with a leading ~ expanded.
+expand_tilde() {
+	# A literal ~ is what is being matched, not expanded.
+	# shellcheck disable=SC2088
+	case "$1" in
+	"~" | "~/"*) printf '%s\n' "$HOME${1#\~}" ;;
+	*) printf '%s\n' "$1" ;;
+	esac
+}
+
+[ "$#" -ge 1 ] || usage
+MODE="$1"
+shift
+LIVE=0
+# The app's arguments, built up below; each path is its own element, so one
+# with a space in it stays one argument.
+ARGS=()
+case "$MODE" in
+replay)
+	LANE=replay
+	fixtures="$ROOT/Tests/AthinaCoreTests/Fixtures/Replay"
+	settings=""
+	time_scale=""
+	allow_stale=0
+	while [ "$#" -gt 0 ]; do
+		case "$1" in
+		--lane) [ "$#" -ge 2 ] || usage; LANE="$2"; shift 2 ;;
+		--fixtures) [ "$#" -ge 2 ] || usage; fixtures="$(expand_tilde "$2")"; shift 2 ;;
+		--settings) [ "$#" -ge 2 ] || usage; settings="$(expand_tilde "$2")"; shift 2 ;;
+		--time-scale) [ "$#" -ge 2 ] || usage; time_scale="$2"; shift 2 ;;
+		--allow-stale) allow_stale=1; shift ;;
+		*) usage ;;
+		esac
+	done
+	[ -d "$fixtures" ] || { echo "launch: no fixture directory at $fixtures" >&2; exit 1; }
+	ARGS+=(--replay "$(cd "$fixtures" && pwd)")
+	[ "$allow_stale" = 0 ] || ARGS+=(--allow-stale-fixtures)
+	[ -z "$time_scale" ] || ARGS+=(--time-scale "$time_scale")
+	if [ -n "$settings" ]; then
+		[ -f "$settings" ] || { echo "launch: no settings file at $settings" >&2; exit 1; }
+		ARGS+=(--settings "$(cd "$(dirname "$settings")" && pwd)/$(basename "$settings")")
+	fi
+	;;
+live)
+	[ "$#" -eq 0 ] || usage
+	LANE=live
+	LIVE=1
+	;;
+record)
+	[ "$#" -le 1 ] || usage
+	LANE=live
+	LIVE=1
+	ARGS+=(--record)
+	if [ "$#" -eq 1 ] && [ -n "$1" ]; then
+		dir="$(expand_tilde "$1")"
+		# Only the recordings directory itself is kept private; its parents are
+		# whatever they already were or would be.
+		# shellcheck disable=SC2174
+		mkdir -p -m 700 "$dir"
+		ARGS+=("$(cd "$dir" && pwd)")
+	fi
+	ARGS+=(--open debug)
+	;;
+*) usage ;;
+esac
 APP="$ROOT/build/Athina.app"
 EXECUTABLE="$APP/Contents/MacOS/Athina"
 PID_FILE="$ROOT/build/$LANE.pid"
@@ -147,8 +222,10 @@ STARTED_LINE="$(mktemp "${TMPDIR:-/tmp}/athina-started-XXXXXXXX")"
 STARTUP_ERRORS="$(mktemp "${TMPDIR:-/tmp}/athina-launch-XXXXXXXX")"
 trap 'rm -f "$STARTED_LINE" "$STARTUP_ERRORS"' EXIT
 
-if [ "$#" -gt 0 ]; then
-	open -n --stdout "$STARTED_LINE" --stderr "$STARTUP_ERRORS" "$APP" --args "$@" --launch-token "$TOKEN"
+# `${ARGS[@]}` alone is an unbound variable under set -u in the bash 3.2
+# macOS ships, so an empty list is not expanded at all.
+if [ ${#ARGS[@]} -gt 0 ]; then
+	open -n --stdout "$STARTED_LINE" --stderr "$STARTUP_ERRORS" "$APP" --args "${ARGS[@]}" --launch-token "$TOKEN"
 else
 	open -n --stdout "$STARTED_LINE" --stderr "$STARTUP_ERRORS" "$APP" --args --launch-token "$TOKEN"
 fi

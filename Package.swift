@@ -31,7 +31,7 @@ let package = Package(
     // Builds the UI smoke test, the one target that uses
     // swift-snapshot-testing (README "UI snapshot smoke test"). It is off by
     // default, so the app, `make test` and every other build neither fetch
-    // nor build it; `make ui-snapshots-smoke` turns it on.
+    // nor build it; `make test-snapshots-ci` turns it on.
     .trait(name: "UISnapshotsSmoke"),
   ],
   dependencies: [

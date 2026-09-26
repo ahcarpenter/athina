@@ -349,7 +349,7 @@ struct ScaledClockTests {
   )
 
   /// A replay waits out the recorded latency unless it is asked not to, so
-  /// `make run-replay` still looks like a live session.
+  /// `make run` still looks like a live session.
   @Test func aReplayAnswersAfterTheRecordedLatencyUnlessAskedOtherwise() {
     #expect(
       ReplayLatencyMode(arguments: ["Athina", "--replay", "/fixtures"], clientMode: replay)
