@@ -261,7 +261,7 @@ public struct LaunchFiles: Equatable, Sendable {
   /// its default among them, runs a checkpoint as it closes that touches both
   /// files, and so can put the lane's removal off by up to one window. The
   /// stamps inside the journal cannot date a lane instead: they come from the
-  /// replay's clock, which `--time-scale`, `--advance-clock` and `ClockRemote`
+  /// replay's clock, which `--time-scale`, `--advance-clock` and `advance`
   /// run ahead of real time, so they would keep its captures long past the
   /// window. `.distantPast` when there is none to read, so a directory holding
   /// no journal at all is swept rather than kept forever.

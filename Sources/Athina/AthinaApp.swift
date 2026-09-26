@@ -294,8 +294,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     startControl()
     // Past every reason this launch could refuse itself, and past `start`,
     // so a launcher waiting on this line knows the lane is up rather than
-    // guessing from elapsed time: by now the clock channel is listening,
-    // so a request sent the moment this is read is heard. A journal that
+    // guessing from elapsed time: by now the control API, when it is
+    // served, is listening, so a request sent the moment this is read is
+    // answered. A journal that
     // would not open is the one thing `start` finds out for itself, and it
     // leaves the lane unable to journal anything, so it is reported as the
     // failed launch it is. The app stays up either way, so the person at
