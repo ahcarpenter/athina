@@ -139,13 +139,49 @@ records for each suggestion whether one was drawn, and the debug panel's
 Mentor card shows the last callout decision with the region in frame pixels
 and in screen points.
 
+## Keyboard shortcuts
+
+The pause shortcut (Settings > Privacy, Control-Option-Command-P unless
+changed) and the talk-back shortcut (Settings > General, unset until chosen)
+work from any app. Both run on
+[KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts), the
+app's one third-party package (MIT), pinned exactly in `Package.swift` and
+`project.yml`. It registers each combination with the system's Carbon hot
+keys, which report the press and the release and need no permission; while a
+menu is open, when the system holds those back, it reads the keys itself, so
+the shortcuts still work; and its recorder, the field in each pane, names
+keys by the current keyboard layout and holds the shortcuts off while it
+records, so pressing one there records it instead of running it.
+`ShortcutRecorder` puts that recorder in the panes. It refuses, with an alert
+that says why, a combination the system or the app's menu already uses
+(offering Use Anyway for a system one) and the other shortcut's combination,
+and beeps at one without Control, Option or Command unless its key is a
+function key. Delete or the field's clear button removes the talk-back
+shortcut; the pause shortcut is always set, so clearing it keeps its
+combination. The recorder's strings are in the package's resource bundle,
+which `scripts/bundle.sh` copies into the app.
+
+settings.json keeps each shortcut in the form every earlier build wrote
+(`HotKey`: the key's virtual key code and modifier bits of Athina's own), so
+a saved shortcut keeps working and an older build still reads the file;
+`HotKey.shortcut` is the same combination as the package has it, and a test
+holds the two forms to the combination earlier builds registered.
+
+Any number of apps can register a combination the way the package does, and
+every one of them hears it, so that registration never fails and the package
+reports none. Only an app that registers a combination exclusively takes it
+from the rest, so before the package registers one, `HotKeyCenter` makes a
+trial exclusive registration of it and lets it go at once: refused means
+another app holds it, and the pane says so under the field. A hermetic run
+registers nothing with the system (see [Hermetic runs](e2e.md#hermetic-runs)).
+
 ## Talking back
 
-A push-to-talk hotkey (the talk-back shortcut), recorded in Settings > General
-the same way as the pause shortcut in Settings > Privacy and unset by default,
-captures the microphone only while it is held. Carbon's hotkey registration
-delivers both `kEventHotKeyPressed` and `kEventHotKeyReleased` for a
-combination it registered, so `HotKeyCenter` hears the key go down and up
+A push-to-talk keyboard shortcut (the talk-back shortcut), recorded in
+Settings > General the same way as the pause shortcut in Settings > Privacy
+and unset by default, captures the microphone only while it is held.
+KeyboardShortcuts reports both the press and the release of a combination
+(see [Keyboard shortcuts](#keyboard-shortcuts)), so `HotKeyCenter` hears the key go down and up
 without Input Monitoring or any other permission beyond the two optional ones.
 The same combination cannot be both the pause and the talk-back key; the
 recorder refuses it and validation clears it. A recording is cut off after 30

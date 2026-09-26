@@ -243,7 +243,7 @@ it.
 | `journal` | one of the harness's named journal queries (`journal - queries` in the drive helpers lists them), `query=<name>`, answered from the app's own journal connection, which refuses any statement that writes: the `columns`, and the `rows` as objects keyed by column |
 | `advance` | moves the replay's clock `seconds=` ahead, or `interval=` as the debug panel's Advance field takes it (`15m`, `2h`, `1d12h`), as that field does, and answers with the clock's time and how far it has been moved ahead in all |
 | `open-link` | follows a link in the app's own text, found as `click` finds a control, through the handler a click on it runs, with the URL SwiftUI carries as its identifier (`open-link window=Models identifier=athina-settings:journal`). It proves where the link goes and that the app handles it; that a click reaches it stays a real-screen check. Refused as `missing` when the control is not a link and `unhandled` when the app has no handler for its URL |
-| `hotkey` | `key=pause` or `key=talk-back` through the handler Carbon calls, pressed and let go, or only `phase=down` or `phase=up`; `heard=<words>` is what talking back hears while its key is down, since a hermetic run opens no microphone; refused as `disabled` when the key is not registered (unset, unusable, or taken), as Carbon then never reports it |
+| `hotkey` | `key=pause` or `key=talk-back` through the handler a press of the shortcut calls, pressed and let go, or only `phase=down` or `phase=up`; `heard=<words>` is what talking back hears while its key is down, since a hermetic run opens no microphone; refused as `disabled` when the key is not registered (unset, unusable, or held by another app), as the app then never hears it |
 
 The waits take `timeout=<seconds>`, 10 unless given, and poll the app's own
 state at a fixed real-time pace; the replay's clock is not involved.
@@ -332,8 +332,8 @@ serves.
   gives it and opens no microphone.
 - **It listens to nothing outside itself.** The toast has no system-wide
   click listener, so the owner's clicks cannot dismiss a toast they cannot
-  see, and no hot key is registered with Carbon, where it would take the
-  combination from every other app. The API's `outside-click` and `hotkey`
+  see, and no keyboard shortcut is registered with the system, where every
+  press of it by the owner would reach the run. The API's `outside-click` and `hotkey`
   run the same handlers instead.
 - **It writes nothing to the owner's preferences.** The API tier runs
   `build/e2e/Athina.app`, a copy of the development bundle the harness makes

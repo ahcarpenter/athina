@@ -1,4 +1,6 @@
+import Carbon.HIToolbox
 import Foundation
+import KeyboardShortcuts
 import Testing
 
 @testable import AthinaCore
@@ -358,22 +360,62 @@ import Testing
 }
 
 @Suite struct HotKeyTests {
-  @Test func displayStringShowsModifiersAndKey() {
-    #expect(HotKey.defaultPause.displayString == "⌃⌥⌘P")
-    #expect(HotKey(keyCode: 49, modifiers: [.shift, .command]).displayString == "⇧⌘Space")
-    #expect(HotKey(keyCode: 200, modifiers: []).displayString == "Key 200")
+  /// The modifiers every earlier build registered with Carbon for a stored
+  /// shortcut, bit for bit.
+  private func carbonModifiers(_ modifiers: HotKey.Modifiers) -> Int {
+    var flags = 0
+    if modifiers.contains(.command) { flags |= cmdKey }
+    if modifiers.contains(.option) { flags |= optionKey }
+    if modifiers.contains(.control) { flags |= controlKey }
+    if modifiers.contains(.shift) { flags |= shiftKey }
+    return flags
   }
 
-  @Test func usabilityNeedsRealModifier() {
+  @Test func aSavedShortcutRegistersTheCombinationEarlierBuildsDid() throws {
+    // Control-Option-Command-P as settings.json has always held it.
+    let saved = try JSONDecoder().decode(
+      HotKey.self,
+      from: Data(#"{"keyCode": 35, "modifiers": 11}"#.utf8)
+    )
+    #expect(saved == .defaultPause)
+    let pause = KeyboardShortcuts.Shortcut(.p, modifiers: [.control, .option, .command])
+    #expect(saved.shortcut == pause)
+    #expect(saved.shortcut.carbonKeyCode == kVK_ANSI_P)
+    #expect(saved.shortcut.carbonModifiers == controlKey | optionKey | cmdKey)
+  }
+
+  @Test func everyStoredCombinationIsTheSameShortcutBothWays() {
+    for bits in 0..<16 {
+      let key = HotKey(keyCode: 17, modifiers: HotKey.Modifiers(rawValue: UInt32(bits)))
+      #expect(key.shortcut.carbonKeyCode == 17)
+      #expect(key.shortcut.carbonModifiers == carbonModifiers(key.modifiers))
+      #expect(HotKey(key.shortcut) == key)
+    }
+  }
+
+  @Test func theStoredFormIsTheOneEarlierBuildsWrote() throws {
+    let key = HotKey(keyCode: 12, modifiers: [.option, .command])
+    let data = try JSONEncoder().encode(key)
+    let object = try JSONSerialization.jsonObject(with: data) as? [String: Int]
+    #expect(object == ["keyCode": 12, "modifiers": 10])
+    #expect(try JSONDecoder().decode(HotKey.self, from: data) == key)
+  }
+
+  @Test func aShortcutWithFnIsNotStored() {
+    #expect(HotKey(KeyboardShortcuts.Shortcut(.a, modifiers: [.command, .function])) == nil)
+  }
+
+  @Test func usabilityNeedsARealModifierOrAFunctionKey() {
     #expect(HotKey.defaultPause.isUsable)
     #expect(!HotKey(keyCode: 0, modifiers: [.shift]).isUsable)
     #expect(!HotKey(keyCode: 0, modifiers: []).isUsable)
+    #expect(HotKey(keyCode: UInt32(kVK_F13), modifiers: []).isUsable)
+    #expect(HotKey(keyCode: UInt32(kVK_F5), modifiers: [.shift]).isUsable)
   }
 
-  @Test func codableRoundTrip() throws {
-    let key = HotKey(keyCode: 12, modifiers: [.option, .command])
-    let data = try JSONEncoder().encode(key)
-    #expect(try JSONDecoder().decode(HotKey.self, from: data) == key)
+  @Test @MainActor func displayStringShowsModifiersAndKey() {
+    let key = HotKey(keyCode: UInt32(kVK_F5), modifiers: [.control, .command])
+    #expect(key.displayString == "⌃⌘F5")
   }
 }
 
