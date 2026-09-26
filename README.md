@@ -56,7 +56,7 @@ suppression are later phases.
 make                         # lists every command and variable, grouped Everyday and Occasional
 make build                   # builds build/Athina.app, the development bundle (make all is the same)
 make run                     # builds and launches a replay: recorded fixtures, no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
-make test                    # runs swift test, the replayed loop and the fixture freshness check included (FILTER=<name> for some)
+make test                    # runs swift test, the replayed loop and the fixture freshness check included (FILTER=<name> for some), then checks a build without the ControlAPI trait carries no control API, as CI's build-and-test does
 make test-e2e                # runs the end-to-end scenarios, replays only (SCENARIO=<name>, JOBS=<n>; see End-to-end harness)
 make test-snapshots          # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported
 make check                   # lint, test and test-snapshots: what local validation runs before a push
@@ -2129,7 +2129,7 @@ with a merge commit in it is flattened by a rebase; give every step
 ## Continuous integration
 
 CI runs five checks on GitHub's `macos-26` runner, which ships Xcode 26 and
-the macOS 26 SDK this package targets: `build-and-test` runs `swift test` and
+the macOS 26 SDK this package targets: `build-and-test` runs `make test`: `swift test`, then
 `scripts/check-no-control-api.sh`, which must find no control API in a build
 without the `ControlAPI` trait, for which it takes the debug `Athina` the
 tests' build already made rather than compiling the package again; `lint` runs `make lint` (see Code style) and fails on any
