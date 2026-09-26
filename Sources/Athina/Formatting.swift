@@ -58,7 +58,8 @@ enum Formatting {
     ClockFormat.dayAndTime(date)
   }
 
-  /// Dollars with enough precision for cents on small figures: $0.0042, $0.13, $1.00.
+  /// Dollars with a tenth of a cent under a dollar, so calls that differ by less than a
+  /// cent still read apart: $0.0042, $0.130, $1.00.
   static func dollars(_ amount: Double) -> String {
     if amount == 0 { return "$0.00" }
     if amount < 0.01 { return String(format: "$%.4f", amount) }
