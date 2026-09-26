@@ -302,11 +302,16 @@ public enum DataMigration {
   /// The journal is only read, and stays byte for byte what it was: in
   /// exclusive mode the log's index lives in memory rather than in `-shm`,
   /// and a log that was there beforehand (Mentor did not quit cleanly) is
-  /// left as found rather than folded into the database on close.
+  /// left as found rather than folded into the database on close, while one
+  /// opening the journal made is deleted on close rather than left behind.
   private static func lockedJournal(at url: URL, manager: FileManager) throws -> SQLiteConnection {
     let hadLog = manager.fileExists(atPath: url.path + "-wal")
     let connection = try SQLiteConnection(path: url.path, create: false)
-    if hadLog { try connection.keepWriteAheadLogOnClose() }
+    if hadLog {
+      try connection.keepWriteAheadLogOnClose()
+    } else {
+      try connection.deleteWriteAheadLogOnClose()
+    }
     // Another copy of the app holding the journal is not about to let go,
     // so the launch says so promptly rather than sitting on the wait a
     // journal gives its own writers.
