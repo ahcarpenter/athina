@@ -129,7 +129,7 @@ A change that touches none of those takes no screen time.
 | `debug-panel-access` | api | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed, a click on it is refused, and one forced onto it opens nothing; turned on, the menu gains Debug Panel in a group of its own after Settings…, and it and the button each open the panel; turned off again, the panel closes and the command leaves the menu |
 | `settings-pane-text` | api | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link to that pane rather than Markdown, and a click on the one below the fold is refused until the pane is scrolled to it |
 | `settings-sheet` | api | Settings > Contexts' Add Context… brings up the New Context sheet; while it is up, a click on Add Context… under it is refused as covered, a name typed into the sheet's Name field lands there, and the sheet's own Cancel lands in the sheet and takes it down, adding no context |
-| `shortcut-recorder` | api | the Settings shortcut recorders: Settings > General's talk-back recorder takes a combination pressed while it records into the settings, refuses the pause shortcut's combination with an alert that says why, keeping what it had, and clears on Delete; Settings > Privacy's pause recorder clears on Delete too, which turns the pause shortcut off (a press of it is refused and the pane warns of nothing) while settings.json keeps its combination for earlier builds, and records it again |
+| `shortcut-recorder` | api | the Settings shortcut recorders: Settings > General's talk-back recorder takes a combination pressed while it records into the settings, refuses the pause shortcut's combination with an alert that says why, keeping what it had and the window parked below the desktop while the alert runs and after, and clears on Delete; Settings > Privacy's pause recorder clears on Delete too, which turns the pause shortcut off (a press of it is refused and the pane warns of nothing) while settings.json keeps its combination for earlier builds, and records it again |
 | `debug-timeline` | api | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started row appears once rather than once from the journal load and again from the live stream |
 
 A scenario prints one JSON line on the harness's standard output, with the
@@ -317,11 +317,13 @@ serves.
   takes every click the API simulates and its checkpoints are the pictures a
   visible window gives, and nobody sees it. Moved any later, even at the end
   of the event loop pass that opened it, a window showed for a frame, and for
-  the length of its opening animation. The item stays
-  out of the menu bar (`MenuBarExtra(isInserted:)` is false), and the menu's
-  content comes from `MenuModel`, which the menu bar extra draws everywhere
-  else and the API's `menu` reads and presses here, with the same handler for
-  each command. The app never makes itself the active app: every request to
+  the length of its opening animation. A level the app sets on a window keeps
+  it parked too, such as the modal level AppKit raises a window to while an
+  alert's sheet runs on it and the normal level it drops it to after. The
+  item stays out of the menu bar (`MenuBarExtra(isInserted:)` is false), and
+  the menu's content comes from `MenuModel`, which the menu bar extra draws
+  everywhere else and the API's `menu` reads and presses here, with the same
+  handler for each command. The app never makes itself the active app: every request to
   come forward goes through `AppActivation.request()`, which does nothing
   here. So its windows draw as an inactive app's do, in checkpoints too.
 - **It senses only what it is told.** The pipeline runs with
