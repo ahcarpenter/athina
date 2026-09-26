@@ -15,6 +15,9 @@ import SwiftUI
 struct ShortcutRecorder: NSViewRepresentable {
   /// What the shortcut is for, which VoiceOver reads as the control's label.
   let title: String
+  /// The control's accessibility identifier, which end-to-end scenarios find
+  /// it by.
+  let identifier: String
   @Binding var hotKey: HotKey?
   /// Whether the shortcut must stay set, so clearing it keeps the combination.
   var isRequired = false
@@ -25,11 +28,13 @@ struct ShortcutRecorder: NSViewRepresentable {
 
   init(
     title: String,
+    identifier: String,
     hotKey: Binding<HotKey?>,
     conflicts: [HotKey] = [],
     conflictNote: String = "This keyboard shortcut is already in use."
   ) {
     self.title = title
+    self.identifier = identifier
     _hotKey = hotKey
     self.conflicts = conflicts
     self.conflictNote = conflictNote
@@ -38,12 +43,14 @@ struct ShortcutRecorder: NSViewRepresentable {
   /// A recorder for a shortcut that is always set.
   init(
     title: String,
+    identifier: String,
     hotKey: Binding<HotKey>,
     conflicts: [HotKey] = [],
     conflictNote: String = "This keyboard shortcut is already in use."
   ) {
     self.init(
       title: title,
+      identifier: identifier,
       hotKey: Binding<HotKey?>(
         get: { hotKey.wrappedValue },
         set: { if let key = $0 { hotKey.wrappedValue = key } }
@@ -65,6 +72,7 @@ struct ShortcutRecorder: NSViewRepresentable {
     }
     recorder.validateShortcut = { coordinator.validate($0) }
     recorder.setAccessibilityLabel(title)
+    recorder.setAccessibilityIdentifier(identifier)
     coordinator.recorder = recorder
     return recorder
   }
@@ -101,7 +109,11 @@ struct ShortcutRecorder: NSViewRepresentable {
     func recorded(_ shortcut: KeyboardShortcuts.Shortcut?) {
       guard let shortcut, let key = HotKey(shortcut) else {
         if parent.isRequired {
-          recorder?.shortcut = parent.hotKey?.shortcut
+          // The field says it was cleared before it has finished clearing
+          // itself, so the combination goes back on the next turn.
+          Task { [weak self] in
+            self?.recorder?.shortcut = self?.parent.hotKey?.shortcut
+          }
         } else {
           parent.hotKey = nil
         }

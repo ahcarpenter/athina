@@ -32,6 +32,7 @@ final class ControlCommands {
     "click",
     "press",
     "type",
+    "key",
     "scroll",
     "menu",
     "settings",
@@ -58,6 +59,7 @@ final class ControlCommands {
       case "click": return try await click(request)
       case "press": return try await press(request)
       case "type": return try type(request)
+      case "key": return try await key(request)
       case "scroll": return try scroll(request)
       case "menu": return try await menu(request)
       case "settings": return try settings(request)
@@ -272,14 +274,7 @@ final class ControlCommands {
     guard let text = try request.string("text") else {
       return .error("type needs text=<what to type>")
     }
-    let flags: NSEvent.ModifierFlags = try request.modifiers().reduce(into: []) { flags, key in
-      switch key {
-      case .command: flags.insert(.command)
-      case .option: flags.insert(.option)
-      case .control: flags.insert(.control)
-      case .shift: flags.insert(.shift)
-      }
-    }
+    let flags = try modifierFlags(request)
     // Keys go where a person's would: to the sheet up over the window.
     while let sheet = window.attachedSheet { window = sheet }
     let codes: [Character: UInt16] = ["\r": 36, "\n": 36, "\t": 48, "\u{7f}": 51, "\u{1b}": 53]
@@ -346,6 +341,63 @@ final class ControlCommands {
     }
     return nil
   }
+
+  /// One key press, posted to the app's event queue as the window server
+  /// delivers one.
+  ///
+  /// `code=<virtual key code>`, held with `modifiers=` when it names any,
+  /// for `window=`, so a local event
+  /// monitor, such as a shortcut recorder's, sees it as it sees a person's;
+  /// `type` hands its keys to the window, past every monitor. The answer
+  /// comes once it has been dispatched.
+  private func key(_ request: ControlRequest) async throws -> ControlReply {
+    guard let code = try request.number("code"), let keyCode = UInt16(exactly: code) else {
+      return .error("key needs code=<virtual key code>")
+    }
+    let flags = try modifierFlags(request)
+    guard let title = try request.string("window"),
+      let window = AppAccessibility.windows(titled: title).first
+    else {
+      return .error("key needs window=<title> of an open window")
+    }
+    let characters = Self.keyCharacters[keyCode] ?? ""
+    let now = ProcessInfo.processInfo.systemUptime
+    for type in [NSEvent.EventType.keyDown, .keyUp] {
+      if let event = NSEvent.keyEvent(
+        with: type,
+        location: .zero,
+        modifierFlags: flags,
+        timestamp: now,
+        windowNumber: window.windowNumber,
+        context: nil,
+        characters: characters,
+        charactersIgnoringModifiers: characters,
+        isARepeat: false,
+        keyCode: keyCode
+      ) {
+        NSApp.postEvent(event, atStart: false)
+      }
+    }
+    return .ok(["dispatched": .bool(await EventFlush.flush())])
+  }
+
+  /// The keys `modifiers=` holds down, as AppKit's flags.
+  private func modifierFlags(_ request: ControlRequest) throws -> NSEvent.ModifierFlags {
+    try request.modifiers().reduce(into: []) { flags, key in
+      switch key {
+      case .command: flags.insert(.command)
+      case .option: flags.insert(.option)
+      case .control: flags.insert(.control)
+      case .shift: flags.insert(.shift)
+      }
+    }
+  }
+
+  /// The characters of the keys that type one, which is how AppKit tells
+  /// them apart: Return, Tab, Delete and Escape.
+  private static let keyCharacters: [UInt16: String] = [
+    36: "\r", 48: "\t", 51: "\u{7f}", 53: "\u{1b}",
+  ]
 
   /// Scrolls a control into view in the scroll view that holds it, as a
   /// person scrolling to it would.
@@ -486,7 +538,9 @@ final class ControlCommands {
     guard let key = try request.string("key"), let expected = request.argument("equals") else {
       return .error("wait-setting needs key=<path> and equals=<value>")
     }
-    let reached = try await poll(request) { self.host.controlSettings[path: key] == expected }
+    let reached = try await poll(request) {
+      (self.host.controlSettings[path: key] ?? .null) == expected
+    }
     let value = host.controlSettings[path: key] ?? .null
     return reached
       ? .ok(["value": value])
