@@ -1,4 +1,4 @@
-// Built only with the UISnapshotsSmoke trait on (Package.swift), which `make ui-snapshots-smoke`
+// Built only with the UISnapshotsSmoke trait on (Package.swift), which `make test-snapshots-ci`
 // turns on, so `make test` compiles none of this.
 #if UISnapshotsSmoke
   import AppKit
@@ -19,7 +19,7 @@
   /// of CI's four runners sets it, it draws and checks only the snapshots `SnapshotShard` gives
   /// shard k, the same split `ui-snapshots` uses.
   ///
-  /// With `UI_SNAPSHOTS_SMOKE_AGAINST` set to a folder, as `make ui-snapshots-smoke-local` sets
+  /// With `UI_SNAPSHOTS_SMOKE_AGAINST` set to a folder, as `make test-snapshots` sets
   /// it, it compares each snapshot with that folder's render of it instead, drawn on this Mac
   /// from another commit, writes what it finds to `UI_SNAPSHOTS_SMOKE_OUTPUT`, and fails only on a
   /// snapshot it could not draw: a changed screen is a report, not a failure.

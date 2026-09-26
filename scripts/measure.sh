@@ -14,7 +14,7 @@ pid="${ATHINA_PID:-}"
 if [ -z "$pid" ]; then
   running="$(pgrep -x Athina || true)"
   if [ -z "$running" ]; then
-    echo "Athina is not running (make run)" >&2
+    echo "Athina is not running (make run or make run-live)" >&2
     exit 1
   fi
   if [ "$(echo "$running" | wc -l)" -gt 1 ]; then

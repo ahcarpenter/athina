@@ -4,7 +4,7 @@ import Foundation
 /// command line.
 ///
 /// A replay waits out each call's recorded latency by default, so its
-/// in-flight states look the way they do live and `make run-replay` still
+/// in-flight states look the way they do live and `make run` still
 /// looks like a live session:
 ///
 /// - `--replay-latency immediate`: every replayed call is answered at once,

@@ -7,7 +7,7 @@ import Foundation
 // Builds every asset the app draws its mark from, out of the two committed
 // masters: Resources/Mark/AthinaMark.svg, the Athena drawing, for the app
 // icon, and Resources/Mark/AthinaOwl.svg, the owl, for the menu bar. Run it
-// with `make mark` whenever either changes; its outputs are committed so a
+// with `make icons` whenever either changes; its outputs are committed so a
 // plain `make build` needs nothing but the repository.
 //
 // It produces:
@@ -720,7 +720,7 @@ func drawMenuBarMark(_ eyes: Eyes, asleep: Bool, into context: CGContext) {
 /// id derived from it, so two runs over the same drawing produce two different
 /// files.
 ///
-/// These are committed, so that would dirty all six on every `make mark`.
+/// These are committed, so that would dirty all six on every `make icons`.
 /// Rewriting both fields, the id from the file's own content, leaves the output
 /// a pure function of the masters and this script.
 func makeReproducible(_ url: URL) throws {
@@ -917,7 +917,7 @@ func samePicture(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep) -> Bool {
 /// check that can hold. What matters is not the bytes but whether the assets
 /// came from the drawing and the drawing code that are in the tree now, and
 /// that is what this records: `MarkAssetTests` fails when any of the three has
-/// changed and `make mark` has not been run.
+/// changed and `make icons` has not been run.
 ///
 /// The script is in the record because most of the drawing lives here rather
 /// than in the masters: the inset, the eye treatments, the z's and the
@@ -935,7 +935,7 @@ func writeProvenance() throws {
   let text = """
     # What Resources/AppIcon.icns, the MenuBarMark PDFs and the README icon
     # were built from: both masters and the script that drew them. Written by
-    # scripts/mark-assets.swift; run `make mark` after changing a master, the
+    # scripts/mark-assets.swift; run `make icons` after changing a master, the
     # script or the variant set, never edit this by hand.
     \(digest)
     variants \(set.map(\.mark).joined(separator: " "))

@@ -1,8 +1,8 @@
 # What Resources/AppIcon.icns, the MenuBarMark PDFs and the README icon
 # were built from: both masters and the script that drew them. Written by
-# scripts/mark-assets.swift; run `make mark` after changing a master, the
+# scripts/mark-assets.swift; run `make icons` after changing a master, the
 # script or the variant set, never edit this by hand.
 AthinaMark.svg 02dc7f7b960525ffe50cce980c37640aa7311ee36da5e9c025451d904706fb79
 AthinaOwl.svg e227bce988b0923c2caffc967581fd748de147d9258106d52ae7ae3808de9aa5
-mark-assets.swift 3a92623738b679835f405bb8ec1bf6d279127c162c89dda40449abbb1b3d4b23
+mark-assets.swift c9a4c9fbfe0cded0cb53f9a9d799e9921027c8db44e2538a52422e23eaa3e6f6
 variants watching idle paused excluded needsSomething held

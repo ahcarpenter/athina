@@ -68,7 +68,7 @@ if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
   cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 fi
 # The menu bar mark, one template PDF per variant, built from
-# Resources/Mark/AthinaOwl.svg by `make mark`, as the icon above is from
+# Resources/Mark/AthinaOwl.svg by `make icons`, as the icon above is from
 # AthinaMark.svg. Both are committed, so a plain build needs nothing but the
 # repository.
 cp "$ROOT"/Resources/Mark/MenuBarMark-*.pdf "$APP/Contents/Resources/"

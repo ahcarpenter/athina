@@ -4,12 +4,12 @@
 # the tests, then the UI smoke set drawn at HEAD and at main on this Mac and
 # compared (README "UI snapshot smoke test").
 commands:
-  test: "swift test && make ui-snapshots-smoke-local"
+  test: "swift test && make test-snapshots"
 # test.instructions steers the agent-driven evidence pass that follows it.
 test:
   instructions: |
-    Hard rule: never run the Xcode project steps (make xcodeproj, make
-    xcode-build, make xcode-archive, or xcodebuild on the generated project),
+    Hard rule: never run the Xcode project steps (make xcodeproj, or
+    xcodebuild on the generated project),
     the full ui-snapshots gate (scripts/snapshots.sh gate, `Athina
     --snapshot`), the checkpoint gate (scripts/snapshots.sh checkpoints), or
     any approve command (make snapshots-approve, make
@@ -17,7 +17,7 @@ test:
     references) in this validation. CI's ui-snapshots, ui-snapshots-smoke
     and e2e-api jobs prove those.
 
-    The test command ends with make ui-snapshots-smoke-local, whose summary
+    The test command ends with make test-snapshots, whose summary
     (build/snapshots-smoke-local/summary.md) lists every UI smoke screen the
     change altered, added or removed against main, drawn on this Mac, with
     the base, new and difference images of each. Read it and explain each
@@ -28,7 +28,8 @@ test:
     "Iterating without the network"):
     - Use the development build (`make build`, build/Athina.app).
     - Replays only: never a live launch and never a live model call, which
-      spends the owner's API credits. Never `make run` or `make record`.
+      spends the owner's API credits. Never `make run-live` or `make
+      record`; `make run` is a replay.
     - Drive it with the e2e harness, `scripts/e2e/athina-e2e run`
       (`list` names the scenarios, README "End-to-end harness"); call it
       bare, never wrapped in lockf.
