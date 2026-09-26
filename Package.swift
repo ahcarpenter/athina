@@ -35,11 +35,16 @@ let package = Package(
     .trait(name: "UISnapshotsSmoke"),
   ],
   dependencies: [
-    // Only for the UI smoke test, and fetched only with its trait on. Pinned
-    // exactly, and no Package.resolved is committed, since a committed one
-    // has every build fetch every package it names; the one product used,
-    // SnapshotTesting, depends on no other package.
-    .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.6")
+    // Each pinned exactly, and no Package.resolved is committed, since a
+    // committed one has every build fetch every package it names. Neither
+    // depends on another package.
+    //
+    // The command lines of athina-drive and snapshot-diff, the developer
+    // tools; the app and its release builds never link it.
+    .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2"),
+    // Only for the UI smoke test, and fetched only with its trait on; the one
+    // product used is SnapshotTesting.
+    .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.6"),
   ],
   targets: [
     // The one SQLite call Swift cannot make for itself (see the header).
@@ -88,12 +93,24 @@ let package = Package(
     .target(name: "AthinaE2E"),
     .executableTarget(
       name: "AthinaDrive",
-      dependencies: ["AthinaE2E", "AthinaControlProtocol"],
+      dependencies: [
+        "AthinaE2E",
+        "AthinaControlProtocol",
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+      ],
       linkerSettings: [.linkedFramework("ApplicationServices")]
     ),
     .target(name: "SnapshotDiff"),
-    .executableTarget(name: "SnapshotDiffTool", dependencies: ["SnapshotDiff"]),
+    .executableTarget(
+      name: "SnapshotDiffTool",
+      dependencies: [
+        "SnapshotDiff",
+        .product(name: "ArgumentParser", package: "swift-argument-parser"),
+      ]
+    ),
     .testTarget(name: "SnapshotDiffTests", dependencies: ["SnapshotDiff"]),
+    // athina-drive's command line, parsed without touching the screen.
+    .testTarget(name: "AthinaDriveTests", dependencies: ["AthinaDrive"]),
     .testTarget(
       // AthinaCore so the harness's journal queries are checked against a
       // journal the app itself just created, not a hand-written schema;

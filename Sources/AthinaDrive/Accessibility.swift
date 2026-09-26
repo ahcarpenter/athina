@@ -1,15 +1,16 @@
 import AppKit
 import ApplicationServices
-import AthinaE2E
 import Foundation
 
 /// Reading and pressing through accessibility: the route that needs no
 /// pointer, so it works while someone else is using the Mac, and the only
 /// route to a menu item a mouse cannot reach.
 enum Accessibility {
-  static func run(_ invocation: DriveInvocation) throws {
-    let pid = try invocation.pid(0)
-    let command = try invocation.positional(1)
+  /// Does one action to a pid's elements.
+  ///
+  /// Only those under `scope` when it is given; `terms` are the role, match
+  /// and value `action` takes.
+  static func run(pid: pid_t, action: AX.Action, terms: [String], scope: String?) {
     let app = AXUIElementCreateApplication(pid)
 
     func windows() -> [AXUIElement] { (attr(app, kAXWindowsAttribute) as? [AXUIElement]) ?? [] }
@@ -17,7 +18,7 @@ enum Accessibility {
     /// Where to look: a window whose title contains `scope`, the status
     /// menu (`extras`), or everything the app shows.
     func roots() -> [AXUIElement] {
-      guard let scope = invocation.option("--scope"), !scope.isEmpty else {
+      guard let scope, !scope.isEmpty else {
         var roots = windows()
         if let extras = attr(app, "AXExtrasMenuBar") { roots.append(extras as! AXUIElement) }
         return roots
@@ -45,14 +46,14 @@ enum Accessibility {
       return nil
     }
 
-    switch command {
-    case "dump":
+    switch action {
+    case .dump:
       for root in roots() {
         say("ROOT \(line(root))")
         walk(root, depth: 1)
       }
 
-    case "texts":
+    case .texts:
       // AXUnknown is in the list because that is the role SwiftUI gives a
       // row whose parts are combined into one element, which is how
       // VoiceOver reads most of Athina's rows.
@@ -72,7 +73,7 @@ enum Accessibility {
         for element in found { say(line(element)) }
       }
 
-    case "menuitems":
+    case .menuitems:
       guard let extras = attr(app, "AXExtrasMenuBar") else {
         fail("ax menuitems: pid \(pid) has no menu bar extra", code: 2)
       }
@@ -82,7 +83,7 @@ enum Accessibility {
         say("AXMenuItem title=\"\(title(element))\" en=\(text(attr(element, kAXEnabledAttribute)))")
       }
 
-    case "menu":
+    case .menu:
       // The open status menu's own rows as macOS shows them, top level
       // only, in order: the title and whether it is enabled, or "-" for
       // a separator, which accessibility shows as a row with no title.
@@ -98,14 +99,14 @@ enum Accessibility {
         say(name.isEmpty ? "-" : "\(name)\t\(enabled ? "enabled" : "dimmed")")
       }
 
-    case "pressextra":
+    case .pressextra:
       guard let item = statusItem(of: pid) else {
         fail("ax pressextra: pid \(pid) has no menu bar extra", code: 2)
       }
       let status = AXUIElementPerformAction(item, kAXPressAction as CFString)
       say("pressextra \"\(title(item))\" desc=\"\(describe(item))\" -> \(status.rawValue)")
 
-    case "cancelmenu":
+    case .cancelmenu:
       guard let extras = attr(app, "AXExtrasMenuBar") else {
         fail("ax cancelmenu: pid \(pid) has no menu bar extra", code: 2)
       }
@@ -114,19 +115,19 @@ enum Accessibility {
       }
       say("cancelmenu -> \(AXUIElementPerformAction(menu, kAXCancelAction as CFString).rawValue)")
 
-    case "get", "press", "pressx", "focus", "set":
-      let wanted = try invocation.positional(2)
-      let name = invocation.positionals.count > 3 ? invocation.positionals[3] : ""
-      guard let element = find(role: wanted, name: name, exact: command == "pressx") else {
+    case .get, .press, .pressx, .focus, .set:
+      let wanted = terms[0]
+      let name = terms.count > 1 ? terms[1] : ""
+      guard let element = find(role: wanted, name: name, exact: action == .pressx) else {
         fail(
-          "ax \(command): no \(wanted.isEmpty ? "element" : wanted) matching \"\(name)\"",
+          "ax \(action.rawValue): no \(wanted.isEmpty ? "element" : wanted) matching \"\(name)\"",
           code: 2
         )
       }
-      switch command {
-      case "get":
+      switch action {
+      case .get:
         say(line(element))
-      case "press", "pressx":
+      case .press, .pressx:
         let status = AXUIElementPerformAction(element, kAXPressAction as CFString)
         say(
           """
@@ -135,7 +136,7 @@ enum Accessibility {
           """
         )
         if status != .success { exit(2) }
-      case "focus":
+      case .focus:
         let status = AXUIElementSetAttributeValue(
           element,
           kAXFocusedAttribute as CFString,
@@ -143,7 +144,7 @@ enum Accessibility {
         )
         say("focus \(role(element)) -> \(status.rawValue)")
       default:
-        let newValue = try invocation.positional(4)
+        let newValue = terms[2]
         AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
         // A number goes in as a number only where the element's value
         // already is one, as a scroll bar's is: a text field, which is
@@ -170,14 +171,6 @@ enum Accessibility {
         )
       }
 
-    default:
-      fail(
-        """
-        ax: unknown command \
-        \"\(command)\"\n\n\(DriveArguments.usage(for: DriveArguments.command(named: "ax")))
-        """,
-        code: 64
-      )
     }
   }
 
