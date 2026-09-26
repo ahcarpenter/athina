@@ -44,7 +44,8 @@ jobs:
   lint:
     # Google's Swift style (README "Code style"): swift-format from the Xcode
     # that .xcode-version pins checks every Swift file against the committed
-    # .swift-format and fails on any finding.
+    # .swift-format and fails on any finding. Then the drift check: the rules
+    # GitHub enforces on main against the committed ruleset.
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
@@ -52,6 +53,17 @@ jobs:
       - name: Lint
         timeout-minutes: 10
         run: make lint
+      - name: The rules GitHub enforces on main match .github/rulesets/main.json
+        # GitHub never reads the file, which is applied by hand (README
+        # "Continuous integration"), so this reads the live rules and fails
+        # when they differ, including on a pull request that changes the file
+        # until its ruleset is applied. It runs after a lint failure too, so
+        # both are reported at once.
+        if: ${{ !cancelled() }}
+        timeout-minutes: 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/check-ruleset.sh
 
   e2e-api:
     # Every API-tier scenario of the end-to-end harness, run hermetically

@@ -2193,7 +2193,14 @@ gh api -X PUT "repos/ahcarpenter/athina/rulesets/$(gh api repos/ahcarpenter/athi
 creates it if it is gone). It requires each check from GitHub Actions itself
 (integration 15368), so a commit status of the same name cannot stand in for
 one, and it does not require a branch to be up to date with main, so a pull
-request is not rerun each time another merges.
+request is not rerun each time another merges. GitHub never reads the file, so
+the `lint` job ends by checking that the two still agree:
+`scripts/check-ruleset.sh` reads the rules GitHub applies to main from the
+public `repos/ahcarpenter/athina/rules/branches/main` endpoint and fails when
+any rule or required check differs from the file's, even after a lint failure,
+so both are reported at once. A pull request that changes the file therefore
+fails `lint` until the change is applied with the command above, which is the
+order it goes in: apply, then run the job again, then merge.
 
 **A build cache.** Every macOS job that compiles the package restores
 `.build` from an earlier run of the same job through
