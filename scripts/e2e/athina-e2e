@@ -27,7 +27,6 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/harness.sh"
 # shellcheck source=lib/lock.sh
 source "$E2E_DIR/lib/lock.sh"
 
-SCENARIO_DIR="$E2E_DIR/scenarios"
 KEEP_HOME=0
 OUT_ROOT=""
 TIME_SCALE=""
@@ -41,6 +40,8 @@ usage: scripts/e2e/athina-e2e <command> [options]
   list                     the scenarios and what each one proves
   warm [--force]           prepare the warm fixture home (needs the screen)
   run <scenario|all> ...   run scenarios end to end
+  run --tier <api|screen|all>
+                           run every scenario of a tier
   journal <query> [--home <dir>]
                            a named query over a run's journal
   doctor                   check everything a run needs
@@ -52,7 +53,9 @@ options:
   --time-scale <n>   run the replay clock n times faster (see README)
   --jobs <n>         run up to n API-tier scenarios at once, beside the
                      real-screen ones (default 1: one scenario at a time)
-  --tier <api|screen> run only the scenarios of that tier
+  --tier <api|screen|all>
+                     run only the scenarios of that tier, every one of them
+                     when no scenario is named (default all)
   --show-windows     leave an API-tier run's windows on screen to watch it,
                      taking the screen lock as a real-screen run does
   --checkpoints <dir> put the API tier's checkpoints in <dir>/<scenario>/
@@ -72,26 +75,6 @@ time across every checkout, and one that says SCENARIO_IDLE_FIRST=yes only
 once the keyboard and mouse have been quiet for 15 seconds (README "End-to-end
 harness").
 TEXT
-}
-
-scenario_names() {
-	local path
-	for path in "$SCENARIO_DIR"/*.sh; do
-		[ -e "$path" ] || continue
-		basename "$path" .sh
-	done
-}
-
-scenario_summary_of() {
-	# Read the summary without running anything the scenario defines.
-	sed -n 's/^SCENARIO_SUMMARY="\(.*\)"$/\1/p' "$SCENARIO_DIR/$1.sh" | head -1
-}
-
-# The tier a scenario names, read the same way; screen when it names none.
-scenario_tier_of() {
-	local tier
-	tier="$(sed -n 's/^SCENARIO_TIER=\([a-z]*\)$/\1/p' "$SCENARIO_DIR/$1.sh" 2>/dev/null | head -1)"
-	printf '%s\n' "${tier:-screen}"
 }
 
 # How long the keyboard and mouse must be quiet before a scenario that says
@@ -200,24 +183,10 @@ cmd_warm() {
 SCENARIO_SKIPPED=77
 
 cmd_run() {
-	local names=() name
-	[ $# -gt 0 ] || { usage; exit 64; }
-	if [ "$1" = "all" ]; then
-		mapfile -t names < <(scenario_names)
-	else
-		names=("$@")
-	fi
-	for name in "${names[@]}"; do
-		[ -f "$SCENARIO_DIR/$name.sh" ] || die "no scenario named $name"
-	done
-	if [ -n "$TIER" ]; then
-		local chosen=()
-		for name in "${names[@]}"; do
-			[ "$(scenario_tier_of "$name")" = "$TIER" ] && chosen+=("$name")
-		done
-		[ ${#chosen[@]} -gt 0 ] || die "none of those scenarios is on the $TIER tier"
-		names=("${chosen[@]}")
-	fi
+	local names=() name chosen
+	[ $# -gt 0 ] || [ -n "$TIER" ] || { usage; exit 64; }
+	chosen="$(scenarios_to_run "${TIER:-all}" "$@")" || exit 1
+	mapfile -t names <<<"$chosen"
 	ensure_app
 	ensure_drive
 	local api=() screen=()
@@ -474,7 +443,7 @@ main() {
 			JOBS="$2"; shift 2 ;;
 		--show-windows) SHOW_WINDOWS=1; shift ;;
 		--tier)
-			case "${2:-}" in api | screen) TIER="$2" ;; *) echo "--tier is api or screen" >&2; exit 64 ;; esac
+			case "${2:-}" in api | screen | all) TIER="$2" ;; *) echo "--tier is api, screen or all" >&2; exit 64 ;; esac
 			shift 2 ;;
 		--checkpoints)
 			[ -n "${2:-}" ] || { echo "--checkpoints takes a directory" >&2; exit 64; }

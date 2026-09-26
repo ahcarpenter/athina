@@ -604,7 +604,8 @@ scripts/e2e/athina-e2e warm          # once per machine: prepare the warm home
 scripts/e2e/athina-e2e list          # the scenarios and what each one proves
 scripts/e2e/athina-e2e run all       # run them; one JSON line of result each
 scripts/e2e/athina-e2e run --jobs 4 all   # up to 4 API-tier scenarios at once
-scripts/e2e/athina-e2e run --tier api all # only the API tier, as CI's e2e-api runs it
+scripts/e2e/athina-e2e run --tier api     # every API-tier scenario, as CI's e2e-api runs them
+scripts/e2e/athina-e2e run --tier screen  # every real-screen scenario
 scripts/e2e/athina-e2e run toast-menu-answers
 scripts/e2e/athina-e2e doctor        # what is missing before a run
 scripts/e2e/athina-e2e journal suggestions   # a named query over the last run
@@ -677,6 +678,18 @@ Scenarios come in two tiers, which each scenario names in `SCENARIO_TIER`:
   menu bar item and the menu the system runs for it, clicks in other apps that
   reach Athina only through a system-wide listener, and the item's width in
   the real menu bar.
+
+`run --tier api|screen|all` runs every scenario of that tier, or, with
+scenarios named, those of them on it; `all`, as when no tier is given, runs
+both. A validation's live evidence runs the API tier for anything in
+Athina's own windows (the menu as the app builds it, the toast and its
+buttons, Settings, the debug panel, the About panel): `run --tier api
+--jobs 4`, or the API-tier scenarios the change touches by name. It holds no
+lock, shows nothing and never waits on whoever is at the Mac. The real screen
+is only for what the API tier cannot prove, a change to the menu bar item,
+toast dismissal, the Settings links or sensing: `run real-screen` for the
+first three, and `run --tier screen`, which adds `capture-race`, for sensing.
+A change that touches none of those takes no screen time.
 
 ### Scenarios
 
