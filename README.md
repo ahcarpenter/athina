@@ -49,6 +49,9 @@ suppression are later phases.
 - The UI smoke test alone (see UI snapshot smoke test) uses
   swift-snapshot-testing, which SwiftPM fetches, pinned, only when that test
   runs; the app never links it
+- The developer tools `athina-drive` and `snapshot-diff` alone take their
+  command lines with swift-argument-parser, which SwiftPM fetches, pinned,
+  with any build of the package; the app never links it
 
 ## Build, run, test
 
@@ -734,7 +737,12 @@ then lands in 1 second**. Re-warm with `warm --force` after a macOS upgrade.
 
 `athina-drive` (`Sources/AthinaDrive`, built on demand) is the one
 implementation of every step a scenario takes on the screen. It works by pid
-only and never looks an app up by name.
+only and never looks an app up by name. Its command line is
+[swift-argument-parser](https://github.com/apple/swift-argument-parser)'s:
+`athina-drive --help` and `athina-drive <command> --help` describe each
+command, and a command line it cannot run exits 64 with its usage before
+anything is touched. Coordinates, titles and values are taken as written,
+a negative coordinate or a title starting with a dash included.
 
 | command | what it does |
 | --- | --- |
@@ -742,27 +750,32 @@ only and never looks an app up by name.
 | `ready <pid>` | print `READY` once the app's menu bar extra exists |
 | `windows <pid>` | the on-screen windows of a pid, with ids and frames |
 | `toast <pid>` | the window id of the suggestion toast, or nothing |
-| `bar [pid]` | menu bar extras and menu titles with frames, the gaps between neighbours, and a point on the bar that is on no item |
+| `bar [<pid>]` | menu bar extras and menu titles with frames, the gaps between neighbours, and a point on the bar that is on no item |
 | `front` | the frontmost app and its pid |
 | `activate <pid>` | bring a pid to the front |
-| `ax <pid> <dump\|texts\|menuitems\|menu\|pressextra\|cancelmenu\|get\|press\|pressx\|focus\|set> [role] [match] [value]` | read or press elements through accessibility, with no pointer; `--scope` narrows the search; `menu` prints the open menu's rows as macOS shows them, a title and `enabled` or `dimmed` or `-` for a separator, the shape the control API's `menu` is compared in |
-| `click <item <pid> \| at <x> <y> \| window <pid> <x> <y>>` | post a real HID click, aborting if the pointer is moved or the target is not what was asked for, and log the accessibility element and topmost window under it; a window that lets clicks through, such as a window manager's full-screen overlay, does not count as covering the target; `--shot <out.png>` captures the result |
-| `raise <pid> [title]` | bring one of a pid's windows to the front, which journals a window switch |
+| `ax <pid> <dump\|texts\|menuitems\|menu\|pressextra\|cancelmenu\|get\|press\|pressx\|focus\|set> [<role>] [<match>] [<value>]` | read or press elements through accessibility, with no pointer; `--scope` narrows the search; `menu` prints the open menu's rows as macOS shows them, a title and `enabled` or `dimmed` or `-` for a separator, the shape the control API's `menu` is compared in |
+| `click item <pid>` | post a real HID click on a pid's menu bar extra, aborting if the pointer is moved or the target is not what was asked for, and log the accessibility element and topmost window under it; `--shot <out.png>` captures the result |
+| `click at <x> <y>` | the same click on a point of the menu bar that is on no item |
+| `click window <pid> <x> <y>` | the same click on a point, in screen coordinates, on one of a pid's windows; a window that lets clicks through, such as a window manager's full-screen overlay, does not count as covering the target |
+| `raise <pid> [<title>]` | bring one of a pid's windows to the front, which journals a window switch |
 | `close <pid> <title>` | close one of a pid's windows through its close button |
 | `menupick <pid> <row> <item>` | hover a submenu row and click one of its items with the pointer |
-| `tap <session\|pid> [pid]` | listen-only event taps (`tap session` for every mouse-down, `tap pid <pid>` for one app), which is what attributes a dismissal to a real click rather than a timeout |
+| `tap session` | a listen-only event tap logging every mouse-down and what is under it, which is what attributes a dismissal to a real click rather than a timeout |
+| `tap pid <pid>` | the same for one app's mouse-downs |
 | `announce <pid>` | log every `AXAnnouncementRequested` the app posts |
 | `flip <x> <y> <w> <h>` | a click-through helper window that changes text and colour on `SIGUSR1`, so sensing has something to see |
 | `journal <db> <query>` | a named read-only query over a journal (`journal - queries` lists them), including `capture-race` |
 | `key <keycode>` | post a key press, with `--cmd` and `--shift` as modifiers |
-| `shot <window <id> \| region <x> <y> <w> <h>> <out.png>` | capture a window by id or a screen region |
-| `api <command> [key=value ...]` | one request to a replay's control API, in `ATHINA_CONTROL_DIR` (the harness sets it); prints the answer, or one field of it with `--field <path>` such as `elements.0.enabled`; exit 0 when the answer is ok, 1 when not, 2 when no app answered |
+| `shot window <id> <out.png>` | capture a window by id |
+| `shot region <x> <y> <w> <h> <out.png>` | capture a region of the screen |
+| `api <command> [<key=value> ...]` | one request to a replay's control API, in `ATHINA_CONTROL_DIR` (the harness sets it); prints the answer, or one field of it with `--field <path>` such as `elements.0.enabled`; exit 0 when the answer is ok, 1 when not, 2 when no app answered |
 
-The maths and parsing behind them are a plain library (`Sources/AthinaE2E`)
-with unit tests: the journal queries, the menu bar geometry, the capture-race
-report, and the drive tool's argument handling. The queries are run against a
-journal `Journal` itself creates, so a column renamed in the app fails the
-suite rather than every scenario.
+The maths behind them is a plain library (`Sources/AthinaE2E`) with unit
+tests: the journal queries, the menu bar geometry, and the capture-race
+report. The queries are run against a journal `Journal` itself creates, so a
+column renamed in the app fails the suite rather than every scenario. The
+command line has its own tests (`Tests/AthinaDriveTests`), one of which
+checks this table against the commands the tool accepts.
 
 ### The control API
 
