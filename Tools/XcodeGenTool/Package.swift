@@ -1,7 +1,7 @@
 // swift-tools-version: 6.2
 import PackageDescription
 
-// Pins XcodeGen, which generates Athina.xcodeproj from project.yml (README
+// Pins XcodeGen, which generates Athina.xcodeproj from project.yml (docs/releasing.md
 // "The Xcode project"). A package of its own, never a dependency of the app's
 // Package.swift, so `make build`, `make test` and CI's package jobs never fetch
 // or build it; `make xcodeproj` runs it with

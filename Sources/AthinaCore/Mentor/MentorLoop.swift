@@ -16,8 +16,8 @@ public actor MentorLoop {
   /// How long a Test Connection call may take, in seconds.
   public static let testTimeout: TimeInterval = 30
   /// Output tokens a second a reply is assumed to arrive at, under the rate
-  /// measured on Opus 5 (README), so a reply that runs to max_tokens still
-  /// finishes inside its timeout.
+  /// measured on Opus 5 (docs/mentor-loop.md "Standing understanding"), so a
+  /// reply that runs to max_tokens still finishes inside its timeout.
   public static let outputTokensPerSecond = 15.0
 
   /// The timeout for a call whose reply may run to `maxTokens`, never past

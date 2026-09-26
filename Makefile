@@ -38,7 +38,7 @@ approve: ## take the ui-snapshots, smoke and checkpoint images CI made of HEAD, 
 lint: swift-format-version ## check every Swift file against .swift-format, as CI does
 	$(SWIFT_FILES) | xargs -0 xcrun swift-format lint --strict --parallel
 
-format: swift-format-version ## format every Swift file in place (README "Code style")
+format: swift-format-version ## format every Swift file in place (docs/code-style.md)
 	$(SWIFT_FILES) | xargs -0 xcrun swift-format format --in-place --parallel
 
 doctor: ## what this Mac is missing: tools, grants, the e2e harness's needs
@@ -63,7 +63,7 @@ icons: ## rebuild the app icon, menu bar mark and README icon from Resources/Mar
 measure: ## sample the running app's CPU and memory for 60 seconds
 	ATHINA_PID="$(PID)" scripts/measure.sh
 
-release: ## the notarized direct-download release (README "Releasing")
+release: ## the notarized direct-download release (docs/releasing.md)
 	scripts/release.sh
 
 xcodeproj: ## generate Athina.xcodeproj, for the App Store route, from project.yml
@@ -82,7 +82,7 @@ FILTER ?=
 REPLAY_DIR ?=
 ## SETTINGS     run: a settings file to start from, read and never written
 SETTINGS ?=
-## TIME_SCALE   run: the replay's clock runs that many times faster (README "A faster clock")
+## TIME_SCALE   run: the replay's clock runs that many times faster (docs/replay.md "A faster clock")
 TIME_SCALE ?=
 ## ALLOW_STALE  run: 1 also serves fixtures of an older prompt version, to iterate on prompts
 ALLOW_STALE ?=
@@ -104,8 +104,8 @@ PID ?=
 # Every Swift file in the checkout, tracked or new, that git does not ignore
 SWIFT_FILES = git ls-files -z --cached --others --exclude-standard '*.swift'
 
-# The Xcode every CI job runs, whose swift-format CI lints with (README "Code
-# style" and "Continuous integration")
+# The Xcode every CI job runs, whose swift-format CI lints with (docs/code-style.md
+# and docs/ci.md)
 SWIFT_FORMAT_XCODE := $(shell cat .xcode-version)
 
 # Warns when the selected Xcode is not the one CI lints with, whose swift-format

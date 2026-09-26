@@ -1,6 +1,6 @@
 import Foundation
 
-// What travels over the control API's socket (README "The control API"): one
+// What travels over the control API's socket (docs/e2e.md "The control API"): one
 // JSON request per line from athina-drive, one JSON answer per line from the
 // app. Both sides use these types, so neither can drift from the other.
 
@@ -171,7 +171,7 @@ public struct ControlRequest: Equatable, Sendable, Codable {
   ///
   /// A request whose secret does not match gets an error and nothing else.
   public var secret: String
-  /// The command's name, such as `click` or `wait-setting` (README "The
+  /// The command's name, such as `click` or `wait-setting` (docs/e2e.md "The
   /// control API").
   public var command: String
   /// The command's parameters by name, such as `window=` or `timeout=`.

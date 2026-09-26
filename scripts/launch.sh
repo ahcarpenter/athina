@@ -121,7 +121,7 @@ esac
 APP="$ROOT/build/Athina.app"
 EXECUTABLE="$APP/Contents/MacOS/Athina"
 PID_FILE="$ROOT/build/$LANE.pid"
-# The token is kept beside the pid rather than in it: README shows a person
+# The token is kept beside the pid rather than in it: docs/replay.md shows a person
 # `cat build/<lane>.pid` and handing the result to scripts/advance-clock.sh, so
 # the pid stays the whole of that file.
 TOKEN_FILE="$ROOT/build/$LANE.token"

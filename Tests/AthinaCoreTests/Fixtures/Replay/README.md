@@ -1,8 +1,7 @@
 # Replay fixtures
 
 Recorded model calls that `ReplayClaudeClient` serves in the loop tests and in
-`make run`. See README.md, "Iterating without the network", for the format
-and the rules.
+`make run`. See docs/replay.md for the format and the rules.
 
 The set is current at prompt version 10. It was recorded live on 2026-09-15 in
 one `Mentor --record` session from a staged scenario and nothing else: the two

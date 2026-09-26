@@ -66,7 +66,7 @@ enum Snapshots {
   static let appearances: [NSAppearance.Name] = [.aqua, .darkAqua]
 
   /// Every snapshot, with its sample data. `--snapshot` renders these and so
-  /// does the UI smoke test (README "UI snapshot smoke test"), so the two
+  /// does the UI smoke test (docs/ci.md "UI snapshot smoke test"), so the two
   /// gates always cover the same states.
   static func specs() -> [Spec] {
     let state = AppState.sample()

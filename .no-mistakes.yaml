@@ -1,12 +1,12 @@
 # no-mistakes repository configuration (read from the default branch).
 # Local validation runs the make targets people run, and together its lint and
-# test steps run exactly what `make check` composes (README "Continuous
-# integration"): `make lint`, as CI's lint job runs it, `make test`, as CI's
-# build-and-test runs it, and `make test-snapshots`, which draws the UI smoke
-# set at HEAD and at main on this Mac and compares them (README "UI snapshot
-# smoke test"), where CI's ui-snapshots-smoke runs `make test-snapshots-ci`
-# against the runner's references. The comparison stays in the test command
-# so its summary is fresh when the test step's evidence pass reads it.
+# test steps run exactly what `make check` composes (docs/ci.md): `make lint`,
+# as CI's lint job runs it, `make test`, as CI's build-and-test runs it, and
+# `make test-snapshots`, which draws the UI smoke set at HEAD and at main on
+# this Mac and compares them (docs/ci.md "UI snapshot smoke test"), where CI's
+# ui-snapshots-smoke runs `make test-snapshots-ci` against the runner's
+# references. The comparison stays in the test command so its summary is fresh
+# when the test step's evidence pass reads it.
 commands:
   lint: "make lint"
   test: "make test && make test-snapshots"
@@ -32,4 +32,27 @@ test:
     called bare: the API tier (`--tier api --jobs 4`) for anything in
     Athina's own windows, and the real-screen tier only for a change to the
     menu bar item, toast dismissal, the Settings links or sensing (AGENTS.md
-    and README "End-to-end harness"). Say which tier ran and why.
+    and docs/e2e.md). Say which tier ran and why.
+
+# document.instructions keeps each document to its job on every change.
+document:
+  instructions: |
+    Every fact has one home. Put new or changed documentation there, and
+    point to it from anywhere else rather than repeating it:
+    - README.md introduces Athina to the people using it: what it is,
+      installing it, the requirements, the API key, permissions and privacy
+      in brief, and a short Develop section pointing at CONTRIBUTING.md and
+      docs/. It carries no development mechanics.
+    - CONTRIBUTING.md owns the development loop: setup and requirements, the
+      everyday make commands, the rules, and how a change reaches main.
+    - docs/<topic>.md owns the detail of its topic (architecture,
+      mentor-loop, privacy, debug-panel, design, code-style, testing, replay,
+      e2e, ci, releasing, coming-from-mentor); docs/testing.md states each
+      test layer's job and where it runs.
+    - AGENTS.md holds rules only, one line each, each with a pointer to the
+      doc or code that explains it where there is one: never a doc's detail
+      copied in.
+    A reference to a section names its file (docs/e2e.md "The control
+    API"). A change that moves or renames a section updates every reference
+    to it, in code comments, scripts, CI files and error messages too.
+    Never use the em dash; use a plain dash.

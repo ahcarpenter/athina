@@ -35,7 +35,7 @@ scenario_run() {
 	check "the Contexts footer shows its link to Privacy as a link" "AXLink" "$(link_field Contexts athina-settings:privacy role)"
 
 	# Settings opens on the pane it last showed; the toolbar changes it. The
-	# toolbar's tabs carry no identifier (README "The control API"), so the
+	# toolbar's tabs carry no identifier (docs/e2e.md "The control API"), so the
 	# tab is found by its label.
 	check "a click on the Models toolbar item lands" "true" "$(api click window=Contexts label=Models --field ok)"
 	api wait-window window=Models timeout=5 >/dev/null || { log "the Models pane never showed"; return 1; }

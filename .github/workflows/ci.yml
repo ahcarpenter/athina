@@ -5,7 +5,7 @@ name: CI
 # the fast UI check, ui-snapshots-smoke. The slow, full-fidelity ui-snapshots
 # check lives in merge-checks.yml, which runs on push to main and for a pull
 # request only with the merge-checks label; the main ruleset requires all five
-# at a pull request's head before it merges (README "Continuous integration").
+# at a pull request's head before it merges (docs/ci.md).
 on:
   push:
     branches: [main]
@@ -42,7 +42,7 @@ jobs:
         run: make test
 
   lint:
-    # Google's Swift style (README "Code style"): swift-format from the Xcode
+    # Google's Swift style (docs/code-style.md): swift-format from the Xcode
     # that .xcode-version pins checks every Swift file against the committed
     # .swift-format and fails on any finding.
     runs-on: macos-26
@@ -57,7 +57,7 @@ jobs:
     # Every API-tier scenario of the end-to-end harness, run hermetically
     # through the app's control API, twice, then their checkpoints compared
     # with the approved baselines in Tests/Checkpoints as ui-snapshots
-    # compares a snapshot (README "Checkpoints"). The app is launched through
+    # compares a snapshot (docs/ci.md "Checkpoints"). The app is launched through
     # LaunchServices (--launch open): exec'd from this job's shell, which the
     # runner image grants Accessibility, it would inherit the grant, and the
     # run could never catch a change that made the API tier need one.
@@ -96,7 +96,7 @@ jobs:
       - name: Build the app bundle
         # The development bundle, built with the ControlAPI trait, so it must
         # carry the control API; build-and-test checks that a build without the
-        # trait carries none (README "The control API").
+        # trait carries none (docs/e2e.md "The control API").
         run: |
           scripts/bundle.sh release
           if scripts/check-no-control-api.sh build/Athina.app/Contents/MacOS/Athina; then
@@ -146,7 +146,7 @@ jobs:
     # The fast UI check, and the check the main ruleset requires: draws every
     # snapshot in the test process with swift-snapshot-testing and compares
     # each with its reference image, recorded on this image with the pinned
-    # Xcode as the ui-snapshots baselines were (README "UI snapshot smoke
+    # Xcode as the ui-snapshots baselines were (docs/ci.md "UI snapshot smoke
     # test"). One runner: most of the job is fetching and compiling, which the
     # build cache cuts to what changed, and drawing all 76 images takes about a
     # minute, where four runners each compiled it again.

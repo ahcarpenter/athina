@@ -8,8 +8,7 @@ import Foundation
 /// The API key is never part of it, and any key that shows up in the text is
 /// redacted before the file is written.
 ///
-/// `ReplayClaudeClient` serves these without the network; see README,
-/// "Iterating without the network".
+/// `ReplayClaudeClient` serves these without the network; see docs/replay.md.
 public struct CallFixture: Equatable, Sendable {
   /// The file format this code reads and writes.
   public static let format = 1

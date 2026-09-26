@@ -16,7 +16,7 @@ import Foundation
 /// even when a click is forced onto it.
 ///
 /// The waits here poll the app's own state at a fixed real-time pace, as UI
-/// polling does, never the replay's clock (README "A faster clock").
+/// polling does, never the replay's clock (docs/replay.md "A faster clock").
 @MainActor
 final class ControlCommands {
   let host: ControlHost
