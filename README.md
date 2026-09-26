@@ -37,7 +37,7 @@ suppression are later phases.
 - Xcode 26 or later with its command line tools (`swift`, `codesign`)
 - For development: bash 4 or newer first on `PATH` (macOS ships 3.2; `brew
   install bash`) and python3, which the end-to-end harness runs on; `gh`,
-  signed in, which the approve targets download CI's renders with; and, for
+  signed in, which `make approve` downloads CI's renders with; and, for
   the end-to-end harness's real-screen tier, Screen Recording and
   Accessibility granted to the terminal that runs it (see Permissions).
   `make doctor` names whatever is missing
@@ -60,15 +60,13 @@ make test                    # runs swift test, the replayed loop and the fixtur
 make test-e2e                # runs the end-to-end scenarios, replays only (SCENARIO=<name>, JOBS=<n>; see End-to-end harness)
 make test-snapshots          # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported
 make check                   # lint, test and test-snapshots: what local validation runs before a push
+make approve                 # after an intended UI change, takes the ui-snapshots baselines, smoke references and e2e checkpoints from CI's runs of HEAD, all or none (see Continuous integration)
 make lint                    # checks every Swift file against the style without changing it, as CI does
 make format                  # formats every Swift file in place to Google's Swift style (see Code style)
 make doctor                  # names what this Mac is missing: Xcode, bash 4, python3, gh, the grants, the warm e2e home
 
 make run-live                # builds and launches the live app, replacing only the copy this checkout's run-live or record launched (spends API credits)
 make record                  # the same, writing every model call to a fixture file (spends API credits)
-make snapshots-approve       # makes the baselines match the renders CI made of HEAD, after an intended UI change (RUN_ID=<id> for another run)
-make snapshots-smoke-approve # makes the smoke test's references match the set CI made of HEAD, after an intended UI change
-make checkpoints-approve     # makes the e2e checkpoint baselines match the checkpoints CI took of HEAD, after an intended UI change (see Checkpoints)
 make test-snapshots-ci       # the UI smoke test as CI runs it, compared with the runner's references
 make icons                   # rebuilds the app icon and this README's copy of it from AthinaMark.svg, and the menu bar mark from AthinaOwl.svg (their outputs are committed, so a plain build never needs it)
 make measure                 # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
@@ -2149,10 +2147,17 @@ approved baselines, and uploads them (see UI snapshot baselines).
 `ui-snapshots` is split across four runners that each take a quarter of the
 snapshots, by the `SnapshotShard` table, and `ui-snapshots-smoke` draws them
 all on one. Both draw the same list of snapshots, so a UI change drifts both,
-and each has its own approved images:
-`make snapshots-approve` approves the `ui-snapshots` baselines from HEAD's
-merge-checks run and `make snapshots-smoke-approve` the `ui-snapshots-smoke`
-references from HEAD's CI run, both from the runner and never from a Mac. The
+and often `e2e-api`'s checkpoints too; each has its own approved images, and
+`make approve` takes all three from the runner, never from a Mac: the
+`ui-snapshots` baselines from HEAD's newest completed, non-cancelled
+merge-checks run, and the `ui-snapshots-smoke` references and the checkpoints
+from HEAD's newest completed, non-cancelled CI run. It fetches and checks all
+three before it changes any approved image, so when one has no run to take
+(a run still going, a merge-checks run never started for want of the label, a
+job that published nothing), it changes nothing and fails naming each one
+missing and why. `scripts/snapshots.sh baselines-approve`, `smoke-approve`
+and `checkpoints-approve` each take one alone, from HEAD's newest run or the
+run id given, for a change that drifts only some. The
 Xcode project's archive check is out of CI until the App Store release flow
 brings it back as part of that flow (see The Xcode project).
 
@@ -2226,8 +2231,8 @@ its own run.
 
 Local validation, the no-mistakes pipeline a change goes through before its
 pull request, never runs the Xcode project steps, the full `ui-snapshots` gate,
-the checkpoint gate (`scripts/snapshots.sh checkpoints`) or any approve
-command, which only CI proves, and compares the UI smoke set
+the checkpoint gate (`scripts/snapshots.sh checkpoints`) or `make approve`
+(or any other approve command), which only CI proves, and compares the UI smoke set
 with main's on the Mac itself (see UI snapshot smoke test);
 `test.instructions` in `.no-mistakes.yaml` carries that rule to its test step.
 
@@ -2331,12 +2336,13 @@ where it was made:
 
 **Approving an intended change.** Push the change, with the `merge-checks`
 label on its pull request (see Continuous integration), and let `ui-snapshots`
-fail on the drift, look at the report, then run `make snapshots-approve` (or
-`scripts/snapshots.sh approve`), which downloads the renders of all four
+fail on the drift, look at the report, then run `make approve` (see
+Continuous integration; `scripts/snapshots.sh baselines-approve [<run id>]`
+takes these alone), which downloads the renders of all four
 shards of HEAD's newest merge-checks run, the `ui-snapshots-shard-<k>`
 artifacts, and makes `Tests/Snapshots` match them: a changed or new
 snapshot's render replaces its baseline, a removed snapshot's baseline is
-deleted, and every other file is left alone. `RUN_ID=<id>` names another CI run.
+deleted, and every other file is left alone.
 A shard publishes its renders only once both its renders finished and agree,
 and approve refuses a run unless every shard did, since a missing shard's
 snapshots would read as removed; so a run that failed, timed out or was
@@ -2424,17 +2430,17 @@ have every build fetch every package it names.
 
 **Approving an intended change.** Push the change and let
 `ui-snapshots-smoke` fail on the drift, look at the report, then run `make
-snapshots-smoke-approve` (or `scripts/snapshots.sh smoke-approve`), which
-downloads the set HEAD's newest CI run published (`ui-snapshots-smoke-set`)
+approve` (`scripts/snapshots.sh smoke-approve [<run id>]` takes these alone),
+which downloads the set HEAD's newest CI run published (`ui-snapshots-smoke-set`)
 and makes the references folder match it exactly: the run's render of every
 snapshot that drifted or was new, the reference of every one that matched,
 which comes back unchanged, and nothing else, so a removed snapshot's
-reference goes. `RUN_ID=<id>` names another CI run. The job publishes the set
+reference goes. The job publishes the set
 only once every snapshot has rendered, the set names the source tree it was
-made from, and approving refuses any tree but HEAD's, as `make
-snapshots-approve` does, and a set that names a shard, which holds only that
-shard's snapshots. A UI change drifts both gates, so
-approve both, each from its own run of HEAD, and commit the images together
+made from, and approving refuses any tree but HEAD's, as it does for the
+baselines, and a set that names a shard, which holds only that
+shard's snapshots. A UI change drifts both gates, and `make approve` takes
+both, each from its own run of HEAD; commit the images together
 with the change that caused them. References never come from a Mac: they are the
 runner's, rendered at its 1x scale on its macOS, and a Mac on another macOS or
 display scale draws differently everywhere, so `make test-snapshots-ci` on a
@@ -2504,11 +2510,11 @@ ScreenCaptureKit, glass, title bar and toolbar included, as `ui-snapshots`
 captures a snapshot.
 
 **Approving an intended change.** Push the change and let `e2e-api` fail on
-the drift, look at the report, then run `make checkpoints-approve` (or
-`scripts/snapshots.sh checkpoints-approve`), which downloads the `checkpoints`
-artifact of HEAD's newest CI run (`RUN_ID=<id>` names another) and makes
-`Tests/Checkpoints` match it the way `make snapshots-approve` makes
-`Tests/Snapshots` match its renders. The job publishes the artifact only once
+the drift, look at the report, then run `make approve`
+(`scripts/snapshots.sh checkpoints-approve [<run id>]` takes these alone),
+which downloads the `checkpoints` artifact of HEAD's newest CI run and makes
+`Tests/Checkpoints` match it the way it makes `Tests/Snapshots` match the
+`ui-snapshots` renders. The job publishes the artifact only once
 both runs passed and agree, it names the source tree it was taken from, and
 approving refuses any tree but HEAD's. Commit the images with the change that
 caused them. Baselines never come from a Mac: on a Mac a checkpoint is
