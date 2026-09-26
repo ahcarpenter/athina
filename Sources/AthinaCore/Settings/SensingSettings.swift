@@ -19,9 +19,9 @@ public enum OCRLevel: String, Codable, Sendable, CaseIterable, Identifiable {
 
 /// Every threshold and cadence the sensing pipeline uses, in one place.
 ///
-/// Decoding tolerates missing keys so settings files written by older builds
-/// keep working when new fields are added: a missing field takes its default.
-public struct SensingSettings: Codable, Equatable, Sendable {
+/// Read with `init(json:)`, so a settings file an older build wrote keeps
+/// working when new fields are added: a missing field takes its default.
+public struct SensingSettings: SettingsSection, Equatable, Sendable {
   // MARK: Cadence
 
   /// Delay after an app or window switch before capturing, so the new
@@ -89,62 +89,10 @@ public struct SensingSettings: Codable, Equatable, Sendable {
   /// whatever this says (`DebugPanelAccess`).
   public var showDebugPanel = false
 
-  // MARK: Initializers, and Codable with per-field defaults
-
-  private enum CodingKeys: String, CodingKey {
-    case focusSettleDelay, inputSettleDelay, floorInterval, minCaptureInterval
-    case idleThreshold, inputPollInterval, idlePollInterval
-    case maxFrameDimension, hashDistanceThreshold, thumbnailJPEGQuality, ocrLevel
-    case thumbnailRetention, textRetention, journalSizeCapBytes, retentionInterval
-    case excludedBundleIDs, pauseHotKey
-    case mentor
-    case showDebugPanel
-  }
+  // MARK: Initializers
 
   /// Creates the default settings.
   public init() {}
-
-  /// Decodes the settings, giving any field missing from the file its
-  /// default, and validates them.
-  public init(from decoder: Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    let d = SensingSettings()
-    focusSettleDelay =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .focusSettleDelay) ?? d.focusSettleDelay
-    inputSettleDelay =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .inputSettleDelay) ?? d.inputSettleDelay
-    floorInterval =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .floorInterval) ?? d.floorInterval
-    minCaptureInterval =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .minCaptureInterval) ?? d.minCaptureInterval
-    idleThreshold =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .idleThreshold) ?? d.idleThreshold
-    inputPollInterval =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .inputPollInterval) ?? d.inputPollInterval
-    idlePollInterval =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .idlePollInterval) ?? d.idlePollInterval
-    maxFrameDimension =
-      try c.decodeIfPresent(Int.self, forKey: .maxFrameDimension) ?? d.maxFrameDimension
-    hashDistanceThreshold =
-      try c.decodeIfPresent(Int.self, forKey: .hashDistanceThreshold) ?? d.hashDistanceThreshold
-    thumbnailJPEGQuality =
-      try c.decodeIfPresent(Double.self, forKey: .thumbnailJPEGQuality) ?? d.thumbnailJPEGQuality
-    ocrLevel = try c.decodeIfPresent(OCRLevel.self, forKey: .ocrLevel) ?? d.ocrLevel
-    thumbnailRetention =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .thumbnailRetention) ?? d.thumbnailRetention
-    textRetention =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .textRetention) ?? d.textRetention
-    journalSizeCapBytes =
-      try c.decodeIfPresent(Int64.self, forKey: .journalSizeCapBytes) ?? d.journalSizeCapBytes
-    retentionInterval =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .retentionInterval) ?? d.retentionInterval
-    excludedBundleIDs =
-      try c.decodeIfPresent([String].self, forKey: .excludedBundleIDs) ?? d.excludedBundleIDs
-    pauseHotKey = try c.decodeIfPresent(HotKey.self, forKey: .pauseHotKey) ?? d.pauseHotKey
-    mentor = try c.decodeIfPresent(MentorSettings.self, forKey: .mentor) ?? d.mentor
-    showDebugPanel = try c.decodeIfPresent(Bool.self, forKey: .showDebugPanel) ?? d.showDebugPanel
-    self = validated()
-  }
 
   /// Clamps every value into a range the pipeline can operate with.
   public func validated() -> SensingSettings {
