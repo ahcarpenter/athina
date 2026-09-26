@@ -84,7 +84,12 @@ import Testing
     let url = root.appendingPathComponent(name, isDirectory: true)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     for (file, bitmap) in images {
-      try bitmap.writePNG(to: url.appendingPathComponent(file))
+      let path = url.appendingPathComponent(file)
+      try FileManager.default.createDirectory(
+        at: path.deletingLastPathComponent(),
+        withIntermediateDirectories: true
+      )
+      try bitmap.writePNG(to: path)
     }
     return url
   }
@@ -205,6 +210,42 @@ import Testing
     #expect(try Bitmap(contentsOf: baseline.appendingPathComponent("added-light.png")) == Self.wide)
     // Within the tolerance, so its file is not touched.
     #expect(try Data(contentsOf: tolerated) == before)
+    #expect(try SnapshotComparison.compare(baseline: baseline, actual: actual).matches)
+  }
+
+  /// A checkpoint sits in its scenario's folder, and is compared and
+  /// approved by its path there.
+  @Test func checkpointsInScenarioFoldersAreComparedAndApprovedByPath() throws {
+    let baseline = try directory(
+      "baseline",
+      [
+        "settings-sheet/sheet-up-light.png": Self.grey,
+        "settings-sheet/sheet-typed-light.png": Self.grey,
+      ]
+    )
+    let actual = try directory(
+      "actual",
+      [
+        "settings-sheet/sheet-up-light.png": Self.darker,
+        "settings-sheet/sheet-typed-light.png": Self.grey,
+        "debug-panel-access/on-light.png": Self.grey,
+      ]
+    )
+    let comparison = try SnapshotComparison.compare(baseline: baseline, actual: actual)
+    #expect(
+      comparison.drift.map(\.name) == [
+        "debug-panel-access/on-light", "settings-sheet/sheet-up-light",
+      ]
+    )
+
+    try comparison.approve(baseline: baseline, actual: actual)
+
+    #expect(
+      try SnapshotComparison.pngs(in: baseline) == [
+        "debug-panel-access/on-light.png", "settings-sheet/sheet-typed-light.png",
+        "settings-sheet/sheet-up-light.png",
+      ]
+    )
     #expect(try SnapshotComparison.compare(baseline: baseline, actual: actual).matches)
   }
 

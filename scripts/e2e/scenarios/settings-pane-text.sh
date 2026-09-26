@@ -26,8 +26,6 @@ has_text() { grep -qF "$2" "$RUN_DIR/$1-texts.txt" && echo yes || echo no; }
 # URL as its identifier.
 link_field() { api find window="$1" identifier="$2" --field "elements.0.$3"; }
 
-checkpoint() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no checkpoint of $1"; }
-
 scenario_run() {
 	api wait-window window=Contexts timeout=20 >/dev/null || { log "Settings never opened on the Contexts pane"; return 1; }
 	pane_texts Contexts contexts
@@ -48,8 +46,9 @@ scenario_run() {
 	check "a click on the link below the fold is refused" "offscreen" \
 		"$(api click window=Models identifier=athina-settings:journal --field refused)"
 	check "the pane scrolls to the link" "true" "$(api scroll window=Models identifier=athina-settings:journal --field ok)"
+	# The whole answer, so api.log says why when the click is refused.
 	check "scrolled into view, a click on the link lands" "true" \
-		"$(api click window=Models identifier=athina-settings:journal --field ok)"
+		"$(json_eval "$(api click window=Models identifier=athina-settings:journal)" 'str(r["ok"]).lower()')"
 	checkpoint Models models-footer
 	return 0
 }

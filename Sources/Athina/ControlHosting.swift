@@ -28,13 +28,16 @@ enum ControlAvailability {
       return value
     }
 
-    /// Taken the way this run's `--snapshot` takes a window, and again while
-    /// ScreenCaptureKit misses it.
-    func controlCapture(_ window: NSWindow) async throws -> CGImage {
+    /// Settled as `--snapshot` settles a window, and captured this run's one
+    /// way; the last capture, marked unsettled, when no two in a row agree.
+    func controlCapture(_ window: NSWindow) async throws -> ControlCapture {
+      if let bitmap = try await Snapshots.settledCapture(of: window) {
+        return ControlCapture(image: try bitmap.cgImage(), settled: true)
+      }
       let hosting = window.contentView ?? NSView()
       for _ in 0..<8 {
         if let image = try await Snapshots.capture(window: window, hosting: hosting) {
-          return image
+          return ControlCapture(image: image, settled: false)
         }
         try await Task.sleep(for: .milliseconds(150))
       }
