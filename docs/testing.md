@@ -24,7 +24,9 @@ No test of the suite waits on real time (see [A faster clock](replay.md#a-faster
 end-to-end tests, which `swift test` builds only with the `E2EAPI` trait, poll
 the app they launch in real time, as UI polling does. The tests
 exercise the pure parts
-(hashing, cadence, journal, retention and its in-place migration, settings, the
+(hashing, cadence, journal, retention and its in-place migration, Clear
+Journal and retention reaching every table, a journal made from every table's
+oldest shape opening with a new journal's columns and indexes, settings, the
 mentor scheduler and every gate, mentorship context rules and placement, spend
 accounting, snooze and never-for-this rules per category, the rolling window,
 the understanding's encoding, versioning, bounding and expiry, prompt assembly
