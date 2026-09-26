@@ -5,15 +5,16 @@
 # Settings > General's talk-back recorder takes a combination pressed while it
 # records into the settings, refuses the pause shortcut's combination with an
 # alert that says why, keeping what it had, and clears on Delete; Settings >
-# Privacy's pause recorder keeps its combination on Delete, since the pause
-# shortcut is always set.
+# Privacy's pause recorder clears on Delete too, which turns the pause
+# shortcut off while settings.json keeps its combination for earlier builds,
+# and records it again.
 #
 # On the API tier: every click is simulated inside Athina, through AppKit's own
 # event path, and every key press is posted to its event queue (`key`), where
 # the recorder's own event monitor takes it as it takes a person's. A hermetic
 # run registers no shortcut with the system, so what a press of one does
 # outside the recorder is not this scenario's to prove.
-SCENARIO_SUMMARY="the Settings shortcut recorders record, refuse the other shortcut with an alert, and clear on Delete, the pause shortcut excepted"
+SCENARIO_SUMMARY="the Settings shortcut recorders record, refuse the other shortcut with an alert, and clear on Delete"
 SCENARIO_ARGS=(--open settings:general)
 SCENARIO_TIER=api
 
@@ -32,6 +33,16 @@ talk_back_field() { field General voice.talkBackShortcut; }
 pause_field() { field Privacy privacy.pauseShortcut; }
 sheet_count() { json_eval "$(api find window=General role=AXSheet)" 'len(r["elements"])'; }
 setting() { json_eval "$(api settings key="$1")" 'json.dumps(r["value"], sort_keys=True)'; }
+# The menu's Pause Watching or Resume Watching, whichever it offers.
+menu_toggle() {
+	json_eval "$(api menu --field items)" \
+		'next(i["title"] for i in r if i["title"] in ("Pause Watching", "Resume Watching"))'
+}
+# Whether the Privacy pane warns that the pause shortcut is not registered.
+pane_warns() {
+	json_eval "$(api find window=Privacy role=AXStaticText)" \
+		'any(e["value"].startswith("Another app uses this combination") for e in r["elements"])'
+}
 
 scenario_run() {
 	api wait-window window=General timeout=20 >/dev/null || { log "Settings never opened on the General pane"; return 1; }
@@ -69,15 +80,35 @@ scenario_run() {
 	check "the recorder is empty" "" "$(settled "" talk_back_field)"
 	api key window=General code=$KEY_ESCAPE >/dev/null
 
-	step "4 the pause shortcut stays set"
+	step "4 Delete clears the pause shortcut"
 	check "a click on the Privacy toolbar item lands" "true" "$(api click window=General label=Privacy --field ok)"
 	api wait-window window=Privacy timeout=5 >/dev/null || { log "the Privacy pane never opened"; return 1; }
 	check "the pause recorder shows its combination" "⌃⌥⌘P" "$(settled "⌃⌥⌘P" pause_field)"
+	check "a press of the pause shortcut is heard" "true" "$(api hotkey key=pause --field ok)"
+	check "which pauses watching" "Resume Watching" "$(menu_toggle)"
+	api hotkey key=pause >/dev/null
 	check "a click on the pause recorder lands" "true" \
 		"$(api click window=Privacy identifier=privacy.pauseShortcut --field ok)"
 	check "Delete is pressed" "true" "$(api key window=Privacy code=$KEY_DELETE --field dispatched)"
-	check "the recorder keeps the combination" "⌃⌥⌘P" "$(settled "⌃⌥⌘P" pause_field)"
-	check "the settings keep the pause shortcut" "$PAUSE" "$(setting pauseHotKey)"
+	check "the settings hold the pause shortcut cleared" "true" \
+		"$(api wait-setting key=pauseHotKeyCleared equals=true timeout=5 --field ok)"
+	check "and keep its combination for earlier builds" "$PAUSE" "$(setting pauseHotKey)"
+	check "the recorder is empty" "" "$(settled "" pause_field)"
+	check "the pane says nothing is wrong" "False" "$(pane_warns)"
+	check "a press of it is refused as not registered" "disabled" \
+		"$(api hotkey key=pause --field refused)"
+	check "watching goes on" "Pause Watching" "$(menu_toggle)"
 	api key window=Privacy code=$KEY_ESCAPE >/dev/null
+
+	step "5 the pause recorder records it again"
+	check "a click on the pause recorder lands" "true" \
+		"$(api click window=Privacy identifier=privacy.pauseShortcut --field ok)"
+	check "Control-Option-Command-P is pressed" "true" \
+		"$(api key window=Privacy code=$KEY_P modifiers=$CONTROL_OPTION_COMMAND --field dispatched)"
+	check "the settings hold it set" "true" \
+		"$(api wait-setting key=pauseHotKeyCleared equals=false timeout=5 --field ok)"
+	check "the recorder shows it" "⌃⌥⌘P" "$(settled "⌃⌥⌘P" pause_field)"
+	check "a press of it is heard" "true" "$(api hotkey key=pause --field ok)"
+	check "which pauses watching" "Resume Watching" "$(menu_toggle)"
 	return 0
 }

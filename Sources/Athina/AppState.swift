@@ -74,7 +74,7 @@ final class AppState {
     }
   }
 
-  /// False when the pause hotkey could not be registered (unusable or taken by another app).
+  /// False when no pause hotkey is set or it could not be registered.
   private(set) var hotKeyRegistered = false
   /// False when no talk-back hotkey is set or it could not be registered.
   private(set) var pushToTalkRegistered = false
@@ -508,12 +508,13 @@ final class AppState {
   /// take the combination from every other app; the control API's `hotkey`
   /// presses it instead (`hotKeyPressed`), so it counts as registered.
   private func registerPauseHotKey() {
+    let key = settings.pauseHotKey
     hotKeyRegistered =
       controlMode.isHermetic
-      ? settings.pauseHotKey.isUsable : hotKeys.register(settings.pauseHotKey, for: .pause)
+      ? key?.isUsable == true : hotKeys.register(key, for: .pause)
     AppState.log.notice(
       """
-      pause hotkey \(self.settings.pauseHotKey.displayString, privacy: .public) registered: \
+      pause hotkey \(key?.displayString ?? "unset", privacy: .public) registered: \
       \(self.hotKeyRegistered)
       """
     )
