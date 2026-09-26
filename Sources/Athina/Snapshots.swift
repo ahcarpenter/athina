@@ -542,7 +542,7 @@ enum Snapshots {
         // A new frame on the display, so the next capture is of it.
         await frames.next()
       } else {
-        try await Task.sleep(for: .milliseconds(150))
+        try await Task.sleep(until: .now + .milliseconds(150), clock: .continuous)
       }
     }
     return nil

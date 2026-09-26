@@ -101,7 +101,7 @@ struct PermissionsView: View {
       // Grants made in System Settings do not notify apps; poll while visible.
       while !Task.isCancelled {
         state.refreshPermissions()
-        try? await Task.sleep(for: .seconds(1))
+        try? await Task.sleep(until: .now + .seconds(1), clock: .continuous)
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
