@@ -40,7 +40,8 @@ Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swif
                               so `DataMigration` can read the old journal without altering it
 Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
-                              (on-device speech recognition), HotKeyCenter (Carbon, press and release),
+                              (on-device speech recognition), HotKeyCenter (the global keyboard shortcuts,
+                              press and release), Settings/ShortcutRecorder (the recorder in Settings),
                               Snapshots
 Tests/AthinaCoreTests         Swift Testing suites for the pure parts, with JSON fixtures under Fixtures/
 ```

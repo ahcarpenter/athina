@@ -542,7 +542,7 @@ final class AppState {
 
   // MARK: Actions
 
-  /// A hot key went down: from Carbon, or in a hermetic run from the control
+  /// A hot key went down: from the system, or in a hermetic run from the control
   /// API's `hotkey`, which takes the same path.
   func hotKeyPressed(_ slot: HotKeyCenter.Slot) {
     switch slot {

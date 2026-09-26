@@ -1116,14 +1116,9 @@ struct SampleContextEditor: View {
 }
 
 /// Every inline status message the Settings panes can show, in one form, so
-/// the transient ones (a connection test, a refused shortcut, recording a
-/// shortcut, recognition unavailable) have renders too.
+/// the transient ones (a connection test, a shortcut another app holds,
+/// recognition unavailable) have renders too.
 struct StatusMessagesPreview: View {
-  @State private var shortcut: HotKey? = HotKey(
-    keyCode: 17,
-    modifiers: [.control, .option, .command]
-  )
-
   var body: some View {
     Form {
       Section("Connection") {
@@ -1154,16 +1149,6 @@ struct StatusMessagesPreview: View {
         StatusLabel("Paste the whole key. It is one word with no spaces.", kind: .error)
       }
       Section("Shortcuts") {
-        LabeledContent("Recording") {
-          HotKeyRecorder(title: "Talk-back shortcut", hotKey: $shortcut, previewRecording: true)
-        }
-        LabeledContent("Refused") {
-          HotKeyRecorder(
-            title: "Talk-back shortcut",
-            hotKey: $shortcut,
-            previewRefusal: "That is the pause shortcut."
-          )
-        }
         StatusLabel(
           """
           Another app uses this combination, or it lacks Control, Option, or Command. Choose \

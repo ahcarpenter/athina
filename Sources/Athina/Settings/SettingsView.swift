@@ -465,11 +465,11 @@ struct PrivacySettings: View {
         content: {
           LabeledContent(
             content: {
-              HotKeyRecorder(
+              ShortcutRecorder(
                 title: "Pause shortcut",
                 hotKey: $state.settings.pauseHotKey,
                 conflicts: [state.settings.mentor.pushToTalkHotKey].compactMap { $0 },
-                conflictNote: "That is the talk-back shortcut."
+                conflictNote: "This keyboard shortcut is already the talk-back shortcut."
               )
             },
             label: {

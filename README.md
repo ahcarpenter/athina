@@ -105,7 +105,7 @@ what is kept.
 
 ## Develop
 
-Athina builds with SwiftPM, and the app has no third-party dependencies. Plain
+Athina builds with SwiftPM, and the app has one third-party dependency. Plain
 `make` lists every command, `make run` starts a replay that needs no key and
 spends nothing, and `make check` is what a change passes before it is pushed.
 [CONTRIBUTING.md](CONTRIBUTING.md) covers setup, the daily loop, the rules and
@@ -114,7 +114,7 @@ how a change reaches `main`; `docs/` holds the reference:
 | Doc | Covers |
 | --- | --- |
 | [architecture.md](docs/architecture.md) | the source layout, the sensing loop, the journal, the subscription point |
-| [mentor-loop.md](docs/mentor-loop.md) | triage and mentor calls, callouts, talking back, mentorship contexts, the standing understanding, spend control |
+| [mentor-loop.md](docs/mentor-loop.md) | triage and mentor calls, callouts, keyboard shortcuts, talking back, mentorship contexts, the standing understanding, spend control |
 | [privacy.md](docs/privacy.md) | what leaves the Mac, what is kept, and for how long |
 | [debug-panel.md](docs/debug-panel.md) | the debug panel |
 | [design.md](docs/design.md) | the design conventions, the app icon and the menu bar mark |

@@ -16,9 +16,11 @@ coding agents, with pointers into these docs.
   the end-to-end harness's real-screen tier, Screen Recording and
   Accessibility granted to the terminal that runs it (see [Permissions](README.md#permissions)).
   `make doctor` names whatever is missing
-- The app has no third-party dependencies: SwiftUI, ScreenCaptureKit, Vision, the
-  accessibility API, Carbon hotkeys, AVFoundation and Speech for talking
-  back, and the system SQLite
+- The app has one third-party dependency, KeyboardShortcuts, for its global
+  keyboard shortcuts and their recorder (see [Keyboard shortcuts](docs/mentor-loop.md#keyboard-shortcuts)), which
+  SwiftPM fetches, pinned; the rest is the system's: SwiftUI,
+  ScreenCaptureKit, Vision, the accessibility API, AVFoundation and Speech
+  for talking back, and the system SQLite
 - The Xcode project alone (see [The Xcode project](docs/releasing.md#the-xcode-project)) is generated with XcodeGen,
   which SwiftPM fetches and builds, pinned, on first use; nothing else needs it
 - The UI smoke test alone (see [UI snapshot smoke test](docs/ci.md#ui-snapshot-smoke-test)) uses
