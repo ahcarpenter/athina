@@ -1416,7 +1416,7 @@ each kept observation it runs, in order:
    runs while paused, idle, on an excluded app, without permissions, without an
    API key, while another call is in flight, or while the spend cap holds.
 2. **Triage call** on the cheap model (`claude-haiku-4-5-20251001` by default;
-   Sonnet 5, Opus 5, and Fable 5.1 are offered too) with structured output:
+   Sonnet 5, Opus 5, Opus 5.5, and Fable 5.1 are offered too) with structured output:
    `{"worth_a_look": bool, "reason": string}`, plus `context` while
    mentorship contexts are enforced.
 3. **Mentor gate** (`MentorScheduler.mentorGate`), the single yes-or-no between
@@ -1424,7 +1424,7 @@ each kept observation it runs, in order:
    context (see below), triage said yes, the spend cap is not reached, and at
    least `mentorMinInterval` (2 min) has passed since the last mentor call.
 4. **Mentor call** on the strong model (`claude-opus-5` at medium effort by
-   default; Sonnet 5 and Fable 5.1 are offered too) with a rolling window of
+   default; Sonnet 5, Opus 5.5, and Fable 5.1 are offered too) with a rolling window of
    recent observations' text (bounded by `mentorWindowDuration` and
    `mentorWindowTokenBudget`), a compact event summary, the categories
    currently suppressed for the app, the standing understanding as its own
@@ -1443,7 +1443,7 @@ each kept observation it runs, in order:
    medium, high, extra high) goes out as `output_config.effort` only to models
    that accept it; Haiku 4.5 rejects the parameter, so its effort control is
    disabled and nothing is sent. Thinking is left at each model's default
-   (adaptive on Sonnet 5, Opus 5, and Fable 5.1); no thinking configuration is
+   (adaptive on Sonnet 5, Opus 5, Opus 5.5, and Fable 5.1); no thinking configuration is
    sent.
 
 5. **Delivery.** A suggestion under `minimumConfidence`, in a snoozed or
@@ -1690,7 +1690,7 @@ it. Active use is time spent capturing the screen: a break, a pause, a
 sleeping Mac, an excluded app, missing permissions, or a closed app counts for
 nothing, so coming back never buys a call over the few screens since. The count is kept
 in the journal, so a relaunch carries on from it. It is a third tier with its own model and effort picker (`claude-opus-5`
-at low effort by default; Haiku 4.5, Sonnet 5, and Fable 5.1 are offered too), its own versioned prompt and
+at low effort by default; Haiku 4.5, Sonnet 5, Opus 5.5, and Fable 5.1 are offered too), its own versioned prompt and
 schema, and no screenshot: summarising does not need one. `refreshGate` in
 `MentorScheduler` is the single decision, and it holds while the loop is off,
 paused, idle, on an excluded app, waiting for permissions, without a key, over
