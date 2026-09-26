@@ -21,6 +21,13 @@ import Testing
 
   /// What the stand-in `swift` builds for scripts/bundle.sh, and where the bundle lands.
   private var binary: URL { directory.appendingPathComponent("bin-path/Athina") }
+  /// The KeyboardShortcuts resources a build leaves beside the binary, which
+  /// scripts/bundle.sh copies into the app.
+  private var packageResources: URL {
+    directory.appendingPathComponent(
+      "bin-path/KeyboardShortcuts_KeyboardShortcuts.bundle/Info.plist"
+    )
+  }
   private var out: URL { directory.appendingPathComponent("out", isDirectory: true) }
   private var app: URL { out.appendingPathComponent("Athina.app/Contents/MacOS/Athina") }
   private var appStamp: URL { out.appendingPathComponent("Athina.app.built") }
@@ -151,6 +158,7 @@ import Testing
   /// Returns bundle.sh's exit status.
   private func bundle(status: Int32, saving: URL? = nil) throws -> Int32 {
     try make(binary, at: 0)
+    try make(packageResources, at: 0)
     let path = try standIn(
       """
       case " $* " in
