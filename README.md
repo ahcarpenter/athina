@@ -712,6 +712,7 @@ A change that touches none of those takes no screen time.
 | `settings-pane-text` | api | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link to that pane rather than Markdown, and a click on the one below the fold is refused until the pane is scrolled to it |
 | `settings-sheet` | api | Settings > Contexts' Add Context… brings up the New Context sheet; while it is up, a click on Add Context… under it is refused as covered, a name typed into the sheet's Name field lands there, and the sheet's own Cancel lands in the sheet and takes it down, adding no context |
 | `debug-timeline` | api | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started row appears once rather than once from the journal load and again from the live stream |
+| `launch-arguments` | api | `--open settings:advanced` after a flag that takes no value (`--allow-stale-fixtures`) still opens Settings on that pane, where AppKit once took the pane's name for a document to open and opened no window |
 
 A scenario prints one JSON line on the harness's standard output, with the
 log on its standard error: its name, `pass`, `fail` or `skip`, how long

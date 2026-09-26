@@ -46,10 +46,11 @@
     /// Every launch replays with `--replay-latency immediate`, so no recorded latency is waited
     /// out, and draws dates, times, numbers and scroll bars in UTC and US English, as the UI
     /// snapshots do, whatever this Mac is set to, so its checkpoints read the same on every run.
-    /// The `-Name value` pairs go before the scenario's own arguments: AppKit reads every
-    /// argument after them as a document to open, and an app asked to open one at launch opens
-    /// none of its windows, so each pair comes before a flag that takes no value, such as
-    /// `--hermetic`.
+    /// The `-Name value` pairs go before the scenario's own arguments: AppKit pairs each argument
+    /// that starts with a dash with the one after it, so behind a flag that takes no value, such
+    /// as `--hermetic`, a pair would be read out of step and the settings it names never applied.
+    /// Athina has AppKit open nothing left over as a document (`LaunchArguments`), so that no
+    /// longer costs the launch its windows, but the pairs still have to come first.
     static func launch(
       _ app: URL,
       home: URL,
