@@ -71,8 +71,23 @@ public struct SensingSettings: Codable, Equatable, Sendable {
 
   /// Bundle identifiers under which no capture, OCR, or journaling happens.
   public var excludedBundleIDs: [String] = ExcludedApps.defaults
-  /// Global hotkey that toggles pause.
-  public var pauseHotKey: HotKey = .defaultPause
+  /// The keyboard shortcut that pauses and resumes watching from any app;
+  /// nil once the person clears it.
+  public var pauseHotKey: HotKey? {
+    get { pauseHotKeyCleared ? nil : pauseCombination }
+    set {
+      if let newValue { pauseCombination = newValue }
+      pauseHotKeyCleared = newValue == nil
+    }
+  }
+  /// The last pause combination, which settings.json keeps under
+  /// `pauseHotKey` even after it is cleared, since every earlier build
+  /// reads that key as a combination that is always set: one of those keeps
+  /// it rather than failing to read the file.
+  private var pauseCombination = HotKey.defaultPause
+  /// Whether the person cleared the pause shortcut, which earlier builds do
+  /// not read.
+  private var pauseHotKeyCleared = false
 
   // MARK: Mentor loop
 
@@ -96,7 +111,9 @@ public struct SensingSettings: Codable, Equatable, Sendable {
     case idleThreshold, inputPollInterval, idlePollInterval
     case maxFrameDimension, hashDistanceThreshold, thumbnailJPEGQuality, ocrLevel
     case thumbnailRetention, textRetention, journalSizeCapBytes, retentionInterval
-    case excludedBundleIDs, pauseHotKey
+    case excludedBundleIDs
+    case pauseCombination = "pauseHotKey"
+    case pauseHotKeyCleared
     case mentor
     case showDebugPanel
   }
@@ -140,7 +157,10 @@ public struct SensingSettings: Codable, Equatable, Sendable {
       try c.decodeIfPresent(TimeInterval.self, forKey: .retentionInterval) ?? d.retentionInterval
     excludedBundleIDs =
       try c.decodeIfPresent([String].self, forKey: .excludedBundleIDs) ?? d.excludedBundleIDs
-    pauseHotKey = try c.decodeIfPresent(HotKey.self, forKey: .pauseHotKey) ?? d.pauseHotKey
+    pauseCombination =
+      try c.decodeIfPresent(HotKey.self, forKey: .pauseCombination) ?? d.pauseCombination
+    pauseHotKeyCleared =
+      try c.decodeIfPresent(Bool.self, forKey: .pauseHotKeyCleared) ?? d.pauseHotKeyCleared
     mentor = try c.decodeIfPresent(MentorSettings.self, forKey: .mentor) ?? d.mentor
     showDebugPanel = try c.decodeIfPresent(Bool.self, forKey: .showDebugPanel) ?? d.showDebugPanel
     self = validated()

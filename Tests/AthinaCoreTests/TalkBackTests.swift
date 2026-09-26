@@ -429,6 +429,15 @@ import Testing
     #expect(decoded.pauseHotKey == HotKey(keyCode: 17, modifiers: [.control, .command]))
     #expect(decoded.mentor.pushToTalkHotKey == nil)
   }
+
+  /// A cleared pause shortcut leaves its combination free for talking back.
+  @Test func theTalkBackKeyMayBeAClearedPauseKey() {
+    var settings = SensingSettings()
+    settings.pauseHotKey = nil
+    settings.mentor.pushToTalkHotKey = .defaultPause
+    #expect(settings.validated().mentor.pushToTalkHotKey == .defaultPause)
+    #expect(settings.validated().pauseHotKey == nil)
+  }
 }
 
 @Suite struct RegionDecodingTests {

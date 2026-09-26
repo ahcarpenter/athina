@@ -705,7 +705,7 @@ A change that touches none of those takes no screen time.
 | `debug-panel-access` | api | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed, a click on it is refused, and one forced onto it opens nothing; turned on, the menu gains Debug Panel in a group of its own after Settings…, and it and the button each open the panel; turned off again, the panel closes and the command leaves the menu |
 | `settings-pane-text` | api | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link to that pane rather than Markdown, and a click on the one below the fold is refused until the pane is scrolled to it |
 | `settings-sheet` | api | Settings > Contexts' Add Context… brings up the New Context sheet; while it is up, a click on Add Context… under it is refused as covered, a name typed into the sheet's Name field lands there, and the sheet's own Cancel lands in the sheet and takes it down, adding no context |
-| `shortcut-recorder` | api | the Settings shortcut recorders: Settings > General's talk-back recorder takes a combination pressed while it records into the settings, refuses the pause shortcut's combination with an alert that says why, keeping what it had, and clears on Delete; Settings > Privacy's pause recorder keeps its combination on Delete, since the pause shortcut is always set |
+| `shortcut-recorder` | api | the Settings shortcut recorders: Settings > General's talk-back recorder takes a combination pressed while it records into the settings, refuses the pause shortcut's combination with an alert that says why, keeping what it had, and clears on Delete; Settings > Privacy's pause recorder clears on Delete too, which turns the pause shortcut off (a press of it is refused and the pane warns of nothing) while settings.json keeps its combination for earlier builds, and records it again |
 | `debug-timeline` | api | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started row appears once rather than once from the journal load and again from the live stream |
 
 A scenario prints one JSON line: its name, `pass`, `fail` or `skip`, how long
@@ -1521,8 +1521,8 @@ and in screen points.
 
 ### Keyboard shortcuts
 
-The pause shortcut (Settings > Privacy, Control-Option-Command-P unless
-changed) and the talk-back shortcut (Settings > General, unset until chosen)
+The pause shortcut (Settings > Privacy, Control-Option-Command-P on a new
+install) and the talk-back shortcut (Settings > General, unset until chosen)
 work from any app. Both run on
 [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts), the
 app's one third-party package (MIT), pinned exactly in `Package.swift` and
@@ -1536,16 +1536,20 @@ records, so pressing one there records it instead of running it.
 that says why, a combination the system or the app's menu already uses
 (offering Use Anyway for a system one) and the other shortcut's combination,
 and beeps at one without Control, Option or Command unless its key is a
-function key. Delete or the field's clear button removes the talk-back
-shortcut; the pause shortcut is always set, so clearing it keeps its
-combination. The recorder's strings are in the package's resource bundle,
-which `scripts/bundle.sh` copies into the app.
+function key. Delete or the field's clear button removes either shortcut, as
+in any Mac app: a cleared pause shortcut stays cleared from launch to launch,
+and the menu's Pause Watching then shows none. The recorder's strings are in
+the package's resource bundle, which `scripts/bundle.sh` copies into the
+app.
 
 settings.json keeps each shortcut in the form every earlier build wrote
 (`HotKey`: the key's virtual key code and modifier bits of Athina's own), so
 a saved shortcut keeps working and an older build still reads the file;
 `HotKey.shortcut` is the same combination as the package has it, and a test
-holds the two forms to the combination earlier builds registered.
+holds the two forms to the combination earlier builds registered. Every
+earlier build reads `pauseHotKey` as always set, so a cleared pause shortcut
+keeps its last combination there and adds `pauseHotKeyCleared`, which only
+this build reads: an earlier build keeps pausing on that combination.
 
 Any number of apps can register a combination the way the package does, and
 every one of them hears it, so that registration never fails and the package
@@ -1851,10 +1855,11 @@ counted (see Iterating without the network).
 - **Committed fixtures** carry only staged, synthetic screen content, recorded
   for the purpose, never the captain's or any user's real work. Every recording
   is read, text and screenshot, before it is committed.
-- **Pause** from the menu or with the global hotkey (default ⌃⌥⌘P) stops all
-  sensing; the menu bar owl drops a lid over its eyes. Idle closes them and two
-  z's drift off it, an excluded app looks away, missing permissions is a wide
-  stare, and a held mentor tier winks (see Design conventions).
+- **Pause** from the menu or with the global hotkey (⌃⌥⌘P unless changed or
+  cleared) stops all sensing; the menu bar owl drops a lid over its eyes. Idle
+  closes them and two z's drift off it, an excluded app looks away, missing
+  permissions is a wide stare, and a held mentor tier winks (see Design
+  conventions).
 - Thumbnails expire after 6 hours and text after 7 days by default; the journal
   is capped at 500 MB; all three are adjustable, and the journal can be cleared
   at any time. A replay senses the real screen too, and a finished replay's
