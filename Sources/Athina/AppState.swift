@@ -451,7 +451,7 @@ final class AppState {
     resourceTask = Task { [weak self] in
       var previous = ProcessResources.sample()
       while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(2))
+        try? await Task.sleep(until: .now + .seconds(2), clock: .continuous)
         let current = ProcessResources.sample()
         if let usage = ProcessResourceUsage.between(previous, current) {
           self?.resources = usage
@@ -624,7 +624,7 @@ final class AppState {
     AppState.log.notice("requesting permission \(permission.rawValue, privacy: .public)")
     PermissionProbe.request(permission)
     Task {
-      try? await Task.sleep(for: .seconds(1))
+      try? await Task.sleep(until: .now + .seconds(1), clock: .continuous)
       refreshPermissions()
     }
   }
@@ -658,7 +658,7 @@ final class AppState {
       }
       PermissionProbe.openSystemSettings(for: permission)
       Task {
-        try? await Task.sleep(for: .seconds(1))
+        try? await Task.sleep(until: .now + .seconds(1), clock: .continuous)
         refreshPermissions()
       }
     }
@@ -1895,7 +1895,7 @@ final class AppState {
     let store = store
     let settings = settings
     saveTask = Task {
-      try? await Task.sleep(for: .milliseconds(300))
+      try? await Task.sleep(until: .now + .milliseconds(300), clock: .continuous)
       guard !Task.isCancelled else { return }
       try? store.save(settings)
     }
