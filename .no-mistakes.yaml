@@ -12,9 +12,9 @@ test:
     xcodebuild on the generated project),
     the full ui-snapshots gate (scripts/snapshots.sh gate, `Athina
     --snapshot`), the checkpoint gate (scripts/snapshots.sh checkpoints), or
-    any approve command (make snapshots-approve, make
-    snapshots-smoke-approve, make checkpoints-approve, which change the
-    references) in this validation. CI's ui-snapshots, ui-snapshots-smoke
+    any approve command (make approve, or scripts/snapshots.sh
+    baselines-approve, smoke-approve or checkpoints-approve, which change
+    the references) in this validation. CI's ui-snapshots, ui-snapshots-smoke
     and e2e-api jobs prove those.
 
     The test command ends with make test-snapshots, whose summary

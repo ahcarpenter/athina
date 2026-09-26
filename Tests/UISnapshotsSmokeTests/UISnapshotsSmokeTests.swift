@@ -15,7 +15,7 @@
   ///
   /// It never records a reference. A missing one fails like a changed one, and the render that
   /// would replace it goes to `build/snapshots-smoke/references`, which CI uploads for
-  /// `make snapshots-smoke-approve` to take. With `UI_SNAPSHOTS_SMOKE_SHARD` set to `k/n`, as each
+  /// `make approve` to take. With `UI_SNAPSHOTS_SMOKE_SHARD` set to `k/n`, as each
   /// of CI's four runners sets it, it draws and checks only the snapshots `SnapshotShard` gives
   /// shard k, the same split `ui-snapshots` uses.
   ///

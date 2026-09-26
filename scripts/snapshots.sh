@@ -8,18 +8,11 @@
 #                   are the same picture, then fail on any drift from the
 #                   baselines; with k/n, only the snapshots CI shard k of n
 #                   renders and compares (SnapshotShard, in Sources/SnapshotDiff)
-#   approve [<run>] make the baselines match the renders of CI run <run>, every
-#                   shard's together, by default the newest CI run of this
-#                   checkout's HEAD commit
 #   smoke [<k>/<n>] what CI's ui-snapshots-smoke runs: draw every snapshot in
 #                   the test process with swift-snapshot-testing and fail on any
 #                   drift from its reference image; with k/n, only the snapshots
 #                   shard k of n draws, by the SnapshotShard table the full gate
 #                   splits by (CI runs it whole, on one runner)
-#   smoke-approve [<run>]
-#                   make the smoke test's references match the set CI run <run>
-#                   published for every snapshot, by default the newest CI run
-#                   of HEAD
 #   smoke-local [<base>]
 #                   what local validation runs: draw the smoke set on this Mac
 #                   at HEAD and at <base> (by default HEAD's merge-base with
@@ -32,14 +25,25 @@
 #                   their checkpoints are the same pictures, then on any drift of
 #                   a checkpoint from its baseline in Tests/Checkpoints; the
 #                   options go to `athina-e2e run`, as CI's --launch open does
+#   approve         what `make approve` runs: every approval below, each
+#                   from the newest completed, non-cancelled run of HEAD that
+#                   publishes it; all three are fetched and checked before any
+#                   approved image changes, and when one has no run to take,
+#                   nothing changes and it fails naming each one missing
+#   baselines-approve [<run>]
+#                   make the baselines match the renders of merge-checks run
+#                   <run>, every shard's together, by default HEAD's newest
+#   smoke-approve [<run>]
+#                   make the smoke test's references match the set CI run <run>
+#                   published for every snapshot, by default HEAD's newest
 #   checkpoints-approve [<run>]
 #                   make Tests/Checkpoints match the checkpoints CI run <run>
-#                   took, by default the newest CI run of HEAD
+#                   took, by default HEAD's newest
 #
 # Output lands in build/snapshots: render-first/ and render-again/ hold the two
 # renders; render/ holds the first once both finished and agree, with
 # source-tree naming the git tree they were made from, and is what CI uploads
-# for approve, with shard naming the shard it holds when there is one;
+# for baselines-approve, with shard naming the shard it holds when there is one;
 # report/index.html shows each drifted snapshot before, after, and
 # where it changed, and determinism/ the same for two renders that did not match.
 #
@@ -126,6 +130,136 @@ render() {
     || die "could not render every snapshot into $dir"
 }
 
+# Approving takes the images CI made of HEAD, in two steps: fetch_<kind> finds
+# the run, downloads what it published and checks that it is HEAD's own,
+# changing nothing in the checkout, and apply_<kind> writes it into the approved
+# set. `approve` fetches every kind before it applies any. Each fetch step says
+# every failure through die, never through set -e, since `approve` runs it in a
+# subshell on the left of ||, where set -e does not apply.
+
+need_gh() {
+  command -v gh >/dev/null || die "approving needs the GitHub CLI (gh) to fetch the images CI made"
+}
+
+# Prints the newest completed run of <workflow> for HEAD that was neither
+# cancelled nor skipped, or dies naming <what> it was wanted for and <hint> on
+# how to get one.
+newest_run() {
+  local workflow="$1" what="$2" hint="$3" head run going
+  head="$(git -C "$ROOT" rev-parse HEAD)" || die "no HEAD commit"
+  run="$(gh run list --workflow "$workflow" --commit "$head" --status completed --limit 20 --json databaseId,conclusion \
+    --jq 'map(select(.conclusion != "skipped" and .conclusion != "cancelled")) | .[0].databaseId // empty')" \
+    || die "could not list the $workflow runs of HEAD ($head)"
+  if [ -z "$run" ]; then
+    going="$(gh run list --workflow "$workflow" --commit "$head" --limit 20 --json databaseId,status \
+      --jq 'map(select(.status != "completed")) | .[0].databaseId // empty' 2>/dev/null)" || going=""
+    [ -z "$going" ] || die "the $workflow run of HEAD ($head) to take $what from, run $going, has not finished; wait for it"
+    die "no finished $workflow run of HEAD ($head) to take $what from; $hint"
+  fi
+  echo "$run"
+}
+
+head_tree() {
+  git -C "$ROOT" rev-parse 'HEAD^{tree}' || die "no HEAD tree"
+}
+
+# The ui-snapshots baselines, from merge-checks run <run> or HEAD's newest.
+fetch_baselines() {
+  local run="${1:-}" tree first count k dir run_tree extra
+  need_gh
+  if [ -z "$run" ]; then
+    run="$(newest_run merge-checks.yml "the ui-snapshots baselines" \
+      "push it with the merge-checks label on its pull request and let the run finish")" || exit 2
+  fi
+  tree="$(head_tree)" || exit 2
+  # Each shard uploads the renders of its own snapshots as
+  # ui-snapshots-shard-<k>; approving takes them all together, and only
+  # when every shard's are there, since a missing shard's snapshots would
+  # read as removed and have their baselines deleted.
+  rm -rf "$OUT/approved-run" "$OUT/approved-shards"
+  gh run download "$run" --pattern 'ui-snapshots-shard-*' --dir "$OUT/approved-shards" \
+    || die "could not download the renders of CI run $run"
+  first="$(cat "$OUT/approved-shards/ui-snapshots-shard-1/shard" 2>/dev/null)" \
+    || die "CI run $run has no renders from shard 1 to approve; a shard publishes them only when both its renders finished and agree"
+  count="${first#*/}"
+  mkdir -p "$OUT/approved-run" || die "could not make $OUT/approved-run"
+  for k in $(seq 1 "$count"); do
+    dir="$OUT/approved-shards/ui-snapshots-shard-$k"
+    [ "$(cat "$dir/shard" 2>/dev/null)" = "$k/$count" ] \
+      || die "CI run $run has no renders from shard $k of $count to approve; a shard publishes them only when both its renders finished and agree"
+    run_tree="$(cat "$dir/source-tree" 2>/dev/null)" \
+      || die "shard $k of CI run $run does not name the source tree it rendered, so its renders cannot be matched to HEAD"
+    [ "$run_tree" = "$tree" ] \
+      || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into these baselines; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
+    cp "$dir"/*.png "$OUT/approved-run/" || die "could not copy the renders of shard $k of CI run $run"
+  done
+  extra="$(find "$OUT/approved-shards" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
+  [ "$extra" -eq "$count" ] || die "CI run $run has renders from $extra shards, not $count"
+}
+
+apply_baselines() {
+  diff_tool approve "$BASELINES" "$OUT/approved-run"
+  echo "snapshots: review the changed images (git status Tests/Snapshots), then commit them with the change that caused them"
+}
+
+# The ui-snapshots-smoke references, from CI run <run> or HEAD's newest.
+fetch_smoke() {
+  local run="${1:-}" tree run_tree
+  need_gh
+  if [ -z "$run" ]; then
+    run="$(newest_run ci.yml "the ui-snapshots-smoke references" "push it and let CI finish")" || exit 2
+  fi
+  tree="$(head_tree)" || exit 2
+  # CI's one smoke runner uploads the set for every snapshot as
+  # ui-snapshots-smoke-set, only once every snapshot has rendered. A set
+  # naming a shard holds only that shard's snapshots, and approving it would
+  # delete every other reference as removed, so it is refused.
+  rm -rf "$SMOKE_OUT/approved-run" "$SMOKE_OUT/approved-set"
+  gh run download "$run" --name ui-snapshots-smoke-set --dir "$SMOKE_OUT/approved-set" \
+    || die "CI run $run has no ui-snapshots-smoke-set to approve; the smoke job publishes one only once every snapshot has rendered"
+  [ ! -f "$SMOKE_OUT/approved-set/shard" ] \
+    || die "CI run $run published the set of shard $(cat "$SMOKE_OUT/approved-set/shard") only, not every snapshot's"
+  run_tree="$(cat "$SMOKE_OUT/approved-set/source-tree" 2>/dev/null)" \
+    || die "CI run $run does not name the source tree it rendered, so its renders cannot be matched to HEAD"
+  [ "$run_tree" = "$tree" ] \
+    || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into the references; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
+  mkdir -p "$SMOKE_OUT/approved-run" || die "could not make $SMOKE_OUT/approved-run"
+  cp "$SMOKE_OUT"/approved-set/*.png "$SMOKE_OUT/approved-run/" || die "CI run $run published a smoke set with no images"
+}
+
+apply_smoke() {
+  # The set is every reference the test compares, so it replaces the folder
+  # whole: a matching snapshot's file comes back byte for byte and shows no
+  # change, and a removed snapshot's reference goes.
+  mkdir -p "$SMOKE_REFERENCES"
+  find "$SMOKE_REFERENCES" -name '*.png' -delete
+  cp "$SMOKE_OUT"/approved-run/*.png "$SMOKE_REFERENCES/"
+  echo "snapshots: review the changed images (git status Tests/UISnapshotsSmokeTests), then commit them with the change that caused them"
+}
+
+# The e2e-api checkpoints, from CI run <run> or HEAD's newest.
+fetch_checkpoints() {
+  local run="${1:-}" tree run_tree
+  need_gh
+  if [ -z "$run" ]; then
+    run="$(newest_run ci.yml "the e2e-api checkpoints" "push it and let CI finish")" || exit 2
+  fi
+  tree="$(head_tree)" || exit 2
+  rm -rf "$CHECKPOINTS_OUT/approved-run"
+  # The job publishes its checkpoints only once both runs passed and agree.
+  gh run download "$run" --name checkpoints --dir "$CHECKPOINTS_OUT/approved-run" \
+    || die "CI run $run has no checkpoints to approve; its e2e-api job publishes them only once both runs of the API tier passed and took the same pictures"
+  run_tree="$(cat "$CHECKPOINTS_OUT/approved-run/source-tree" 2>/dev/null)" \
+    || die "CI run $run does not name the source tree its checkpoints were taken from, so they cannot be matched to HEAD"
+  [ "$run_tree" = "$tree" ] \
+    || die "CI run $run took its checkpoints of source tree $run_tree, not HEAD's ($tree), and approving them would bake another tree's UI into the baselines; a pull request's run tests the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
+}
+
+apply_checkpoints() {
+  diff_tool approve "$CHECKPOINT_BASELINES" "$CHECKPOINTS_OUT/approved-run"
+  echo "snapshots: review the changed images (git status Tests/Checkpoints), then commit them with the change that caused them"
+}
+
 command="${1:-}"
 case "$command" in
   gate)
@@ -155,44 +289,6 @@ case "$command" in
     diff_tool compare "$BASELINES" "$OUT/render" --report "$OUT/report" ${diff_shard[@]+"${diff_shard[@]}"}
     ;;
 
-  approve)
-    [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh approve [<run id>]"
-    command -v gh >/dev/null || die "approving needs the GitHub CLI (gh) to fetch the runner's renders"
-    run="${2:-}"
-    head="$(git -C "$ROOT" rev-parse HEAD)"
-    tree="$(git -C "$ROOT" rev-parse 'HEAD^{tree}')"
-    if [ -z "$run" ]; then
-      run="$(gh run list --workflow merge-checks.yml --commit "$head" --status completed --limit 20 --json databaseId,conclusion --jq 'map(select(.conclusion != "skipped" and .conclusion != "cancelled")) | .[0].databaseId // empty')" \
-        || die "could not list the merge-checks runs of HEAD ($head)"
-      [ -n "$run" ] || die "no finished merge-checks run of HEAD ($head); push it with the merge-checks label on its pull request and let the run finish, or name a run"
-    fi
-    # Each shard uploads the renders of its own snapshots as
-    # ui-snapshots-shard-<k>; approving takes them all together, and only
-    # when every shard's are there, since a missing shard's snapshots would
-    # read as removed and have their baselines deleted.
-    rm -rf "$OUT/approved-run" "$OUT/approved-shards"
-    gh run download "$run" --pattern 'ui-snapshots-shard-*' --dir "$OUT/approved-shards" \
-      || die "could not download the renders of CI run $run"
-    first="$(cat "$OUT/approved-shards/ui-snapshots-shard-1/shard" 2>/dev/null)" \
-      || die "CI run $run has no renders from shard 1 to approve; a shard publishes them only when both its renders finished and agree"
-    count="${first#*/}"
-    mkdir -p "$OUT/approved-run"
-    for k in $(seq 1 "$count"); do
-      dir="$OUT/approved-shards/ui-snapshots-shard-$k"
-      [ "$(cat "$dir/shard" 2>/dev/null)" = "$k/$count" ] \
-        || die "CI run $run has no renders from shard $k of $count to approve; a shard publishes them only when both its renders finished and agree"
-      run_tree="$(cat "$dir/source-tree" 2>/dev/null)" \
-        || die "shard $k of CI run $run does not name the source tree it rendered, so its renders cannot be matched to HEAD"
-      [ "$run_tree" = "$tree" ] \
-        || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into these baselines; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
-      cp "$dir"/*.png "$OUT/approved-run/"
-    done
-    extra="$(find "$OUT/approved-shards" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
-    [ "$extra" -eq "$count" ] || die "CI run $run has renders from $extra shards, not $count"
-    diff_tool approve "$BASELINES" "$OUT/approved-run"
-    echo "snapshots: review the changed images (git status Tests/Snapshots), then commit them with the change that caused them"
-    ;;
-
   checkpoints)
     shift
     rm -rf "$CHECKPOINTS_OUT"
@@ -213,29 +309,6 @@ case "$command" in
     git -C "$ROOT" rev-parse 'HEAD^{tree}' > "$CHECKPOINTS_OUT/render-first/source-tree"
     mv "$CHECKPOINTS_OUT/render-first" "$CHECKPOINTS_OUT/render"
     diff_tool compare "$CHECKPOINT_BASELINES" "$CHECKPOINTS_OUT/render" --report "$CHECKPOINTS_OUT/report"
-    ;;
-
-  checkpoints-approve)
-    [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh checkpoints-approve [<run id>]"
-    command -v gh >/dev/null || die "approving needs the GitHub CLI (gh) to fetch the runner's checkpoints"
-    run="${2:-}"
-    head="$(git -C "$ROOT" rev-parse HEAD)"
-    tree="$(git -C "$ROOT" rev-parse 'HEAD^{tree}')"
-    if [ -z "$run" ]; then
-      run="$(gh run list --workflow ci.yml --commit "$head" --status completed --limit 20 --json databaseId,conclusion --jq 'map(select(.conclusion != "cancelled")) | .[0].databaseId // empty')" \
-        || die "could not list the CI runs of HEAD ($head)"
-      [ -n "$run" ] || die "no finished CI run of HEAD ($head); push it and let CI finish, or name a run"
-    fi
-    rm -rf "$CHECKPOINTS_OUT/approved-run"
-    # The job publishes its checkpoints only once both runs passed and agree.
-    gh run download "$run" --name checkpoints --dir "$CHECKPOINTS_OUT/approved-run" \
-      || die "CI run $run has no checkpoints to approve; its e2e-api job publishes them only once both runs of the API tier passed and took the same pictures"
-    run_tree="$(cat "$CHECKPOINTS_OUT/approved-run/source-tree" 2>/dev/null)" \
-      || die "CI run $run does not name the source tree its checkpoints were taken from, so they cannot be matched to HEAD"
-    [ "$run_tree" = "$tree" ] \
-      || die "CI run $run took its checkpoints of source tree $run_tree, not HEAD's ($tree), and approving them would bake another tree's UI into the baselines; a pull request's run tests the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
-    diff_tool approve "$CHECKPOINT_BASELINES" "$CHECKPOINTS_OUT/approved-run"
-    echo "snapshots: review the changed images (git status Tests/Checkpoints), then commit them with the change that caused them"
     ;;
 
   smoke)
@@ -269,39 +342,43 @@ case "$command" in
     exit "$status"
     ;;
 
+  approve)
+    [ "$#" -eq 1 ] || die "usage: scripts/snapshots.sh approve"
+    # Every kind is fetched, each from its own run, before any is applied, so
+    # a kind with no run to take leaves every approved set as it was.
+    missing=()
+    ( fetch_baselines ) || missing+=("the ui-snapshots baselines (Tests/Snapshots): scripts/snapshots.sh baselines-approve")
+    ( fetch_smoke ) || missing+=("the smoke references (Tests/UISnapshotsSmokeTests): scripts/snapshots.sh smoke-approve")
+    ( fetch_checkpoints ) || missing+=("the e2e-api checkpoints (Tests/Checkpoints): scripts/snapshots.sh checkpoints-approve")
+    if [ "${#missing[@]}" -gt 0 ]; then
+      {
+        echo "snapshots: approved nothing; ${#missing[@]} of 3 approvals have no run of HEAD to take, for the reasons above:"
+        for approval in "${missing[@]}"; do echo "  - $approval"; done
+        echo "snapshots: once each has its run, make approve again; to take only some, run their own commands (each takes a run id too)"
+      } >&2
+      exit 2
+    fi
+    apply_baselines
+    apply_smoke
+    apply_checkpoints
+    ;;
+
+  baselines-approve)
+    [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh baselines-approve [<run id>]"
+    fetch_baselines "${2:-}"
+    apply_baselines
+    ;;
+
   smoke-approve)
     [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh smoke-approve [<run id>]"
-    command -v gh >/dev/null || die "approving needs the GitHub CLI (gh) to fetch the runner's renders"
-    run="${2:-}"
-    head="$(git -C "$ROOT" rev-parse HEAD)"
-    tree="$(git -C "$ROOT" rev-parse 'HEAD^{tree}')"
-    if [ -z "$run" ]; then
-      run="$(gh run list --workflow ci.yml --commit "$head" --status completed --limit 20 --json databaseId,conclusion --jq 'map(select(.conclusion != "cancelled")) | .[0].databaseId // empty')" \
-        || die "could not list the CI runs of HEAD ($head)"
-      [ -n "$run" ] || die "no finished CI run of HEAD ($head); push it and let CI finish, or name a run"
-    fi
-    # CI's one smoke runner uploads the set for every snapshot as
-    # ui-snapshots-smoke-set, only once every snapshot has rendered. A set
-    # naming a shard holds only that shard's snapshots, and approving it would
-    # delete every other reference as removed, so it is refused.
-    rm -rf "$SMOKE_OUT/approved-run" "$SMOKE_OUT/approved-set"
-    gh run download "$run" --name ui-snapshots-smoke-set --dir "$SMOKE_OUT/approved-set" \
-      || die "CI run $run has no ui-snapshots-smoke-set to approve; the smoke job publishes one only once every snapshot has rendered"
-    [ ! -f "$SMOKE_OUT/approved-set/shard" ] \
-      || die "CI run $run published the set of shard $(cat "$SMOKE_OUT/approved-set/shard") only, not every snapshot's"
-    run_tree="$(cat "$SMOKE_OUT/approved-set/source-tree" 2>/dev/null)" \
-      || die "CI run $run does not name the source tree it rendered, so its renders cannot be matched to HEAD"
-    [ "$run_tree" = "$tree" ] \
-      || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into the references; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
-    mkdir -p "$SMOKE_OUT/approved-run"
-    cp "$SMOKE_OUT"/approved-set/*.png "$SMOKE_OUT/approved-run/"
-    # The set is every reference the test compares, so it replaces the folder
-    # whole: a matching snapshot's file comes back byte for byte and shows no
-    # change, and a removed snapshot's reference goes.
-    mkdir -p "$SMOKE_REFERENCES"
-    find "$SMOKE_REFERENCES" -name '*.png' -delete
-    cp "$SMOKE_OUT"/approved-run/*.png "$SMOKE_REFERENCES/"
-    echo "snapshots: review the changed images (git status Tests/UISnapshotsSmokeTests), then commit them with the change that caused them"
+    fetch_smoke "${2:-}"
+    apply_smoke
+    ;;
+
+  checkpoints-approve)
+    [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh checkpoints-approve [<run id>]"
+    fetch_checkpoints "${2:-}"
+    apply_checkpoints
     ;;
 
   smoke-local)
@@ -411,6 +488,6 @@ case "$command" in
     ;;
 
   *)
-    die "usage: scripts/snapshots.sh gate [<k>/<n>] | approve [<run id>] | checkpoints [<athina-e2e option> ...] | checkpoints-approve [<run id>] | smoke [<k>/<n>] | smoke-approve [<run id>] | smoke-local [<base commit>]"
+    die "usage: scripts/snapshots.sh gate [<k>/<n>] | smoke [<k>/<n>] | smoke-local [<base commit>] | checkpoints [<athina-e2e option> ...] | approve | baselines-approve [<run id>] | smoke-approve [<run id>] | checkpoints-approve [<run id>]"
     ;;
 esac
