@@ -48,6 +48,17 @@ final class SQLiteConnection {
     try check(athina_sqlite_keep_wal_on_close(db), "keep the write-ahead log on close")
   }
 
+  /// Deletes the write-ahead log when this connection closes, where the
+  /// system SQLite would keep an empty one: for a database that had none
+  /// beside it and must be left with none.
+  func deleteWriteAheadLogOnClose() throws {
+    var persist: Int32 = 0
+    try check(
+      sqlite3_file_control(db, "main", SQLITE_FCNTL_PERSIST_WAL, &persist),
+      "delete the write-ahead log on close"
+    )
+  }
+
   private func check(_ rc: Int32, _ context: String) throws {
     guard rc == SQLITE_OK || rc == SQLITE_DONE || rc == SQLITE_ROW else {
       throw SQLiteError(code: rc, message: "\(context): \(String(cString: sqlite3_errmsg(db)))")
