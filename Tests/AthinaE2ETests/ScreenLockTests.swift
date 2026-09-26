@@ -460,7 +460,7 @@ import Testing
     let one = checkout("one")
     let holder = try startHolder(
       "run menubar-keyboard",
-      seconds: 10,
+      seconds: 60,
       checkout: one,
       lock: "CHECKOUT_LOCK"
     )
@@ -481,7 +481,9 @@ import Testing
     let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
     hand.waitUntilExit()
     #expect(hand.terminationStatus == 75)
-    #expect(Date().timeIntervalSince(started) < 5, "it waited on the run that holds its checkout")
+    // Well short of the holder's minute, with room for a loaded machine's
+    // slow lsof, so only a real wait on the holder fails it.
+    #expect(Date().timeIntervalSince(started) < 30, "it waited on the run that holds its checkout")
     #expect(
       output.contains(
         "the screen lock is held by pid \(hand.processIdentifier), which started this run"
