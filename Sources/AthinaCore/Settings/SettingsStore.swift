@@ -22,7 +22,7 @@ public struct SettingsStore: Sendable {
   public func load() -> SensingSettings {
     guard let data = try? Data(contentsOf: url) else { return SensingSettings() }
     do {
-      return try JSONDecoder().decode(SensingSettings.self, from: data).validated()
+      return try SensingSettings(json: data)
     } catch {
       return SensingSettings()
     }
@@ -31,7 +31,7 @@ public struct SettingsStore: Sendable {
   /// The settings in the file, or the error when it is missing, unreadable,
   /// or not settings, for a file someone asked for by name.
   public func loadStrictly() throws -> SensingSettings {
-    try JSONDecoder().decode(SensingSettings.self, from: Data(contentsOf: url)).validated()
+    try SensingSettings(json: Data(contentsOf: url))
   }
 
   /// Writes `settings`, validated, to the file atomically as sorted,
