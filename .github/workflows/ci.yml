@@ -54,10 +54,11 @@ jobs:
         run: make lint
 
   e2e-api:
-    # Every API-tier scenario of the end-to-end harness, run hermetically
-    # through the app's control API, twice, then their checkpoints compared
-    # with the approved baselines in Tests/Checkpoints as ui-snapshots
-    # compares a snapshot (README "Checkpoints"). The app is launched through
+    # Every API-tier scenario of the end-to-end harness, the Swift Testing
+    # tests in Tests/E2EAPITests, each launching a hermetic replay and driving
+    # it through the app's control API, run twice, then their checkpoints
+    # compared with the approved baselines in Tests/Checkpoints as
+    # ui-snapshots compares a snapshot (README "Checkpoints"). The app is launched through
     # LaunchServices (--launch open): exec'd from this job's shell, which the
     # runner image grants Accessibility, it would inherit the grant, and the
     # run could never catch a change that made the API tier need one.
@@ -79,7 +80,8 @@ jobs:
             killall Dock
           fi
       - name: Install bash 4 or newer
-        # The harness needs it, and macOS ships 3.2 as /bin/bash.
+        # The harness, which builds and runs the tests, needs it, and macOS
+        # ships 3.2 as /bin/bash.
         run: brew install bash
       - name: Let the hermetic copy record its own windows
         # Screen Recording for the API tier's copy of the app, which the
@@ -115,7 +117,9 @@ jobs:
           echo "::error::The Dock never hid, so the tallest Settings panes would be cut off." >&2
           exit 1
       - name: Run the API tier twice and compare its checkpoints with their baselines
-        timeout-minutes: 20
+        # The first run compiles the tests, with the E2EAPI trait in a build
+        # directory of their own under .build, which the cache keeps.
+        timeout-minutes: 30
         run: scripts/snapshots.sh checkpoints --launch open
       - name: Summarize
         if: always()
