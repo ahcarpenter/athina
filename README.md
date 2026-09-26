@@ -59,6 +59,7 @@ make snapshots-approve # makes the baselines match the renders CI made of HEAD, 
 make ui-snapshots-smoke # the UI smoke test: every snapshot drawn in process with swift-snapshot-testing and compared with the runner's references
 make ui-snapshots-smoke-local # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported, as local validation runs it
 make snapshots-smoke-approve # makes the smoke test's references match the set CI made of HEAD, after an intended UI change
+make checkpoints-approve # makes the e2e checkpoint baselines match the checkpoints CI took of HEAD, after an intended UI change (see Checkpoints)
 make format           # formats every Swift file in place to Google's Swift style (see Code style)
 make lint             # checks every Swift file against that style without changing it, as CI does
 make measure          # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
@@ -595,14 +596,17 @@ scripts/e2e/athina-e2e warm          # once per machine: prepare the warm home
 scripts/e2e/athina-e2e list          # the scenarios and what each one proves
 scripts/e2e/athina-e2e run all       # run them; one JSON line of result each
 scripts/e2e/athina-e2e run --jobs 4 all   # up to 4 API-tier scenarios at once
+scripts/e2e/athina-e2e run --tier api all # only the API tier, as CI's e2e-api runs it
 scripts/e2e/athina-e2e run toast-menu-answers
 scripts/e2e/athina-e2e doctor        # what is missing before a run
 scripts/e2e/athina-e2e journal suggestions   # a named query over the last run
 ```
 
 Every run is replay only: no API key is read, no network is reachable inside
-the sandbox, and nothing is billed. It needs a display, so it never runs in
-CI; CI runs the harness's unit tests with the rest of the suite.
+the sandbox, and nothing is billed. The real-screen tier needs a person's
+screen and runs only on a Mac; CI's `e2e-api` job runs every API-tier scenario
+on the runner, and compares their checkpoints with approved baselines (see
+Checkpoints), and CI runs the harness's unit tests with the rest of the suite.
 `ATHINA_E2E_APP=<bundle>` runs the scenarios against another bundle than
 `build/Athina.app`, such as the hardened release build (see Releasing), which
 the harness then checks as it is rather than rebuilding. A bundle without the
@@ -684,8 +688,9 @@ Scenarios come in two tiers, which each scenario names in `SCENARIO_TIER`:
 A scenario prints one JSON line: its name, `pass`, `fail` or `skip`, how long
 it took, every check it made, and the directory holding its evidence (transcript,
 screenshots, event taps, announcements, and the journal as TSV and as a copy;
-for an API-tier run, every request and answer in `api.log`, the checkpoint
-PNGs it took of Athina's windows, and what the harness saw of the screen in
+for an API-tier run, every request and answer in `api.log`, its checkpoints
+in `checkpoints/<scenario>/` (see Checkpoints) and the other pictures it took
+of Athina's windows, and what the harness saw of the screen in
 `hermetic-windows.log` and `hermetic-bar.log`). A scenario that runs several
 steps, as `real-screen` does, names each (`step`), so each check carries its
 step (`step 5 a real click on empty menu bar space dismisses a new toast, and
@@ -764,7 +769,7 @@ it.
 | `settings` | the live settings, or one of them with `key=<path>` |
 | `wait-setting` | waits until `key=<path>` reads `equals=<value>` |
 | `wait-window` | waits until a window titled `window=` is open, or with `present=false` gone |
-| `snapshot` | a checkpoint PNG of one of Athina's windows at `path=`, taken as `--snapshot` takes one once macOS has finished animating the window open (up to two seconds); never over an existing file |
+| `snapshot` | a PNG of one of Athina's windows at `path=`, taken as `--snapshot` takes one once macOS has finished animating the window open (up to two seconds): once three of the display's frames in a row changed nothing in it, captured until two captures in a row are the same picture, or, for a window that moves on its own, its last capture with `settled` false; never over an existing file. `appearance=light` or `dark` draws the app in that appearance for the picture and gives it its own back after |
 | `outside-click` | a click outside Athina's windows at `x=`, `y=` (points from the top left of the main display, as frames are given), handed to the suggestion toast as its system-wide listener would hand it one, which a hermetic run does not have; `heard` says whether a toast was up |
 | `observe` | what a hermetic run senses next (see Scripted sensing): `app=` and `bundle=` in front, in `window=`, showing `text=`, captured at once; or `idle=true` or `idle=false` alone, input going idle or coming back. `kept` says whether the capture was journaled, `why` why not, and `after` is the newest event's sequence before it, for a `wait-event` on what it brings. Refused as `unscripted` in a run that senses the real Mac |
 | `wait-event` | waits for the first event named `name=` after the sequence `after=` (every event since launch when left out) whose fields hold every other argument: `wait-event name=feedback feedback=notNow`. The names are what the sensing pipeline and the mentor loop publish, each logged once the app has acted on it: `observation`, `focus`, `mode`, `event` (a journaled event, by `kind`), `status` (with the understanding's `revision` as `understanding`), `suggestion` (logged once its toast is up), `feedback`, `followUp` and `call` (by `tier` and `outcome`); the answer carries the event's `sequence` and fields |
@@ -2103,13 +2108,15 @@ with a merge commit in it is flattened by a rebase; give every step
 
 ## Continuous integration
 
-CI runs four checks on GitHub's `macos-26` runner, which ships Xcode 26 and
+CI runs five checks on GitHub's `macos-26` runner, which ships Xcode 26 and
 the macOS 26 SDK this package targets: `build-and-test` runs `swift test`, the
 bundle script, and `scripts/check-no-control-api.sh` (which must find the
 control API in the development bundle and none in a build without the
 `ControlAPI` trait, for which it takes the debug `Athina` the tests' build
 already made rather than compiling the package again); `lint` runs `make lint` (see Code style) and fails on any
-finding; `ui-snapshots-smoke`, the fast UI check, draws every
+finding; `e2e-api` runs every API-tier scenario of the end-to-end harness and
+compares their checkpoints with approved baselines (see Checkpoints);
+`ui-snapshots-smoke`, the fast UI check, draws every
 snapshot inside a test process with swift-snapshot-testing and compares each
 with its reference image (see UI snapshot smoke test); and `ui-snapshots`, the
 full-fidelity UI check, renders every snapshot with `Athina --snapshot`
@@ -2126,8 +2133,8 @@ references from HEAD's CI run, both from the runner and never from a Mac. The
 Xcode project's archive check is out of CI until the App Store release flow
 brings it back as part of that flow (see The Xcode project).
 
-All four run on every push to main. On a pull request, `build-and-test`, `lint`
-and `ui-snapshots-smoke` (`.github/workflows/ci.yml`) run on every push, and the
+All five run on every push to main. On a pull request, `build-and-test`, `lint`,
+`e2e-api` and `ui-snapshots-smoke` (`.github/workflows/ci.yml`) run on every push, and the
 slow `ui-snapshots` (`.github/workflows/merge-checks.yml`) runs only while the
 pull request carries the `merge-checks` label: adding the label runs it, and
 so does every push, or any other label added, while it is on. Anyone with write access can add it,
@@ -2137,7 +2144,7 @@ from the pull request page or with
 gh pr edit <number> --add-label merge-checks
 ```
 
-All four must pass at a pull request's head before it can merge: the `main`
+All five must pass at a pull request's head before it can merge: the `main`
 ruleset requires them, with no bypass, and until `ui-snapshots` has run there,
 the pull request lists it as expected and cannot merge. Two traps shape this.
 A job that an `if` skips still reports a check run, and a skipped check counts
@@ -2179,8 +2186,9 @@ runs five macOS jobs at once. Pushes to main are never cancelled; each keeps
 its own run.
 
 Local validation, the no-mistakes pipeline a change goes through before its
-pull request, never runs the Xcode project steps, the full `ui-snapshots` gate
-or either approve command, which only CI proves, and compares the UI smoke set
+pull request, never runs the Xcode project steps, the full `ui-snapshots` gate,
+the checkpoint gate (`scripts/snapshots.sh checkpoints`) or any approve
+command, which only CI proves, and compares the UI smoke set
 with main's on the Mac itself (see UI snapshot smoke test);
 `test.instructions` in `.no-mistakes.yaml` carries that rule to its test step.
 
@@ -2260,11 +2268,22 @@ where it was made:
   background of its appearance, so glass and materials sample that and never
   what is behind the window. Dark mode's wallpaper tinting still reads the
   desktop picture, which the runner never changes.
-- **Settled, and agreed.** A window is captured until two captures in a row
-  are the same picture, and each snapshot is rendered in fresh windows until
-  two in a row agree, because AppKit now and then lays a text field out a
-  point off in one window. Captures are kept in sRGB whatever the display's
-  profile.
+- **Settled, and agreed.** A window opens with no animation and is first
+  captured once three of the display's frames in a row changed nothing in it:
+  no view waiting for layout or to be drawn, no Core Animation animation
+  running, and no layer moved, resized, faded or recoloured since the frame
+  before, as a switch's knob is while it springs across, so a task that loads
+  what a view shows, or an image fading in, is waited for as long as it takes
+  and no longer (`DisplayFrames`). It is then
+  captured, a frame apart, until two captures in a row are the same picture,
+  and each snapshot is rendered in fresh windows until two in a row agree,
+  because AppKit now and then lays a text field out a point off in one window;
+  a new window whose first capture is already the picture the last settled on
+  agrees with it at once. Four snapshots render at a time, each in windows of
+  its own, since most of a render is waiting on the display and on
+  ScreenCaptureKit: every snapshot renders in about 20 seconds on a Mac, where
+  a fixed wait before each window's first capture took 176. Captures are kept
+  in sRGB whatever the display's profile.
 - **One way of capturing.** A run captures every window with ScreenCaptureKit
   when it has Screen Recording, as the runner does, and renders each window's
   layer tree when it does not, and says which on its first line. The two draw
@@ -2344,7 +2363,7 @@ baselines), in UTC and the runner's US English locale, drawn at the runner's
 1x scale whatever the display's: a fixed clock, animations and Core Animation's clock stopped, a window
 with a fixed backdrop, and captures until two in a row agree, in fresh windows
 until two agree. A window drawn in process is drawn as its layers stand, so
-it skips the wait `--snapshot` gives a fade to end before its first capture.
+it skips the frames `--snapshot` waits for before its first capture.
 
 The test never records a reference. A snapshot with no reference fails, as a
 drifted one does, and a reference no snapshot produces fails until it is
@@ -2401,3 +2420,57 @@ removed screen is a report, in `build/snapshots-smoke-local/summary.md` with
 the base, new and difference images of each, for whoever reads the change to
 judge. A base from before this mode has no set to compare, so HEAD is drawn
 alone. The pixel comparison with the runner's references stays in CI.
+
+### Checkpoints
+
+A checkpoint is a picture of one of Athina's windows at a step of an API-tier
+scenario, in a state `--snapshot`'s sample data cannot show: a pane after its
+switch was pressed, a sheet with a name typed into it. A scenario takes one
+with the harness's `checkpoint <window> <step>`, which asks the control API's
+`snapshot` for the window in light and in dark and writes
+`<scenario>/<step>-light.png` and `<step>-dark.png` under the run's
+checkpoints folder (`checkpoints/` in its evidence, or `run --checkpoints
+<dir>`). Only a window whose picture holds still from run to run is a
+checkpoint, and one that did not settle fails the scenario; one that shows the
+run's times, pid or journal path, such as the debug panel, or that moves on its
+own, such as a suggestion's countdown, would differ every run, so a scenario
+keeps its picture as plain evidence (`api snapshot path=`). An API-tier run draws dates, times and
+numbers in UTC and US English with scroll bars always shown, as `--snapshot`
+does, so a checkpoint reads the same on every machine that draws it alike.
+
+**The gate.** `e2e-api` (`scripts/snapshots.sh checkpoints`) runs every
+API-tier scenario four at a time, twice, and fails when a scenario fails, when
+the two runs took different pictures (reported in its
+`checkpoints-report` artifact as `determinism/`, like two `--snapshot`
+renders that differ), and on any drift of a checkpoint from its approved
+baseline in `Tests/Checkpoints/<scenario>/`, by the rule and in the report
+`ui-snapshots` uses (see UI snapshot baselines): a changed, new or removed
+checkpoint fails until approved. The job, from a clean runner to the answer,
+takes about as long as `build-and-test` beside it, so it runs on every push to
+a pull request. On the runner, whose display is 1024 by 768, it hides the Dock
+first: with it showing, the tallest Settings panes are taller than the room
+left, macOS cuts the Settings window off above their end, and their last rows
+cannot be scrolled into view.
+
+It launches the app through LaunchServices (`run --launch open`) rather than
+under `sandbox-exec`: the runner image grants Accessibility to the job's
+shell, and an app exec'd from it inherits that grant, so the run could never
+catch a change that made the API tier need one; opened, the app is as
+untrusted as the hermetic copy is on a Mac. `--launch open` runs the app
+outside the sandbox, so the harness refuses it on a Mac that holds Athina
+data. The job does grant the hermetic copy's identifier Screen Recording, and
+only that, in the runner's TCC database, so a checkpoint is captured with
+ScreenCaptureKit, glass, title bar and toolbar included, as `ui-snapshots`
+captures a snapshot.
+
+**Approving an intended change.** Push the change and let `e2e-api` fail on
+the drift, look at the report, then run `make checkpoints-approve` (or
+`scripts/snapshots.sh checkpoints-approve`), which downloads the `checkpoints`
+artifact of HEAD's newest CI run (`RUN=<id>` names another) and makes
+`Tests/Checkpoints` match it the way `make snapshots-approve` makes
+`Tests/Snapshots` match its renders. The job publishes the artifact only once
+both runs passed and agree, it names the source tree it was taken from, and
+approving refuses any tree but HEAD's. Commit the images with the change that
+caused them. Baselines never come from a Mac: on a Mac a checkpoint is
+evidence of a run, never compared, since a Mac draws at another scale and
+often on another macOS.

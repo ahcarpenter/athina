@@ -46,7 +46,9 @@ public enum SnapshotStatus: Equatable, Sendable {
 
 /// One snapshot's file and what became of it.
 public struct SnapshotResult: Equatable, Sendable {
-  /// The file name, `settings-general-light.png`.
+  /// The file's path inside its set, `settings-general-light.png`, or
+  /// `settings-sheet/sheet-up-light.png` for a checkpoint, which sits in its
+  /// scenario's folder.
   public let file: String
   /// What became of it between the two directories.
   public let status: SnapshotStatus
@@ -172,10 +174,15 @@ public struct SnapshotComparison: Sendable {
     return diff.matches ? .unchanged(diff) : .changed(diff)
   }
 
-  /// The PNG file names directly inside `directory`; none when it does not exist.
+  /// The PNG files inside `directory` and its folders, as paths inside it;
+  /// none when it does not exist.
   static func pngs(in directory: URL) throws -> [String] {
-    guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
-    return try FileManager.default.contentsOfDirectory(atPath: directory.path)
+    let files = FileManager.default
+    guard files.fileExists(atPath: directory.path) else { return [] }
+    guard let found = files.enumerator(atPath: directory.path) else {
+      throw CocoaError(.fileReadUnknown, userInfo: [NSFilePathErrorKey: directory.path])
+    }
+    return found.compactMap { $0 as? String }
       .filter { $0.lowercased().hasSuffix(".png") }
       .sorted()
   }
@@ -195,6 +202,10 @@ public struct SnapshotComparison: Sendable {
         try files.removeItem(at: target)
       }
       if result.status != .removed {
+        try files.createDirectory(
+          at: target.deletingLastPathComponent(),
+          withIntermediateDirectories: true
+        )
         try files.copyItem(at: actual.appendingPathComponent(result.file), to: target)
       }
     }

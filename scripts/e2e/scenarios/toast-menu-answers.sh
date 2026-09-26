@@ -24,12 +24,14 @@ answer_enabled() { answers | sed -n "s/^$1=//p"; }
 
 toast_up() { api wait-window window="Athina suggestion" present="$1" timeout=5 >/dev/null && echo yes || echo no; }
 
-checkpoint() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no checkpoint of $1"; }
+# Pictures kept as evidence: these windows show what changes from run to run
+# or move on their own, so they are not checkpoints (README "Checkpoints").
+picture() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no picture of $1"; }
 
 scenario_run() {
 	scripted_toast || return 1
 	local suggestion="$SUGGESTION_ID"
-	checkpoint "Athina suggestion" toast
+	picture "Athina suggestion" toast
 	answers >"$RUN_DIR/answers-up.txt"
 	check "the menu offers Tell Me More while the suggestion is up" "true" "$(answer_enabled "Tell Me More")"
 	check "the menu offers Not Now while the suggestion is up" "true" "$(answer_enabled "Not Now")"
@@ -43,7 +45,7 @@ scenario_run() {
 	check "the toast stays up after Tell Me More" "yes" "$(toast_up true)"
 	check "the toast shows its explanation" "Show Less" \
 		"$(api find window="Athina suggestion" identifier=toast.tellMeMore --field elements.0.label)"
-	checkpoint "Athina suggestion" toast-told-more
+	picture "Athina suggestion" toast-told-more
 
 	check "Not Now is chosen from the menu" "true" "$(api menu press="Answer Suggestion > Not Now" --field ok)"
 	check "Not Now is recorded" "notNow" \

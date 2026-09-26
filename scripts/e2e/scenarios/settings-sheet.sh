@@ -18,8 +18,6 @@ SCENARIO_TIER=api
 sheet_count() { json_eval "$(api find window=Contexts role=AXSheet)" 'len(r["elements"])'; }
 name_value() { api find window=Contexts identifier=contextEditor.name --field elements.0.value; }
 
-checkpoint() { api snapshot window="$1" path="$RUN_DIR/$2.png" >/dev/null || log "no checkpoint of $1"; }
-
 scenario_run() {
 	api wait-window window=Contexts timeout=20 >/dev/null || { log "Settings never opened on the Contexts pane"; return 1; }
 	check "no sheet is up at first" "0" "$(sheet_count)"

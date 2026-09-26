@@ -13,8 +13,9 @@ import CoreGraphics
 public protocol ControlHost: AnyObject {
   /// The live settings, encoded as the settings file is.
   var controlSettings: ControlValue { get }
-  /// A picture of one of the app's windows, taken the way `--snapshot` takes one.
-  func controlCapture(_ window: NSWindow) async throws -> CGImage
+  /// A picture of one of the app's windows, settled and taken the way
+  /// `--snapshot` takes one.
+  func controlCapture(_ window: NSWindow) async throws -> ControlCapture
   /// The menu bar item's menu as the app builds it.
   var controlMenu: MenuModel { get }
   /// Runs one of the menu's commands, as choosing it does.
@@ -48,6 +49,24 @@ public protocol ControlHost: AnyObject {
   /// Opens a link in the app's own text through the handler a click on it
   /// runs; false when the app has no handler for it.
   func controlOpenLink(_ url: URL) -> Bool
+}
+
+/// A picture of one of the app's windows.
+public struct ControlCapture {
+  /// The picture.
+  public let image: CGImage
+  /// Whether two captures in a row gave this same picture.
+  ///
+  /// A window that keeps moving on its own, such as a toast's countdown ring,
+  /// never does; its picture is the last capture, evidence of a run but never
+  /// one to compare with a baseline.
+  public let settled: Bool
+
+  /// A picture, settled or not.
+  public init(image: CGImage, settled: Bool) {
+    self.image = image
+    self.settled = settled
+  }
 }
 
 /// The hot keys a person sets in Settings > General.

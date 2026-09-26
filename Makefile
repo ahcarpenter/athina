@@ -22,7 +22,7 @@ BASE ?=
 ## The app's own recordings directory, where `make record` writes by default
 RECORDINGS := $(HOME)/Library/Application Support/athina/recordings
 
-.PHONY: build mark run run-replay record clear-recordings fixture-status test format lint swift-format-version clean measure release xcodeproj xcode-build xcode-archive snapshots-approve ui-snapshots-smoke ui-snapshots-smoke-local snapshots-smoke-approve
+.PHONY: build mark run run-replay record clear-recordings fixture-status test format lint swift-format-version clean measure release xcodeproj xcode-build xcode-archive snapshots-approve ui-snapshots-smoke ui-snapshots-smoke-local snapshots-smoke-approve checkpoints-approve
 
 ## Build the .app bundle into build/Athina.app
 build:
@@ -149,6 +149,13 @@ ui-snapshots-smoke-local:
 ## the change that caused them.
 snapshots-smoke-approve:
 	scripts/snapshots.sh smoke-approve $(RUN)
+
+## Approve a change to the end-to-end checkpoints: make Tests/Checkpoints
+## match the checkpoints CI's e2e-api job took of HEAD (in HEAD's newest CI
+## run, or CI run RUN=<id>), never pictures from this Mac, then commit the
+## changed images with the change that caused them.
+checkpoints-approve:
+	scripts/snapshots.sh checkpoints-approve $(RUN)
 
 ## Every Swift file in the checkout, tracked or new, that git does not ignore
 SWIFT_FILES = git ls-files -z --cached --others --exclude-standard '*.swift'

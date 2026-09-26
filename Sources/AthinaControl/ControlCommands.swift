@@ -192,8 +192,8 @@ final class ControlCommands {
     if try request.bool("force") != true, let refusal = rule.refusal {
       return .refused(refusal.rawValue, message(for: refusal), details)
     }
-    post(clickAt: centre, in: window)
-    let dispatched = await EventFlush.flush()
+    let number = post(clickAt: centre, in: window)
+    let dispatched = await PostedClicks.handled(number, in: window)
     return .ok(details.merging(["dispatched": .bool(dispatched)]) { _, new in new })
   }
 
@@ -235,7 +235,10 @@ final class ControlCommands {
 
   private var eventNumber = 0
 
-  private func post(clickAt point: CGPoint, in window: NSWindow) {
+  /// Posts a mouse-down and a mouse-up at `point` and returns the event
+  /// number they carry, which `PostedClicks` knows them by.
+  private func post(clickAt point: CGPoint, in window: NSWindow) -> Int {
+    PostedClicks.watch()
     eventNumber += 1
     let now = ProcessInfo.processInfo.systemUptime
     for (type, time, pressure) in [
@@ -255,6 +258,7 @@ final class ControlCommands {
         NSApp.postEvent(event, atStart: false)
       }
     }
+    return eventNumber
   }
 
   /// Keys for the window's first responder, such as a text field a click
@@ -458,8 +462,12 @@ final class ControlCommands {
 
   // MARK: - Checkpoints
 
-  /// A PNG of one of the app's windows at `path`: absolute, ending in .png,
-  /// and new, since a checkpoint never replaces a file.
+  /// A PNG of one of the app's windows at `path`.
+  ///
+  /// The path is absolute, ends in .png, and is new, since a checkpoint never
+  /// replaces a file. With `appearance=light` or `dark`, the app is drawn in
+  /// that appearance for the picture and given its own back after it, so a
+  /// scenario can take a state in both.
   private func snapshot(_ request: ControlRequest) async throws -> ControlReply {
     guard let title = try request.string("window"),
       let window = AppAccessibility.windows(titled: title).first
@@ -469,9 +477,20 @@ final class ControlCommands {
     guard let path = try request.string("path"), path.hasPrefix("/"), path.hasSuffix(".png") else {
       return .error("snapshot needs path=<an absolute path ending in .png>")
     }
+    let appearances: [String: NSAppearance.Name] = ["light": .aqua, "dark": .darkAqua]
+    let appearance = try request.string("appearance")
+    if let appearance, appearances[appearance] == nil {
+      return .error("snapshot appearance= is light or dark, not \(appearance)")
+    }
+    let previous = NSApp.appearance
+    if let name = appearance.flatMap({ appearances[$0] }) {
+      NSApp.appearance = NSAppearance(named: name)
+    }
+    defer { NSApp.appearance = previous }
     do {
       await drawnIn(window)
-      let image = try await host.controlCapture(window)
+      let capture = try await host.controlCapture(window)
+      let image = capture.image
       guard let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])
       else {
         return .error("the capture could not be written as a PNG")
@@ -481,6 +500,7 @@ final class ControlCommands {
         "path": .string(path),
         "width": .number(Double(image.width)),
         "height": .number(Double(image.height)),
+        "settled": .bool(capture.settled),
       ])
     } catch {
       return .error("snapshot failed: \(error.localizedDescription)")
@@ -530,9 +550,96 @@ final class ControlCommands {
   }
 }
 
+/// Knows when AppKit has handled a click the API posted.
+///
+/// The mouse-down always reaches the app's `sendEvent`, where a local monitor sees it; the
+/// mouse-up does too, unless the control's own tracking loop takes it off the
+/// queue, as a switch or a window's close button does. So a click has been
+/// handled once its mouse-down was seen, the run loop is back in its default
+/// mode, which it leaves for as long as a control tracks the mouse, and its
+/// mouse-up was seen or is no longer waiting in the queue. An event of the
+/// API's own queued after the click, as `EventFlush` queues one, is no proof:
+/// a tracking loop can take that off the queue too, and did on the CI runner.
+@MainActor
+enum PostedClicks {
+  private struct Seen: Hashable {
+    let window: Int
+    let number: Int
+    let type: UInt
+  }
+
+  private static var monitor: Any?
+  private static var seen: Set<Seen> = []
+
+  /// Starts watching, before the first click is posted.
+  static func watch() {
+    guard monitor == nil else { return }
+    monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .leftMouseUp]) { event in
+      let key = Seen(
+        window: event.windowNumber,
+        number: event.eventNumber,
+        type: event.type.rawValue
+      )
+      MainActor.assumeIsolated { _ = PostedClicks.seen.insert(key) }
+      return event
+    }
+  }
+
+  /// Whether the click numbered `number` in `window` was handled within
+  /// `timeout`, checked every few milliseconds.
+  static func handled(
+    _ number: Int,
+    in window: NSWindow,
+    within timeout: Duration = .seconds(5)
+  ) async -> Bool {
+    let down = Seen(
+      window: window.windowNumber,
+      number: number,
+      type: NSEvent.EventType.leftMouseDown.rawValue
+    )
+    let up = Seen(
+      window: window.windowNumber,
+      number: number,
+      type: NSEvent.EventType.leftMouseUp.rawValue
+    )
+    defer {
+      seen.remove(down)
+      seen.remove(up)
+    }
+    let clock = ContinuousClock()
+    let deadline = clock.now + timeout
+    while clock.now < deadline {
+      if RunLoop.main.currentMode == .default, seen.contains(down),
+        seen.contains(up) || !queued(up)
+      {
+        return true
+      }
+      try? await Task.sleep(for: .milliseconds(5))
+    }
+    return false
+  }
+
+  /// Whether the mouse-up is still in the app's event queue, looked at
+  /// without taking anything off it.
+  private static func queued(_ up: Seen) -> Bool {
+    guard
+      let next = NSApp.nextEvent(
+        matching: .leftMouseUp,
+        until: .distantPast,
+        inMode: .default,
+        dequeue: false
+      )
+    else { return false }
+    return next.windowNumber == up.window && next.eventNumber == up.number
+  }
+}
+
 /// Waits until every event queued before it has been dispatched, by queuing
-/// one more of its own and waiting for it to come round, so a click's answer
-/// comes back only once AppKit has handled its mouse-down and mouse-up.
+/// one more of its own and waiting for it to come round, so a command's answer
+/// comes back only once AppKit has handled the events it set going.
+///
+/// A click waits on `PostedClicks` instead, since a control's tracking loop
+/// can take this event off the queue.
 @MainActor
 enum EventFlush {
   private static let subtype: Int16 = 0x4154

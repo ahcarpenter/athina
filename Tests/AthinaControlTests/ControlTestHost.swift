@@ -22,7 +22,7 @@ final class ControlTestHost: ControlHost {
   var controlClock: (now: Date, movedAhead: TimeInterval) = (Date(timeIntervalSince1970: 0), 0)
 
   var controlSettings: ControlValue { .null }
-  func controlCapture(_ window: NSWindow) async throws -> CGImage {
+  func controlCapture(_ window: NSWindow) async throws -> ControlCapture {
     throw CancellationError()
   }
   var controlMenu: MenuModel { MenuModel(items: []) }
