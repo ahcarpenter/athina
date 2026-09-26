@@ -74,6 +74,23 @@ so both are reported at once. A pull request that changes the file therefore
 fails `lint` until the change is applied with the command above, which is the
 order it goes in: apply, then run the job again, then merge.
 
+**Dependency updates.** Renovate (`.github/renovate.json5`) opens the update
+pull requests, weekly on Monday morning: one for the GitHub Actions the
+workflows and `.github/actions` use, and one for the packages the two
+`Package.swift` manifests pin, swift-snapshot-testing at the root and XcodeGen
+in `Tools/XcodeGenTool`. Each is a pull request like any other, checked by CI
+the same way. The runner images are left out, since moving CI to a new macOS
+image is a deliberate commit (see One Xcode, pinned, below). Renovate moves
+XcodeGen's own pin in the committed `Tools/XcodeGenTool/Package.resolved` but
+not the pins of the packages it depends on, so its pull request says to run
+`swift package --package-path Tools/XcodeGenTool resolve` and commit what that
+changes. The root `Package.resolved` stays uncommitted (see
+[UI snapshot smoke test](#ui-snapshot-smoke-test)), which Renovate does not
+need. Nothing runs until two steps in the repository's settings, which take an
+admin: install the Mend Renovate GitHub App on the repository, and turn on the
+dependency graph and Dependabot alerts, which Renovate's security updates read;
+no Dependabot configuration is used.
+
 **A build cache.** Every macOS job that compiles the package restores
 `.build` from an earlier run of the same job through
 `.github/actions/swiftpm-cache`, so SwiftPM compiles only what changed. A
