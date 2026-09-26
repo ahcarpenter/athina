@@ -81,7 +81,7 @@ struct VoiceSection: View {
               title: "Talk-back shortcut",
               identifier: "voice.talkBackShortcut",
               hotKey: $state.settings.mentor.pushToTalkHotKey,
-              conflicts: [state.settings.pauseHotKey],
+              conflicts: [state.settings.pauseShortcut].compactMap { $0 },
               conflictNote: "This keyboard shortcut is already the pause shortcut."
             )
           },

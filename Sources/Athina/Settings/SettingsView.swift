@@ -468,14 +468,14 @@ struct PrivacySettings: View {
               ShortcutRecorder(
                 title: "Pause shortcut",
                 identifier: "privacy.pauseShortcut",
-                hotKey: $state.settings.pauseHotKey,
+                hotKey: $state.settings.pauseShortcut,
                 conflicts: [state.settings.mentor.pushToTalkHotKey].compactMap { $0 },
                 conflictNote: "This keyboard shortcut is already the talk-back shortcut."
               )
             },
             label: {
               Text("Pause shortcut")
-              if state.isRunning, !state.hotKeyRegistered {
+              if state.isRunning, state.settings.pauseShortcut != nil, !state.hotKeyRegistered {
                 StatusLabel(
                   """
                   Another app uses this combination, or it lacks Control, Option, or Command. \

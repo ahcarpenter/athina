@@ -80,10 +80,11 @@
 - **Committed fixtures** carry only staged, synthetic screen content, recorded
   for the purpose, never the captain's or any user's real work. Every recording
   is read, text and screenshot, before it is committed.
-- **Pause** from the menu or with the global hotkey (default ⌃⌥⌘P) stops all
-  sensing; the menu bar owl drops a lid over its eyes. Idle closes them and two
-  z's drift off it, an excluded app looks away, missing permissions is a wide
-  stare, and a held mentor tier winks (see [Design conventions](design.md)).
+- **Pause** from the menu or with the global hotkey (⌃⌥⌘P unless changed or
+  cleared) stops all sensing; the menu bar owl drops a lid over its eyes. Idle
+  closes them and two z's drift off it, an excluded app looks away, missing
+  permissions is a wide stare, and a held mentor tier winks (see [Design
+  conventions](design.md)).
 - Thumbnails expire after 6 hours and text after 7 days by default; the journal
   is capped at 500 MB; all three are adjustable, and the journal can be cleared
   at any time. A replay senses the real screen too, and a finished replay's

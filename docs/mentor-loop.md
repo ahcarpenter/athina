@@ -141,8 +141,8 @@ and in screen points.
 
 ## Keyboard shortcuts
 
-The pause shortcut (Settings > Privacy, Control-Option-Command-P unless
-changed) and the talk-back shortcut (Settings > General, unset until chosen)
+The pause shortcut (Settings > Privacy, Control-Option-Command-P on a new
+install) and the talk-back shortcut (Settings > General, unset until chosen)
 work from any app. Both run on
 [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts), the
 app's one third-party package (MIT), pinned exactly in `Package.swift` and
@@ -156,16 +156,20 @@ records, so pressing one there records it instead of running it.
 that says why, a combination the system or the app's menu already uses
 (offering Use Anyway for a system one) and the other shortcut's combination,
 and beeps at one without Control, Option or Command unless its key is a
-function key. Delete or the field's clear button removes the talk-back
-shortcut; the pause shortcut is always set, so clearing it keeps its
-combination. The recorder's strings are in the package's resource bundle,
-which `scripts/bundle.sh` copies into the app.
+function key. Delete or the field's clear button removes either shortcut, as
+in any Mac app: a cleared pause shortcut stays cleared from launch to launch,
+and the menu's Pause Watching then shows none. The recorder's strings are in
+the package's resource bundle, which `scripts/bundle.sh` copies into the
+app.
 
 settings.json keeps each shortcut in the form every earlier build wrote
 (`HotKey`: the key's virtual key code and modifier bits of Athina's own), so
 a saved shortcut keeps working and an older build still reads the file;
 `HotKey.shortcut` is the same combination as the package has it, and a test
-holds the two forms to the combination earlier builds registered.
+holds the two forms to the combination earlier builds registered. Every
+earlier build reads `pauseHotKey` as always set, so a cleared pause shortcut
+keeps its last combination there and adds `pauseHotKeyCleared`, which only
+this build reads: an earlier build keeps pausing on that combination.
 
 Any number of apps can register a combination the way the package does, and
 every one of them hears it, so that registration never fails and the package

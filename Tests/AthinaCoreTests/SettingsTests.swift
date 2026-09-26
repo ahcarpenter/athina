@@ -22,7 +22,7 @@ import Testing
     var settings = SensingSettings()
     settings.floorInterval = 9
     settings.excludedBundleIDs = ["com.example.Secret"]
-    settings.pauseHotKey = HotKey(keyCode: 1, modifiers: [.command, .shift])
+    settings.pauseShortcut = HotKey(keyCode: 1, modifiers: [.command, .shift])
     settings.ocrLevel = .accurate
     try store.save(settings)
     #expect(store.load() == settings)
@@ -44,6 +44,44 @@ import Testing
     #expect(decoded.floorInterval == 12)
     #expect(decoded.idleThreshold == SensingSettings().idleThreshold)
     #expect(decoded.excludedBundleIDs == ExcludedApps.defaults)
+  }
+
+  /// A new install pauses on Control-Option-Command-P; the person can clear
+  /// it, it stays cleared from one launch to the next, and recording one
+  /// sets it again.
+  @Test func thePauseShortcutClearsAndStaysCleared() throws {
+    #expect(SensingSettings().pauseShortcut == .defaultPause)
+    let store = SettingsStore(url: temporaryURL())
+    var settings = SensingSettings()
+    settings.pauseShortcut = nil
+    try store.save(settings)
+    #expect(store.load().pauseShortcut == nil)
+    #expect(store.load() == settings)
+    let chosen = HotKey(keyCode: 1, modifiers: [.control, .option])
+    settings.pauseShortcut = chosen
+    try store.save(settings)
+    #expect(store.load().pauseShortcut == chosen)
+  }
+
+  /// Every earlier build reads `pauseHotKey` as a combination that is always
+  /// set, and nothing else about it: a cleared shortcut keeps its last
+  /// combination there, so an earlier build reads the file and pauses on
+  /// that combination, and a file an earlier build wrote reads as set.
+  @Test func anEarlierBuildReadsAClearedPauseShortcutAsItsLastCombination() throws {
+    let chosen = HotKey(keyCode: 1, modifiers: [.control, .option])
+    var settings = SensingSettings()
+    settings.pauseShortcut = chosen
+    settings.pauseShortcut = nil
+    let file = try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings))
+    let stored = try #require((file as? [String: Any])?["pauseHotKey"])
+    let earlier = try JSONDecoder().decode(
+      HotKey.self,
+      from: JSONSerialization.data(withJSONObject: stored)
+    )
+    #expect(earlier == chosen)
+
+    let written = Data(#"{"pauseHotKey": {"keyCode": 1, "modifiers": 3}}"#.utf8)
+    #expect(try SensingSettings(json: written).pauseShortcut == chosen)
   }
 
   /// The debug panel is something the person turns on: a new install and a
@@ -153,7 +191,9 @@ import Testing
     s.journalSizeCapBytes = 200 * 1024 * 1024
     s.retentionInterval = 300
     s.excludedBundleIDs = ["com.example.Secret"]
-    s.pauseHotKey = HotKey(keyCode: 1, modifiers: [.command, .shift])
+    // A cleared shortcut still keeps its last combination.
+    s.pauseShortcut = HotKey(keyCode: 1, modifiers: [.command, .shift])
+    s.pauseShortcut = nil
     s.showDebugPanel = true
     s.mentor.enabled = false
     s.mentor.triageModel = ModelCatalog.sonnet5.id
