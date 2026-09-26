@@ -2122,13 +2122,14 @@ with a merge commit in it is flattened by a rebase; give every step
 ## Continuous integration
 
 CI runs five checks on GitHub's `macos-26` runner, which ships Xcode 26 and
-the macOS 26 SDK this package targets: `build-and-test` runs `swift test`, the
-bundle script, and `scripts/check-no-control-api.sh` (which must find the
-control API in the development bundle and none in a build without the
-`ControlAPI` trait, for which it takes the debug `Athina` the tests' build
-already made rather than compiling the package again); `lint` runs `make lint` (see Code style) and fails on any
-finding; `e2e-api` runs every API-tier scenario of the end-to-end harness and
-compares their checkpoints with approved baselines (see Checkpoints);
+the macOS 26 SDK this package targets: `build-and-test` runs `swift test` and
+`scripts/check-no-control-api.sh`, which must find no control API in a build
+without the `ControlAPI` trait, for which it takes the debug `Athina` the
+tests' build already made rather than compiling the package again; `lint` runs `make lint` (see Code style) and fails on any
+finding; `e2e-api` builds the development bundle with the bundle script,
+checks that it carries the control API, runs every API-tier scenario of the
+end-to-end harness and compares their checkpoints with approved baselines (see
+Checkpoints);
 `ui-snapshots-smoke`, the fast UI check, draws every
 snapshot inside a test process with swift-snapshot-testing and compares each
 with its reference image (see UI snapshot smoke test); and `ui-snapshots`, the
@@ -2179,6 +2180,22 @@ creates it if it is gone). It requires each check from GitHub Actions itself
 (integration 15368), so a commit status of the same name cannot stand in for
 one, and it does not require a branch to be up to date with main, so a pull
 request is not rerun each time another merges.
+
+**A build cache.** Every macOS job that compiles the package restores
+`.build` from an earlier run of the same job through
+`.github/actions/swiftpm-cache`, so SwiftPM compiles only what changed. A
+checkout stamps every file with the time it was checked out, which would make
+every source look changed, so the action first sets each tracked file's time
+from its git blob id: the same content has the same time in every checkout,
+and different content a different one. SwiftPM still decides what is up to
+date, from each source's time and size, so a restored cache only saves work
+and never hides a change; a miss is a full build. The key names the job (which
+fixes the configurations and traits it builds), the Xcode and Swift versions,
+`Package.swift`, and the sources: a run of sources already cached restores
+that cache and saves none, and otherwise the newest cache of the same job,
+toolchain and manifest is restored, a pull request's own before main's, and a
+successful run saves its own. GitHub evicts the least recently used caches
+beyond the repository's 10 GB.
 
 **One Xcode, pinned.** Every macOS job selects the Xcode that `.xcode-version`
 names, as `xcodebuild -version` prints it (26.6 today), through the shared
@@ -2350,9 +2367,10 @@ The two gates cannot drift apart: a snapshot added to the list is in both.
 
 In CI it runs on one runner, the `ui-snapshots-smoke` job, the check the
 ruleset requires, which runs `make ui-snapshots-smoke` and draws every
-snapshot. Most of that job is fetching and compiling; drawing all 76 images
-takes about a minute and a half, so it ends inside `build-and-test`, where
-four runners each compiled the test again for a quarter of the drawing.
+snapshot. Most of that job is fetching and compiling, which the build cache
+cuts to what changed (see Continuous integration); drawing all 76 images takes
+about a minute, where four runners each compiled the test again for a quarter
+of the drawing.
 `make ui-snapshots-smoke SHARD=<k>/4` still draws only the snapshots
 `SnapshotShard` gives shard k (the test reads the shard from
 `UI_SNAPSHOTS_SMOKE_SHARD`), should it be split again.
@@ -2459,9 +2477,9 @@ renders that differ), and on any drift of a checkpoint from its approved
 baseline in `Tests/Checkpoints/<scenario>/`, by the rule and in the report
 `ui-snapshots` uses (see UI snapshot baselines): a changed, new or removed
 checkpoint fails until approved. The job, from a clean runner to the answer,
-takes about as long as `build-and-test` beside it, so it runs on every push to
-a pull request. On the runner, whose display is 1024 by 768, it hides the Dock
-first: with it showing, the tallest Settings panes are taller than the room
+takes about four minutes with the build cache, so it runs on every push to a
+pull request. On the runner, whose display is 1024 by 768, it hides the Dock
+first, through System Events: with it showing, the tallest Settings panes are taller than the room
 left, macOS cuts the Settings window off above their end, and their last rows
 cannot be scrolled into view.
 

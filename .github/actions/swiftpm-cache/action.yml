@@ -1,0 +1,43 @@
+name: Cache the SwiftPM build
+description: >-
+  Restores .build from an earlier run of the same job, and saves it when the job
+  succeeds, so SwiftPM compiles only what changed since. Stamps every tracked
+  file with a time derived from its content first, so an unchanged source looks
+  unchanged to SwiftPM in a fresh checkout. Whether a build is up to date is
+  still SwiftPM's own decision, from each source's time and size: a restored
+  cache only saves work, a changed source is always compiled again, and a miss
+  is a full build (README "Continuous integration"). Run it after
+  select-xcode, which the key reads, and before anything builds.
+inputs:
+  name:
+    description: >-
+      The job whose builds the cache holds, which fixes their configurations and
+      traits; each job keeps its own cache.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Stamp tracked files with times from their content
+      shell: bash
+      run: python3 "$GITHUB_ACTION_PATH/content-mtimes.py"
+    - name: Name the toolchain
+      id: toolchain
+      # The Xcode build and the compiler's own version, so a new Xcode or Swift
+      # starts from an empty cache rather than one another compiler made.
+      shell: bash
+      run: |
+        toolchain="$({ xcodebuild -version; swift --version 2>&1; } | shasum -a 256 | cut -c1-16)"
+        echo "id=$toolchain" >> "$GITHUB_OUTPUT"
+    - name: Restore the SwiftPM build
+      # The key's last part is the sources, so a run of the same sources, such as
+      # a rerun or a change to the workflows only, restores that exact cache and
+      # saves none. Otherwise the newest cache of the same job, toolchain and
+      # package manifest is restored (a pull request's own before main's), and
+      # this run saves its own when it succeeds. A new manifest or toolchain
+      # starts empty.
+      uses: actions/cache@v6
+      with:
+        path: .build
+        key: swiftpm-${{ inputs.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('Sources/**', 'Tests/**') }}
+        restore-keys: |
+          swiftpm-${{ inputs.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-

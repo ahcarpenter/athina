@@ -26,25 +26,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/select-xcode
+      - uses: ./.github/actions/swiftpm-cache
+        with:
+          name: build-and-test
       - name: Unit tests
         # The suite runs on a test clock and takes seconds once built; a wait
         # that never ends fails the job here rather than at the six-hour limit.
         timeout-minutes: 20
         run: swift test
-      - name: Build app bundle
-        run: scripts/bundle.sh release
-      - name: Only the development bundle carries the control API
-        # The bundle above is a development one, built with the ControlAPI
-        # trait; a build without the trait must carry none of it, and
-        # scripts/release.sh refuses a release binary that does (README "The
-        # control API"). The debug Athina the unit tests' build already made is
-        # such a build, so this checks it rather than compiling the package a
-        # third time in release; `swift build` only confirms it is current.
+      - name: A build without the ControlAPI trait carries no control API
+        # scripts/release.sh refuses a release binary that carries it (README
+        # "The control API"). The debug Athina the unit tests' build already
+        # made is such a build, so this checks it rather than compiling the
+        # package again; `swift build` only confirms it is current. The
+        # development bundle, which must carry it, is e2e-api's to build and
+        # check, so this job compiles the package once.
         run: |
-          if scripts/check-no-control-api.sh build/Athina.app/Contents/MacOS/Athina; then
-            echo "the development bundle should carry the control API" >&2
-            exit 1
-          fi
           swift build --product Athina
           scripts/check-no-control-api.sh "$(swift build --show-bin-path)/Athina"
 
@@ -76,11 +73,15 @@ jobs:
         # The runner's display is 1024 by 768, and with the Dock showing, the
         # tallest Settings panes are taller than the room left, so macOS cuts
         # the window off above their end and their last rows cannot be
-        # scrolled into view. The Dock can take most of a minute to come back
-        # hidden, so it goes first and is waited for after the build.
+        # scrolled into view. System Events hides it at once. Should it ever
+        # refuse, the Dock is restarted hidden instead, which can take two
+        # minutes, so this goes first and is waited for after the build.
+        timeout-minutes: 2
         run: |
-          defaults write com.apple.dock autohide -bool true
-          killall Dock
+          if ! osascript -e 'tell application "System Events" to set autohide of dock preferences to true'; then
+            defaults write com.apple.dock autohide -bool true
+            killall Dock
+          fi
       - name: Install bash 4 or newer
         # The harness needs it, and macOS ships 3.2 as /bin/bash.
         run: brew install bash
@@ -93,8 +94,19 @@ jobs:
         run: |
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
             "insert or replace into access (service, client, client_type, auth_value, auth_reason, auth_version, flags) values ('kTCCServiceScreenCapture', 'com.ahcarpenter.athina.e2e', 0, 2, 4, 1, 0)"
+      - uses: ./.github/actions/swiftpm-cache
+        with:
+          name: e2e-api
       - name: Build the app bundle
-        run: scripts/bundle.sh release
+        # The development bundle, built with the ControlAPI trait, so it must
+        # carry the control API; build-and-test checks that a build without the
+        # trait carries none (README "The control API").
+        run: |
+          scripts/bundle.sh release
+          if scripts/check-no-control-api.sh build/Athina.app/Contents/MacOS/Athina; then
+            echo "the development bundle should carry the control API" >&2
+            exit 1
+          fi
       - name: Wait for the Dock to hide
         # Fails rather than run the scenarios with the Dock showing.
         run: |
@@ -139,13 +151,16 @@ jobs:
     # snapshot in the test process with swift-snapshot-testing and compares
     # each with its reference image, recorded on this image with the pinned
     # Xcode as the ui-snapshots baselines were (README "UI snapshot smoke
-    # test"). One runner: most of the job is fetching and compiling, and
-    # drawing all 76 images takes about a minute and a half, so it still ends
-    # inside build-and-test, where four runners each compiled it again.
+    # test"). One runner: most of the job is fetching and compiling, which the
+    # build cache cuts to what changed, and drawing all 76 images takes about a
+    # minute, where four runners each compiled it again.
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/select-xcode
+      - uses: ./.github/actions/swiftpm-cache
+        with:
+          name: ui-snapshots-smoke
       - name: Draw every snapshot and compare with its reference
         timeout-minutes: 20
         run: make ui-snapshots-smoke

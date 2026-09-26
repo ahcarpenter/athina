@@ -44,6 +44,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/select-xcode
+      - uses: ./.github/actions/swiftpm-cache
+        with:
+          # Every shard builds the same, so they share one cache.
+          name: ui-snapshots
       - name: Build app bundle
         run: scripts/bundle.sh release
       - name: Render twice and compare with the approved baselines
