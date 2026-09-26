@@ -125,6 +125,53 @@ step() {
 	log "--- step $STEP"
 }
 
+# --- Scenarios ----------------------------------------------------------------
+
+SCENARIO_DIR="$E2E_DIR/scenarios"
+
+scenario_names() {
+	local path
+	for path in "$SCENARIO_DIR"/*.sh; do
+		[ -e "$path" ] || continue
+		basename "$path" .sh
+	done
+}
+
+scenario_summary_of() {
+	# Read the summary without running anything the scenario defines.
+	sed -n 's/^SCENARIO_SUMMARY="\(.*\)"$/\1/p' "$SCENARIO_DIR/$1.sh" | head -1
+}
+
+# The tier a scenario names, read the same way; screen when it names none.
+scenario_tier_of() {
+	local tier
+	tier="$(sed -n 's/^SCENARIO_TIER=\([a-z]*\)$/\1/p' "$SCENARIO_DIR/$1.sh" 2>/dev/null | head -1)"
+	printf '%s\n' "${tier:-screen}"
+}
+
+# The scenarios `run` runs, one to a line, in the order given: those named, or
+# every one when none is named or the first is all, kept to those of the tier
+# asked for (api, screen, or all for both). Stops when a name is no scenario's
+# or none of them is on that tier.
+scenarios_to_run() {
+	local tier="$1" name found=0
+	shift
+	if [ $# -eq 0 ] || [ "$1" = all ]; then
+		# shellcheck disable=SC2046 # a scenario's name is one word
+		set -- $(scenario_names)
+	fi
+	for name in "$@"; do
+		[ -f "$SCENARIO_DIR/$name.sh" ] || die "no scenario named $name"
+	done
+	for name in "$@"; do
+		if [ "$tier" = all ] || [ "$(scenario_tier_of "$name")" = "$tier" ]; then
+			printf '%s\n' "$name"
+			found=1
+		fi
+	done
+	[ "$found" = 1 ] || die "none of those scenarios is on the $tier tier"
+}
+
 # --- Building -----------------------------------------------------------------
 
 # Is anything under the given directories newer than the built product?
