@@ -219,6 +219,13 @@
       }
     }
 
+    /// A line on the result that is neither a pass nor a failure, such as a wait that took
+    /// longer than it should, so it is seen without failing the scenario.
+    func note(_ line: String) {
+      log("  note \(line)")
+      checks.append("note \(line)")
+    }
+
     /// A value as a check shows it: JSON as the app sent it, and nothing where there was none.
     private static func shown(_ value: Any) -> String {
       if let value = value as? ControlValue { return value.text }
@@ -273,20 +280,20 @@
         // Settled, or it would not be the same picture on the next run. A window still moving
         // from the step before, which on a loaded machine can take longer than the snapshot
         // waits for, is taken again, over its unsettled picture; one that never holds still
-        // fails every time.
+        // fails every time. A take after the first is a longer wait, not a second chance
+        // hidden in the log, so the result line names every checkpoint that needed one.
         var settled = false
-        for attempt in 1...3 where !settled {
+        var takes = 0
+        while !settled, takes < 3 {
+          takes += 1
           try? FileManager.default.removeItem(at: file)
           let reply = try await control.snapshot(window: window, path: file, appearance: appearance)
           settled = reply["settled"]?.bool ?? false
-          if !settled { log("checkpoint \(step)-\(appearance), take \(attempt), had not settled") }
+          if !settled { log("checkpoint \(step)-\(appearance), take \(takes), had not settled") }
         }
-        check(
-          "checkpoint \(scenario)/\(step)-\(appearance) of \(window) is taken, settled",
-          true,
-          settled,
-          sourceLocation: sourceLocation
-        )
+        let name = "checkpoint \(scenario)/\(step)-\(appearance) of \(window) is taken, settled"
+        check(name, true, settled, sourceLocation: sourceLocation)
+        if settled, takes > 1 { note("\(name) on take \(takes)") }
       }
     }
 

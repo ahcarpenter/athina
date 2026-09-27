@@ -1,0 +1,56 @@
+name: Nightly
+
+# Every night on main, the check that fails a pull request on a stale replay
+# fixture: the committed fixtures in Tests/AthinaCoreTests/Fixtures/Replay
+# still match the current prompts, replayed through the whole loop, so a
+# fixture gone stale fails loudly here even on a day nothing is pushed
+# (docs/ci.md "Nightly"). Replay only: no key, no network call to a model, no
+# spend. A failure opens one issue, or adds the run to the one still open.
+on:
+  schedule:
+    # About 3:17 in the morning in New York, off the hour.
+    - cron: '17 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  replay-fixtures:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/select-xcode
+      - uses: ./.github/actions/swiftpm-cache
+        with:
+          # The same debug build of the package as build-and-test's make test,
+          # so main's newest cache of it serves, and this saves none of its own.
+          name: build-and-test
+      - name: Replay the committed fixtures against the current prompts
+        # ReplayLoopTests' theCommittedFixturesAreCurrent is the freshness
+        # check; the rest of it and ReplayInterventionTests replay the set
+        # strictly through the loop, as build-and-test does on every push.
+        timeout-minutes: 20
+        run: make test FILTER='ReplayLoopTests|ReplayInterventionTests'
+      - name: Open or update the issue
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Nightly: the replay fixtures no longer match the current prompts"
+          body="The nightly replay of the committed fixtures failed on main at ${GITHUB_SHA}: ${RUN_URL}"
+          number="$(gh issue list --state open --search "in:title \"$title\"" --json number,title \
+            --jq "map(select(.title == \"$title\")) | .[0].number // empty")"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "$body"
+          else
+            gh issue create --title "$title" --body "$body
+
+          docs/replay.md \"The committed fixtures\" says how to re-record them. Close this once a nightly run passes."
+          fi
