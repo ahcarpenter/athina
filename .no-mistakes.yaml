@@ -13,8 +13,7 @@ commands:
 # test.instructions steers the agent-driven evidence pass of the test step.
 test:
   instructions: |
-    Hard rule: never run the Xcode project steps (make xcodeproj, or
-    xcodebuild on the generated project), the full ui-snapshots gate
+    Hard rule: never run the full ui-snapshots gate
     (scripts/snapshots.sh gate, `Athina --snapshot`), the checkpoint gate
     (scripts/snapshots.sh checkpoints) or any approve command (make
     approve, or scripts/snapshots.sh baselines-approve, smoke-approve or

@@ -64,14 +64,18 @@ public enum AppPaths {
   /// The identifier the app had before it was renamed.
   public static let legacyBundleIdentifier = "com.ahcarpenter.mentor"
 
-  /// The running app's bundle identifier, so a build signed under another
-  /// one (the App Store build) keeps its preferences and its API key apart.
-  public static var bundleIdentifier: String { bundleIdentifier(in: .current) }
+  /// The running app's bundle identifier, so a copy signed under another
+  /// one (the end-to-end harness's hermetic copy, docs/e2e.md) keeps its
+  /// preferences and its API key apart.
+  public static let bundleIdentifier = bundleIdentifier(of: .main)
 
-  /// The bundle identifier in `environment`: its app bundle's, or
-  /// `defaultBundleIdentifier` when it runs from none.
-  public static func bundleIdentifier(in environment: RuntimeEnvironment) -> String {
-    environment.bundleIdentifier ?? defaultBundleIdentifier
+  /// The identifier of `bundle` when it is an app, or
+  /// `defaultBundleIdentifier` when it is not: `swift run`, and the test
+  /// runner, whose bundle has an identifier of its own that must never become
+  /// the preferences domain or the keychain service.
+  static func bundleIdentifier(of bundle: Bundle) -> String {
+    guard bundle.bundleURL.pathExtension == "app" else { return defaultBundleIdentifier }
+    return bundle.bundleIdentifier ?? defaultBundleIdentifier
   }
 
   /// Where the preferences live: the bundle identifier, which is the domain
@@ -81,8 +85,8 @@ public enum AppPaths {
   /// The service the API key's keychain item is saved under.
   public static var keychainService: String { bundleIdentifier }
 
-  /// The live data directory, `athina` in Application Support (inside its
-  /// container for a sandboxed build), which holds the journal and settings.
+  /// The live data directory, `athina` in Application Support, which holds
+  /// the journal and settings.
   public static func supportDirectory() -> URL {
     applicationSupport().appendingPathComponent(directoryName, isDirectory: true)
   }
@@ -104,40 +108,5 @@ public enum AppPaths {
   /// `LaunchFiles`): `replay` inside the support directory.
   public static func replayRoot(in supportDirectory: URL = supportDirectory()) -> URL {
     supportDirectory.appendingPathComponent("replay", isDirectory: true)
-  }
-
-  /// True when `url` names `directory` itself or something inside it, as the
-  /// file system sees it rather than as it was spelled: symlinks resolved, a
-  /// trailing slash and `..` normalized, and case ignored, since the boot
-  /// volume is case-insensitive by default.
-  ///
-  /// Used where a path someone else chose must be kept out of somewhere
-  /// (`RuntimeEnvironment.refusal(writing:for:)`), so spelling it differently
-  /// is never a way in.
-  public static func isAt(_ url: URL, orInside directory: URL) -> Bool {
-    let subject = resolvedPath(url)
-    let parent = resolvedPath(directory)
-    if subject.compare(parent, options: .caseInsensitive) == .orderedSame { return true }
-    return subject.range(of: parent + "/", options: [.caseInsensitive, .anchored]) != nil
-  }
-
-  /// `url` with every symlink in it resolved. `resolvingSymlinksInPath`
-  /// gives up on a path that does not exist yet, which a reply file usually
-  /// is, so the deepest part that does exist is resolved and the rest put
-  /// back on.
-  static func resolvedPath(_ url: URL) -> String {
-    var missing: [String] = []
-    var existing = url.standardizedFileURL
-    while !FileManager.default.fileExists(atPath: existing.path) {
-      let parent = existing.deletingLastPathComponent().standardizedFileURL
-      guard parent.path != existing.path else { break }
-      missing.append(existing.lastPathComponent)
-      existing = parent
-    }
-    var resolved = existing.resolvingSymlinksInPath().standardizedFileURL
-    for component in missing.reversed() {
-      resolved.appendPathComponent(component)
-    }
-    return resolved.standardizedFileURL.path
   }
 }

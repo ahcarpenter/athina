@@ -11,11 +11,9 @@ import Foundation
 ///
 /// - the build carries it at all: the server is compiled in only under the
 ///   `ControlAPI` package trait, which only the development bundle turns on,
-///   so a release or App Store build refuses the flag whatever else is true;
+///   so a release build refuses the flag whatever else is true;
 /// - the launch is a replay, which reads no key, keeps its own files, and
 ///   bills nothing;
-/// - the process is not sandboxed (`RuntimeEnvironment`), so a sandboxed build
-///   made from the development bundle refuses it too;
 /// - the directory is one the harness made for this run: absolute, a real
 ///   directory owned by this user with mode 0700 exactly, holding
 ///   the run's secret in `secret`, a file of its own closed to everyone else,
@@ -74,14 +72,12 @@ public enum ControlMode: Equatable, Sendable {
   /// - Parameters:
   ///   - arguments: The launch's command line.
   ///   - clientMode: How the launch makes model calls, which must be a replay.
-  ///   - environment: The process's runtime, which must not be sandboxed.
   ///   - compiledIn: Whether this build carries the server, which only the
   ///     `ControlAPI` package trait compiles in.
   ///   - inspect: Reads what is at the directory's path; tests pass their own.
   public init(
     arguments: [String],
     clientMode: ModelClientMode,
-    environment: RuntimeEnvironment,
     compiledIn: Bool,
     inspect: (URL) -> ControlDirectory = ControlDirectory.inspect
   ) {
@@ -95,10 +91,6 @@ public enum ControlMode: Equatable, Sendable {
     }
     guard case .replay = clientMode else {
       self = .refused("\(ControlMode.flag) applies only to \(ModelClientMode.replayFlag)")
-      return
-    }
-    guard !environment.isSandboxed else {
-      self = .refused("\(ControlMode.flag): a sandboxed Athina has no control API")
       return
     }
     let value = index + 1 < arguments.count ? arguments[index + 1] : ""

@@ -8,13 +8,11 @@ import Testing
     directory: URL(fileURLWithPath: "/fixtures"),
     allowStale: false
   )
-  let unsandboxed = RuntimeEnvironment(isSandboxed: false)
   let secret = String(repeating: "a1", count: 32)
 
   func mode(
     _ arguments: [String],
     client: ModelClientMode? = nil,
-    environment: RuntimeEnvironment? = nil,
     compiledIn: Bool = true,
     directory: ControlDirectory? = nil
   ) -> ControlMode {
@@ -22,7 +20,6 @@ import Testing
     return ControlMode(
       arguments: ["Athina"] + arguments,
       clientMode: client ?? replay,
-      environment: environment ?? unsandboxed,
       compiledIn: compiledIn
     ) { _ in facts }
   }
@@ -86,16 +83,6 @@ import Testing
   func onlyAReplayIsServed(client: ModelClientMode) {
     #expect(
       mode(["--control", "/tmp/c"], client: client).refusal == "--control applies only to --replay"
-    )
-  }
-
-  @Test func aSandboxedProcessRefuses() {
-    let sandboxed = RuntimeEnvironment(
-      isSandboxed: true,
-      containerURL: URL(fileURLWithPath: "/container")
-    )
-    #expect(
-      mode(["--control", "/tmp/c"], environment: sandboxed).refusal?.contains("sandboxed") == true
     )
   }
 

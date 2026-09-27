@@ -142,9 +142,6 @@ final class AppState {
   /// the owner's to settle; one that could not be finished stops the launch
   /// (`startupRefusal`).
   let dataMigration: DataMigration.Outcome
-  /// Why this live launch moves nothing from Mentor at all, for the log:
-  /// it runs in the App Sandbox (`DataMigration.skipReason`).
-  private let migrationSkipReason: String?
   /// Whether this launch copies the API key saved under the old name
   /// (`KeyMigration`).
   ///
@@ -235,7 +232,6 @@ final class AppState {
     controlMode = ControlMode(
       arguments: CommandLine.arguments,
       clientMode: clientMode,
-      environment: .current,
       compiledIn: ControlAvailability.compiledIn
     )
     (clock, clockControl) = clockMode.makeClock()
@@ -247,12 +243,8 @@ final class AppState {
     // recordings and understanding the app kept while it was called
     // Mentor move to the folder it keeps them in now. A replay's files
     // are its own and never the live ones, and a snapshot render reads
-    // neither, so neither moves anything. A sandboxed build can reach
-    // nothing Mentor kept, and says so once as it starts.
-    migrationSkipReason =
-      clientMode.isOffline || Snapshots.isActive ? nil : DataMigration.skipReason(in: .current)
-    let movesFromMentor =
-      !(clientMode.isOffline || Snapshots.isActive || migrationSkipReason != nil)
+    // neither, so neither moves anything.
+    let movesFromMentor = !(clientMode.isOffline || Snapshots.isActive)
     let dataMigration: DataMigration.Outcome =
       movesFromMentor ? DataMigration.run() : .nothingToMove
     self.dataMigration = dataMigration
@@ -327,7 +319,6 @@ final class AppState {
       launchName: "launch-4242-5a1e0c9d"
     )
     dataMigration = .nothingToMove
-    migrationSkipReason = nil
     dataDirectoryLock = nil
     startupRefusal = nil
     journalURL = Journal.defaultURL(in: launchFiles.dataDirectory)
@@ -360,9 +351,6 @@ final class AppState {
 
     // What became of the files the app kept under its old name, before
     // the journal below opens in the folder they moved to.
-    if let migrationSkipReason {
-      AppState.log.notice("from Mentor: \(migrationSkipReason, privacy: .public)")
-    }
     if let note = dataMigration.note {
       if dataMigration.needsAttention {
         AppState.log.error("data from Mentor: \(note, privacy: .public)")
