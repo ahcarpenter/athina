@@ -17,7 +17,8 @@ public enum MenuBarMark: String, CaseIterable, Sendable {
   case watching
   /// Sensing is on, but the user has been away from the keyboard.
   case idle
-  /// The user stopped Athina, or it has not started.
+  /// The user stopped Athina, it has not started, or it has not been
+  /// allowed to watch: nothing is being captured.
   case paused
   /// The frontmost app is one the user excluded.
   case excluded
@@ -44,11 +45,14 @@ public enum MenuBarMark: String, CaseIterable, Sendable {
     switch mode {
     case .waitingForPermissions: return .needsSomething
     case .excluded: return .excluded
-    case .paused, .stopped: return .paused
+    case .paused, .stopped, .waitingForConsent: return .paused
     case .idle: return .idle
     case .watching, .screenOnly, .accessibilityOnly:
       guard !offline else { return .watching }
       switch availability {
+      // The mode catches up with a withdrawal a moment later; the mark
+      // never says watching once consent is gone.
+      case .noConsent: return .paused
       case .ready: return .watching
       case .noAPIKey: return .needsSomething
       case .disabled, .capReached: return .held

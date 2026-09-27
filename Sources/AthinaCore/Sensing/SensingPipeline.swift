@@ -17,6 +17,12 @@ public enum SensingSource: Sendable {
 
 /// Orchestrates focus tracking, input polling, screen capture, frame diffing,
 /// OCR, and journaling, and publishes `SensingEvent`s to subscribers.
+///
+/// Until the settings carry the person's consent (`SensingSettings.hasConsent`)
+/// the pipeline stays in `waitingForConsent`: focus tracking is not started, and
+/// no input, idle, permission, focus, or capture is read or journaled. Only
+/// retention runs, so what an earlier consent let in still ages out. Settings
+/// that withdraw consent stop all of that at once, a capture in flight included.
 public actor SensingPipeline {
   /// The sensing settings in effect: those it was created with, until
   /// `updateSettings(_:)` replaces them with validated ones.
@@ -92,7 +98,7 @@ public actor SensingPipeline {
         guard let self else { return }
         Task { await self.focusDidChange(change) }
       }
-      await tracker.start()
+      if settings.hasConsent { await tracker.start() }
     }
     await journalEvent(JournalEvent(timestamp: clock.date, kind: .started))
     loopTask = Task { [weak self] in
@@ -125,14 +131,28 @@ public actor SensingPipeline {
   /// apps, and wakes the loop so they take effect at once.
   public func updateSettings(_ newSettings: SensingSettings) async {
     let validated = newSettings.validated()
+    let consentChanged = validated.hasConsent != settings.hasConsent
     settings = validated
     scheduler.settings = validated
     await tracker.updateExcluded(validated.excludedBundleIDSet)
+    if consentChanged, loopTask != nil {
+      if validated.hasConsent {
+        if source == .system { await tracker.start() }
+      } else {
+        if source == .system { await tracker.stop() }
+        lastFocus = nil
+        // Said now rather than on the loop's next turn, so everything
+        // listening stops with it.
+        setMode(.waitingForConsent)
+        scheduler.setActive(false, at: clock.date)
+      }
+    }
     await signal.signal()
   }
 
   /// Captures as soon as the loop wakes, regardless of cadence.
   public func captureNow() async {
+    guard settings.hasConsent else { return }
     scheduler.requestManualCapture(at: clock.date)
     await signal.signal()
   }
@@ -145,6 +165,11 @@ public actor SensingPipeline {
   /// the pipeline senses the real Mac.
   public func observe(_ scripted: ScriptedObservation) async -> ScriptedOutcome {
     guard source == .hermetic else { return .notScripted }
+    guard settings.hasConsent else {
+      return .notKept(
+        "sensing is \(SensingMode.waitingForConsent.rawValue), which captures nothing"
+      )
+    }
     let now = clock.date
     let focus = scripted.focus(at: now, excluded: settings.isExcluded(bundleID: scripted.bundleID))
     let previous = lastFocus
@@ -216,6 +241,8 @@ public actor SensingPipeline {
   // MARK: Focus
 
   private func focusDidChange(_ change: FocusChange) async {
+    // A change the tracker sent just before it was stopped.
+    guard settings.hasConsent else { return }
     let previous = lastFocus
     lastFocus = change.context
     await broadcaster.send(.focusChanged(change.context))
@@ -270,6 +297,13 @@ public actor SensingPipeline {
     while !Task.isCancelled {
       let now = clock.date
       await runRetentionIfDue(now: now)
+      guard settings.hasConsent else {
+        setMode(.waitingForConsent)
+        scheduler.setActive(false, at: now)
+        publishCadence(now: now)
+        await signal.wait(for: .seconds(settings.idlePollInterval))
+        continue
+      }
       if source == .hermetic {
         // Only the person's own choices move a hermetic pipeline:
         // pausing, and the settings.
@@ -381,13 +415,13 @@ public actor SensingPipeline {
   }
 
   private func computeMode() -> SensingMode {
-    if userPaused { return .paused }
-    if !permissions.anyGranted { return .waitingForPermissions }
-    if let lastFocus, lastFocus.isExcluded { return .excluded }
-    if isIdle { return .idle }
-    if !permissions.screenRecording { return .accessibilityOnly }
-    if !permissions.accessibility { return .screenOnly }
-    return .watching
+    SensingMode.resolve(
+      consented: settings.hasConsent,
+      paused: userPaused,
+      permissions: permissions,
+      frontmostExcluded: lastFocus?.isExcluded ?? false,
+      idle: isIdle
+    )
   }
 
   private func setMode(_ newMode: SensingMode) {
@@ -463,8 +497,11 @@ public actor SensingPipeline {
       cadence.lastError = "ocr: \(error)"
     }
     // Checked again here: OCR can take hundreds of milliseconds, and this is
-    // the last point before the frame and its text become durable.
-    guard lastFocus?.isExcluded != true, await frontmostIsStill(focus) else { return }
+    // the last point before the frame and its text become durable. Consent
+    // withdrawn meanwhile discards it too.
+    guard settings.hasConsent, lastFocus?.isExcluded != true, await frontmostIsStill(focus) else {
+      return
+    }
     await journalCapture(
       frame,
       hash: hash,

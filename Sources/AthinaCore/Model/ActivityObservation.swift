@@ -236,6 +236,9 @@ public enum SensingMode: String, Codable, Sendable, CaseIterable {
   case screenOnly
   /// Neither permission granted: nothing is sensed.
   case waitingForPermissions
+  /// The person has not allowed Athina to watch and send (`Consent`), so
+  /// nothing is sensed, journaled, or sent, whatever else is true.
+  case waitingForConsent
   case paused
   case idle
   case excluded
@@ -248,6 +251,7 @@ public enum SensingMode: String, Codable, Sendable, CaseIterable {
     case .accessibilityOnly: "Accessibility only"
     case .screenOnly: "Screen only"
     case .waitingForPermissions: "Waiting for permissions"
+    case .waitingForConsent: "Waiting for consent"
     case .paused: "Paused"
     case .idle: "Idle"
     case .excluded: "Excluded app"
@@ -269,6 +273,27 @@ public enum SensingMode: String, Codable, Sendable, CaseIterable {
     case .watching, .accessibilityOnly, .screenOnly: true
     default: false
     }
+  }
+
+  /// The mode for what the pipeline knows, in order of what outranks what.
+  ///
+  /// Consent comes first: without it nothing else is looked at, so no
+  /// pause, permission, focus, or idle state can let a capture through.
+  public static func resolve(
+    consented: Bool,
+    paused: Bool,
+    permissions: PermissionStatus,
+    frontmostExcluded: Bool,
+    idle: Bool
+  ) -> SensingMode {
+    if !consented { return .waitingForConsent }
+    if paused { return .paused }
+    if !permissions.anyGranted { return .waitingForPermissions }
+    if frontmostExcluded { return .excluded }
+    if idle { return .idle }
+    if !permissions.screenRecording { return .accessibilityOnly }
+    if !permissions.accessibility { return .screenOnly }
+    return .watching
   }
 }
 

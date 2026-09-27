@@ -1,5 +1,7 @@
 # Privacy model
 
+- **Nothing is sensed or sent before Allow** in the consent window, and
+  withdrawing in Settings > Privacy stops both at once (see Consent below).
 - Sensing stays on this Mac: the journal, thumbnails, and settings never leave
   it. The only network peer is `api.anthropic.com`, reached only by the mentor
   loop, only when an API key is saved, and only while the loop is enabled or
@@ -107,3 +109,47 @@
 - The journal directory is created with mode 0700. Athina makes every one of
   them itself, the live one and each replay's, so there is no path someone
   else chose for a journal to land in.
+
+## Consent
+
+Nothing is sensed and nothing is sent until the person allows it. The consent
+window, "Athina and Your Privacy", is the first thing a launch shows while
+there is no Allow on record: a first launch, an install from before the window
+existed, and a launch after Not Now or a withdrawal. It comes before the
+Permissions window, which opens only after Allow and only when a permission is
+missing, so no permission is asked about first. It names Anthropic as who
+receives what is sent, lists what leaves the Mac (see above), says what the
+journal keeps and for how long from the settings in force, and shows the menu
+bar owl with its eyes open, the sign that Athina is watching, and lidded, the
+sign that it is not. Allow and Not Now are its only answers; closing it
+answers nothing.
+
+The answer is kept in `settings.json` under `consent` (`Consent`): Allow or
+Not Now, when, and the version of the disclosure it answered. An Allow counts
+only for `Consent.disclosureVersion` or later, so a change to what is sent
+that the person would want to hear about bumps the version and the window
+asks again. A settings file that cannot be read loads as the defaults, which
+hold no answer, so the window asks again then too.
+
+Without an Allow the sensing pipeline stays in the `waitingForConsent` mode
+(`SensingMode.resolve`, which checks consent before anything else): focus
+tracking is not started, and no input, idle, permission, focus, window, or
+frame is read or journaled; only retention runs, so what an earlier Allow let
+in still ages out. The mentor loop holds every call: `MentorScheduler.callGate`
+is asked by every gate and once more on the one path to the network, Test
+Connection included. The owl shows its lidded, paused eyes, the menu reads
+"Not watching until you allow it" with Allow Watching… as its command, and
+talking back says it is not listening.
+
+Settings > Privacy shows the answer and when it was given. Withdraw Consent
+stops capturing and calling at once: the pipeline stops tracking focus and
+drops a capture in flight before it is journaled, the loop drops a waiting
+question and takes down the toast and callout, and a call already on the
+network finishes but its suggestion is never shown. What the journal already
+holds stays until it expires or is cleared. Review and Allow… opens the window
+again. The privacy policy is linked from both places once
+`Consent.privacyPolicyURL` names it; until the policy is published it is nil
+and no link is shown.
+
+The end-to-end harness seeds an Allow ([e2e](e2e.md) "The warm fixture home"),
+so its scenarios start sensing as the owner's own Athina does.

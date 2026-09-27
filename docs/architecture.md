@@ -51,7 +51,7 @@ Tests/AthinaCoreTests         Swift Testing suites for the pure parts, with JSON
 
 1. re-reads permissions (every 2 s) and runs journal retention (every 10 min by default),
 2. polls seconds-since-last-input and marks idle after `idleThreshold`,
-3. computes the mode (`paused` > `waitingForPermissions` > `excluded` > `idle` > `watching` / `accessibilityOnly` / `screenOnly`),
+3. computes the mode (`waitingForConsent` > `paused` > `waitingForPermissions` > `excluded` > `idle` > `watching` / `accessibilityOnly` / `screenOnly`; without consent it reads nothing else and does only retention, see [Consent](privacy.md#consent)),
 4. asks `CaptureScheduler` whether a capture is due, and
 5. sleeps until the next due time or the poll interval, or until a focus change wakes it.
 

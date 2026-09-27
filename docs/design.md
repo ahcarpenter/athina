@@ -98,6 +98,13 @@ particular to this app:
   Understanding… open a confirmation that names what is lost; the confirming
   button is plain, since it is what the person chose, and Cancel is always
   there.
+- **Consent comes first and asks plainly.** The consent window is the first
+  thing a launch shows until there is an Allow, as the HIG (Privacy) asks
+  for data collection to be explained before it starts; it says who receives
+  what in short rows, leads with its answer as the default button (Allow)
+  beside Not Now as the cancel button, and shows the menu bar owl itself as
+  the sign that Athina is watching. Withdrawing is a button beside the
+  answer in Settings > Privacy with no confirmation, since Allow undoes it.
 - **Permissions explain before they ask.** The window never prompts on its own,
   each permission has one button, and the purpose strings in
   `Resources/Info.plist` say the same as the window in one sentence.

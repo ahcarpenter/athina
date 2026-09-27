@@ -21,6 +21,8 @@ public struct MenuModel: Equatable, Sendable {
     case answer(SuggestionFeedback)
     case openSuggestions
     case openPermissions
+    /// Opens the consent window (`Consent`).
+    case openConsent
     /// Opens Settings on the pane with this identifier, or on the one it
     /// last showed when nil.
     case openSettings(pane: String?)

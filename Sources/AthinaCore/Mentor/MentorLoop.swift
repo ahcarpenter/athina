@@ -77,6 +77,11 @@ public actor MentorLoop {
   private var status = MentorStatus()
   private var lastPublishedStatus: MentorStatus?
   private var mode: SensingMode = .stopped
+  /// Whether the person has allowed Athina to watch and send (`Consent`).
+  ///
+  /// Set by the app, not read from the sensing stream, so a withdrawal
+  /// holds every call at once rather than when the mode change arrives.
+  private var consented: Bool
   private var apiKey: String?
   /// Tiers with a call in progress; a Test Connection can overlap a tier call.
   private var inFlight: Set<ModelTier> = []
@@ -132,6 +137,8 @@ public actor MentorLoop {
   ///   - client: The seam every model call goes through: live or replay.
   ///   - keyStore: Where the API key is read from; never read in a replay.
   ///   - events: The sensing stream.
+  ///   - consented: Whether the person has allowed Athina to watch and
+  ///     send (`Consent`); until then every call is held.
   ///   - clock: The clock every date, wait, and uptime is read from.
   ///   - calendar: Decides when a day ends for expiry.
   public init(
@@ -140,11 +147,13 @@ public actor MentorLoop {
     client: any ClaudeClient,
     keyStore: any KeyStore,
     events: AsyncStream<SensingEvent>,
+    consented: Bool,
     clock: any AthinaClock,
     calendar: Calendar = .current
   ) {
     let validated = settings.validated()
     self.settings = validated
+    self.consented = consented
     self.journal = journal
     self.client = client
     self.keyStore = keyStore
@@ -249,6 +258,23 @@ public actor MentorLoop {
     await publishStatus()
   }
 
+  /// Call when the person allows or withdraws consent.
+  ///
+  /// A withdrawal holds every call from here on, drops the question waiting
+  /// for a call in flight, and expires a suggestion held for a talked-to
+  /// toast; a call already on the network cannot be taken back, but its
+  /// suggestion is never shown (`MentorScheduler.publishGate`).
+  public func setConsented(_ granted: Bool) async {
+    guard granted != consented else { return }
+    consented = granted
+    MentorLoop.log.notice("consent \(granted ? "allowed" : "withdrawn", privacy: .public)")
+    if !granted {
+      dropPendingQuestion()
+      await expireHeldSuggestion()
+    }
+    await publishStatus()
+  }
+
   /// Call after the key is saved or removed in Settings.
   public func apiKeyChanged() async {
     await reloadKey()
@@ -314,6 +340,9 @@ public actor MentorLoop {
   /// Returns the model that answered, or the API's own error message. Counted
   /// as spend like any other call.
   public func testConnection() async -> Result<String, ClaudeClientError> {
+    if let hold = MentorScheduler.callGate(consented: consented) {
+      return .failure(.notSent(hold.label))
+    }
     await reloadKey()
     guard let apiKey else { return .failure(.transport("no API key saved")) }
     let request = MessagesRequest(
@@ -378,6 +407,7 @@ public actor MentorLoop {
     spend.prune(now: now)
     return MentorScheduler.Conditions(
       mode: mode,
+      consented: consented,
       hasAPIKey: apiKey != nil,
       callInFlight: !inFlight.isEmpty,
       talkingBack: talkingBack,
@@ -710,7 +740,7 @@ public actor MentorLoop {
       }
       heldSuggestion = suggestion
       MentorLoop.log.notice("suggestion \(suggestion.id) held while the user talks back")
-    case .expired:
+    case .expired, .withdrawn:
       await expireUnseen(suggestion, now: now)
     }
   }
@@ -1189,7 +1219,9 @@ public actor MentorLoop {
   /// The single path to the network.
   ///
   /// Marks the tier in flight, times the call, and prices its usage; the caller
-  /// sets the outcome.
+  /// sets the outcome. Nothing is sent without consent
+  /// (`MentorScheduler.callGate`), whichever path the call came by and
+  /// whatever its gate saw before an await.
   private func perform(
     tier: ModelTier,
     request: MessagesRequest,
@@ -1201,14 +1233,18 @@ public actor MentorLoop {
     let started = clock.date
     let identity = CallIdentity(kind: tier.rawValue, promptVersion: MentorPrompts.version)
     let result: Result<MessagesResponse, ClaudeClientError>
-    do {
-      result = .success(
-        try await client.send(request, call: identity, apiKey: apiKey, timeout: timeout)
-      )
-    } catch let error as ClaudeClientError {
-      result = .failure(error)
-    } catch {
-      result = .failure(.transport(error.localizedDescription))
+    if let hold = MentorScheduler.callGate(consented: consented) {
+      result = .failure(.notSent(hold.label))
+    } else {
+      do {
+        result = .success(
+          try await client.send(request, call: identity, apiKey: apiKey, timeout: timeout)
+        )
+      } catch let error as ClaudeClientError {
+        result = .failure(error)
+      } catch {
+        result = .failure(.transport(error.localizedDescription))
+      }
     }
     let latency = clock.date.timeIntervalSince(started)
     inFlight.remove(tier)
@@ -1288,6 +1324,7 @@ public actor MentorLoop {
   // MARK: Status
 
   private func availability(now: Date) -> MentorStatus.Availability {
+    if !consented { return .noConsent }
     if !settings.enabled { return .disabled }
     if apiKey == nil { return .noAPIKey }
     if spend.isCapped(now: now) { return .capReached(until: SpendMeter.nextHourStart(after: now)) }

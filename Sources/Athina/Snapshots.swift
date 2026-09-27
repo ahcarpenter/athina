@@ -89,6 +89,13 @@ enum Snapshots {
       CGSize(width: SettingsView.paneWidth, height: height)
     }
     return [
+      // What a first launch shows before anything else.
+      Spec(
+        "consent",
+        CGSize(width: 600, height: 900),
+        AnyView(ConsentView()),
+        AppState.sampleWithoutConsent()
+      ),
       Spec("permissions", CGSize(width: 580, height: 780), AnyView(PermissionsView()), state),
       Spec("debug-panel", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), state),
       Spec(
@@ -179,7 +186,13 @@ enum Snapshots {
         AnyView(JournalSettings().formStyle(.grouped)),
         state
       ),
-      Spec("settings-privacy", pane, AnyView(PrivacySettings().formStyle(.grouped)), state),
+      Spec("settings-privacy", whole(760), AnyView(PrivacySettings().formStyle(.grouped)), state),
+      Spec(
+        "settings-privacy-withdrawn",
+        whole(760),
+        AnyView(PrivacySettings().formStyle(.grouped)),
+        AppState.sampleWithoutConsent(declined: true)
+      ),
       // Off, as every install starts, and enabled, with its button live.
       Spec(
         "settings-advanced",
@@ -679,6 +692,7 @@ extension AppState {
     showDebugPanel: Bool = false
   ) -> AppState {
     var settings = SensingSettings()
+    settings.consent = sampleConsent
     settings.showDebugPanel = showDebugPanel
     settings.mentor.onlyMentorInsideContexts = true
     settings.mentor.contexts = SampleSuggestions.contexts
@@ -949,6 +963,7 @@ extension AppState {
   /// entries, calls, or declared contexts, for the empty states.
   static func sampleEmpty() -> AppState {
     var settings = SensingSettings()
+    settings.consent = sampleConsent
     settings.mentor.onlyMentorInsideContexts = true
     let state = AppState(sampleWithSettings: settings)
     state.mode = .watching
@@ -956,9 +971,31 @@ extension AppState {
     return state
   }
 
+  /// The Allow every sample that watches was given, three days before
+  /// `Snapshots.referenceDate`, so a render reads the same every time.
+  static let sampleConsent = Consent(
+    answer: .allowed,
+    at: Snapshots.referenceDate.addingTimeInterval(-3 * 86400)
+  )
+
+  /// A first launch, before the consent window is answered, or, with
+  /// `declined`, after Not Now or a withdrawal: nothing sensed, nothing sent.
+  static func sampleWithoutConsent(declined: Bool = false) -> AppState {
+    var settings = SensingSettings()
+    settings.consent =
+      declined
+      ? Consent(answer: .declined, at: Snapshots.referenceDate.addingTimeInterval(-3600)) : nil
+    let state = AppState(sampleWithSettings: settings)
+    state.mode = .waitingForConsent
+    state.permissions = PermissionStatus(screenRecording: false, accessibility: false)
+    state.mentorStatus = MentorStatus(availability: .noConsent, mode: .waitingForConsent)
+    return state
+  }
+
   /// Every context slot declared, for the editor's limit state.
   static func sampleAtContextCap() -> AppState {
     var settings = SensingSettings()
+    settings.consent = sampleConsent
     settings.mentor.onlyMentorInsideContexts = true
     settings.mentor.contexts = (1...ContextRules.maxContexts).map { index in
       index <= SampleSuggestions.contexts.count

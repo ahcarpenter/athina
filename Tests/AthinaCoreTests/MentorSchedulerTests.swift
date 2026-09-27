@@ -80,6 +80,7 @@ enum Fixtures {
   ) -> MentorScheduler.Conditions {
     MentorScheduler.Conditions(
       mode: mode,
+      consented: true,
       hasAPIKey: key,
       callInFlight: inFlight,
       talkingBack: talkingBack,
