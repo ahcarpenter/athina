@@ -38,11 +38,6 @@ if [ "$bash_major" -ge 4 ]; then
 else
 	lack bash "bash 4 or newer first on PATH for the e2e harness (brew install bash); $bash_path is ${bash_major}"
 fi
-if command -v python3 >/dev/null; then
-	report python3 "$(command -v python3)"
-else
-	lack python3 "the e2e harness reads its JSON with it"
-fi
 if command -v gh >/dev/null; then
 	if gh auth status >/dev/null 2>&1; then
 		report gh "$(command -v gh), signed in"

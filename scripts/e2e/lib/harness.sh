@@ -27,8 +27,6 @@ E2E_APP="$ROOT/build/e2e/Athina.app"
 E2E_BINARY="$E2E_APP/Contents/MacOS/Athina"
 E2E_BUNDLE_ID="com.ahcarpenter.athina.e2e"
 DRIVE="$ROOT/.build/debug/athina-drive"
-# When the build that last brought athina-drive up to date started (ensure_drive).
-DRIVE_BUILT="$ROOT/build/athina-drive.built"
 FIXTURES="$ROOT/Tests/AthinaCoreTests/Fixtures/Replay"
 SETTINGS_SEED="$E2E_DIR/lib/settings.json"
 # The API tier's scenarios: Swift Testing tests, one per scenario, run with
@@ -229,10 +227,10 @@ sources_newer_than() {
 # Is anything under the given directories newer than the stamp of the build
 # that last brought the built product up to date? Not the product itself: a
 # source saved during a build, after it was compiled, is older than the product
-# that build lands, and SwiftPM leaves athina-drive as it was when no source
-# really changed, so after a touch-only edit it stays older than that source
-# however often it is built. The stamp, made when that build started, is what
-# says the source was built.
+# that build lands, and SwiftPM leaves a binary as it was when no source really
+# changed, so after a touch-only edit it stays older than that source however
+# often it is built. The stamp, made when that build started, is what says the
+# source was built.
 sources_newer_than_build() {
 	local product="$1" stamp="$2"
 	shift 2
@@ -252,15 +250,12 @@ build_when() {
 	fi
 }
 
+# The harness's drive tool. SwiftPM decides what is out of date, so this takes
+# a second or two when nothing is, and the entry point runs it before it takes
+# the screen lock.
 ensure_drive() {
-	sources_newer_than_build "$DRIVE" "$DRIVE_BUILT" "$ROOT/Sources/AthinaDrive" "$ROOT/Sources/AthinaE2E" "$ROOT/Sources/AthinaControlProtocol" || return 0
 	log "building athina-drive $(build_when)"
-	# Stamped when the build starts, so a source saved during it is still newer.
-	mkdir -p "$(dirname "$DRIVE_BUILT")"
-	local started
-	started="$(mktemp "$DRIVE_BUILT.XXXXXX")"
-	(cd "$ROOT" && swift build --product athina-drive >/dev/null) || { rm -f "$started"; die "could not build athina-drive"; }
-	mv -f "$started" "$DRIVE_BUILT"
+	(cd "$ROOT" && swift build -q --product athina-drive >&2 8>&- 9>&-) || die "could not build athina-drive"
 }
 
 # A check of a stale bundle proves nothing, so the app is rebuilt when a source
@@ -416,26 +411,16 @@ new_home() {
 # and the toast lives long enough to survive a wait for idle input. The triage
 # gate is at its 5 second floor, so with the replay answering at once (see
 # launch_athina) the first toast comes seconds after the first capture.
+#
+# A scenario's overrides go over the seed key by key, into nested objects too
+# (jq's `*`), so a scenario names only the settings it changes.
 seed_settings() {
-	local home="$1" overrides="${2:-}"
+	local home="$1" overrides="${2:-}" folder
 	[ -n "$overrides" ] || overrides='{}'
-	HOME_DIR="$home" OVERRIDES="$overrides" SETTINGS_SEED="$SETTINGS_SEED" python3 - <<'PY'
-import json, os, pathlib
-base = json.loads(pathlib.Path(os.environ["SETTINGS_SEED"]).read_text())
-overrides = json.loads(os.environ["OVERRIDES"])
-
-def merge(into, extra):
-    for key, value in extra.items():
-        if isinstance(value, dict) and isinstance(into.get(key), dict):
-            merge(into[key], value)
-        else:
-            into[key] = value
-
-merge(base, overrides)
-path = pathlib.Path(os.environ["HOME_DIR"]) / "Library/Application Support/athina/settings.json"
-path.parent.mkdir(parents=True, exist_ok=True)
-path.write_text(json.dumps(base, indent=2))
-PY
+	folder="$home/Library/Application Support/athina"
+	mkdir -p "$folder"
+	jq --argjson overrides "$overrides" '. * $overrides' "$SETTINGS_SEED" >"$folder/settings.json" \
+		|| die "could not write the settings from $SETTINGS_SEED and $overrides"
 }
 
 # --- Launching and stopping ---------------------------------------------------
@@ -854,11 +839,10 @@ control_wait() {
 	die "the control API never answered; see $RUN_DIR/app.log and $RUN_DIR/api.log"
 }
 
-# A Python expression over a JSON answer, bound to `r`, printed: for checks
-# that count or search what an answer holds. Arguments after the expression
-# are `a[0]`, `a[1]`, and so on.
-json_eval() {
-	python3 -c 'import json, re, sys; r = json.loads(sys.argv[1]); a = sys.argv[3:]; print(eval(sys.argv[2]))' "$@" 2>>"$RUN_DIR/api.log"
+# A jq filter over a JSON answer, its strings printed raw: for checks that
+# count or search what an answer holds.
+json_query() {
+	jq -r "$2" <<<"$1" 2>>"$RUN_DIR/api.log"
 }
 
 # One request to the app; the answer goes to api.log and, with --field, the
@@ -924,19 +908,12 @@ write_evidence() {
 	return 0
 }
 
-# One machine-readable line per scenario, on stdout, whatever the log says.
+# One machine-readable line per scenario, on stdout, whatever the log says, in
+# the shape an API-tier test writes its own (Tests/E2EAPITests): one line of
+# JSON with its keys sorted.
 result_line() {
-	local name="$1" result="$2" seconds="$3" detail="$4"
-	NAME="$name" RESULT="$result" SECONDS_TAKEN="$seconds" DETAIL="$detail" EVIDENCE="$RUN_DIR" \
-		CHECKS="$(printf '%s\n' ${CHECK_LINES[@]+"${CHECK_LINES[@]}"})" python3 - <<'PY'
-import json, os
-print(json.dumps({
-    "scenario": os.environ["NAME"],
-    "result": os.environ["RESULT"],
-    "seconds": int(os.environ["SECONDS_TAKEN"]),
-    "detail": os.environ["DETAIL"],
-    "evidence": os.environ["EVIDENCE"],
-    "checks": [line for line in os.environ["CHECKS"].splitlines() if line],
-}, sort_keys=True))
-PY
+	jq -n -c -S --arg scenario "$1" --arg result "$2" --argjson seconds "$3" --arg detail "$4" \
+		--arg evidence "$RUN_DIR" \
+		'{$scenario, $result, $seconds, $detail, $evidence, checks: $ARGS.positional}' \
+		--args ${CHECK_LINES[@]+"${CHECK_LINES[@]}"}
 }

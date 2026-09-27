@@ -57,16 +57,15 @@ hermetic (see [Hermetic runs](#hermetic-runs)) and takes no lock at all, so any 
 once, beside each other, beside a real-screen run, and beside whoever is using
 the Mac: `run --jobs <n>` runs up to `n` of them at a time, with the
 real-screen scenarios one at a time beside them, and each scenario's log lines
-carry its name. `run` and `warm` build `build/Athina.app` and `athina-drive`
-when a source file was saved after the last build of each started (for
-athina-drive, the harness's own; for the app, any `scripts/bundle.sh` build,
-`make build` included), the API tier's copy of the app when the app is not
-the one it was made from, and the API tier's tests, which SwiftPM brings up to
-date, before any scenario starts, so no other checkout
+carry its name. `run` and `warm` build `build/Athina.app` when a source file
+was saved after its last build started (any `scripts/bundle.sh` build, `make
+build` included), the API tier's copy of the app when the app is not the one
+it was made from, and `athina-drive` and the API tier's tests, which SwiftPM
+brings up to date, before any scenario starts, so no other checkout
 waits on this one's build: the log says "building ... before taking the screen
-lock", then "took the screen lock". They build again inside the lock only when a
-source file was saved after that build started, and say so; a touch-only edit
-builds each once. So call the
+lock", then "took the screen lock". `warm` builds the app again inside the lock
+only when a source file was saved after that build started, and says so; a
+touch-only edit builds it once. So call the
 harness bare: a hand-held `lockf` around it holds the lock through the build
 too. Before they build, `run` and `warm` take their checkout's own lock,
 `build/athina-e2e.lock`, the same way, and keep it to the end, so a second

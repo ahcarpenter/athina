@@ -11,7 +11,7 @@ coding agents, with pointers into these docs.
 - macOS 26 or later
 - Xcode 26 or later with its command line tools (`swift`, `codesign`)
 - For development: bash 4 or newer first on `PATH` (macOS ships 3.2; `brew
-  install bash`) and python3, which the end-to-end harness runs on; `gh`,
+  install bash`), which the end-to-end harness runs on; `gh`,
   signed in, which `make approve` downloads CI's renders with; and, for
   the end-to-end harness's real-screen tier, Screen Recording and
   Accessibility granted to the terminal that runs it (see [Permissions](README.md#permissions)).
@@ -44,7 +44,7 @@ make check                   # lint, test and test-snapshots: what local validat
 make approve                 # after an intended UI change, takes the ui-snapshots baselines, smoke references and e2e checkpoints from CI's runs of HEAD, all or none (see docs/ci.md)
 make lint                    # checks every Swift file against the style without changing it, as CI does
 make format                  # formats every Swift file in place to Google's Swift style (see docs/code-style.md)
-make doctor                  # names what this Mac is missing: Xcode, bash 4, python3, gh, the grants, the warm e2e home
+make doctor                  # names what this Mac is missing: Xcode, bash 4, gh, the grants, the warm e2e home
 
 make run-live                # builds and launches the live app, replacing only the copy this checkout's run-live or record launched (spends API credits)
 make record                  # the same, writing every model call to a fixture file (spends API credits)
