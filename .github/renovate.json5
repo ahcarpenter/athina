@@ -1,0 +1,45 @@
+// Renovate's dependency updates (docs/ci.md): once a
+// week, one pull request for the GitHub Actions the workflows use and one for
+// the Swift packages, each checked by CI like any other. Nothing runs until
+// the Mend Renovate GitHub App is installed on the repository; its security
+// updates read the repository's Dependabot alerts, which are turned on in its
+// settings, with no Dependabot configuration of its own.
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: ['config:recommended', 'schedule:weekly'],
+  timezone: 'America/New_York',
+  // The only two kinds of dependency here: the actions in .github/workflows
+  // and .github/actions, and the packages the two Package.swift manifests pin
+  // (the root's swift-snapshot-testing, Tools/XcodeGenTool's XcodeGen).
+  enabledManagers: ['github-actions', 'swift'],
+  semanticCommits: 'enabled',
+  packageRules: [
+    {
+      matchManagers: ['github-actions'],
+      groupName: 'GitHub Actions',
+      semanticCommitType: 'ci',
+    },
+    {
+      // The runner images (macos-26, ubuntu-latest) stay put: moving CI to a
+      // new macOS image is one deliberate commit that also refreshes both
+      // sets of approved images (docs/ci.md).
+      matchDatasources: ['github-runners'],
+      enabled: false,
+    },
+    {
+      matchManagers: ['swift'],
+      groupName: 'Swift packages',
+      semanticCommitType: 'build',
+    },
+    {
+      // Renovate moves XcodeGen's own pin in the committed Package.resolved,
+      // not the pins of the packages XcodeGen itself depends on, which a new
+      // XcodeGen can need moved too.
+      matchManagers: ['swift'],
+      matchFileNames: ['Tools/XcodeGenTool/Package.swift'],
+      prBodyNotes: [
+        'Before merging, run `swift package --package-path Tools/XcodeGenTool resolve` and commit any change it makes to `Tools/XcodeGenTool/Package.resolved`: this pull request moves XcodeGen\'s own pin there, not the pins of the packages it depends on.',
+      ],
+    },
+  ],
+}

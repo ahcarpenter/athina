@@ -116,9 +116,9 @@ import Testing
     s.onlyMentorInsideContexts = true
     s.contexts = [MentorshipContext(name: "writing Swift", detail: "the app")]
     let data = try JSONEncoder().encode(s)
-    #expect(try JSONDecoder().decode(MentorSettings.self, from: data) == s)
+    #expect(try MentorSettings(json: data) == s)
 
-    let old = try JSONDecoder().decode(MentorSettings.self, from: Data(#"{"enabled": true}"#.utf8))
+    let old = try MentorSettings(json: Data(#"{"enabled": true}"#.utf8))
     #expect(!old.onlyMentorInsideContexts)
     #expect(old.contexts.isEmpty)
   }
