@@ -20,7 +20,8 @@
 <p align="center"><sub>Someone is about to paste a cleanup script into the terminal: Athina notes the risk and outlines the line it means. Both pictures are one frame of the real screen, taken from a replay of the committed fixtures.</sub></p>
 
 **Status:** early. Athina runs on macOS 26 or later, and feedback is wanted:
-[issues](https://github.com/ahcarpenter/athina/issues) are welcome.
+[issues](https://github.com/ahcarpenter/athina/issues) are welcome. It is
+open source under the [MIT License](LICENSE).
 
 ## Overview
 
@@ -63,11 +64,17 @@ what is kept.
 
 ## Install
 
-A release is a notarized download from outside the App Store: open
+A release is a download from the repository's
+[GitHub Releases](https://github.com/ahcarpenter/athina/releases): open
 `Athina-<version>.dmg` and drag Athina onto Applications, or unzip
-`Athina-<version>.zip` into Applications. There are no automatic updates yet:
-a new version is downloaded and dragged over the old one. A released copy
-uses the same journal, settings and keychain item as a development build (see
+`Athina-<version>.zip` into Applications. Releases are not notarized yet, so
+macOS refuses the first launch: choose Done, then Open Anyway next to Athina in
+System Settings > Privacy & Security, and confirm; each update asks again, and
+asks once to read the saved key (see
+[Unsigned releases](docs/releasing.md#unsigned-releases)). There are no
+automatic updates yet: a new version is downloaded and dragged over the old
+one. A released copy uses the same journal, settings and keychain item as a
+development build (see
 [A released copy and your data, grants, and key](docs/releasing.md#a-released-copy-and-your-data-grants-and-key)),
 and the first live launch of either moves what an earlier Mentor kept (see
 [Coming from Mentor](docs/coming-from-mentor.md)). To build Athina from source
@@ -76,8 +83,8 @@ instead, see [CONTRIBUTING.md](CONTRIBUTING.md).
 **Try it without a key.** From a source checkout, `make run` starts a replay:
 Athina watches your real screen but answers from model calls recorded in the
 repository, so it needs no API key and spends nothing. It takes Xcode 26 or
-later and the two permissions below; [CONTRIBUTING.md](CONTRIBUTING.md)
-has the setup.
+later, your Allow in the consent window and the two permissions below;
+[CONTRIBUTING.md](CONTRIBUTING.md) has the setup.
 
 ## Setup: the Anthropic API key
 
@@ -117,12 +124,12 @@ it.
 
 ## Permissions
 
-Before anything else, a first launch asks whether Athina may watch the screen
-and send what it reads to Anthropic, and nothing is sensed or sent until you
-choose Allow (see [Consent](docs/privacy.md#consent)). Athina then needs two
-permissions and asks for neither until you press its button in the window that
-opens once you have allowed it; the other two are optional and serve only
-talking back ([how it asks](docs/privacy.md#permissions)).
+A first launch asks before anything else whether Athina may watch the screen
+and send what it reads to Anthropic; nothing is sensed or sent until you choose
+Allow ([Consent](docs/privacy.md#consent)). Athina then needs two permissions
+and asks for neither until you press its button in the permissions window; the
+other two are optional and serve only talking back
+([how it asks](docs/privacy.md#permissions)).
 
 | Permission | Used for | Without it |
 | --- | --- | --- |
@@ -150,6 +157,6 @@ how a change reaches `main`; `docs/` holds the reference:
 | [testing.md](docs/testing.md) | each test layer's job, where it runs, and what the tests and snapshots cover |
 | [replay.md](docs/replay.md) | replay, the faster clock, replays side by side, recording, the committed fixtures |
 | [e2e.md](docs/e2e.md) | the end-to-end harness, its scenarios and tiers, the control API, hermetic runs |
-| [ci.md](docs/ci.md) | the CI checks, the merge-checks label, the UI snapshot gates, checkpoints |
-| [releasing.md](docs/releasing.md) | releases, code signing, the sandboxed build, the Xcode project |
+| [ci.md](docs/ci.md) | the CI checks, the ready-for-review snapshot gate, checkpoints |
+| [releasing.md](docs/releasing.md) | releases, unsigned releases, code signing |
 | [coming-from-mentor.md](docs/coming-from-mentor.md) | what moves from Mentor on the first launch |

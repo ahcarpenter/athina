@@ -157,8 +157,9 @@ so its scenarios start sensing as the owner's own Athina does.
 ## Permissions
 
 The [README](../README.md#permissions) lists each permission, what it is used
-for, and how Athina works without it. Athina explains each in a window that opens
-at launch whenever one is missing, once consent is given. The window explains before it asks: no
+for, and how Athina works without it. Athina explains each in a window that
+opens at launch whenever one is missing, once the person has allowed it (see
+[Consent](#consent)). The window explains before it asks: no
 system prompt appears when it opens. Each missing permission has one button. For
 the sensing pair it is Open System Settings, which registers Athina in that
 permission's System Settings list (macOS may show its own note pointing there)
