@@ -1,8 +1,7 @@
 import Foundation
 import Testing
 
-/// When and how the harness rebuilds athina-drive and the app
-/// (`sources_newer_than_build` and `ensure_drive` in
+/// When the harness rebuilds the app (`sources_newer_than_build` in
 /// `scripts/e2e/lib/harness.sh`, and the stamp `scripts/bundle.sh` writes), on
 /// files of each test's own with explicit modification times and a stand-in
 /// `swift`, so no test waits on the clock or touches a real build.
@@ -17,10 +16,8 @@ import Testing
   private let directory = FileManager.default.temporaryDirectory
     .appendingPathComponent("athina-build-stamp-\(UUID().uuidString)", isDirectory: true)
 
-  private var product: URL { directory.appendingPathComponent("athina-drive") }
-  private var stamp: URL { directory.appendingPathComponent("athina-drive.built") }
   private var sources: URL { directory.appendingPathComponent("Sources", isDirectory: true) }
-  private var source: URL { sources.appendingPathComponent("Drive.swift") }
+  private var source: URL { sources.appendingPathComponent("Athina.swift") }
 
   /// What the stand-in `swift` builds for scripts/bundle.sh, and where the bundle lands.
   private var binary: URL { directory.appendingPathComponent("bin-path/Athina") }
@@ -38,7 +35,7 @@ import Testing
     )
     FileManager.default.createFile(atPath: url.path, contents: Data())
     var attributes: [FileAttributeKey: Any] = [.modificationDate: base.addingTimeInterval(seconds)]
-    if [product, binary].contains(url) { attributes[.posixPermissions] = 0o755 }
+    if [app, binary].contains(url) { attributes[.posixPermissions] = 0o755 }
     try FileManager.default.setAttributes(attributes, ofItemAtPath: url.path)
   }
 
@@ -55,15 +52,8 @@ import Testing
   }
 
   /// Starts bash on `body` with the harness sourced and `arguments` as `$@`.
-  private func harness(
-    _ body: String,
-    _ arguments: [String],
-    environment: [String: String] = [:]
-  ) throws -> Process {
-    try bash(
-      ["-c", "set -euo pipefail\nsource '\(Self.library)'\n\(body)", "bash"] + arguments,
-      environment: environment
-    )
+  private func harness(_ body: String, _ arguments: [String]) throws -> Process {
+    try bash(["-c", "set -euo pipefail\nsource '\(Self.library)'\n\(body)", "bash"] + arguments)
   }
 
   /// Puts a stand-in `swift` running `script` first on a path, and returns that path.
@@ -87,62 +77,48 @@ import Testing
     return process.terminationStatus == 0
   }
 
-  @Test func aMissingProductIsBuilt() throws {
-    try make(stamp, at: 10)
+  @Test func aMissingAppIsBuilt() throws {
+    try make(appStamp, at: 10)
     try make(source, at: 0)
-    #expect(try needsBuild(product, stamp))
+    #expect(try needsBuild(app, appStamp))
   }
 
-  @Test func aProductWithNoStampIsBuilt() throws {
-    try make(product, at: 10)
+  @Test func anAppWithNoStampIsBuilt() throws {
+    try make(app, at: 10)
     try make(source, at: 0)
-    #expect(try needsBuild(product, stamp))
+    #expect(try needsBuild(app, appStamp))
   }
 
-  @Test func anUpToDateProductIsNotBuilt() throws {
-    try make(stamp, at: 10)
-    try make(product, at: 20)
+  @Test func anUpToDateAppIsNotBuilt() throws {
+    try make(appStamp, at: 10)
+    try make(app, at: 20)
     try make(source, at: 0)
-    #expect(try !needsBuild(product, stamp))
+    #expect(try !needsBuild(app, appStamp))
   }
 
   /// SwiftPM does not relink when a touched source compiles to the same
-  /// thing, so the product stays older than it; the stamp says it was built.
+  /// thing, so the binary stays older than it; the stamp says it was built.
   @Test func aTouchOnlyEditBuildsOnce() throws {
-    try make(product, at: 0)
+    try make(app, at: 0)
     try make(source, at: 10)
-    try make(stamp, at: 20)
-    #expect(try !needsBuild(product, stamp))
+    try make(appStamp, at: 20)
+    #expect(try !needsBuild(app, appStamp))
   }
 
   /// A source saved after a build started may have missed it.
   @Test func aSourceSavedAfterTheBuildIsBuiltAgain() throws {
-    try make(stamp, at: 10)
-    try make(product, at: 30)
+    try make(appStamp, at: 10)
+    try make(app, at: 30)
     try make(source, at: 40)
-    #expect(try needsBuild(product, stamp))
+    #expect(try needsBuild(app, appStamp))
   }
 
-  /// Even when the link that ends the build comes after the save.
+  /// Even when the bundle that ends the build lands after the save.
   @Test func aSourceSavedDuringTheBuildIsBuiltAgain() throws {
-    try make(stamp, at: 10)
+    try make(appStamp, at: 10)
     try make(source, at: 20)
-    try make(product, at: 30)
-    #expect(try needsBuild(product, stamp))
-  }
-
-  /// Two runs in one checkout, such as `run` and `doctor`, can build at once.
-  @Test func overlappingBuildsBothSucceed() throws {
-    #expect(try ensureDrive(times: 2, status: 0) == [0, 0])
-    #expect(try stamps(beside: stamp) == [stamp.lastPathComponent])
-  }
-
-  /// A failed build brought nothing up to date, so the last stamp stands.
-  @Test func aFailedBuildKeepsTheLastStamp() throws {
-    try make(stamp, at: 10)
-    #expect(try ensureDrive(times: 1, status: 1) == [1])
-    #expect(try stamps(beside: stamp) == [stamp.lastPathComponent])
-    #expect(try modified(stamp) == base.addingTimeInterval(10))
+    try make(app, at: 30)
+    #expect(try needsBuild(app, appStamp))
   }
 
   /// scripts/bundle.sh stamps the app when its build starts, so a source
@@ -166,37 +142,6 @@ import Testing
     #expect(try bundle(status: 1) == 1)
     #expect(try stamps(beside: appStamp) == [appStamp.lastPathComponent])
     #expect(try modified(appStamp) == base.addingTimeInterval(10))
-  }
-
-  /// Runs the harness's `ensure_drive` on this test's files `times` times at
-  /// once, with no product so each builds, and a stand-in `swift` that exits
-  /// with `status` once every build has started, so the builds always overlap.
-  ///
-  /// Returns each run's exit status.
-  private func ensureDrive(times: Int, status: Int32) throws -> [Int32] {
-    let started = directory.appendingPathComponent("started", isDirectory: true)
-    try FileManager.default.createDirectory(at: started, withIntermediateDirectories: true)
-    let path = try standIn(
-      """
-      touch "$STARTED/$$"
-      for _ in $(seq 500); do
-          [ "$(ls "$STARTED" | wc -l)" -ge \(times) ] && break
-          sleep 0.01
-      done
-      exit \(status)
-      """
-    )
-    let runs = try (0..<times).map { _ in
-      try harness(
-        "RUN_DIR=\nROOT=\"$(dirname \"$1\")\" DRIVE=\"$1\" DRIVE_BUILT=\"$2\"\nensure_drive",
-        [product.path, stamp.path],
-        environment: ["PATH": path, "STARTED": started.path]
-      )
-    }
-    return runs.map { run in
-      run.waitUntilExit()
-      return run.terminationStatus
-    }
   }
 
   /// Runs scripts/bundle.sh, unsigned, into this test's directory, with a

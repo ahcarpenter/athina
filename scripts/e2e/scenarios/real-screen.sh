@@ -98,8 +98,8 @@ menu_press() {
 # The menu as the app builds it, from the control API, in the shape `ax menu`
 # prints the menu macOS shows.
 built_menu() {
-	json_eval "$(api menu --field items)" \
-		'"\n".join("-" if i["separator"] else i["title"] + "\t" + ("enabled" if i["enabled"] else "dimmed") for i in r)'
+	json_query "$(api menu --field items)" \
+		'.[] | if .separator then "-" else .title + "\t" + (if .enabled then "enabled" else "dimmed" end) end'
 }
 
 # --- Steps 5 and 6: Show Last Suggestion, then a real click elsewhere ---------
