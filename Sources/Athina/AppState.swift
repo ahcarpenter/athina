@@ -223,8 +223,6 @@ final class AppState {
   /// newest kept frame; nil once a newer frame is kept.
   private var lastNearDuplicateAt: Date?
   private var screenObserver: (any NSObjectProtocol)?
-  /// Listens for another process moving a replay's clock (`ClockRemote`).
-  private var clockRemoteObserver: (any NSObjectProtocol)?
   private let listener: SpeechListener
   private var listeningLimitTask: Task<Void, Never>?
   /// Finishes the transcript after the key comes up; cancelled with the exchange.
@@ -352,22 +350,6 @@ final class AppState {
   func start() {
     guard !isRunning else { return }
     isRunning = true
-    // First of all, and before the journal or the fixtures: a distributed
-    // notification reaches only the observers registered when it is
-    // posted, so anything slow ahead of this would drop a clock request
-    // that arrived in the meantime rather than queue it. A journal that
-    // will not open returns below, and the channel stays live even then.
-    if ClockRemote.listens(in: clockMode) {
-      clockRemoteObserver = DistributedNotificationCenter.default().addObserver(
-        forName: Notification.Name(ClockRemote.name),
-        object: ClockRemote.object(for: getpid()),
-        queue: .main
-      ) { [weak self] notification in
-        let request = ClockRemote.seconds(from: notification.userInfo)
-        let replyURL = ClockRemote.replyURL(from: notification.userInfo)
-        MainActor.assumeIsolated { self?.advanceClock(onRequest: request, answeringAt: replyURL) }
-      }
-    }
     // The keychain may put up its prompt on the first read after a
     // rebuild; off the main thread it never freezes the app behind it.
     reloadKeyHint()
@@ -512,9 +494,6 @@ final class AppState {
     stopCalloutWatch()
     if let screenObserver {
       NotificationCenter.default.removeObserver(screenObserver)
-    }
-    if let clockRemoteObserver {
-      DistributedNotificationCenter.default().removeObserver(clockRemoteObserver)
     }
     try? store.save(settings)
     await mentor?.stop()
@@ -1691,52 +1670,6 @@ final class AppState {
         "the clock moves ahead by more than nothing and up to \(ClockInterval.description(of: ClockMode.maxAdvance))"
     }
     return nil
-  }
-
-  /// Moves a replay's clock ahead for another process (`ClockRemote`), and
-  /// answers the request where it asked, so the script that made it knows it
-  /// was heard rather than assuming so.
-  ///
-  /// A request that cannot be answered there moves nothing.
-  private func advanceClock(
-    onRequest request: Result<TimeInterval, ClockRemote.Refusal>,
-    answeringAt replyURL: URL?
-  ) {
-    do {
-      try ClockRemote.answer(request, at: replyURL) { request in
-        switch request {
-        case .success(let seconds):
-          if advanceClock(by: seconds) {
-            return ClockRemote.Reply(moved: true, movedAhead: clockMovedAhead, now: clock.date)
-          }
-          let reason = "this launch has no replay clock"
-          AppState.log.error("clock advance request refused: \(reason, privacy: .public)")
-          return ClockRemote.Reply(
-            moved: false,
-            reason: reason,
-            movedAhead: clockMovedAhead,
-            now: clock.date
-          )
-        case .failure(let refusal):
-          AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
-          return ClockRemote.Reply(
-            moved: false,
-            reason: refusal.reason,
-            movedAhead: clockMovedAhead,
-            now: clock.date
-          )
-        }
-      }
-    } catch let refusal as ClockRemote.Refusal {
-      AppState.log.error("clock advance request refused: \(refusal.reason, privacy: .public)")
-    } catch {
-      AppState.log.error(
-        """
-        could not answer the clock request at \(replyURL?.path ?? "", privacy: .public): \
-        \(String(describing: error), privacy: .public)
-        """
-      )
-    }
   }
 
   // MARK: Control API

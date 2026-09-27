@@ -10,7 +10,10 @@
 #   scripts/launch.sh record [<dir>]
 #
 # `replay` (`make run`) answers every model call from the fixtures in <dir>,
-# the committed set unless given: no network, no key, no spend. `live`
+# the committed set unless given: no network, no key, no spend, and serves
+# the control API (README "The control API") on a directory made here for the
+# lane, which build/<lane>.control names, so scripts/advance-clock.sh can move
+# its clock. `live`
 # (`make run-live`) is the live app, and `record` (`make record`) the live app
 # writing every model call to a fixture file, into <dir> or the app's own
 # recordings directory, with the debug panel open; both spend API credits.
@@ -27,8 +30,8 @@
 # two launches from this checkout overlap, which "any number of replays at
 # once" invites. The pid is reported, and written to the pid file, only once
 # the app itself says it started, on the line it writes past every reason it
-# could refuse this launch and past the point where it is listening for a clock
-# request. Elapsed time is never taken as proof: on a loaded Mac the app can
+# could refuse this launch and past the point where its control API is
+# listening. Elapsed time is never taken as proof: on a loaded Mac the app can
 # still be short of that point after seconds.
 #
 # A live launch guards the live files. Before this script, every launch target
@@ -121,10 +124,17 @@ esac
 APP="$ROOT/build/Athina.app"
 EXECUTABLE="$APP/Contents/MacOS/Athina"
 PID_FILE="$ROOT/build/$LANE.pid"
-# The token is kept beside the pid rather than in it: README shows a person
-# `cat build/<lane>.pid` and handing the result to scripts/advance-clock.sh, so
-# the pid stays the whole of that file.
+# The token is kept beside the pid rather than in it, so the pid stays the
+# whole of that file for a person to `cat build/<lane>.pid` and `kill`.
 TOKEN_FILE="$ROOT/build/$LANE.token"
+# The replay's control directory (`--control`), which scripts/advance-clock.sh
+# hands athina-drive.
+CONTROL_FILE="$ROOT/build/$LANE.control"
+# Where every control directory is made: the per-user temporary directory,
+# closed to everyone else, whose path is short enough for the socket inside.
+TEMPORARY="$(getconf DARWIN_USER_TEMP_DIR 2>/dev/null || true)"
+[ -n "$TEMPORARY" ] || TEMPORARY="${TMPDIR:-/tmp}"
+TEMPORARY="${TEMPORARY%/}"
 TOKEN="lane-$LANE-$$-$(date +%s)"
 
 # The pid of this checkout's Athina whose arguments carry `$1`, or nothing.
@@ -197,7 +207,17 @@ stop_previous() {
 	if [ -n "$previous" ] && [ -n "$token" ] && [ "$(lane_pid "$token")" = "$previous" ]; then
 		stop_pid "$previous"
 	fi
-	rm -f "$PID_FILE" "$TOKEN_FILE"
+	remove_control "$(cat "$CONTROL_FILE" 2>/dev/null || true)"
+	rm -f "$PID_FILE" "$TOKEN_FILE" "$CONTROL_FILE"
+}
+
+# Removes a control directory this script made, and nothing else: the path
+# comes from a file under build/, so only one named the way it names them, in
+# the directory it makes them in, is taken for one.
+remove_control() {
+	case "$1" in
+	"$TEMPORARY"/athina-run-ctl.*) rm -rf "$1" ;;
+	esac
 }
 
 stop_previous
@@ -214,13 +234,26 @@ if [ "$LIVE" = 1 ]; then
 	fi
 fi
 
+# A replay serves the control API, which answers only a request carrying the
+# secret in this 0700 directory, made the way the e2e harness makes its own
+# (`control_prepare`). The app refuses it on a build without the API or in a
+# sandbox, and the lane then runs without it.
+CONTROL_DIR=""
+if [ "$MODE" = replay ]; then
+	CONTROL_DIR="$(mktemp -d "$TEMPORARY/athina-run-ctl.XXXXXX")"
+	chmod 700 "$CONTROL_DIR"
+	(umask 077 && head -c 32 /dev/urandom | xxd -p -c 64 >"$CONTROL_DIR/secret")
+	ARGS+=(--control "$CONTROL_DIR")
+fi
+
 # `open` hands the app its own stdout and stderr, so the line it writes once it
 # has started, and any refusal it prints, would otherwise reach nothing but the
 # unified log. Both files are this launch's alone, so only the app it started
 # ever writes to them.
 STARTED_LINE="$(mktemp "${TMPDIR:-/tmp}/athina-started-XXXXXXXX")"
 STARTUP_ERRORS="$(mktemp "${TMPDIR:-/tmp}/athina-launch-XXXXXXXX")"
-trap 'rm -f "$STARTED_LINE" "$STARTUP_ERRORS"' EXIT
+# The control directory goes too unless the lane is claimed below.
+trap 'rm -f "$STARTED_LINE" "$STARTUP_ERRORS"; remove_control "$CONTROL_DIR"' EXIT
 
 # `${ARGS[@]}` alone is an unbound variable under set -u in the bash 3.2
 # macOS ships, so an empty list is not expanded at all.
@@ -302,6 +335,17 @@ fi
 
 echo "$pid" >"$PID_FILE"
 printf '%s\n' "$TOKEN" >"$TOKEN_FILE"
+if [ -n "$CONTROL_DIR" ]; then
+	# The app says on stderr why it serves no API, and the lane is still a
+	# replay worth keeping: only the clock can no longer move from a script.
+	control_refusal="$(grep -m 1 -E '^control API (refused|failed): ' "$STARTUP_ERRORS" 2>/dev/null || true)"
+	if [ -n "$control_refusal" ]; then
+		echo "launch: $control_refusal; scripts/advance-clock.sh cannot reach this lane" >&2
+	else
+		printf '%s\n' "$CONTROL_DIR" >"$CONTROL_FILE"
+		CONTROL_DIR=""
+	fi
+fi
 # Where it put its journal and settings, which it chose for itself: nothing
 # names that directory any more, so the app is what says where it is.
 echo "Athina running as pid $pid (lane $LANE) in $(sed -n '1s/^Athina started: pid [0-9]* in //p' "$STARTED_LINE")"

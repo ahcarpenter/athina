@@ -188,8 +188,8 @@ differs in three ways:
   (see Coming from Mentor), since all three are out of its reach, and says so
   once in the log.
 - `--replay` and `--settings` may name only a path inside its container or its
-  own bundle, and `--record`, `--snapshot` and a clock request's reply
-  (`scripts/advance-clock.sh`) only one inside its container. Anything else is
+  own bundle, and `--record` and `--snapshot` only one inside its container.
+  Anything else is
   refused with one line naming the path and where it could have been.
 - `--control` is refused whatever it names: a sandboxed Athina never serves
   the control API, even one built from the development bundle.
@@ -355,25 +355,17 @@ open -n build/Athina.app --args --replay <dir> --time-scale 60 --advance-clock 1
   directives below for long waits.
 - `--advance-clock <interval>` starts the clock that far ahead: `90s`, `15m`,
   `2h`, `1d12h`, up to `30d`.
-- `scripts/advance-clock.sh <pid> <interval>` moves a running replay's clock
-  ahead from a script, exactly as the Advance field below does, with no
-  accessibility and no window. It posts a distributed notification addressed
-  to that pid (`ClockRemote`); only a replay listens, and only for its own pid,
-  so a live or recording Athina and every other replay ignore it. The request
-  names a file for the replay to answer at, and the script waits for that
-  answer: a notification reaches only the observers registered when it is
-  posted and says nothing about who heard it, so a request sent to a replay
-  that is still starting, to a live Athina, or to a pid that is not Athina
-  would otherwise look exactly like success and leave a check waiting on a
-  clock that never moved. Nothing authenticates the channel, so a replay
-  answers only at a file that does not exist yet, inside the system temporary
-  directory and outside the live data folder, and refuses anything else into
-  the log: otherwise a request would be a way for any process in the login
-  session to create or replace a file the user can write, the live settings
-  among them. A request it cannot answer moves nothing, so a retry after no
-  answer never moves the clock twice. It exits 0 with what the clock now
-  reads, 1 when no answer arrives inside `ATHINA_CLOCK_TIMEOUT` (10 seconds by
-  default), naming the pid, and 3 when the replay refused the interval.
+- `scripts/advance-clock.sh <lane> <interval>` moves the clock of a replay
+  `make run` launched ahead from a script, exactly as the Advance field below
+  does, with no accessibility and no window: it sends the control API's
+  `advance` (see The control API) to the directory `make run` made for that
+  lane (`LANE`, `replay` unless given), named in `build/<lane>.control`, and
+  prints the answer, what the clock now reads and how far it has been moved
+  ahead in all. The API answers only a request carrying that directory's
+  secret, so no other process can move the clock, and a replay of a release
+  build or a sandboxed one serves none, so a script cannot move theirs; the
+  Advance field still does. It exits 0 once the clock moved, 1 when the replay
+  refused the interval, and 2 when no replay answered.
 - The debug panel's Mentor card has an **Advance** field (accessibility label
   "Advance clock"): type an interval and press Return, and the clock moves
   ahead at once, as if that much time went by with the Mac awake in the mode
@@ -465,10 +457,10 @@ of them disturbs another or the live app:
   file behind, and when the Mac has since given that pid to another lane, the
   other lane keeps running. The pid is reported only once the app itself says
   it started, on the line it writes past every reason it could refuse the
-  launch and past the point where it is listening for a clock request, never
-  after an elapsed time that proves nothing on a busy Mac. So a
-  `scripts/advance-clock.sh` sent the moment the pid file appears is heard
-  rather than posted into a channel nobody is observing yet. A launch that
+  launch and past the point where its control API is listening, never after
+  an elapsed time that proves nothing on a busy Mac. So a
+  `scripts/advance-clock.sh` sent the moment the pid file appears is
+  answered. A launch that
   quits as it starts, a replay given a `--settings` file that is not settings
   among them, is reported as the failure it is, with what the app said, and
   leaves no pid file behind. So is a lane whose journal will not open: it can
@@ -481,7 +473,7 @@ of them disturbs another or the live app:
 make run LANE=a SETTINGS=/tmp/a/settings.json TIME_SCALE=60
 make run LANE=b SETTINGS=/tmp/b/settings.json
 cat build/a.pid                                   # lane a's pid
-scripts/advance-clock.sh "$(cat build/a.pid)" 2h  # moves only lane a's clock, and fails if it was not heard
+scripts/advance-clock.sh a 2h                     # moves only lane a's clock, and fails if it did not answer
 ```
 
   An on-screen check drives the app through `scripts/e2e/athina-e2e` (see
@@ -793,7 +785,7 @@ it.
 | `observe` | what a hermetic run senses next (see Scripted sensing): `app=` and `bundle=` in front, in `window=`, showing `text=`, captured at once; or `idle=true` or `idle=false` alone, input going idle or coming back. `kept` says whether the capture was journaled, `why` why not, and `after` is the newest event's sequence before it, for a `wait-event` on what it brings. Refused as `unscripted` in a run that senses the real Mac |
 | `wait-event` | waits for the first event named `name=` after the sequence `after=` (every event since launch when left out) whose fields hold every other argument: `wait-event name=feedback feedback=notNow`. The names are what the sensing pipeline and the mentor loop publish, each logged once the app has acted on it: `observation`, `focus`, `mode`, `event` (a journaled event, by `kind`), `status` (with the understanding's `revision` as `understanding`), `suggestion` (logged once its toast is up), `feedback`, `followUp` and `call` (by `tier` and `outcome`); the answer carries the event's `sequence` and fields |
 | `journal` | one of the harness's named journal queries (`journal - queries` in the drive helpers lists them), `query=<name>`, answered from the app's own journal connection, which refuses any statement that writes: the `columns`, and the `rows` as objects keyed by column |
-| `advance` | moves the replay's clock `seconds=` ahead, as the debug panel's Advance field does, and answers with the clock's time and how far it has been moved ahead in all |
+| `advance` | moves the replay's clock `seconds=` ahead, or `interval=` as the debug panel's Advance field takes it (`15m`, `2h`, `1d12h`), as that field does, and answers with the clock's time and how far it has been moved ahead in all |
 | `open-link` | follows a link in the app's own text, found as `click` finds a control, through the handler a click on it runs, with the URL SwiftUI carries as its identifier (`open-link window=Models identifier=athina-settings:journal`). It proves where the link goes and that the app handles it; that a click reaches it stays a real-screen check. Refused as `missing` when the control is not a link and `unhandled` when the app has no handler for its URL |
 | `hotkey` | `key=pause` or `key=talk-back` through the handler Carbon calls, pressed and let go, or only `phase=down` or `phase=up`; `heard=<words>` is what talking back hears while its key is down, since a hermetic run opens no microphone; refused as `disabled` when the key is not registered (unset, unusable, or taken), as Carbon then never reports it |
 
@@ -839,7 +831,9 @@ harness (`ControlMode`):
   directory owned by you with mode 0700 exactly, holding the run's
   secret in `secret`, a file closed to everyone else, and short enough for the
   socket's path (103 bytes). The harness makes it with `mktemp` inside your
-  per-user temporary directory, not the run's home, whose path is too long.
+  per-user temporary directory, not the run's home, whose path is too long,
+  and `make run` makes one there the same way for each replay it launches
+  (`build/<lane>.control` names it), which `scripts/advance-clock.sh` uses.
 
 The app makes its socket, `control.sock`, inside that directory, open to you
 alone. It answers a connection only from your own user (`getpeereid`), and a
@@ -1287,8 +1281,8 @@ Sources/AthinaCore            library, fully testable
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
-                              and ClockRemote (moving a replay's clock from a script), RuntimeEnvironment
-                              (whether the process is sandboxed, and which app bundle it runs from),
+                              RuntimeEnvironment (whether the process is sandboxed, and which app bundle
+                              it runs from),
                               ControlMode (whether a launch serves the control API, see The control API)
 Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swift cannot make (it is variadic),
                               so `DataMigration` can read the old journal without altering it
@@ -2246,9 +2240,8 @@ with and without one, request and response coding against fixture JSON,
 recording, redaction, replay matching and stale refusal, launch flags, a
 replay's separate files, per-launch directories with their locks and pruning,
 the replay-only `--settings` flag, the line a launch writes as it starts, the
-clocks, a replay's clock flags, the clock requests a script sends and where a
-replay may answer them, the toast countdown, which variant of the mark the menu
-bar shows and that every variant is committed at one size, callout mapping and
+clocks, a replay's clock flags, the toast countdown, which variant of the mark
+the menu bar shows and that every variant is committed at one size, callout mapping and
 every anchor rejection, a callout aging out, transcript matching, the follow-up
 prompt and gate, the toast rule for voice input, the whole loop against a
 scripted client, follow-ups included, and the whole loop against the committed
