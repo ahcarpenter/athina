@@ -248,9 +248,12 @@ scripts/advance-clock.sh a 2h                     # moves only lane a's clock, a
 ## Record
 
 ```sh
-make record                          # into ~/Library/Application Support/athina/recordings
-make record RECORD_DIR=recordings    # into ./recordings, which git ignores
+make record SPEND=1                          # into ~/Library/Application Support/athina/recordings
+make record SPEND=1 RECORD_DIR=recordings    # into ./recordings, which git ignores
 ```
+
+Without `SPEND=1` it refuses and starts nothing; with it, it prints the hourly
+spend cap from Settings > Models before it launches.
 
 `--record` runs live, with the saved key and real spend, and
 `RecordingClaudeClient` writes each call to its own JSON file named
@@ -319,7 +322,7 @@ scenario and an empty journal:
 2. Stage a synthetic scenario in real windows that fill the display (the
    documents in the fixture directory's `scenario/` folder work), and add every
    other running app to Settings > Privacy > Excluded apps.
-3. Run `make record RECORD_DIR=recordings`, drive it through a moment worth a
+3. Run `make record SPEND=1 RECORD_DIR=recordings`, drive it through a moment worth a
    look that yields a shown suggestion pointing at one spot, a quiet moment, a
    follow-up question typed into the debug panel's Talk back field, a Test
    Connection, and one call of every other kind, then quit. Drive it without

@@ -1,111 +1,94 @@
 # Athina's one front door: plain `make` lists every command. The `##` text after
-# a target is its help, a line starting `## ` is printed as it stands, and `##@`
-# starts a group; scripts/make-help.awk reads all three.
-# Each recipe is one line calling a script, where the logic lives.
+# a target is its help, a `##= NAME=value text` line under it is one of its
+# variables, a line starting `## ` is printed as it stands, and `##@` starts a
+# group; scripts/make-help.awk reads all four.
+# Each recipe is one line calling a script, where the logic lives, and each
+# ends in one summary line; VERBOSE=1 shows the whole output too
+# (scripts/quietly.sh).
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build run test check lint format test-e2e doctor test-snapshots \
-	approve all run-live record test-snapshots-ci \
-	icons measure release clean swift-format-version
+.PHONY: help doctor build all run test test-e2e snapshots check approve lint \
+	format run-live record snapshots-ci icons measure release clean
+
+help:
+	@awk -f scripts/make-help.awk $(MAKEFILE_LIST)
+
+## Start with make doctor. Any target takes VERBOSE=1 to show its whole output.
 
 ##@ Everyday
 
-help: ## this list
-	@awk -f scripts/make-help.awk $(MAKEFILE_LIST)
+doctor: ## what this Mac is missing to build, test and check, and how to get each
+	@scripts/doctor.sh
 
-build: ## the development bundle, build/Athina.app (it carries the control API)
-	scripts/bundle.sh $(CONFIG)
+build: ## the app, build/Athina.app
+	@scripts/bundle.sh $(CONFIG)
+##= CONFIG=debug a debug build; release by default
+CONFIG ?= release
 
-run: build ## build and launch a replay: recorded fixtures, no key, no spend
+# The same as build, the GNU standard name, left out of the list.
+all: build
+
+run: build ## the app on recorded model answers: no key, nothing spent
 	@scripts/launch.sh replay --lane "$(LANE)" $(if $(REPLAY_DIR),--fixtures "$(REPLAY_DIR)") $(if $(SETTINGS),--settings "$(SETTINGS)") $(if $(TIME_SCALE),--time-scale "$(TIME_SCALE)") $(if $(ALLOW_STALE),--allow-stale)
+##= REPLAY_DIR=<dir> answer from these fixtures, not the committed ones
+##= SETTINGS=<file> start from these settings, never written to
+##= TIME_SCALE=<n> run the clock n times faster (docs/replay.md)
+##= ALLOW_STALE=1 answer from an older prompt version's fixtures too
+##= LANE=<name> run beside other replays, one app per lane
+LANE ?= replay
 
-test: ## swift test, then no control API in a build without the trait, as CI runs it
-	scripts/test.sh "$(FILTER)"
+test: ## unit tests, as CI runs them
+	@scripts/test.sh "$(FILTER)"
+##= FILTER=<name> only the tests matching it
 
-test-e2e: ## run end-to-end scenarios on the app, replays only (SCENARIO=, JOBS=)
+test-e2e: ## end-to-end scenarios driving the app, replays only (docs/e2e.md)
 	scripts/e2e/athina-e2e run $(SCENARIO) --jobs $(JOBS)
+##= SCENARIO=<name> just this one (scripts/e2e/athina-e2e list); all by default
+SCENARIO ?= all
+##= JOBS=<n> scenarios at once; 1 by default
+JOBS ?= 1
 
-test-snapshots: ## draw the UI smoke set here at HEAD and at BASE; report every change
-	scripts/snapshots.sh smoke-local $(BASE)
+snapshots: ## screenshots of your change vs main, drawn here, listing every difference
+	@scripts/snapshots.sh smoke-local $(BASE)
+##= BASE=<commit> compare with this commit rather than main
 
-check: ## lint, test and test-snapshots, what local validation runs (CI: test-snapshots-ci)
-	$(MAKE) --no-print-directory lint && $(MAKE) --no-print-directory test && $(MAKE) --no-print-directory test-snapshots
+check: ## lint, test and snapshots: the one command to run before a push
+	@scripts/check.sh
 
-approve: ## take the ui-snapshots, smoke and checkpoint images CI made of HEAD, all or none
-	scripts/snapshots.sh approve
+approve: ## accept CI's new screenshots of HEAD, listing each before writing it
+	@scripts/snapshots.sh approve
 
-lint: swift-format-version ## check every Swift file against .swift-format, as CI does
-	$(SWIFT_FILES) | xargs -0 xcrun swift-format lint --strict --parallel
+lint: ## the Swift style check, as CI runs it
+	@scripts/swift-format.sh lint
 
-format: swift-format-version ## format every Swift file in place (docs/code-style.md)
-	$(SWIFT_FILES) | xargs -0 xcrun swift-format format --in-place --parallel
-
-doctor: ## what this Mac is missing: tools, grants, the e2e harness's needs
-	scripts/doctor.sh
+format: ## fix the Swift style of every file in place
+	@scripts/swift-format.sh format
 
 ##@ Occasional
 
-all: build ## the same as build, the GNU standard name
+run-live: $(if $(filter 1,$(SPEND)),build) ## the app on your API key: SPENDS CREDITS, so it needs SPEND=1
+	@scripts/launch.sh live $(if $(filter 1,$(SPEND)),--spend)
+##= SPEND=1 spend, up to the hourly cap in Settings > Models
 
-run-live: build ## the live app: reads the real key and SPENDS API CREDITS
-	@scripts/launch.sh live
+record: $(if $(filter 1,$(SPEND)),build) ## the app on your API key, saving each call as a fixture: SPENDS CREDITS
+	@scripts/launch.sh record $(if $(filter 1,$(SPEND)),--spend) "$(RECORD_DIR)"
+##= SPEND=1 spend, up to the hourly cap in Settings > Models
+##= RECORD_DIR=<dir> save the fixtures here; the app's recordings folder by default
 
-record: build ## the live app writing every model call to a fixture: SPENDS API CREDITS
-	@scripts/launch.sh record "$(RECORD_DIR)"
+snapshots-ci: ## CI's screenshot check reproduced; drifts on a Mac unlike CI's
+	@scripts/snapshots.sh smoke $(SHARD)
+##= SHARD=<k>/<n> only the screenshots CI's shard k of n draws
 
-test-snapshots-ci: ## the UI smoke test as CI runs it; drifts on a Mac unlike the runner
-	scripts/snapshots.sh smoke $(SHARD)
-
-icons: ## rebuild the app icon, menu bar mark and README icon from Resources/Mark
+icons: ## redraw the app icon, menu bar mark and README icon from Resources/Mark
 	swift scripts/mark-assets.swift .
 
-measure: ## sample the running app's CPU and memory for 60 seconds
+measure: ## the running app's CPU and memory over 60 seconds
 	ATHINA_PID="$(PID)" scripts/measure.sh
+##= PID=<pid> the Athina to measure when several run
 
-release: ## the notarized direct-download release (docs/releasing.md)
+release: ## the notarized download (docs/releasing.md)
 	scripts/release.sh
 
-clean: ## remove every build product
+clean: ## delete every build product
 	rm -rf .build build
-
-##@ Variables
-
-## CONFIG       build: the SwiftPM configuration
-CONFIG ?= release
-## FILTER       test: only the tests matching this, as swift test --filter takes it
-FILTER ?=
-## REPLAY_DIR   run: the fixtures to answer from; the committed set when empty
-REPLAY_DIR ?=
-## SETTINGS     run: a settings file to start from, read and never written
-SETTINGS ?=
-## TIME_SCALE   run: the replay's clock runs that many times faster (docs/replay.md "A faster clock")
-TIME_SCALE ?=
-## ALLOW_STALE  run: 1 also serves fixtures of an older prompt version, to iterate on prompts
-ALLOW_STALE ?=
-## LANE         run: names build/<LANE>.pid, so replays in other lanes keep running
-LANE ?= replay
-## RECORD_DIR   record: where fixtures go; the app's recordings directory when empty
-RECORD_DIR ?=
-## SCENARIO     test-e2e: the scenario to run (scripts/e2e/athina-e2e list names them)
-SCENARIO ?= all
-## JOBS         test-e2e: API-tier scenarios run at once
-JOBS ?= 1
-## BASE         test-snapshots: the commit to compare with; the fork from origin/main
-BASE ?=
-## SHARD        test-snapshots-ci: the shard to draw, k/n, by the full gate's table; all when empty
-SHARD ?=
-## PID          measure: the Athina to sample when several run
-PID ?=
-
-# Every Swift file in the checkout, tracked or new, that git does not ignore
-SWIFT_FILES = git ls-files -z --cached --others --exclude-standard '*.swift'
-
-# The Xcode every CI job runs, whose swift-format CI lints with (docs/code-style.md
-# and docs/ci.md)
-SWIFT_FORMAT_XCODE := $(shell cat .xcode-version)
-
-# Warns when the selected Xcode is not the one CI lints with, whose swift-format
-# may format differently
-swift-format-version:
-	@scripts/swift-format-version.sh "$(SWIFT_FORMAT_XCODE)"

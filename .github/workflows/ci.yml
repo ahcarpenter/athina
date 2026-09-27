@@ -175,7 +175,7 @@ jobs:
           name: ui-snapshots-smoke
       - name: Draw every snapshot and compare with its reference
         timeout-minutes: 20
-        run: make test-snapshots-ci
+        run: make snapshots-ci
       - name: Summarize
         if: always()
         run: |

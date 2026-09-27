@@ -173,7 +173,7 @@ public actor ReplayClaudeClient: ClaudeClient {
   public static func staleMessage(fixture: String, recorded: Int, current: Int) -> String {
     """
     fixture \(fixture) is stale: recorded with prompt version \(recorded), the current \
-    prompt version is \(current). Record it again live with make record, for the committed \
+    prompt version is \(current). Record it again live with make record SPEND=1, for the committed \
     fixtures in the same change that bumped the version. To replay it anyway while iterating \
     on prompts locally, use \(ModelClientMode.allowStaleFlag) (make run ALLOW_STALE=1).
     """
