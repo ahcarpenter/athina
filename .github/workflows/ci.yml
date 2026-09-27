@@ -4,7 +4,7 @@ name: CI
 # the API tier of the end-to-end harness with its checkpoints, e2e-api, and
 # the fast UI check, ui-snapshots-smoke. The slow, full-fidelity ui-snapshots
 # check lives in merge-checks.yml, which runs on push to main and for a pull
-# request only with the merge-checks label; the main ruleset requires all five
+# request only once it is ready for review; the main ruleset requires all five
 # at a pull request's head before it merges (docs/ci.md).
 on:
   push:

@@ -26,22 +26,36 @@ and often `e2e-api`'s checkpoints too; each has its own approved images, and
 merge-checks run, and the `ui-snapshots-smoke` references and the checkpoints
 from HEAD's newest completed, non-cancelled CI run. It fetches and checks all
 three before it changes any approved image, so when one has no run to take
-(a run still going, a merge-checks run never started for want of the label, a
-job that published nothing), it changes nothing and fails naming each one
+(a run still going, a merge-checks run never started because the pull
+request is still a draft, a job that published nothing), it changes nothing and fails naming each one
 missing and why. `scripts/snapshots.sh baselines-approve`, `smoke-approve`
 and `checkpoints-approve` each take one alone, from HEAD's newest run or the
 run id given, for a change that drifts only some.
 
-All five run on every push to main. On a pull request, `build-and-test`, `lint`,
-`e2e-api` and `ui-snapshots-smoke` (`.github/workflows/ci.yml`) run on every push, and the
-slow `ui-snapshots` (`.github/workflows/merge-checks.yml`) runs only while the
-pull request carries the `merge-checks` label: adding the label runs it, and
-so does every push, or any other label added, while it is on. Anyone with write access can add it,
-from the pull request page or with
+All five run on every push to main. On a pull request, the fast lane,
+`build-and-test`, `lint`, `e2e-api` and `ui-snapshots-smoke`
+(`.github/workflows/ci.yml`), runs on every push, draft or not, and the slow
+`ui-snapshots` (`.github/workflows/merge-checks.yml`) runs only while the pull
+request is ready for review: marking a draft ready runs it, and so does every
+push while it is ready, and a pull request opened ready runs it at once. A
+draft never starts it, so the four runners it takes stay free for the fast
+lane while a change is still moving. A pull request goes through it in these
+steps, whoever opens it:
 
-```sh
-gh pr edit <number> --add-label merge-checks
-```
+1. Open it as a draft. The no-mistakes pipeline does, since
+   `.no-mistakes.yaml` sets `providers.github.draft_pull_requests`; by hand,
+   `gh pr create --draft` (or `gh-axi pr create --draft`).
+2. Wait for the fast lane to pass on its head. The no-mistakes pipeline's CI
+   step reports `checks-passed` then, since a draft's `ui-snapshots` is only
+   expected, not run.
+3. Mark it ready: `gh pr ready <number>` (or `gh-axi pr ready <number>`). That
+   runs `ui-snapshots` on the same head; the fast lane does not run again.
+4. Wait for `ui-snapshots` to pass; the pull request can then merge. A push
+   after this runs both again, and should the change need more work first,
+   `gh pr ready --undo <number>` makes it a draft again.
+
+Only the pull request's draft state decides: editing it, labelling it or
+changing its title starts and cancels nothing.
 
 All five must pass at a pull request's head before it can merge: the `main`
 ruleset requires them, with no bypass, and until `ui-snapshots` has run there,
@@ -75,6 +89,14 @@ ruleset on main, so another ruleset, or a parameter GitHub adds to a rule, must
 not fail it. A pull request that changes the file therefore
 fails `lint` until the change is applied with the command above, which is the
 order it goes in: apply, then run the job again, then merge.
+
+**The pull request title.** `pr-title` (`.github/workflows/pr-title.yml`)
+fails unless a pull request's title is Conventional Commits, `type(scope):
+summary` with the scope optional, since the title becomes the squash commit's
+subject on main. It runs again when the title is edited, in a workflow of its
+own so an edit never restarts the fast lane. The `main` ruleset does not
+require it; making it required is a change to `.github/rulesets/main.json`,
+applied as above.
 
 **Dependency updates.** Renovate (`.github/renovate.json5`) opens the update
 pull requests, weekly on Monday morning: one for the GitHub Actions the
@@ -136,8 +158,7 @@ swift-format (see [Code style](code-style.md) and [UI snapshot baselines](#ui-sn
 27 image leaves preview, CI moves to it in such a commit.
 
 **Superseded runs.** A new push to a pull request cancels that pull request's
-runs still going, in both workflows, and so does a label added while
-merge-checks runs, so a superseded commit stops holding runners: the account
+runs still going, in both workflows, so a superseded commit stops holding runners: the account
 runs five macOS jobs at once. Pushes to main are never cancelled; each keeps
 its own run.
 
@@ -176,6 +197,20 @@ difference (changed pixels in red over a faded copy), one folder each, with an
 `index.html` that shows them side by side at real size. The comparison is
 `snapshot-diff` (`Sources/SnapshotDiff`, with unit tests), and the renderer
 uses the same rule.
+
+On a pull request, the `ui-snapshots drift comment` job, which runs once
+every shard has finished and is not required, puts the drift where the
+reviewer already is: one comment on the pull request, updated in place by
+every later run, with a row per drifted snapshot showing its approved image,
+the new render and the difference inline
+(`scripts/snapshot-drift-comment.sh`). A comment's image needs a public
+address and an artifact needs a login to fetch, so the job pushes the report's
+images in a commit of their own over `refs/ui-snapshots-drift/pr-<number>`, a
+ref outside `refs/heads` that no clone fetches and no branch list shows,
+replaced on each run, and the comment reads them from
+`raw.githubusercontent.com` at that commit. Once a run finds no drift, it says
+so in the comment and deletes the ref; with no comment yet, it posts none. A
+pull request from a fork gets no comment, since its token cannot write.
 
 A render is the same on every run because nothing in it depends on when or
 where it was made:
@@ -217,9 +252,9 @@ where it was made:
   glass differently, so a run never mixes them: a ScreenCaptureKit capture
   that fails is taken again, never drawn the other way.
 
-**Approving an intended change.** Push the change, with the `merge-checks`
-label on its pull request (see [Continuous integration](#continuous-integration)), and let `ui-snapshots`
-fail on the drift, look at the report, then run `make approve` (see
+**Approving an intended change.** Push the change to a pull request ready
+for review (see [Continuous integration](#continuous-integration)), and let `ui-snapshots`
+fail on the drift, look at the drift comment or the report, then run `make approve` (see
 [Continuous integration](#continuous-integration); `scripts/snapshots.sh baselines-approve [<run id>]`
 takes these alone), which downloads the renders of all four
 shards of HEAD's newest merge-checks run, the `ui-snapshots-shard-<k>`
