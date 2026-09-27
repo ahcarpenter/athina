@@ -51,7 +51,8 @@ particular to this app:
   away, also gets two z's drifting off it, drawn in the clear upper left of the
   owl's own bounding box: with the pupils gone the eyes are the whitest thing
   in the set and read wide awake rather than shut, so the z's are what actually
-  say asleep. Paused, the deliberate stop, takes the half-lidded eyes. Every
+  say asleep. Paused, the deliberate stop, takes the half-lidded eyes, as does
+  waiting for consent, since nothing is captured either way. Every
   state, the z's included, is made inside the owl's own box, which is what
   keeps the item one width throughout, so the other extras never shift
   sideways when Athina's state changes. Which variant a mode gets is
