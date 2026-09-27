@@ -5,7 +5,7 @@ import Foundation
 
 // The control API's commands over the app's state rather than its windows:
 // scripted sensing, the events the app has handled, its journal, its clock,
-// and the links in its own text (README "The control API").
+// and the links in its own text (docs/e2e.md "The control API").
 extension ControlCommands {
   /// The names `wait-event` waits for (`ControlEventLog.Entry.name`).
   static let eventNames = [

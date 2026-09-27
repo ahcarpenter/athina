@@ -13,8 +13,8 @@
     /// answers it and stops that kind there, and a click outside Athina's windows takes it down.
     /// Each button is clicked through AppKit's own event path in the toast's panel, parked below
     /// the desktop picture, so a click that lands proves the button can be hit and is wired. The
-    /// toast comes from scripted sensing (README "Scripted sensing"); that a real click in another
-    /// app reaches it is the real-screen tier's to prove.
+    /// toast comes from scripted sensing (docs/e2e.md "Scripted sensing"); that a real click in
+    /// another app reaches it is the real-screen tier's to prove.
     @Test func `toast-buttons`() async {
       await Run.scenario("toast-buttons") { run in
         let control = run.control
@@ -48,7 +48,7 @@
 
         let suggestion = try await run.scriptedToast()
         // Pictures kept as evidence: the toast shows what changes from run to run and moves on
-        // its own, so it is no checkpoint (README "Checkpoints").
+        // its own, so it is no checkpoint (docs/ci.md "Checkpoints").
         try await run.picture(toast, "toast")
 
         run.check("a click on Tell Me More lands", true, try await press("toast.tellMeMore"))

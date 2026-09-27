@@ -1,7 +1,7 @@
 #if E2EAPI
   import Testing
 
-  /// The API tier of the end-to-end harness (README "End-to-end harness").
+  /// The API tier of the end-to-end harness (docs/e2e.md).
   ///
   /// Each test is one scenario, named as `scripts/e2e/athina-e2e run` and `list` name it, which
   /// launches a hermetic replay and drives Athina through its control API. The first paragraph
