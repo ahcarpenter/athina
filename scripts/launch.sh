@@ -6,8 +6,8 @@
 # Usage:
 #   scripts/launch.sh replay [--lane <name>] [--fixtures <dir>] [--settings <file>]
 #                            [--time-scale <n>] [--allow-stale]
-#   scripts/launch.sh live
-#   scripts/launch.sh record [<dir>]
+#   scripts/launch.sh live --spend
+#   scripts/launch.sh record --spend [<dir>]
 #
 # `replay` (`make run`) answers every model call from the fixtures in <dir>,
 # the committed set unless given: no network, no key, no spend, and serves
@@ -16,7 +16,10 @@
 # its clock. `live`
 # (`make run-live`) is the live app, and `record` (`make record`) the live app
 # writing every model call to a fixture file, into <dir> or the app's own
-# recordings directory, with the debug panel open; both spend API credits.
+# recordings directory, with the debug panel open; both spend API credits,
+# so both refuse to start without --spend, which `make run-live SPEND=1` and
+# `make record SPEND=1` pass, and both say the hourly spend cap they will
+# stop at, from the live settings, before they launch.
 # A leading ~ in a path is expanded here, because zsh leaves it after `=`.
 #
 # Each lane has a pid file, build/<lane>.pid. `live` and `record` share the
@@ -46,8 +49,8 @@ usage() {
 	cat >&2 <<'TEXT'
 usage: scripts/launch.sh replay [--lane <name>] [--fixtures <dir>] [--settings <file>]
                                 [--time-scale <n>] [--allow-stale]
-       scripts/launch.sh live
-       scripts/launch.sh record [<dir>]
+       scripts/launch.sh live --spend
+       scripts/launch.sh record --spend [<dir>]
 TEXT
 	exit 2
 }
@@ -64,6 +67,33 @@ expand_tilde() {
 	"~" | "~/"*) printf '%s\n' "$HOME${1#\~}" ;;
 	*) printf '%s\n' "$1" ;;
 	esac
+}
+
+# The hourly spend cap the live app stops calling at, in dollars: Settings >
+# Models, `mentor.hourlySpendCap` in the live settings.json, which a first
+# launch copies from Mentor's when Athina has none yet (docs/coming-from-mentor.md),
+# clamped as `MentorSettings.validated()` clamps it, and its default when unset.
+spend_cap() {
+	local support="$HOME/Library/Application Support" file cap=""
+	for file in "$support/athina/settings.json" "$support/mentor/settings.json"; do
+		[ -f "$file" ] || continue
+		cap="$(plutil -extract mentor.hourlySpendCap raw -o - "$file" 2>/dev/null || true)"
+		break
+	done
+	awk -v cap="${cap:-1}" 'BEGIN {
+		if (cap < 0.05) cap = 0.05
+		if (cap > 1000) cap = 1000
+		printf "$%.2f an hour", cap
+	}'
+}
+
+# Refuses a launch that would spend without being asked to, naming how to ask.
+refuse_spend() {
+	{
+		echo "launch: make $1 calls the Anthropic API and spends credits, up to $(spend_cap) (the spend cap in Settings > Models)."
+		echo "launch: nothing started; to spend, run make $1 SPEND=1, or make run for a replay that spends nothing"
+	} >&2
+	exit 1
 }
 
 [ "$#" -ge 1 ] || usage
@@ -100,11 +130,13 @@ replay)
 	fi
 	;;
 live)
+	if [ "${1:-}" = --spend ]; then shift; else refuse_spend run-live; fi
 	[ "$#" -eq 0 ] || usage
 	LANE=live
 	LIVE=1
 	;;
 record)
+	if [ "${1:-}" = --spend ]; then shift; else refuse_spend record; fi
 	[ "$#" -le 1 ] || usage
 	LANE=live
 	LIVE=1
@@ -232,6 +264,7 @@ if [ "$LIVE" = 1 ]; then
 		} >&2
 		exit 1
 	fi
+	echo "launch: spending up to $(spend_cap), the spend cap in Settings > Models"
 fi
 
 # A replay serves the control API, which answers only a request carrying the

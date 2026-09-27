@@ -29,7 +29,9 @@
 #                   from the newest completed, non-cancelled run of HEAD that
 #                   publishes it; all three are fetched and checked before any
 #                   approved image changes, and when one has no run to take,
-#                   nothing changes and it fails naming each one missing
+#                   nothing changes and it fails naming each one missing.
+#                   Every approval lists the images it would add, change or
+#                   delete before it writes any, and on a terminal asks first
 #   baselines-approve [<run>]
 #                   make the baselines match the renders of merge-checks run
 #                   <run>, every shard's together, by default HEAD's newest
@@ -65,6 +67,9 @@
 # ~/Library/Caches/athina-snapshots-smoke/<commit>, so every later run off the
 # same base draws only HEAD.
 #
+# Each command ends in one summary line; swift's own output goes to
+# build/logs (scripts/quietly.sh).
+#
 # ATHINA_APP names the app to render with (build/Athina.app by default).
 # Exit: 0 match, 1 drift or renders that differ, 2 bad usage or a step that
 # could not run.
@@ -89,14 +94,15 @@ die() { echo "snapshots: $*" >&2; exit 2; }
 
 # Runs the smoke test in the package at <root>: in UTC, as `--snapshot` renders,
 # comparing with the images in <against> when that is set and writing to <out>
-# when that is. Stopped, the whole process group, after SMOKE_TIME_LIMIT.
+# when that is, with its output in build/logs/<log>.log. Stopped, the whole
+# process group, after SMOKE_TIME_LIMIT.
 smoke_test() {
-  local root="$1" shard="$2" against="$3" out="$4" waited=0 pid
+  local root="$1" shard="$2" against="$3" out="$4" log="$5" waited=0 pid
   set -m
   (cd "$root" && TZ=UTC SNAPSHOT_ARTIFACTS="${out:-$root/build/snapshots-smoke}/artifacts" \
     UI_SNAPSHOTS_SMOKE_SHARD="$shard" UI_SNAPSHOTS_SMOKE_AGAINST="$against" \
     UI_SNAPSHOTS_SMOKE_OUTPUT="$out" \
-    swift test --traits UISnapshotsSmoke --filter UISnapshotsSmokeTests) &
+    "$ROOT/scripts/quietly.sh" "$log" swift test --traits UISnapshotsSmoke --filter UISnapshotsSmokeTests) &
   pid=$!
   set +m
   while kill -0 "$pid" 2>/dev/null; do
@@ -113,7 +119,7 @@ smoke_test() {
 }
 
 diff_tool() {
-  (cd "$ROOT" && swift build -c release --product snapshot-diff >&2) || die "could not build snapshot-diff"
+  (cd "$ROOT" && scripts/quietly.sh snapshot-diff swift build -c release --product snapshot-diff >&2) || die "could not build snapshot-diff"
   "$ROOT/.build/release/snapshot-diff" "$@"
 }
 
@@ -138,7 +144,7 @@ render() {
 # subshell on the left of ||, where set -e does not apply.
 
 need_gh() {
-  command -v gh >/dev/null || die "approving needs the GitHub CLI (gh) to fetch the images CI made"
+  command -v gh >/dev/null || die "approving needs the GitHub CLI (gh) to fetch the images CI made; make doctor says how to get it"
 }
 
 # Prints the newest completed run of <workflow> for HEAD that was neither
@@ -161,6 +167,64 @@ newest_run() {
 
 head_tree() {
   git -C "$ROOT" rev-parse 'HEAD^{tree}' || die "no HEAD tree"
+}
+
+# Lists what applying would add, change or delete in the approved set, and on a
+# terminal asks before anything is written; elsewhere, as for an agent, the
+# list stands as the record and approving goes on. Each preview_<kind> prints
+# the list for one kind and the number of images it would touch.
+confirm() {
+  local touched="$1"
+  if [ "$touched" -eq 0 ]; then return 0; fi
+  if [ -t 0 ]; then
+    printf 'snapshots: write these %s image(s)? [y/N] ' "$touched"
+    read -r answer
+    case "$answer" in
+      y | Y | yes) ;;
+      *) echo "snapshots: approved nothing"; exit 1 ;;
+    esac
+  fi
+}
+
+# snapshot-diff's comparison of the approved set <baselines> with the fetched
+# <render>, one line a snapshot that would change, into the report <report>.
+preview_diff() {
+  local what="$1" baselines="$2" render="$3" report="$4" said
+  said="$(diff_tool compare "$baselines" "$render" --report "$report" | grep -v '^::')" || true
+  echo "$what (${baselines#"$ROOT"/}):" >&2
+  printf '%s\n' "$said" | sed 's/^/  /' >&2
+  # Its last line says "all <m> snapshots match ..." or "<n> of <m> snapshots ...".
+  printf '%s\n' "$said" | tail -n 1 | sed -nE 's/^all .*/0/p; s/^([0-9]+) of [0-9]+ snapshots .*/\1/p' | grep . || echo 0
+}
+
+preview_baselines() {
+  preview_diff "the ui-snapshots baselines" "$BASELINES" "$OUT/approved-run" "$OUT/approve-report"
+}
+
+preview_checkpoints() {
+  preview_diff "the e2e-api checkpoints" "$CHECKPOINT_BASELINES" "$CHECKPOINTS_OUT/approved-run" "$CHECKPOINTS_OUT/approve-report"
+}
+
+# The smoke set replaces its folder whole, so what changes is any file that
+# is not byte for byte the same.
+preview_smoke() {
+  local file name count=0
+  echo "the smoke references (${SMOKE_REFERENCES#"$ROOT"/}):" >&2
+  for file in "$SMOKE_OUT"/approved-run/*.png; do
+    name="$(basename "$file")"
+    if [ ! -f "$SMOKE_REFERENCES/$name" ]; then
+      echo "  add $name" >&2; count=$((count + 1))
+    elif ! cmp -s "$file" "$SMOKE_REFERENCES/$name"; then
+      echo "  change $name" >&2; count=$((count + 1))
+    fi
+  done
+  for file in "$SMOKE_REFERENCES"/*.png; do
+    [ -f "$file" ] || continue
+    name="$(basename "$file")"
+    [ -f "$SMOKE_OUT/approved-run/$name" ] || { echo "  delete $name" >&2; count=$((count + 1)); }
+  done
+  [ "$count" -gt 0 ] || echo "  every reference already matches" >&2
+  echo "$count"
 }
 
 # The ui-snapshots baselines, from merge-checks run <run> or HEAD's newest.
@@ -198,8 +262,7 @@ fetch_baselines() {
 }
 
 apply_baselines() {
-  diff_tool approve "$BASELINES" "$OUT/approved-run"
-  echo "snapshots: review the changed images (git status Tests/Snapshots), then commit them with the change that caused them"
+  diff_tool approve "$BASELINES" "$OUT/approved-run" >/dev/null
 }
 
 # The ui-snapshots-smoke references, from CI run <run> or HEAD's newest.
@@ -234,7 +297,6 @@ apply_smoke() {
   mkdir -p "$SMOKE_REFERENCES"
   find "$SMOKE_REFERENCES" -name '*.png' -delete
   cp "$SMOKE_OUT"/approved-run/*.png "$SMOKE_REFERENCES/"
-  echo "snapshots: review the changed images (git status Tests/UISnapshotsSmokeTests), then commit them with the change that caused them"
 }
 
 # The e2e-api checkpoints, from CI run <run> or HEAD's newest.
@@ -256,8 +318,17 @@ fetch_checkpoints() {
 }
 
 apply_checkpoints() {
-  diff_tool approve "$CHECKPOINT_BASELINES" "$CHECKPOINTS_OUT/approved-run"
-  echo "snapshots: review the changed images (git status Tests/Checkpoints), then commit them with the change that caused them"
+  diff_tool approve "$CHECKPOINT_BASELINES" "$CHECKPOINTS_OUT/approved-run" >/dev/null
+}
+
+# The line every approval ends in.
+approved() {
+  local touched="$1" where="$2"
+  if [ "$touched" -eq 0 ]; then
+    echo "approve: nothing to write, every approved image already matches CI's"
+  else
+    echo "approve: wrote $touched image(s); review them (git status $where), then commit them with the change that caused them"
+  fi
 }
 
 command="${1:-}"
@@ -321,7 +392,7 @@ case "$command" in
     # test reads the shard from UI_SNAPSHOTS_SMOKE_SHARD, since swift test
     # passes a test no arguments.
     status=0
-    smoke_test "$ROOT" "$shard" "" "" || status=1
+    smoke_test "$ROOT" "$shard" "" "" snapshots-ci || status=1
     if [ -d "$SMOKE_OUT/references" ]; then
       git -C "$ROOT" rev-parse 'HEAD^{tree}' > "$SMOKE_OUT/references/source-tree"
       if [ -n "$shard" ]; then echo "$shard" > "$SMOKE_OUT/references/shard"; fi
@@ -339,6 +410,15 @@ case "$command" in
         echo "No snapshot drifted, but the test failed; see its output."
       fi
     } > "$SMOKE_OUT/summary.md"
+    drifted="$(find "$SMOKE_OUT/drift" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')"
+    drawn="$(find "$SMOKE_OUT/references" -name '*.png' 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "$status" -eq 0 ]; then
+      echo "snapshots-ci: passed, all $drawn snapshots match their references"
+    elif [ "$drifted" -gt 0 ]; then
+      echo "snapshots-ci: failed, $drifted of $drawn snapshots drifted from the runner's references (expected on a Mac unlike the runner); build/snapshots-smoke/summary.md" >&2
+    else
+      echo "snapshots-ci: failed, the smoke test did not finish; log build/logs/snapshots-ci.log" >&2
+    fi
     exit "$status"
     ;;
 
@@ -358,27 +438,39 @@ case "$command" in
       } >&2
       exit 2
     fi
+    touched=$(($(preview_baselines) + $(preview_smoke) + $(preview_checkpoints)))
+    confirm "$touched"
     apply_baselines
     apply_smoke
     apply_checkpoints
+    approved "$touched" "Tests/Snapshots Tests/UISnapshotsSmokeTests Tests/Checkpoints"
     ;;
 
   baselines-approve)
     [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh baselines-approve [<run id>]"
     fetch_baselines "${2:-}"
+    touched="$(preview_baselines)"
+    confirm "$touched"
     apply_baselines
+    approved "$touched" Tests/Snapshots
     ;;
 
   smoke-approve)
     [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh smoke-approve [<run id>]"
     fetch_smoke "${2:-}"
+    touched="$(preview_smoke)"
+    confirm "$touched"
     apply_smoke
+    approved "$touched" Tests/UISnapshotsSmokeTests
     ;;
 
   checkpoints-approve)
     [ "$#" -le 2 ] || die "usage: scripts/snapshots.sh checkpoints-approve [<run id>]"
     fetch_checkpoints "${2:-}"
+    touched="$(preview_checkpoints)"
+    confirm "$touched"
     apply_checkpoints
+    approved "$touched" Tests/Checkpoints
     ;;
 
   smoke-local)
@@ -414,7 +506,7 @@ case "$command" in
       mkdir -p "$work/none" "$work/sets"
       echo "snapshots: drawing the smoke set of the base, $base, in $sets processes, once for this base"
       for k in $(seq 1 "$sets"); do
-        smoke_test "$work" "" "$work/none" "$work/out" \
+        smoke_test "$work" "" "$work/none" "$work/out" snapshots-base \
           || { echo "snapshots: the base, $base, could not draw every snapshot" >&2; exit 1; }
         mv "$work/out/references" "$work/sets/$k"
       done
@@ -429,7 +521,7 @@ case "$command" in
       against="$(seq -f "$cache/%g" -s : 1 "$sets")"
     fi
     status=0
-    smoke_test "$ROOT" "" "$against" "$SMOKE_LOCAL_OUT/pass-1" || status=1
+    smoke_test "$ROOT" "" "$against" "$SMOKE_LOCAL_OUT/pass-1" snapshots || status=1
     drawn="$SMOKE_LOCAL_OUT/pass-1/references"
     changed=()
     added=()
@@ -452,7 +544,7 @@ case "$command" in
         pass=$((pass + 1))
         last="$SMOKE_LOCAL_OUT/pass-$pass"
         only="$(IFS=,; echo "${changed[*]}")"
-        UI_SNAPSHOTS_SMOKE_ONLY="$only" smoke_test "$ROOT" "" "$against" "$last" || { status=1; break; }
+        UI_SNAPSHOTS_SMOKE_ONLY="$only" smoke_test "$ROOT" "" "$against" "$last" "snapshots-pass-$pass" || { status=1; break; }
         still=()
         for name in "${changed[@]}"; do
           [ -d "$last/drift/$name" ] && still+=("$name")
@@ -483,7 +575,15 @@ case "$command" in
       echo
       echo "Took $(($(date +%s) - started)) s."
     } > "$SMOKE_LOCAL_OUT/summary.md"
-    cat "$SMOKE_LOCAL_OUT/summary.md"
+    grep '^- ' "$SMOKE_LOCAL_OUT/summary.md" || true
+    total="$(find "$drawn" -name '*.png' 2>/dev/null | wc -l | tr -d ' ')"
+    if [ "$status" -ne 0 ]; then
+      echo "snapshots: failed, HEAD could not draw every snapshot; log build/logs/snapshots.log" >&2
+    elif [ "$compared" -eq 0 ]; then
+      echo "snapshots: passed, HEAD drew all $total; the base, $base, predates the comparison, so nothing was compared"
+    else
+      echo "snapshots: ${#changed[@]} changed, ${#added[@]} added, ${#removed[@]} removed of $total against $base in $(($(date +%s) - started)) s; build/snapshots-smoke-local/summary.md"
+    fi
     exit "$status"
     ;;
 

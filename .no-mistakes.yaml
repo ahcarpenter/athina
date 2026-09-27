@@ -2,14 +2,14 @@
 # Local validation runs the make targets people run, and together its lint and
 # test steps run exactly what `make check` composes (docs/ci.md): `make lint`,
 # as CI's lint job runs it, `make test`, as CI's build-and-test runs it, and
-# `make test-snapshots`, which draws the UI smoke set at HEAD and at main on
+# `make snapshots`, which draws the UI smoke set at HEAD and at main on
 # this Mac and compares them (docs/ci.md "UI snapshot smoke test"), where CI's
-# ui-snapshots-smoke runs `make test-snapshots-ci` against the runner's
+# ui-snapshots-smoke runs `make snapshots-ci` against the runner's
 # references. The comparison stays in the test command so its summary is fresh
 # when the test step's evidence pass reads it.
 commands:
   lint: "make lint"
-  test: "make test && make test-snapshots"
+  test: "make test && make snapshots"
 # test.instructions steers the agent-driven evidence pass of the test step.
 test:
   instructions: |
@@ -20,7 +20,7 @@ test:
     checkpoints-approve) in this validation. CI's ui-snapshots,
     ui-snapshots-smoke and e2e-api jobs prove those.
 
-    The test command ends with make test-snapshots, whose summary,
+    The test command ends with make snapshots, whose summary,
     build/snapshots-smoke-local/summary.md, lists every UI smoke screen the
     change altered, added or removed against main, with the base, new and
     difference images of each. Explain each screen in your evidence: a

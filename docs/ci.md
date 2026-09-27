@@ -27,10 +27,13 @@ merge-checks run, and the `ui-snapshots-smoke` references and the checkpoints
 from HEAD's newest completed, non-cancelled CI run. It fetches and checks all
 three before it changes any approved image, so when one has no run to take
 (a run still going, a merge-checks run never started because the pull
-request is still a draft, a job that published nothing), it changes nothing and fails naming each one
-missing and why. `scripts/snapshots.sh baselines-approve`, `smoke-approve`
-and `checkpoints-approve` each take one alone, from HEAD's newest run or the
-run id given, for a change that drifts only some.
+request is still a draft, a job that published nothing), it changes nothing
+and fails naming each one missing and why. Once all three are fetched, it
+lists every image it would add, change or delete in each set before it writes
+any, and on a terminal asks first. `scripts/snapshots.sh baselines-approve`,
+`smoke-approve` and `checkpoints-approve` each take one alone, from HEAD's
+newest run or the run id given, for a change that drifts only some, listing
+theirs the same way.
 
 All five run on every push to main. On a pull request, the fast lane,
 `build-and-test`, `lint`, `e2e-api` and `ui-snapshots-smoke`
@@ -289,7 +292,7 @@ which would add a download quota and an extra step to every checkout.
 ## UI snapshot smoke test
 
 `ui-snapshots-smoke` is the fast UI check, run on every push to a pull request
-and to main. `make test-snapshots-ci` (`scripts/snapshots.sh smoke`) runs
+and to main. `make snapshots-ci` (`scripts/snapshots.sh smoke`) runs
 the `UISnapshotsSmokeTests` target, which draws every snapshot `--snapshot`
 renders, from the same list (`Snapshots.specs()`) and the same sample data,
 light and dark, in the same kind of window, settled by the same rule, and
@@ -299,12 +302,12 @@ compares each with its reference image in
 The two gates cannot drift apart: a snapshot added to the list is in both.
 
 In CI it runs on one runner, the `ui-snapshots-smoke` job, the check the
-ruleset requires, which runs `make test-snapshots-ci` and draws every
+ruleset requires, which runs `make snapshots-ci` and draws every
 snapshot. Most of that job is fetching and compiling, which the build cache
 cuts to what changed (see [Continuous integration](#continuous-integration)); drawing all 76 images takes
 about a minute, where four runners each compiled the test again for a quarter
 of the drawing.
-`make test-snapshots-ci SHARD=<k>/4` still draws only the snapshots
+`make snapshots-ci SHARD=<k>/4` still draws only the snapshots
 `SnapshotShard` gives shard k (the test reads the shard from
 `UI_SNAPSHOTS_SMOKE_SHARD`), should it be split again.
 
@@ -338,7 +341,7 @@ difference (`difference.png`), or only the render when there is no reference
 yet.
 
 The target and its one dependency sit behind the `UISnapshotsSmoke` package
-trait, which only `make test-snapshots-ci` and `make test-snapshots`
+trait, which only `make snapshots-ci` and `make snapshots`
 turn on. Without it the target
 has no tests and no dependencies, so a plain `swift test` (what `make test`
 runs), `build-and-test`, the app, `make release` and the Xcode project never
@@ -361,14 +364,14 @@ shard's snapshots. A UI change drifts both gates, and `make approve` takes
 both, each from its own run of HEAD; commit the images together
 with the change that caused them. References never come from a Mac: they are the
 runner's, rendered at its 1x scale on its macOS, and a Mac on another macOS or
-display scale draws differently everywhere, so `make test-snapshots-ci` on a
+display scale draws differently everywhere, so `make snapshots-ci` on a
 Mac only shows how it would draw. The runner's image and the pinned Xcode are a
 deliberate refresh here too, approved with the baselines in a commit of their
 own.
 
 **On a Mac, against main.** Since a Mac cannot match the runner's references,
 local validation compares a change with main on the same Mac instead: `make
-test-snapshots` (`scripts/snapshots.sh smoke-local`) draws the smoke
+snapshots` (`scripts/snapshots.sh smoke-local`) draws the smoke
 set at HEAD and at its merge-base with `origin/main` (or `BASE=<commit>`) and
 compares each pair by the same 98 percent rule. A few details, such as a dark
 switch's knob or a text field laid out a point off, settle one of two ways in
