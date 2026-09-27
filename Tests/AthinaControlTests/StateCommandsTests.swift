@@ -138,4 +138,21 @@ import Testing
     #expect(refused["error"] == .string("this launch has no replay clock"))
     #expect(host.advanced == [90])
   }
+
+  @Test func advanceTakesAnIntervalAsTheAdvanceFieldDoes() async {
+    let host = ControlTestHost()
+    let moved = await host.handle("advance", ["interval": .string("1d12h")])
+    #expect(moved.ok)
+    #expect(host.advanced == [129_600])
+    let unreadable = await host.handle("advance", ["interval": .string("soon")])
+    #expect(unreadable["error"] == .string("\"soon\" is not an interval such as 15m, 2h, or 1d"))
+    let both = await host.handle(
+      "advance",
+      ["seconds": .number(90), "interval": .string("15m")]
+    )
+    #expect(both["error"] == .string("advance takes seconds= or interval=, not both"))
+    let neither = await host.handle("advance", [:])
+    #expect(!neither.ok)
+    #expect(host.advanced == [129_600])
+  }
 }

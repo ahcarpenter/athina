@@ -112,7 +112,8 @@ public enum AppPaths {
   /// volume is case-insensitive by default.
   ///
   /// Used where a path someone else chose must be kept out of somewhere
-  /// (`ClockRemote.answer`), so spelling it differently is never a way in.
+  /// (`RuntimeEnvironment.refusal(writing:for:)`), so spelling it differently
+  /// is never a way in.
   public static func isAt(_ url: URL, orInside directory: URL) -> Bool {
     let subject = resolvedPath(url)
     let parent = resolvedPath(directory)
