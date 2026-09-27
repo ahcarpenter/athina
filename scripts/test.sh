@@ -44,10 +44,10 @@ count="$(tests test)"
 aside=""
 if [ -n "$quarantined" ]; then
 	if scripts/quietly.sh test-quarantined swift test --filter "$quarantined"; then
-		aside=", and the $(tests test-quarantined) quarantined passed"
+		aside=" (the $(tests test-quarantined) quarantined passed too)"
 	else
 		scripts/quarantine.sh report tests
-		aside=", and the $(tests test-quarantined) quarantined failed, not counted (log build/logs/test-quarantined.log)"
+		aside=" (the $(tests test-quarantined) quarantined failed, not counted: build/logs/test-quarantined.log)"
 	fi
 fi
 if ! scripts/quietly.sh test-build swift build --product Athina; then
