@@ -53,6 +53,15 @@ names each path):
   saying why it cannot fail, unless the line alone makes that plain.
 - Each file imports every module it uses by name (Foundation and
   CoreGraphics too, not through AppKit or SwiftUI), and nothing else.
+- A real-time wait in the app's targets is
+  `Task.sleep(until: .now + d, clock: .continuous)`, never
+  `Task.sleep(for: d)`. The pinned Swift 6.3 links our copy of
+  `Clock.sleep(for:)`'s `ContinuousClock` specialization and
+  KeyboardShortcuts' copy, whose sizes differ, into one, which corrupts the
+  task allocator and crashes the app in CI's `e2e-api`
+  ([swiftlang/swift#86204](https://github.com/swiftlang/swift/issues/86204));
+  a Mac on Swift 6.4 never shows it. The rule can go once the pin reaches
+  Swift 6.4.
 
 ## Rebasing a branch across the reformat
 
