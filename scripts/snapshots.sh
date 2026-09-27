@@ -410,8 +410,9 @@ case "$command" in
         echo "No snapshot drifted, but the test failed; see its output."
       fi
     } > "$SMOKE_OUT/summary.md"
-    drifted="$(find "$SMOKE_OUT/drift" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')"
-    drawn="$(find "$SMOKE_OUT/references" -name '*.png' 2>/dev/null | wc -l | tr -d ' ')"
+    # Either folder is missing when nothing drifted or nothing rendered.
+    drifted="$({ find "$SMOKE_OUT/drift" -mindepth 1 -maxdepth 1 2>/dev/null || true; } | wc -l | tr -d ' ')"
+    drawn="$({ find "$SMOKE_OUT/references" -name '*.png' 2>/dev/null || true; } | wc -l | tr -d ' ')"
     if [ "$status" -eq 0 ]; then
       echo "snapshots-ci: passed, all $drawn snapshots match their references"
     elif [ "$drifted" -gt 0 ]; then
@@ -576,7 +577,7 @@ case "$command" in
       echo "Took $(($(date +%s) - started)) s."
     } > "$SMOKE_LOCAL_OUT/summary.md"
     grep '^- ' "$SMOKE_LOCAL_OUT/summary.md" || true
-    total="$(find "$drawn" -name '*.png' 2>/dev/null | wc -l | tr -d ' ')"
+    total="$({ find "$drawn" -name '*.png' 2>/dev/null || true; } | wc -l | tr -d ' ')"
     if [ "$status" -ne 0 ]; then
       echo "snapshots: failed, HEAD could not draw every snapshot; log build/logs/snapshots.log" >&2
     elif [ "$compared" -eq 0 ]; then
