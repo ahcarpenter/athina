@@ -515,9 +515,10 @@ enum Snapshots {
     override var backingScaleFactor: CGFloat { fixedScale ?? super.backingScaleFactor }
   }
 
-  /// Captures until two captures in a row are the same picture, so a view that
-  /// was still settling (a late layout pass, an image that loads on its own) is
-  /// never what gets kept; nil when no two ever are.
+  /// Captures until two captures in a row are identical, or the first agrees
+  /// with `earlier` within the tolerance, so a view that was still settling (a
+  /// late layout pass, an image that loads on its own) is never what gets
+  /// kept; nil when neither ever happens.
   ///
   /// A `Bitmap` is in sRGB, so what is kept does not depend on the colour
   /// profile of the display it was captured on, and every viewer shows the file
