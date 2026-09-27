@@ -489,8 +489,8 @@ struct PrivacySettings: View {
         footer: {
           Text(
             """
-            Pauses and resumes watching from any app. The menu bar icon shows an eye while \
-            watching and a crossed-out eye while paused.
+            Pauses and resumes watching from any app. While paused, the owl in the menu bar \
+            lowers its eyelids.
             """
           )
         }
