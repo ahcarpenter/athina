@@ -33,180 +33,34 @@ enum Failure: Error {
   case readmeIcon(String)
 }
 
-/// A small reader for the subset of SVG this project's mark uses: groups,
-/// paths, and the three primitives the cream layer is made of, all in one flat
-/// coordinate space.
+/// The owl master, read as the one path it is.
 ///
-/// Enough to rasterise the committed master source, and no more.
-///
-/// Anything outside that subset stops the build. Both assets are generated and
-/// committed, so a master carrying something this reader does not understand
-/// would otherwise be drawn wrong and committed wrong with nothing to show for
-/// it.
-enum SVG {
-  struct Element {
-    var path: CGPath
-    var fill: CGColor?
-    var evenOdd: Bool
-    var group: String?
-  }
-
-  struct Document {
-    var elements: [Element]
-  }
-
-  static func parse(contentsOf url: URL) throws -> Document {
-    guard let root = try XMLDocument(contentsOf: url).rootElement() else {
-      return Document(elements: [])
-    }
-    var elements: [Element] = []
-    try read(root, into: &elements, fill: CGColor(red: 0, green: 0, blue: 0, alpha: 1), group: nil)
-    return Document(elements: elements)
-  }
-
-  // MARK: Reading
-
-  /// Walks the tree, carrying down what an element inherits from the groups
-  /// it sits in: the fill, and the name of the group itself.
-  ///
-  /// Only `svg` and `g` hold other elements. Anything else is drawn or
-  /// refused, never descended into: `defs`, `clipPath` and `mask` carry
-  /// geometry that is referred to rather than painted, and painting it fills
-  /// the icon with a shape that was never meant to be seen.
-  ///
-  /// A `transform` is refused too. The masters are written in one flat
-  /// coordinate space, so nothing here needs one, and an implementation
-  /// nothing exercises is one that quietly draws the wrong geometry the day
-  /// a re-export does carry it.
-  private static func read(
-    _ element: XMLElement,
-    into elements: inout [Element],
-    fill inheritedFill: CGColor?,
-    group: String?
-  ) throws {
-    let name = element.name ?? ""
-    if attribute("transform", of: element) != nil {
+/// The icon master is drawn by macOS's own SVG renderer, but the owl is not
+/// drawn as it stands: its states are made from the four subpaths of its one
+/// path, so those are needed as geometry, and path data is all this reads. Any
+/// other shape in the master stops the build rather than being left out of
+/// every state without a word.
+enum OwlMaster {
+  static func path(contentsOf url: URL) throws -> CGPath {
+    let root = try XMLDocument(contentsOf: url).rootElement()
+    let drawn = root?.children?.compactMap { $0 as? XMLElement } ?? []
+    guard drawn.count == 1, let element = drawn.first, element.name == "path",
+      let d = element.attribute(forName: "d")?.stringValue
+    else {
       throw Failure.svg(
-        "<\(name)> carries a transform, which this reader does not apply; the "
-          + "masters are written in one flat coordinate space and need none"
+        "the owl master should be one <path> and nothing else; found "
+          + drawn.map { "<\($0.name ?? "?")>" }.joined(separator: ", ")
       )
     }
-    let fill = attribute("fill", of: element).map(colour) ?? inheritedFill
-    guard name == "svg" || name == "g" else {
-      elements.append(
-        Element(
-          path: try shape(of: element),
-          fill: fill,
-          evenOdd: attribute("fill-rule", of: element) == "evenodd",
-          group: group
-        )
-      )
-      return
+    // The states are drawn in the path's own coordinates, so a transform
+    // would be ignored and the owl drawn somewhere it was never put.
+    guard [root, element].allSatisfy({ $0?.attribute(forName: "transform") == nil }) else {
+      throw Failure.svg("the owl master carries a transform, which this reader does not apply")
     }
-    let group = name == "g" ? attribute("id", of: element) ?? group : group
-    for child in element.children ?? [] {
-      guard let child = child as? XMLElement else { continue }
-      try read(child, into: &elements, fill: fill, group: group)
-    }
+    return try pathData(d)
   }
 
-  /// One drawable element's geometry in its own coordinates: a path, or one
-  /// of the three primitives the cream layer is made of.
-  private static func shape(of element: XMLElement) throws -> CGPath {
-    let kind = element.name ?? "?"
-    func number(_ name: String) -> Double { attribute(name, of: element).flatMap(Double.init) ?? 0 }
-    func required(_ name: String) throws -> String {
-      guard let value = attribute(name, of: element) else {
-        throw Failure.svg("<\(kind)> carries no \(name) for this reader to draw")
-      }
-      return value
-    }
-    switch kind {
-    case "path":
-      return try pathData(required("d"))
-    case "circle":
-      let cx = number("cx")
-      let cy = number("cy")
-      let r = number("r")
-      let p = CGMutablePath()
-      p.addEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
-      return p
-    case "rect":
-      let p = CGMutablePath()
-      p.addRect(
-        CGRect(
-          x: number("x"),
-          y: number("y"),
-          width: number("width"),
-          height: number("height")
-        )
-      )
-      return p
-    case "polygon":
-      let n = numbers(try required("points"))
-      let p = CGMutablePath()
-      for i in stride(from: 0, to: n.count - 1, by: 2) {
-        let pt = CGPoint(x: n[i], y: n[i + 1])
-        if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
-      }
-      p.closeSubpath()
-      return p
-    default:
-      throw Failure.svg(
-        "<\(kind)> is not an element this reader draws; the masters carry "
-          + "groups, paths, circles, rects and polygons and nothing else"
-      )
-    }
-  }
-
-  private static func attribute(_ name: String, of element: XMLElement) -> String? {
-    element.attribute(forName: name)?.stringValue
-  }
-
-  private static func numbers(_ text: String) -> [Double] {
-    var found: [Double] = []
-    var current = ""
-    func flush() {
-      if let v = Double(current) { found.append(v) }
-      current = ""
-    }
-    for character in text {
-      if character.isNumber || character == "." {
-        current.append(character)
-      } else if character == "-" || character == "+" {
-        // A sign starts a new number unless it follows an exponent.
-        if current.hasSuffix("e") || current.hasSuffix("E") {
-          current.append(character)
-        } else {
-          flush()
-          current.append(character)
-        }
-      } else if character == "e" || character == "E" {
-        current.append(character)
-      } else {
-        flush()
-      }
-    }
-    flush()
-    return found
-  }
-
-  private static func colour(_ text: String) -> CGColor? {
-    var value = text.trimmingCharacters(in: .whitespaces)
-    if value == "none" { return nil }
-    guard value.hasPrefix("#") else { return CGColor(red: 0, green: 0, blue: 0, alpha: 1) }
-    value.removeFirst()
-    if value.count == 3 { value = value.map { "\($0)\($0)" }.joined() }
-    guard let n = UInt32(value, radix: 16) else { return nil }
-    return CGColor(
-      red: CGFloat((n >> 16) & 0xFF) / 255,
-      green: CGFloat((n >> 8) & 0xFF) / 255,
-      blue: CGFloat(n & 0xFF) / 255,
-      alpha: 1
-    )
-  }
-
-  private static func pathData(_ d: String) throws -> CGMutablePath {
+  static func pathData(_ d: String) throws -> CGMutablePath {
     let path = CGMutablePath()
     var tokens: [String] = []
     var current = ""
@@ -302,11 +156,103 @@ enum SVG {
       default:
         throw Failure.svg(
           "path command '\(command)' is not one this reader draws; the "
-            + "masters are written with M, L, H, V, C and Z alone"
+            + "owl master is written with M, L, H, V, C and Z alone"
         )
       }
     }
     return path
+  }
+}
+
+/// The icon master, drawn by macOS's own SVG renderer.
+///
+/// The one thing added to the master before it is drawn is the per-size
+/// thickening: a stroke on the line art group in the line art's own colour.
+struct IconMaster {
+  var source: Data
+  /// The master's page, its `viewBox`, which the renderer maps onto whatever
+  /// rectangle it is drawn into.
+  var page: CGRect
+
+  init(contentsOf url: URL) throws {
+    source = try Data(contentsOf: url)
+    let numbers = try XMLDocument(data: source).rootElement()?
+      .attribute(forName: "viewBox")?.stringValue?
+      .split(whereSeparator: { $0 == " " || $0 == "," }).compactMap { Double($0) }
+    guard let n = numbers, n.count == 4 else {
+      throw Failure.svg("AthinaMark.svg carries no viewBox to draw its page from")
+    }
+    page = CGRect(x: n[0], y: n[1], width: n[2], height: n[3])
+  }
+
+  /// The master ready to draw, its line art widened by `thicken` units.
+  ///
+  /// Stroking the same outline widens it evenly on both sides, so the line
+  /// keeps its shape and only gains weight.
+  func image(thicken: Double) throws -> NSImageRep {
+    let document = try XMLDocument(data: source)
+    if thicken > 0 {
+      guard let lineart = try document.nodes(forXPath: "//*[@id='lineart']").first as? XMLElement,
+        let ink = lineart.attribute(forName: "fill")?.stringValue
+      else {
+        throw Failure.svg("AthinaMark.svg has no line art group with a fill to thicken")
+      }
+      for (name, value) in [
+        ("stroke", ink), ("stroke-width", "\(thicken)"), ("stroke-linejoin", "round"),
+      ] {
+        // An attribute node made from a name and a string is always one.
+        lineart.addAttribute(XMLNode.attribute(withName: name, stringValue: value) as! XMLNode)
+      }
+    }
+    // The representation, not an NSImage around it: an NSImage caches a
+    // bitmap of its own and draws that, a fraction of a pixel off the vector.
+    guard let rep = NSImage(data: document.xmlData)?.representations.first else {
+      throw Failure.svg("macOS could not read AthinaMark.svg")
+    }
+    return rep
+  }
+
+  /// The drawing's own extent in the page's units, measured from the
+  /// renderer's own drawing of it at 8192 px on the long side, a fraction of
+  /// a unit out at most.
+  func inkExtent() throws -> CGRect {
+    let rep = try image(thicken: 0)
+    let scale = 8192 / max(page.width, page.height)
+    let width = Int((page.width * scale).rounded(.up))
+    let height = Int((page.height * scale).rounded(.up))
+    // An alpha-only bitmap of positive size is a format bitmap contexts support.
+    let context = CGContext(
+      data: nil,
+      width: width,
+      height: height,
+      bitsPerComponent: 8,
+      bytesPerRow: 0,
+      space: CGColorSpaceCreateDeviceGray(),
+      bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue
+    )!
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+    rep.draw(in: CGRect(x: 0, y: 0, width: page.width * scale, height: page.height * scale))
+    NSGraphicsContext.restoreGraphicsState()
+    // A bitmap context made with no buffer of its own allocates one.
+    let alpha = context.data!.assumingMemoryBound(to: UInt8.self)
+    var (minX, minY, maxX, maxY) = (width, height, -1, -1)
+    for row in 0..<height {
+      for column in 0..<width where alpha[row * context.bytesPerRow + column] > 0 {
+        minX = min(minX, column)
+        maxX = max(maxX, column)
+        minY = min(minY, row)
+        maxY = max(maxY, row)
+      }
+    }
+    guard maxX >= 0 else { throw Failure.svg("AthinaMark.svg draws nothing") }
+    // The bitmap's first row is the top of the page, as SVG counts it.
+    return CGRect(
+      x: page.minX + Double(minX) / scale,
+      y: page.minY + Double(minY) / scale,
+      width: Double(maxX + 1 - minX) / scale,
+      height: Double(maxY + 1 - minY) / scale
+    )
   }
 }
 
@@ -318,13 +264,14 @@ let root = URL(
 )
 let master = root.appendingPathComponent("Resources/Mark/AthinaMark.svg")
 let markDirectory = root.appendingPathComponent("Resources/Mark", isDirectory: true)
-let document = try SVG.parse(contentsOf: master)
 
 let ink = CGColor(red: 0, green: 0, blue: 0, alpha: 1)
 
+let icon = try IconMaster(contentsOf: master)
+
 /// The drawing's own extent, which is what gets centred: the master's page has
 /// uneven margins around it.
-let content: CGRect = document.elements.reduce(CGRect.null) { $0.union($1.path.boundingBoxOfPath) }
+let content = try icon.inkExtent()
 
 // MARK: The app icon
 
@@ -350,7 +297,7 @@ func iconTuning(for size: Int) -> (fraction: Double, thicken: Double) {
   }
 }
 
-func drawIcon(size: Int) -> CGImage {
+func drawIcon(size: Int) throws -> CGImage {
   let tuned = iconTuning(for: size)
   // 8-bit sRGB with premultiplied alpha is a format bitmap contexts support,
   // and every size drawn is positive, so neither this nor the sRGB space fails.
@@ -365,31 +312,25 @@ func drawIcon(size: Int) -> CGImage {
   )!
   context.setFillColor(iconBackground)
   context.fill(CGRect(x: 0, y: 0, width: size, height: size))
-  context.setAllowsAntialiasing(true)
 
   let canvas = Double(size)
   let scale = canvas * tuned.fraction / content.height
+  // The whole page is drawn, placed so the drawing's own extent lands centred:
+  // drawing only that extent would clip the soft edge pixels just outside it
+  // and every thickened stroke. SVG counts y down the page and the bitmap up.
   let drawnWidth = content.width * scale
   let drawnHeight = content.height * scale
-  context.translateBy(x: CGFloat((canvas - drawnWidth) / 2), y: CGFloat((canvas - drawnHeight) / 2))
-  context.translateBy(x: 0, y: CGFloat(drawnHeight))
-  context.scaleBy(x: CGFloat(scale), y: CGFloat(-scale))
-  context.translateBy(x: -content.minX, y: -content.minY)
-  for element in document.elements {
-    guard let fill = element.fill else { continue }
-    context.addPath(element.path)
-    context.setFillColor(fill)
-    context.fillPath(using: element.evenOdd ? .evenOdd : .winding)
-    // Stroking the same outline widens it evenly on both sides, so the
-    // line keeps its shape and only gains weight.
-    if tuned.thicken > 0, element.group == "lineart" {
-      context.addPath(element.path)
-      context.setStrokeColor(fill)
-      context.setLineWidth(CGFloat(tuned.thicken))
-      context.setLineJoin(.round)
-      context.strokePath()
-    }
-  }
+  let top = (canvas + drawnHeight) / 2 + (content.minY - icon.page.minY) * scale
+  let page = CGRect(
+    x: (canvas - drawnWidth) / 2 - (content.minX - icon.page.minX) * scale,
+    y: top - icon.page.height * scale,
+    width: icon.page.width * scale,
+    height: icon.page.height * scale
+  )
+  NSGraphicsContext.saveGraphicsState()
+  NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+  try icon.image(thicken: tuned.thicken).draw(in: page)
+  NSGraphicsContext.restoreGraphicsState()
   // A bitmap context always has an image to make.
   return context.makeImage()!
 }
@@ -413,7 +354,7 @@ func writeIcon() throws {
     ("icon_512x512@2x", 1024),
   ]
   for (name, pixels) in sizes {
-    let rep = NSBitmapImageRep(cgImage: drawIcon(size: pixels))
+    let rep = NSBitmapImageRep(cgImage: try drawIcon(size: pixels))
     // A bitmap made from a CGImage always encodes as PNG.
     try rep.representation(using: .png, properties: [:])!.write(
       to: iconset.appendingPathComponent("\(name).png")
@@ -453,7 +394,6 @@ func writeIcon() throws {
 // keeps ONE width in every mode.
 
 let owlMaster = root.appendingPathComponent("Resources/Mark/AthinaOwl.svg")
-let owl = try SVG.parse(contentsOf: owlMaster)
 
 /// The owl is one path made of four closed subpaths.
 ///
@@ -470,26 +410,24 @@ struct Owl {
   var eyes: [CGPath]
   var bounds: CGRect
 
-  static func read(_ document: SVG.Document) throws -> Owl {
+  static func read(_ path: CGPath) throws -> Owl {
     // Copying a path, done below as each next subpath starts and after the
     // last, cannot fail.
     var subpaths: [CGPath] = []
     var current = CGMutablePath()
-    for element in document.elements {
-      element.path.applyWithBlock { pointer in
-        let e = pointer.pointee
-        switch e.type {
-        case .moveToPoint:
-          if !current.isEmpty { subpaths.append(current.copy()!) }
-          current = CGMutablePath()
-          current.move(to: e.points[0])
-        case .addLineToPoint: current.addLine(to: e.points[0])
-        case .addCurveToPoint:
-          current.addCurve(to: e.points[2], control1: e.points[0], control2: e.points[1])
-        case .addQuadCurveToPoint: current.addQuadCurve(to: e.points[1], control: e.points[0])
-        case .closeSubpath: current.closeSubpath()
-        @unknown default: break
-        }
+    path.applyWithBlock { pointer in
+      let e = pointer.pointee
+      switch e.type {
+      case .moveToPoint:
+        if !current.isEmpty { subpaths.append(current.copy()!) }
+        current = CGMutablePath()
+        current.move(to: e.points[0])
+      case .addLineToPoint: current.addLine(to: e.points[0])
+      case .addCurveToPoint:
+        current.addCurve(to: e.points[2], control1: e.points[0], control2: e.points[1])
+      case .addQuadCurveToPoint: current.addQuadCurve(to: e.points[1], control: e.points[0])
+      case .closeSubpath: current.closeSubpath()
+      @unknown default: break
       }
     }
     if !current.isEmpty { subpaths.append(current.copy()!) }
@@ -541,7 +479,7 @@ struct Owl {
   var base: CGPath { body.subtracting(faceCutout) }
 }
 
-let parts = try Owl.read(owl)
+let parts = try Owl.read(OwlMaster.path(contentsOf: owlMaster))
 
 /// What a state does to the owl's eyes.
 ///
