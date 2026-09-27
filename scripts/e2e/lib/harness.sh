@@ -411,26 +411,16 @@ new_home() {
 # and the toast lives long enough to survive a wait for idle input. The triage
 # gate is at its 5 second floor, so with the replay answering at once (see
 # launch_athina) the first toast comes seconds after the first capture.
+#
+# A scenario's overrides go over the seed key by key, into nested objects too
+# (jq's `*`), so a scenario names only the settings it changes.
 seed_settings() {
-	local home="$1" overrides="${2:-}"
+	local home="$1" overrides="${2:-}" folder
 	[ -n "$overrides" ] || overrides='{}'
-	HOME_DIR="$home" OVERRIDES="$overrides" SETTINGS_SEED="$SETTINGS_SEED" python3 - <<'PY'
-import json, os, pathlib
-base = json.loads(pathlib.Path(os.environ["SETTINGS_SEED"]).read_text())
-overrides = json.loads(os.environ["OVERRIDES"])
-
-def merge(into, extra):
-    for key, value in extra.items():
-        if isinstance(value, dict) and isinstance(into.get(key), dict):
-            merge(into[key], value)
-        else:
-            into[key] = value
-
-merge(base, overrides)
-path = pathlib.Path(os.environ["HOME_DIR"]) / "Library/Application Support/athina/settings.json"
-path.parent.mkdir(parents=True, exist_ok=True)
-path.write_text(json.dumps(base, indent=2))
-PY
+	folder="$home/Library/Application Support/athina"
+	mkdir -p "$folder"
+	jq --argjson overrides "$overrides" '. * $overrides' "$SETTINGS_SEED" >"$folder/settings.json" \
+		|| die "could not write the settings from $SETTINGS_SEED and $overrides"
 }
 
 # --- Launching and stopping ---------------------------------------------------
@@ -849,11 +839,10 @@ control_wait() {
 	die "the control API never answered; see $RUN_DIR/app.log and $RUN_DIR/api.log"
 }
 
-# A Python expression over a JSON answer, bound to `r`, printed: for checks
-# that count or search what an answer holds. Arguments after the expression
-# are `a[0]`, `a[1]`, and so on.
-json_eval() {
-	python3 -c 'import json, re, sys; r = json.loads(sys.argv[1]); a = sys.argv[3:]; print(eval(sys.argv[2]))' "$@" 2>>"$RUN_DIR/api.log"
+# A jq filter over a JSON answer, its strings printed raw: for checks that
+# count or search what an answer holds.
+json_query() {
+	jq -r "$2" <<<"$1" 2>>"$RUN_DIR/api.log"
 }
 
 # One request to the app; the answer goes to api.log and, with --field, the
@@ -919,19 +908,12 @@ write_evidence() {
 	return 0
 }
 
-# One machine-readable line per scenario, on stdout, whatever the log says.
+# One machine-readable line per scenario, on stdout, whatever the log says, in
+# the shape an API-tier test writes its own (Tests/E2EAPITests): one line of
+# JSON with its keys sorted.
 result_line() {
-	local name="$1" result="$2" seconds="$3" detail="$4"
-	NAME="$name" RESULT="$result" SECONDS_TAKEN="$seconds" DETAIL="$detail" EVIDENCE="$RUN_DIR" \
-		CHECKS="$(printf '%s\n' ${CHECK_LINES[@]+"${CHECK_LINES[@]}"})" python3 - <<'PY'
-import json, os
-print(json.dumps({
-    "scenario": os.environ["NAME"],
-    "result": os.environ["RESULT"],
-    "seconds": int(os.environ["SECONDS_TAKEN"]),
-    "detail": os.environ["DETAIL"],
-    "evidence": os.environ["EVIDENCE"],
-    "checks": [line for line in os.environ["CHECKS"].splitlines() if line],
-}, sort_keys=True))
-PY
+	jq -n -c -S --arg scenario "$1" --arg result "$2" --argjson seconds "$3" --arg detail "$4" \
+		--arg evidence "$RUN_DIR" \
+		'{$scenario, $result, $seconds, $detail, $evidence, checks: $ARGS.positional}' \
+		--args ${CHECK_LINES[@]+"${CHECK_LINES[@]}"}
 }

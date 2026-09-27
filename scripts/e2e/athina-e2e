@@ -106,7 +106,7 @@ cmd_doctor() {
 	printf 'screen lock      %s, %s\n' "$SCREEN_LOCK" "$(lock_status SCREEN_LOCK)"
 	printf 'checkout lock    %s, %s\n' "$CHECKOUT_LOCK" "$(lock_status CHECKOUT_LOCK)"
 	local tool
-	for tool in sqlite3 python3 sandbox-exec screencapture; do
+	for tool in sqlite3 jq sandbox-exec screencapture; do
 		command -v "$tool" >/dev/null || { printf 'missing tool     %s\n' "$tool"; ok=1; }
 	done
 	[ -x "$APP_BINARY" ] || ok=1
