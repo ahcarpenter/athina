@@ -169,7 +169,7 @@ fetch_baselines() {
   need_gh
   if [ -z "$run" ]; then
     run="$(newest_run merge-checks.yml "the ui-snapshots baselines" \
-      "push it with the merge-checks label on its pull request and let the run finish")" || exit 2
+      "push it to a pull request ready for review and let the run finish")" || exit 2
   fi
   tree="$(head_tree)" || exit 2
   # Each shard uploads the renders of its own snapshots as

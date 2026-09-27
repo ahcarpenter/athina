@@ -1,0 +1,25 @@
+name: PR title
+
+# A pull request's title becomes its squash commit's subject on main, so it
+# follows Conventional Commits, as every commit does (CONTRIBUTING.md): a type,
+# an optional scope, then a summary, such as `fix(e2e): wait for the window`.
+# Its own workflow, since it reruns when the title is edited, which must not
+# rerun or cancel ci.yml's fast lane. Not required by the main ruleset.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: The title follows Conventional Commits
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9][a-z0-9._/-]*\))?!?: [^ ]'
+          if [[ ! "$TITLE" =~ $pattern ]]; then
+            echo "::error::The title \"$TITLE\" is not Conventional Commits: type(scope): summary, where type is one of build, chore, ci, docs, feat, fix, perf, refactor, revert, style or test, the scope is optional, and a ! before the colon marks a breaking change."
+            exit 1
+          fi
+          echo "The title follows Conventional Commits."
