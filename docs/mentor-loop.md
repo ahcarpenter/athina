@@ -389,5 +389,7 @@ default) both minimum intervals and the refresh interval stretch by
 `1 / (1 - spent / cap)`, capped at 8x: 2x at half the cap, 4x at three
 quarters. At the cap no call is made until the next clock hour. The hour's total is seeded from the journal at launch, so
 relaunching does not reset it. Spend this hour shows in the menu, the debug
-panel status bar, and the Mentor card. Replayed calls cost nothing and are never
+panel status bar, and the Mentor card, and the menu's next row names the model
+that answered the latest call and the tier that asked (`Last answer: Claude
+Haiku 4.5 (Triage), 15:23:06`), from the call log. Replayed calls cost nothing and are never
 counted (see [Iterating without the network](replay.md)).

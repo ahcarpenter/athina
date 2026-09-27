@@ -6,7 +6,8 @@
     /// A suggestion is answered from the menu with no pointer: Answer Suggestion is live while it
     /// is up, Tell Me More keeps it up, and Not Now is recorded and takes it down.
     ///
-    /// The suggestion toast never takes keyboard focus, so the menu offers its answers too,
+    /// The menu also names the model that answered the mentor call behind the suggestion, under
+    /// the mentor's spend. The suggestion toast never takes keyboard focus, so the menu offers its answers too,
     /// where the keyboard and VoiceOver reach them: Answer Suggestion holds them, live while a
     /// suggestion is up and dimmed otherwise. Tell Me More from there opens the toast's
     /// explanation and keeps it up, and Not Now answers it and takes it down. The toast comes
@@ -42,6 +43,21 @@
         }
 
         let suggestion = try await run.scriptedToast()
+        // The menu names the model that answered the mentor call behind the suggestion, in the
+        // row under the mentor's spend, kept with the evidence.
+        let rows = try await control.menu().map(\.title)
+        try (rows.joined(separator: "\n") + "\n")
+          .write(
+            to: run.evidence.appendingPathComponent("menu-up.txt"),
+            atomically: true,
+            encoding: .utf8
+          )
+        let answer = rows.firstIndex { $0.hasPrefix("Mentor: ") }.map { rows[$0 + 1] }
+        run.check(
+          "the row under the mentor's spend names the model that answered the mentor call",
+          true,
+          answer.map { $0.hasPrefix("Last answer: Claude ") && $0.contains(" (Mentor), ") }
+        )
         // Pictures kept as evidence: the toast shows what changes from run to run and moves on
         // its own, so it is no checkpoint (docs/ci.md "Checkpoints").
         try await run.picture(toast, "toast")

@@ -86,6 +86,9 @@ public struct MenuModel: Equatable, Sendable {
     /// The mentor's status: the command that fixes what holds it, when one
     /// does, and otherwise its line.
     public var mentor: Either
+    /// Which model answered the latest call, when one has
+    /// (`MenuModel.answerLine(calls:now:)`), under the mentor's spend.
+    public var answerLine: String?
     /// The mentorship context in force, when one is.
     public var mentorContextLine: String?
     /// What Athina understands the person to be working toward, when it does.
@@ -116,6 +119,7 @@ public struct MenuModel: Equatable, Sendable {
     public init(
       statusLines: [String],
       mentor: Either,
+      answerLine: String? = nil,
       mentorContextLine: String? = nil,
       understandingLine: String? = nil,
       talkBack: Either,
@@ -128,6 +132,7 @@ public struct MenuModel: Equatable, Sendable {
     ) {
       self.statusLines = statusLines
       self.mentor = mentor
+      self.answerLine = answerLine
       self.mentorContextLine = mentorContextLine
       self.understandingLine = understandingLine
       self.talkBack = talkBack
@@ -152,7 +157,9 @@ public struct MenuModel: Equatable, Sendable {
   public init(_ state: State) {
     var items: [Item] = state.statusLines.map(Item.status)
     items.append(Self.row(state.mentor))
-    items += [state.mentorContextLine, state.understandingLine].compactMap { $0.map(Item.status) }
+    items += [state.answerLine, state.mentorContextLine, state.understandingLine].compactMap {
+      $0.map(Item.status)
+    }
     items.append(Self.row(state.talkBack))
     items += [
       .separator,
@@ -195,6 +202,23 @@ public struct MenuModel: Equatable, Sendable {
       .command("Quit Athina", .quit, shortcut: .command("q")),
     ]
     self.items = items
+  }
+
+  /// One line naming the model that answered the latest call and the tier
+  /// that asked, such as "Last answer: Claude Haiku 4.5 (Triage), 15:23:06",
+  /// or nil before any call has answered.
+  ///
+  /// A call that failed got no answer, so the line passes over it. A
+  /// replayed call names the model its recording came from. A call from an
+  /// earlier day says which day, since the log outlives a launch.
+  public static func answerLine(calls: [ModelCallRecord], now: Date) -> String? {
+    let answered = calls.filter { $0.outcome != .error }
+    guard let call = answered.max(by: { $0.timestamp < $1.timestamp }) else { return nil }
+    let when =
+      Calendar.current.isDate(call.timestamp, inSameDayAs: now)
+      ? ClockFormat.time(call.timestamp) : ClockFormat.dayAndTime(call.timestamp)
+    let model = ModelCatalog.displayName(for: call.model)
+    return "Last answer: \(model) (\(call.tier.label)), \(when)"
   }
 
   private static func row(_ either: State.Either) -> Item {
