@@ -587,7 +587,10 @@ a toast waited for, a real click posted, and the journal read. Every one of
 those was written again by hand for each check until now.
 `scripts/e2e/athina-e2e` is that work, once, in the repository. A change, a
 check, or a validation run drives the app through it rather than writing its
-own driving code.
+own driving code. It is the one front door to both tiers of scenarios (below):
+the real-screen tier's are bash scripts in `scripts/e2e/scenarios`, and the
+API tier's are Swift Testing tests in `Tests/E2EAPITests`, which it builds and
+runs with `swift test` and whose results it prints and counts with the rest.
 
 ```sh
 scripts/e2e/athina-e2e warm          # once per machine: prepare the warm home
@@ -638,8 +641,9 @@ real-screen scenarios one at a time beside them, and each scenario's log lines
 carry its name. `run` and `warm` build `build/Athina.app` and `athina-drive`
 when a source file was saved after the last build of each started (for
 athina-drive, the harness's own; for the app, any `scripts/bundle.sh` build,
-`make build` included), and the API tier's copy of the app when the app is not
-the one it was made from, before any scenario starts, so no other checkout
+`make build` included), the API tier's copy of the app when the app is not
+the one it was made from, and the API tier's tests, which SwiftPM brings up to
+date, before any scenario starts, so no other checkout
 waits on this one's build: the log says "building ... before taking the screen
 lock", then "took the screen lock". They build again inside the lock only when a
 source file was saved after that build started, and say so; a touch-only edit
@@ -654,16 +658,29 @@ such a run takes its checkout's lock only if it is free, and otherwise stops
 at once naming the run that holds it, rather than wait on a run that waits on
 it.
 
-Scenarios come in two tiers, which each scenario names in `SCENARIO_TIER`:
+Scenarios come in two tiers:
 
-- **API** (`api`): the harness drives Athina through its control API (see The
-  control API). The app finds a control in its own accessibility tree and
+- **API** (`api`): each scenario is a Swift Testing test in
+  `Tests/E2EAPITests/Scenarios`, named as the scenario with a raw identifier
+  (``func `toast-buttons`()``), the first paragraph of its doc comment saying
+  what it proves, as `list` shows it. It launches a hermetic replay and drives
+  Athina through its control API (see The control API) with a typed client
+  (`Control`, in `Tests/E2EAPITests/Harness`), each check a `run.check` that
+  logs itself and, when it fails, fails the test at its own line and lets the
+  scenario go on. The app finds a control in its own accessibility tree and
   clicks or types into it through its own event path, so the check still
   proves the control can be hit and is wired, with no real pointer and no wait
   for the keyboard and mouse to go quiet. The run is hermetic (see Hermetic
   runs): it stages nothing, posts no input, shows nothing, senses only what
-  the scenario scripts (see Scripted sensing), and takes no lock.
-- **Real screen** (`screen`, the default): real HID clicks and presses through
+  the scenario scripts (see Scripted sensing), and takes no lock. The tests
+  build only with the `E2EAPI` package trait, in a build directory of their
+  own (`.build/e2e-api`), so `swift test` and `make test` build and run none
+  of them, and a run of them never has `make test` compile the package again;
+  they need the app bundle and its hermetic copy the harness makes, so they
+  run through it, which builds both first and names them to the tests in the
+  environment.
+- **Real screen** (`screen`): each scenario is a bash script in
+  `scripts/e2e/scenarios`, driving real HID clicks and presses through
   accessibility from outside, for what only macOS's own routing can prove: the
   menu bar item and the menu the system runs for it, clicks in other apps that
   reach Athina only through a system-wide listener, and the item's width in
@@ -696,13 +713,18 @@ A change that touches none of those takes no screen time.
 | `settings-sheet` | api | Settings > Contexts' Add Context… brings up the New Context sheet; while it is up, a click on Add Context… under it is refused as covered, a name typed into the sheet's Name field lands there, and the sheet's own Cancel lands in the sheet and takes it down, adding no context |
 | `debug-timeline` | api | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started row appears once rather than once from the journal load and again from the live stream |
 
-A scenario prints one JSON line: its name, `pass`, `fail` or `skip`, how long
+A scenario prints one JSON line on the harness's standard output, with the
+log on its standard error: its name, `pass`, `fail` or `skip`, how long
 it took, every check it made, and the directory holding its evidence (transcript,
 screenshots, event taps, announcements, and the journal as TSV and as a copy;
-for an API-tier run, every request and answer in `api.log`, its checkpoints
-in `checkpoints/<scenario>/` (see Checkpoints) and the other pictures it took
-of Athina's windows, and what the harness saw of the screen in
-`hermetic-windows.log` and `hermetic-bar.log`). A scenario that runs several
+for an API-tier run, its log in `log.txt`, every request and answer in
+`api.log`, its checkpoints in `checkpoints/<scenario>/` (see Checkpoints) and
+the other pictures it took of Athina's windows, what it saw of the screen in
+`hermetic-windows.log` and `hermetic-bar.log`, and its JSON line in
+`result.json`). An API-tier test writes its line where the harness finds it,
+and `swift test`'s own report goes to the standard error with the log; a
+scenario the test run stopped before it ended, such as one that did not
+compile, prints a `fail` line saying so. A scenario that runs several
 steps, as `real-screen` does, names each (`step`), so each check carries its
 step (`step 5 a real click on empty menu bar space dismisses a new toast, and
 that is recorded: the toast is gone after the click`), and a run that stops
@@ -759,8 +781,13 @@ suite rather than every scenario.
 ### The control API
 
 An API-tier scenario drives Athina through a control API the app serves on a
-Unix socket: `athina-drive api <command> [key=value ...]` sends one request
-and prints the answer. Each value goes as its parameter takes it: `true` or
+Unix socket, one request and one answer at a time, through the typed client
+its tests share (`Control`); a real-screen scenario that reads the app through
+it, as `real-screen` does, uses `athina-drive api <command> [key=value ...]`,
+which sends one request and prints the answer. Both send their requests
+through `ControlConnection`, in `AthinaControlProtocol`, the module that also
+says what a request and an answer are. On `athina-drive api`'s command line,
+each value goes as its parameter takes it: `true` or
 `false` for `force` and `present`, a number for `timeout`, JSON for `equals`
 (`equals=true`, `equals=3`, and `equals='"30"'` for the text 30), and the text
 as written for every other, so `text=30` types 30. The app answers a value of
@@ -774,7 +801,7 @@ it.
 | `find` | controls in `window=<title>` (every window when it is left out) by `identifier=`, or by `role=`, `subrole=` and `label=` (a control's description or title, whole, ignoring case), read from Athina's own accessibility tree: role, label, identifier, value, enabled, frame |
 | `click` | a left click on the first such control, posted to the app's own event queue and dispatched by AppKit as a real click is after the window server; the answer comes once it has been handled. Refused as `disabled` when the control is dimmed, `offscreen` when a scroll area has it out of sight or it is outside its part of the window (the content, or the whole window for the toolbar and title bar), and `covered` when a sheet is up over its window or the window's own hit test at its centre lands on something else. A control inside a sheet is found under the title of the window the sheet covers, and judged against and clicked in the sheet. `force=true` clicks anyway, for proving a refusal |
 | `press` | an accessibility press on the first such control, as VoiceOver or Full Keyboard Access presses it: its own action, with no pointer. For the one kind of control a simulated click cannot drive: AppKit lets a destructive button (Reset Understanding…) act on no click into a window that is not in front, and a hermetic run's never are. Refused as `disabled` when the control is dimmed and `unsupported` when it offers no press |
-| `type` | `text=` as key presses to the first responder of `window=`, or of the sheet up over it, such as the field a click just focused |
+| `type` | `text=` as key presses to the first responder of `window=`, or of the sheet up over it, such as the field a click just focused; `modifiers=` holds `command`, `option`, `control` or `shift` down for each, a comma between two. A key held with Command goes first where AppKit offers a key equivalent, the window's controls and then the main menu, whose item for it acts from the window's first responder rather than the key window's, since a hermetic run's windows are never key: `text=a modifiers=command` is Edit > Select All in the field being typed into |
 | `scroll` | the scroll view holding a control scrolls it into view |
 | `menu` | the menu bar extra's menu as the app builds it (`MenuModel`), without showing it, and with no menu bar extra at all in a hermetic run; `press="<title>"`, or `press="<submenu> > <title>"`, runs that item's command through the handler choosing it from the menu runs, refused as `missing` or `disabled`, naming the step, when an item or submenu on the way is not there or is dimmed |
 | `settings` | the live settings, or one of them with `key=<path>` |
@@ -897,13 +924,13 @@ serves.
   clean` removes the row with `tccutil reset Accessibility
   com.ahcarpenter.athina.e2e`, and the copy's preferences with `defaults
   delete com.ahcarpenter.athina.e2e`, once no run is going.
-- **It is checked, every run.** From launch to stop, the harness counts the
+- **It is checked, every run.** From launch to stop, the test counts the
   run's windows above the desktop picture five times a second and its items
-  in the menu bar every couple of seconds (`athina-drive windows` and `bar`,
-  into `hermetic-windows.log` and `hermetic-bar.log`); every API-tier run ends
-  with checks that both counts stayed at 0, that no look failed, and that the
-  bar was really read: some look saw another app's items in it, which a drive
-  macOS does not trust for Accessibility never does.
+  in the menu bar every couple of seconds (`HermeticWatch`, each on a thread
+  of its own, into `hermetic-windows.log` and `hermetic-bar.log`); every
+  API-tier run ends with checks that both counts stayed at 0, that no look
+  failed, and that the bar was really read: some look saw another app's items
+  in it, which a process macOS does not trust for Accessibility never does.
 
 `--show-windows`, given to the harness (`run --show-windows <scenario>`) and
 passed on to the app beside `--hermetic`, leaves a hermetic run's windows
@@ -932,15 +959,22 @@ back. The debug panel's Latest frame shows each scripted frame as it shows a
 real one. A suggestion's callout needs a real window to point at, so a
 hermetic run draws none and says so in the debug panel.
 
-The harness scripts the moments the committed fixtures were recorded at, from
-the documents in their `scenario/` folder (`scripted_toast` in
-`scripts/e2e/lib/harness.sh`): `reading-notes.txt` in front, whose replayed
-triage finds nothing worth a look, then, once `advance` has moved the replay
-clock past the triage gate's 5 second floor rather than waiting it out, a
-switch to `cleanup-script.txt`, whose triage and mentor call make the
-suggestion. The toast is up within 2 seconds of that second `observe`,
-measured at about 0.1 second, which the run checks, and every step waits on
-the event it needs (`wait-event`) rather than on a fixed time or the journal.
+The API tier scripts the moments the committed fixtures were recorded at, from
+the documents in their `scenario/` folder (`scriptedToast`, in
+`Tests/E2EAPITests/Harness/ScriptedSensing.swift`): `reading-notes.txt` in
+front, whose replayed triage finds nothing worth a look, then, once `advance`
+has moved the replay clock past the triage gate's 5 second floor rather than
+waiting it out, a switch to `cleanup-script.txt`, whose triage and mentor call
+make the suggestion. Every step waits on the event it needs (`wait-event`)
+rather than on a fixed time or the journal. The run checks that the toast is
+up within 5 seconds of that second `observe`, timed in the test's own process
+from the request to the answer saying the toast's window is open; it takes
+about a tenth of a second. The limit is the triage gate's 5 second floor in
+the seeded settings, the shortest time-based wait on the way to a toast, so a
+toast that waited out a gate or a timer fails the check, and one slowed by a
+loaded machine, as four scenarios at once slow it on a CI runner, does not: a
+2 second limit, timed across the three drive processes the bash harness
+launched for these requests, failed at 2.05 seconds there.
 
 ### What the harness already handles, so a scenario need not
 
@@ -986,8 +1020,9 @@ the event it needs (`wait-event`) rather than on a fixed time or the journal.
 - **A sandbox** denies the real `~/Library/Application Support/athina`, the
   `mentor` folder beside it that the app kept before the rename, and all
   outbound network, so no run can reach live data or make a live call.
-- **Cleanup runs on failure**, through a trap: helpers, taps, staged apps, the
-  app itself, the preferences, and the scratch home. `clean` leaves a run that
+- **Cleanup runs on failure**, through a trap on the real screen and in each
+  API-tier test's own ending: helpers, taps, staged apps, the app itself, the
+  preferences, the control directory, and the scratch home. `clean` leaves a run that
   is still going alone, since an API-tier run of another checkout's waits on
   no lock that `clean` holds.
 - **One run on the screen at a time**, across every checkout on the Mac: a
@@ -1006,7 +1041,8 @@ home.
 
 Runs land in `~/Library/Caches/athina-e2e/runs/<scenario>-<stamp>/`, or under
 `--out <dir>`; `--keep-home` keeps the scratch home to look inside it.
-Each run has its own home, and `launch_athina` in `scripts/e2e/lib/harness.sh`
+Each run has its own home, and `launch_athina` in `scripts/e2e/lib/harness.sh`,
+or `AppProcess` in `Tests/E2EAPITests/Harness` for the API tier,
 learns where that run's journal is rather than dictating it: the replay makes a
 directory for each launch (see Replays side by side), which is what keeps two
 replays apart when they share a home, and names it on the line it writes as it
@@ -1854,10 +1890,11 @@ The builder's paths reach it without changing the owner's setting:
 - **A recording**: `make record` passes `--open debug`, which a recording
   honours whatever the switch says, for the follow-up question typed into the
   panel's Talk back field (see The committed fixtures).
-- **The end-to-end harness**: a scenario that needs the panel puts
-  `--open debug` in its `SCENARIO_ARGS` (`understanding-surfaces` does), and
+- **The end-to-end harness**: a scenario that needs the panel launches with
+  `--open debug` (`understanding-surfaces` does), and
   `athina-drive ax ... --scope "Debug Panel"` reaches its controls, or on the
-  API tier `athina-drive api ... window="Debug Panel"` (`debug-timeline`).
+  API tier the control API's `find` with `window="Debug Panel"`
+  (`debug-timeline`).
   Capture Now is the menu's own command, not the panel's.
 - **Snapshots**: `--snapshot` draws the panel's view directly
   (`debug-panel*`) and the Advanced pane with the switch off and on
@@ -2230,7 +2267,9 @@ the checkpoint gate (`scripts/snapshots.sh checkpoints`) or `make approve`
 with main's on the Mac itself (see UI snapshot smoke test);
 `test.instructions` in `.no-mistakes.yaml` carries that rule to its test step.
 
-No test waits on real time (see A faster clock). The tests
+No test of the suite waits on real time (see A faster clock); the API tier's
+end-to-end tests, which `swift test` builds only with the `E2EAPI` trait, poll
+the app they launch in real time, as UI polling does. The tests
 exercise the pure parts
 (hashing, cadence, journal, retention and its in-place migration, settings, the
 mentor scheduler and every gate, mentorship context rules and placement, spend
@@ -2465,15 +2504,18 @@ alone. The pixel comparison with the runner's references stays in CI.
 A checkpoint is a picture of one of Athina's windows at a step of an API-tier
 scenario, in a state `--snapshot`'s sample data cannot show: a pane after its
 switch was pressed, a sheet with a name typed into it. A scenario takes one
-with the harness's `checkpoint <window> <step>`, which asks the control API's
+with `run.checkpoint(<window>, <step>)`, which asks the control API's
 `snapshot` for the window in light and in dark and writes
 `<scenario>/<step>-light.png` and `<step>-dark.png` under the run's
 checkpoints folder (`checkpoints/` in its evidence, or `run --checkpoints
 <dir>`). Only a window whose picture holds still from run to run is a
-checkpoint, and one that did not settle fails the scenario; one that shows the
+checkpoint, and one that did not settle is taken again, since a window still
+moving from the step before can take longer to settle than the snapshot waits
+on a loaded machine, and fails the scenario when it has not settled by the
+third take; one that shows the
 run's times, pid or journal path, such as the debug panel, or that moves on its
 own, such as a suggestion's countdown, would differ every run, so a scenario
-keeps its picture as plain evidence (`api snapshot path=`). An API-tier run draws dates, times and
+keeps its picture as plain evidence (`run.picture(<window>, <name>)`). An API-tier run draws dates, times and
 numbers in UTC and US English with scroll bars always shown, as `--snapshot`
 does, so a checkpoint reads the same on every machine that draws it alike.
 

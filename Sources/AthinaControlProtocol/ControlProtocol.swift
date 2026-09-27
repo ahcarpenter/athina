@@ -40,6 +40,15 @@ public enum ControlProtocol {
     "y": .number,
     "after": .number, "seconds": .number, "idle": .bool,
   ]
+
+  /// A key `type` holds down while it presses its keys, as `modifiers=` names
+  /// it: `modifiers=command` makes `text=a` Command-A.
+  public enum Modifier: String, CaseIterable, Sendable {
+    case command
+    case option
+    case control
+    case shift
+  }
 }
 
 /// A JSON value, for requests and answers whose fields vary by command.
@@ -213,6 +222,18 @@ public struct ControlRequest: Equatable, Sendable, Codable {
   /// Returns the parameter named `key` as a number, nil when the request
   /// leaves it out; throws when it holds anything else.
   public func number(_ key: String) throws -> Double? { try read(key, "a number") { $0.number } }
+  /// Returns the keys `modifiers=` names, a comma between two, such as
+  /// `command,shift`: none when the request leaves it out; throws when it
+  /// names anything else.
+  public func modifiers() throws -> [ControlProtocol.Modifier] {
+    let expected = "command, option, control or shift, a comma between two"
+    return try read("modifiers", expected) { value in
+      guard let names = value.string?.split(separator: ",", omittingEmptySubsequences: false)
+      else { return nil }
+      let modifiers = names.compactMap { ControlProtocol.Modifier(rawValue: String($0)) }
+      return modifiers.count == names.count ? modifiers : nil
+    } ?? []
+  }
 
   private func read<T>(
     _ key: String,
