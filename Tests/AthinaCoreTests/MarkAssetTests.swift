@@ -162,10 +162,11 @@ import Testing
     #expect(drawing.attributeNames.allSatisfy { !$0.localizedCaseInsensitiveContains("c2pa") })
   }
 
-  /// The README's pictures, today the icon at its top, are drawn by the same
-  /// script as the app's assets and committed beside them: the README shows
-  /// every one of them, points at none that is missing, and nothing drawn
-  /// for the README is left lying unused.
+  /// The README's drawn pictures, today the icon at its top, come from the same
+  /// script as the app's assets and are committed beside them (the screen
+  /// captures in docs/images are taken from a replay, docs/replay.md "The
+  /// committed fixtures"): the README shows every one of them, points at none
+  /// that is missing, and nothing drawn for the README is left lying unused.
   @Test func theReadmeShowsEveryPictureDrawnForIt() throws {
     let files = Set(
       try FileManager.default.contentsOfDirectory(atPath: markDirectory.path)
