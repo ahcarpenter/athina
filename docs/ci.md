@@ -35,15 +35,19 @@ any, and on a terminal asks first. `scripts/snapshots.sh baselines-approve`,
 newest run or the run id given, for a change that drifts only some, listing
 theirs the same way.
 
-All five run on every push to main. On a pull request, the fast lane,
-`build-and-test`, `lint`, `e2e-api` and `ui-snapshots-smoke`
-(`.github/workflows/ci.yml`), runs on every push, draft or not, and the slow
-`ui-snapshots` (`.github/workflows/merge-checks.yml`) runs only while the pull
-request is ready for review: marking a draft ready runs it, and so does every
-push while it is ready, and a pull request opened ready runs it at once. A
-draft never starts it, so the four runners it takes stay free for the fast
-lane while a change is still moving. A pull request goes through it in these
-steps, whoever opens it:
+All five run on every push to main, and so does `release-build`
+(`.github/workflows/release.yml`), which builds the direct-download release
+with `make release`, signed and notarized when the Apple secrets exist, and
+which a pushed version tag turns into a GitHub Release (see
+[Releasing](releasing.md#ci)); no pull request runs it or waits for it. On a
+pull request, the fast lane, `build-and-test`, `lint`, `e2e-api` and
+`ui-snapshots-smoke` (`.github/workflows/ci.yml`), runs on every push, draft
+or not, and the slow `ui-snapshots` (`.github/workflows/merge-checks.yml`)
+runs only while the pull request is ready for review: marking a draft ready
+runs it, and so does every push while it is ready, and a pull request opened
+ready runs it at once. A draft never starts it, so the four runners it takes
+stay free for the fast lane while a change is still moving. A pull request
+goes through it in these steps, whoever opens it:
 
 1. Open it as a draft. The no-mistakes pipeline does, since
    `.no-mistakes.yaml` sets `providers.github.draft_pull_requests`; by hand,

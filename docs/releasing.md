@@ -2,7 +2,10 @@
 
 Athina's releases go out directly, as a download from outside the App Store:
 signed with a Developer ID, notarized by Apple, with no App Sandbox and no App
-Review. `make release` (`scripts/release.sh`) does all of it:
+Review; until the Developer ID exists, CI releases them unsigned instead (see
+[Unsigned releases](#unsigned-releases)). `make release` (`scripts/release.sh`) does all of it, on the owner's
+Mac or in CI, whose release workflow runs it on every push to main and
+publishes a release when a version tag is pushed (see [CI](#ci)):
 
 1. Builds the Release configuration for Apple silicon and Intel in one binary,
    without the end-to-end harness's control API, and fails if the binary
@@ -18,7 +21,8 @@ Review. `make release` (`scripts/release.sh`) does all of it:
    staples the ticket to it.
 4. Packages it as `Athina-<version>.dmg`, the app beside a link to
    Applications, signs the disk image, notarizes it, and staples it too; and
-   as `Athina-<version>.zip` holding the stapled app.
+   as `Athina-<version>.zip` holding the stapled app, with the SHA-256 of
+   both in `Athina-<version>-checksums.txt` (`shasum -a 256 -c` checks them).
 5. Verifies what people download: `codesign --verify --deep --strict`, the
    hardened runtime flag and the exact entitlements, that the app inside the
    disk image and the zip is the one signed (the same code directory hash) and
@@ -27,17 +31,19 @@ Review. `make release` (`scripts/release.sh`) does all of it:
 6. Keeps `Athina-<version>.dSYM.zip`, the debug symbols of exactly that binary,
    for reading crash reports, and Apple's notary logs.
 7. Writes `Athina-<version>-notes.md`: the version and build, install steps,
-   the notes written by hand in `docs/release-notes/<version>.md` as they are,
-   headings included, and the SHA-256 of both downloads. Without that file it
-   puts a marked placeholder in their place and names the file to create. It
-   only reads `docs/`, never writes there.
+   any notes written by hand in `docs/release-notes/<version>.md` as they are,
+   headings included, then the Conventional Commit titles since the previous
+   release's tag, grouped as breaking changes, features, bug fixes,
+   performance and reverts (the other types, such as `docs`, `ci` or
+   `refactor`, are left out, as release-please leaves them out), and the
+   SHA-256 of both downloads. It only reads `docs/`, never writes there.
 
 Everything lands in `build/release`. The version is set in one place,
 `Resources/Info.plist`: `CFBundleShortVersionString` is what people see
 (1.2.3), `CFBundleVersion` a whole number that grows with every release. Every
 build carries both, and the release names its files and notes from them.
 
-## Once, before the first release
+## Once, before the first signed release
 
 These need the owner's Apple account, so only the owner can do them. Nothing they
 create goes in the repository.
@@ -61,14 +67,30 @@ create goes in the repository.
    It asks for the password and keeps it in the login keychain; `make release`
    names the profile, never the password.
 
+For a release from CI, the same account also sets the secrets in [CI's
+secrets](#cis-secrets).
+
 ## Each release
 
 1. Raise `CFBundleShortVersionString` and `CFBundleVersion` in
-   `Resources/Info.plist`, write what changed for the people using Athina in
-   `docs/release-notes/<version>.md` (`## What's new`, say), and commit both
-   (`chore(release): 0.2.0`). The notes live there, not in `build/release`,
-   which every `make release` replaces.
-2. From a clean checkout of that commit:
+   `Resources/Info.plist` and merge it to main (`chore(release): 0.2.0`). The
+   commit titles since the last release become its notes; anything more to
+   say to the people using Athina goes, if you like, in
+   `docs/release-notes/<version>.md` (`## What's new`, say), committed with
+   the version and set before the titles. The notes live there, not in
+   `build/release`, which every `make release` replaces.
+2. Push the version's tag on that commit, and CI releases it (see [CI](#ci)):
+
+   ```sh
+   git tag v0.2.0 && git push origin v0.2.0
+   ```
+
+   The tag is what the next release's build number has to exceed and what
+   stops a version being built twice.
+
+To release from the Mac instead, or to rehearse one first:
+
+1. From a clean checkout of the version's commit:
 
    ```sh
    ATHINA_NOTARY_PROFILE=athina-notary make release
@@ -79,17 +101,17 @@ create goes in the repository.
    it is found. The release refuses a worktree with changes, a version whose
    tag already points at another commit, and a build number no higher than
    the last release's.
-3. Check the release build itself end to end, in replay as always:
+2. Check the release build itself end to end, in replay as always:
    `ATHINA_E2E_APP=build/release/Athina.app scripts/e2e/athina-e2e run all`.
    That covers the real-screen tier; step 1's check proves the build carries
    no control API, so each API-tier scenario reports `skip`, and the API tier
    runs on the development build of the same commit
    (`scripts/e2e/athina-e2e run all` without `ATHINA_E2E_APP`).
-4. Publish the disk image (and the zip, for anyone who prefers it) with
-   `Athina-<version>-notes.md` as its notes, and tag the commit:
-   `git tag v0.2.0 && git push origin v0.2.0`. The tag is what the next
-   release's build number has to exceed and what stops a version being built
-   twice.
+3. To publish it yourself, make a GitHub Release of the disk image and the
+   zip, for anyone who prefers it, with the checksums file and the debug
+   symbols, and `Athina-<version>-notes.md` as its notes, then push the tag
+   as above; CI then puts its own build's files in that release in place of
+   yours, and leaves your notes.
 
 There are no automatic updates yet: a new version is downloaded and dragged
 over the old one.
@@ -102,9 +124,85 @@ validation loads only libraries signed by the app's own team, which an ad-hoc
 signature lacks, so once the bundle embeds libraries, such as the local speech
 models' runtime, that local build alone turns library validation off; a
 Developer ID release never does.) It names each step it skipped and why (the
-missing identity or profile), marks the notes "Not for distribution", and
-exits 1. A profile that is set but does not work, or an identity that is named
+missing identity or profile) in the notes, and exits 1, or 0 with
+`ATHINA_RELEASE_ALLOW_SKIPS=1`, as CI builds without its secrets. Without an
+identity the notes open with how to open an unsigned release (see [Unsigned
+releases](#unsigned-releases)); with an identity but no profile they are
+marked "Not for distribution". A profile that is set but does not work, or an identity that is named
 but missing, fails before anything is built.
+
+## CI
+
+`.github/workflows/release.yml` runs `make release` on GitHub's `macos-26`
+runner:
+
+- **On every push to main**, beside the whole suite that `ci.yml` and
+  `merge-checks.yml` run there ([Continuous integration](ci.md)), so the
+  artifact a release would ship is proven on every merge. With the secrets
+  below it signs and notarizes; without them it builds signed ad hoc, as
+  above, passes, and the job summary names the missing secrets. The job
+  summary shows the notes, and the `release-build` artifact holds everything
+  in `build/release` but `Athina.app` itself, which the disk image and the
+  zip hold.
+- **On a pushed version tag** (`v1.2.3`), it first checks that the tag is
+  `v` and the version `Resources/Info.plist` sets, on a commit on main. Then
+  it builds and verifies, and publishes a GitHub Release named `Athina
+  <version>` with the disk image, the zip, the checksums file and the debug
+  symbols, its notes `Athina-<version>-notes.md` without their title line.
+  It releases in one of two modes, by the secrets below:
+  - **Signed**, with every secret: signed with the Developer ID, notarized
+    and stapled, as `make release` does with the identity and the profile.
+  - **Unsigned**, with none: signed ad hoc, not notarized, and its notes say
+    so at the top (see [Unsigned releases](#unsigned-releases)). This is how
+    Athina releases until the Developer ID exists; setting the secrets
+    switches every later release to signed, with no other change.
+
+  With only some of the secrets it fails, so a half-configured signing setup
+  never ships an unsigned release unnoticed.
+
+A release that already exists for the tag gets the files, replacing any of
+the same name, and keeps its own notes, so a release made by hand, or by
+release-please, which creates the release and its tag from the Conventional
+Commit titles, works as it is. release-please needs two things: a tag pushed
+with the workflow's own `GITHUB_TOKEN` starts no workflow, so it must run with
+a GitHub App's token or a fine-grained personal access token instead, and its
+version has to reach `Resources/Info.plist` (an `extra-files` entry).
+
+### Unsigned releases
+
+An unsigned release is the same build as a signed one, signed ad hoc with the
+bundle-identifier requirement a development build has ([Code
+signing](#code-signing)), and not notarized. Its notes open with what someone
+downloading it has to do:
+
+- **Open it the first time**, and after each update: Gatekeeper refuses an
+  app Apple has not notarized, so they open Athina, choose Done, then choose
+  Open Anyway next to it in System Settings > Privacy & Security and confirm.
+- **Allow the key again after each update**: the keychain trusts an ad-hoc
+  app by its exact binary, so each new version asks once to read the saved
+  API key (Always Allow). Screen Recording and Accessibility carry over,
+  since the grant is recorded against the bundle identifier, which every
+  version meets; they hold for the first signed release too ([A released copy
+  and your data, grants, and key](#a-released-copy-and-your-data-grants-and-key)).
+
+### CI's secrets
+
+The owner sets these in the repository's Settings > Secrets and variables >
+Actions, or with `gh secret set <name>`, which asks for the value so it stays
+out of the shell's history, from what [Once, before the first
+signed release](#once-before-the-first-signed-release) made. The workflow puts them in a
+keychain made for the run and deletes it at the end.
+
+| Secret | What it holds | How to make it |
+| --- | --- | --- |
+| `DEVELOPER_ID_CERTIFICATE` | the Developer ID Application certificate and its private key, as a base64 .p12 | the backup .p12 from step 2 (Keychain Access > My Certificates, the `Developer ID Application` item, File > Export Items, with a password), then `base64 -i Athina.p12 \| gh secret set DEVELOPER_ID_CERTIFICATE` |
+| `DEVELOPER_ID_CERTIFICATE_PASSWORD` | the .p12's password | the password given at export |
+| `NOTARY_APPLE_ID` | the Apple ID releases go out under | the one from step 1 |
+| `NOTARY_TEAM_ID` | the team ID | the ten characters in parentheses in the identity's name |
+| `NOTARY_PASSWORD` | an app-specific password for that Apple ID | a new one made as in step 3, named for CI so it can be revoked alone |
+
+The run stores the notary credentials as it starts, and Apple checks them
+then, so a wrong one fails before anything is built.
 
 ## A released copy and your data, grants, and key
 
