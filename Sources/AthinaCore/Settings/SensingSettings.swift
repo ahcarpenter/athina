@@ -71,8 +71,22 @@ public struct SensingSettings: SettingsSection, Equatable, Sendable {
 
   /// Bundle identifiers under which no capture, OCR, or journaling happens.
   public var excludedBundleIDs: [String] = ExcludedApps.defaults
-  /// Global hotkey that toggles pause.
-  public var pauseHotKey: HotKey = .defaultPause
+  /// The keyboard shortcut that pauses and resumes watching from any app;
+  /// nil once the person clears it.
+  public var pauseShortcut: HotKey? {
+    get { pauseHotKeyCleared ? nil : pauseHotKey }
+    set {
+      if let newValue { pauseHotKey = newValue }
+      pauseHotKeyCleared = newValue == nil
+    }
+  }
+  /// The last pause combination, kept even after it is cleared, since every
+  /// earlier build reads this key as a combination that is always set: one
+  /// of those keeps it rather than failing to read the file.
+  private var pauseHotKey = HotKey.defaultPause
+  /// Whether the person cleared the pause shortcut, which earlier builds do
+  /// not read.
+  private var pauseHotKeyCleared = false
 
   // MARK: Mentor loop
 
@@ -116,7 +130,7 @@ public struct SensingSettings: SettingsSection, Equatable, Sendable {
     s.excludedBundleIDs = ExcludedApps.normalized(s.excludedBundleIDs)
     s.mentor = s.mentor.validated()
     // One combination cannot both pause and listen; the pause key wins.
-    if s.mentor.pushToTalkHotKey == s.pauseHotKey { s.mentor.pushToTalkHotKey = nil }
+    if s.mentor.pushToTalkHotKey == s.pauseShortcut { s.mentor.pushToTalkHotKey = nil }
     return s
   }
 

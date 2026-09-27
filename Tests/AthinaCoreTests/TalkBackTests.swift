@@ -414,17 +414,26 @@ import Testing
 
   @Test func theTalkBackKeyMayNotBeThePauseKey() throws {
     var settings = SensingSettings()
-    settings.mentor.pushToTalkHotKey = settings.pauseHotKey
+    settings.mentor.pushToTalkHotKey = settings.pauseShortcut
     #expect(settings.validated().mentor.pushToTalkHotKey == nil)
-    #expect(settings.validated().pauseHotKey == HotKey.defaultPause)
+    #expect(settings.validated().pauseShortcut == HotKey.defaultPause)
     let json =
       #"""
       {"pauseHotKey": {"keyCode": 17, "modifiers": 9}, "mentor": {"pushToTalkHotKey": \#
       {"keyCode": 17, "modifiers": 9}}}
       """#
     let decoded = try SensingSettings(json: Data(json.utf8))
-    #expect(decoded.pauseHotKey == HotKey(keyCode: 17, modifiers: [.control, .command]))
+    #expect(decoded.pauseShortcut == HotKey(keyCode: 17, modifiers: [.control, .command]))
     #expect(decoded.mentor.pushToTalkHotKey == nil)
+  }
+
+  /// A cleared pause shortcut leaves its combination free for talking back.
+  @Test func theTalkBackKeyMayBeAClearedPauseKey() {
+    var settings = SensingSettings()
+    settings.pauseShortcut = nil
+    settings.mentor.pushToTalkHotKey = .defaultPause
+    #expect(settings.validated().mentor.pushToTalkHotKey == .defaultPause)
+    #expect(settings.validated().pauseShortcut == nil)
   }
 }
 

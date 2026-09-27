@@ -14,10 +14,15 @@ import ObjectiveC
 ///
 /// Ordering in is where every window passes: SwiftUI's, AppKit's About panel,
 /// and the app's own panels alike, so each is caught by exchanging
-/// `NSWindow`'s two ordering primitives for ones that park it first. After
-/// every pass through the event loop, any window on screen that is still not
-/// parked is parked too, should one ever reach the screen another way. This is
-/// in the control API's target, so only a development build carries it.
+/// `NSWindow`'s two ordering primitives for ones that park it first. A level
+/// set on a window already on screen is caught the same way, by exchanging
+/// its level setter for one that keeps it parked: AppKit raises a window to
+/// the modal level while an alert's sheet runs on it and drops it to the
+/// normal level after, which would put it over the desktop, in front of
+/// whoever is at the Mac. After every pass through the event loop, any window
+/// on screen that is still not parked is parked too, should one ever reach
+/// the screen another way. This is in the control API's target, so only a
+/// development build carries it.
 @MainActor
 public enum WindowParking {
   /// Below the desktop picture.
@@ -35,6 +40,7 @@ public enum WindowParking {
     for (original, parking) in [
       (#selector(NSWindow.order(_:relativeTo:)), #selector(NSWindow.parkedOrder(_:relativeTo:))),
       (#selector(NSWindow.orderFrontRegardless), #selector(NSWindow.parkedOrderFrontRegardless)),
+      (NSSelectorFromString("setLevel:"), #selector(NSWindow.parkedSetLevel(_:))),
     ] {
       if let original = class_getInstanceMethod(NSWindow.self, original),
         let parking = class_getInstanceMethod(NSWindow.self, parking)
@@ -70,5 +76,11 @@ extension NSWindow {
   @objc fileprivate func parkedOrderFrontRegardless() {
     MainActor.assumeIsolated { WindowParking.park(self) }
     parkedOrderFrontRegardless()
+  }
+
+  /// The `level` setter, as `parkedOrder` is `order(_:relativeTo:)`: whatever
+  /// level is asked for, the window stays parked.
+  @objc fileprivate func parkedSetLevel(_ level: Int) {
+    parkedSetLevel(MainActor.assumeIsolated { WindowParking.level.rawValue })
   }
 }

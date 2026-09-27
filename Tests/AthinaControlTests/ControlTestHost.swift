@@ -21,7 +21,7 @@ final class ControlTestHost: ControlHost {
   var advanced: [TimeInterval] = []
   var controlClock: (now: Date, movedAhead: TimeInterval) = (Date(timeIntervalSince1970: 0), 0)
 
-  var controlSettings: ControlValue { .null }
+  var controlSettings = ControlValue.null
   func controlCapture(_ window: NSWindow) async throws -> ControlCapture {
     throw CancellationError()
   }

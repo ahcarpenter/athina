@@ -77,11 +77,12 @@ struct VoiceSection: View {
       content: {
         LabeledContent(
           content: {
-            HotKeyRecorder(
+            ShortcutRecorder(
               title: "Talk-back shortcut",
+              identifier: "voice.talkBackShortcut",
               hotKey: $state.settings.mentor.pushToTalkHotKey,
-              conflicts: [state.settings.pauseHotKey],
-              conflictNote: "That is the pause shortcut."
+              conflicts: [state.settings.pauseShortcut].compactMap { $0 },
+              conflictNote: "This keyboard shortcut is already the pause shortcut."
             )
           },
           label: {

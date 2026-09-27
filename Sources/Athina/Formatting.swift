@@ -1,6 +1,7 @@
 import AthinaCore
 import CoreGraphics
 import Foundation
+import KeyboardShortcuts
 import SwiftUI
 
 enum Formatting {
@@ -87,16 +88,11 @@ enum Formatting {
     interval < 10 ? String(format: "%.2fs", interval) : String(format: "%.1fs", interval)
   }
 
-  /// A SwiftUI shortcut mirroring the global hotkey, so the menu shows it.
+  /// A SwiftUI shortcut mirroring the global one, so the menu shows it; nil
+  /// for a key a menu cannot show, such as one on the keypad.
+  @MainActor
   static func keyboardShortcut(for hotKey: HotKey) -> KeyboardShortcut? {
-    let name = HotKey.keyName(for: hotKey.keyCode)
-    guard name.count == 1, let character = name.lowercased().first else { return nil }
-    var modifiers: EventModifiers = []
-    if hotKey.modifiers.contains(.command) { modifiers.insert(.command) }
-    if hotKey.modifiers.contains(.option) { modifiers.insert(.option) }
-    if hotKey.modifiers.contains(.control) { modifiers.insert(.control) }
-    if hotKey.modifiers.contains(.shift) { modifiers.insert(.shift) }
-    return KeyboardShortcut(KeyEquivalent(character), modifiers: modifiers)
+    hotKey.shortcut.toSwiftUI
   }
 }
 

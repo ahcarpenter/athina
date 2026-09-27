@@ -215,7 +215,8 @@ Store release flow brings it back as part of that flow.
 
 The project has one target, `Athina App Store`, and a scheme of the same name
 whose Archive action builds Release. It compiles `Sources/Athina` against the
-package's `AthinaCore` and `SnapshotDiff`, linking the frameworks the package's
+package's `AthinaCore` and `SnapshotDiff` and the KeyboardShortcuts package, at
+the version `Package.swift` pins, linking the frameworks the package's
 `Athina` target does (a dependency or framework added to one goes in the other
 too, except the `ControlAPI`-conditional `AthinaControl`, which the App Store
 build never carries; see [The control API](e2e.md#the-control-api)), bundles the same icon and menu bar

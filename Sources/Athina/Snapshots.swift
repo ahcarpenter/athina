@@ -515,9 +515,10 @@ enum Snapshots {
     override var backingScaleFactor: CGFloat { fixedScale ?? super.backingScaleFactor }
   }
 
-  /// Captures until two captures in a row are the same picture, so a view that
-  /// was still settling (a late layout pass, an image that loads on its own) is
-  /// never what gets kept; nil when no two ever are.
+  /// Captures until two captures in a row are identical, or the first agrees
+  /// with `earlier` within the tolerance, so a view that was still settling (a
+  /// late layout pass, an image that loads on its own) is never what gets
+  /// kept; nil when neither ever happens.
   ///
   /// A `Bitmap` is in sRGB, so what is kept does not depend on the colour
   /// profile of the display it was captured on, and every viewer shows the file
@@ -529,20 +530,30 @@ enum Snapshots {
     frames: DisplayFrames?,
     agreeingWith earlier: Bitmap?
   ) async throws -> Bitmap? {
-    var previous = earlier
+    var earlier = earlier
+    var previous: Bitmap?
     for _ in 0..<8 {
       hosting.layoutSubtreeIfNeeded()
       window.displayIfNeeded()
       if let image = try await capture.take(window, hosting) {
         let bitmap = try Bitmap(image)
-        if let previous, samePicture(previous, bitmap) { return bitmap }
+        // Two captures of one window agree only as the same bytes: the end of
+        // a slow fade, such as the title bar's to a new appearance, changes
+        // less from one frame to the next than the tolerance allows, so
+        // captures that agree only within it may still be moving. The
+        // tolerance is for a picture from another window, which the window
+        // server may draw one of two ways.
+        if bitmap == previous || earlier.map({ samePicture($0, bitmap) }) == true {
+          return bitmap
+        }
+        earlier = nil
         previous = bitmap
       }
       if let frames {
         // A new frame on the display, so the next capture is of it.
         await frames.next()
       } else {
-        try await Task.sleep(for: .milliseconds(150))
+        try await Task.sleep(until: .now + .milliseconds(150), clock: .continuous)
       }
     }
     return nil
@@ -1116,14 +1127,9 @@ struct SampleContextEditor: View {
 }
 
 /// Every inline status message the Settings panes can show, in one form, so
-/// the transient ones (a connection test, a refused shortcut, recording a
-/// shortcut, recognition unavailable) have renders too.
+/// the transient ones (a connection test, a shortcut another app holds,
+/// recognition unavailable) have renders too.
 struct StatusMessagesPreview: View {
-  @State private var shortcut: HotKey? = HotKey(
-    keyCode: 17,
-    modifiers: [.control, .option, .command]
-  )
-
   var body: some View {
     Form {
       Section("Connection") {
@@ -1154,16 +1160,6 @@ struct StatusMessagesPreview: View {
         StatusLabel("Paste the whole key. It is one word with no spaces.", kind: .error)
       }
       Section("Shortcuts") {
-        LabeledContent("Recording") {
-          HotKeyRecorder(title: "Talk-back shortcut", hotKey: $shortcut, previewRecording: true)
-        }
-        LabeledContent("Refused") {
-          HotKeyRecorder(
-            title: "Talk-back shortcut",
-            hotKey: $shortcut,
-            previewRefusal: "That is the pause shortcut."
-          )
-        }
         StatusLabel(
           """
           Another app uses this combination, or it lacks Control, Option, or Command. Choose \

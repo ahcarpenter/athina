@@ -42,12 +42,15 @@ let package = Package(
   ],
   dependencies: [
     // Each pinned exactly, and no Package.resolved is committed, since a
-    // committed one has every build fetch every package it names. Neither
+    // committed one has every build fetch every package it names. None
     // depends on another package.
     //
     // The command lines of athina-drive and snapshot-diff, the developer
     // tools; the app and its release builds never link it.
     .package(url: "https://github.com/apple/swift-argument-parser", exact: "1.8.2"),
+    // The global keyboard shortcuts and their recorder, in the app itself
+    // (docs/mentor-loop.md "Keyboard shortcuts").
+    .package(url: "https://github.com/sindresorhus/KeyboardShortcuts", exact: "3.1.0"),
     // Only for the UI smoke test, and fetched only with its trait on; the one
     // product used is SnapshotTesting.
     .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.6"),
@@ -57,7 +60,11 @@ let package = Package(
     .target(name: "AthinaSQLiteShim", linkerSettings: [.linkedLibrary("sqlite3")]),
     .target(
       name: "AthinaCore",
-      dependencies: ["AthinaSQLiteShim"],
+      // KeyboardShortcuts for the stored shortcut's own form of the combination.
+      dependencies: [
+        "AthinaSQLiteShim",
+        .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
+      ],
       linkerSettings: [
         .linkedLibrary("sqlite3"),
         .linkedFramework("ScreenCaptureKit"),
@@ -78,6 +85,7 @@ let package = Package(
       dependencies: [
         "AthinaCore",
         "SnapshotDiff",
+        .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
         .target(name: "AthinaControl", condition: .when(traits: ["ControlAPI"])),
       ],
       linkerSettings: [
@@ -130,7 +138,10 @@ let package = Package(
     ),
     .testTarget(
       name: "AthinaCoreTests",
-      dependencies: ["AthinaCore"],
+      dependencies: [
+        "AthinaCore",
+        .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
+      ],
       resources: [.copy("Fixtures")]
     ),
     .testTarget(

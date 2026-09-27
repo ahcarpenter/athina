@@ -1,4 +1,6 @@
+import Carbon.HIToolbox
 import Foundation
+import KeyboardShortcuts
 import Testing
 
 @testable import AthinaCore
@@ -20,7 +22,7 @@ import Testing
     var settings = SensingSettings()
     settings.floorInterval = 9
     settings.excludedBundleIDs = ["com.example.Secret"]
-    settings.pauseHotKey = HotKey(keyCode: 1, modifiers: [.command, .shift])
+    settings.pauseShortcut = HotKey(keyCode: 1, modifiers: [.command, .shift])
     settings.ocrLevel = .accurate
     try store.save(settings)
     #expect(store.load() == settings)
@@ -42,6 +44,44 @@ import Testing
     #expect(decoded.floorInterval == 12)
     #expect(decoded.idleThreshold == SensingSettings().idleThreshold)
     #expect(decoded.excludedBundleIDs == ExcludedApps.defaults)
+  }
+
+  /// A new install pauses on Control-Option-Command-P; the person can clear
+  /// it, it stays cleared from one launch to the next, and recording one
+  /// sets it again.
+  @Test func thePauseShortcutClearsAndStaysCleared() throws {
+    #expect(SensingSettings().pauseShortcut == .defaultPause)
+    let store = SettingsStore(url: temporaryURL())
+    var settings = SensingSettings()
+    settings.pauseShortcut = nil
+    try store.save(settings)
+    #expect(store.load().pauseShortcut == nil)
+    #expect(store.load() == settings)
+    let chosen = HotKey(keyCode: 1, modifiers: [.control, .option])
+    settings.pauseShortcut = chosen
+    try store.save(settings)
+    #expect(store.load().pauseShortcut == chosen)
+  }
+
+  /// Every earlier build reads `pauseHotKey` as a combination that is always
+  /// set, and nothing else about it: a cleared shortcut keeps its last
+  /// combination there, so an earlier build reads the file and pauses on
+  /// that combination, and a file an earlier build wrote reads as set.
+  @Test func anEarlierBuildReadsAClearedPauseShortcutAsItsLastCombination() throws {
+    let chosen = HotKey(keyCode: 1, modifiers: [.control, .option])
+    var settings = SensingSettings()
+    settings.pauseShortcut = chosen
+    settings.pauseShortcut = nil
+    let file = try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings))
+    let stored = try #require((file as? [String: Any])?["pauseHotKey"])
+    let earlier = try JSONDecoder().decode(
+      HotKey.self,
+      from: JSONSerialization.data(withJSONObject: stored)
+    )
+    #expect(earlier == chosen)
+
+    let written = Data(#"{"pauseHotKey": {"keyCode": 1, "modifiers": 3}}"#.utf8)
+    #expect(try SensingSettings(json: written).pauseShortcut == chosen)
   }
 
   /// The debug panel is something the person turns on: a new install and a
@@ -151,7 +191,9 @@ import Testing
     s.journalSizeCapBytes = 200 * 1024 * 1024
     s.retentionInterval = 300
     s.excludedBundleIDs = ["com.example.Secret"]
-    s.pauseHotKey = HotKey(keyCode: 1, modifiers: [.command, .shift])
+    // A cleared shortcut still keeps its last combination.
+    s.pauseShortcut = HotKey(keyCode: 1, modifiers: [.command, .shift])
+    s.pauseShortcut = nil
     s.showDebugPanel = true
     s.mentor.enabled = false
     s.mentor.triageModel = ModelCatalog.sonnet5.id
@@ -358,22 +400,62 @@ import Testing
 }
 
 @Suite struct HotKeyTests {
-  @Test func displayStringShowsModifiersAndKey() {
-    #expect(HotKey.defaultPause.displayString == "⌃⌥⌘P")
-    #expect(HotKey(keyCode: 49, modifiers: [.shift, .command]).displayString == "⇧⌘Space")
-    #expect(HotKey(keyCode: 200, modifiers: []).displayString == "Key 200")
+  /// The modifiers every earlier build registered with Carbon for a stored
+  /// shortcut, bit for bit.
+  private func carbonModifiers(_ modifiers: HotKey.Modifiers) -> Int {
+    var flags = 0
+    if modifiers.contains(.command) { flags |= cmdKey }
+    if modifiers.contains(.option) { flags |= optionKey }
+    if modifiers.contains(.control) { flags |= controlKey }
+    if modifiers.contains(.shift) { flags |= shiftKey }
+    return flags
   }
 
-  @Test func usabilityNeedsRealModifier() {
+  @Test func aSavedShortcutRegistersTheCombinationEarlierBuildsDid() throws {
+    // Control-Option-Command-P as settings.json has always held it.
+    let saved = try JSONDecoder().decode(
+      HotKey.self,
+      from: Data(#"{"keyCode": 35, "modifiers": 11}"#.utf8)
+    )
+    #expect(saved == .defaultPause)
+    let pause = KeyboardShortcuts.Shortcut(.p, modifiers: [.control, .option, .command])
+    #expect(saved.shortcut == pause)
+    #expect(saved.shortcut.carbonKeyCode == kVK_ANSI_P)
+    #expect(saved.shortcut.carbonModifiers == controlKey | optionKey | cmdKey)
+  }
+
+  @Test func everyStoredCombinationIsTheSameShortcutBothWays() {
+    for bits in 0..<16 {
+      let key = HotKey(keyCode: 17, modifiers: HotKey.Modifiers(rawValue: UInt32(bits)))
+      #expect(key.shortcut.carbonKeyCode == 17)
+      #expect(key.shortcut.carbonModifiers == carbonModifiers(key.modifiers))
+      #expect(HotKey(key.shortcut) == key)
+    }
+  }
+
+  @Test func theStoredFormIsTheOneEarlierBuildsWrote() throws {
+    let key = HotKey(keyCode: 12, modifiers: [.option, .command])
+    let data = try JSONEncoder().encode(key)
+    let object = try JSONSerialization.jsonObject(with: data) as? [String: Int]
+    #expect(object == ["keyCode": 12, "modifiers": 10])
+    #expect(try JSONDecoder().decode(HotKey.self, from: data) == key)
+  }
+
+  @Test func aShortcutWithFnIsNotStored() {
+    #expect(HotKey(KeyboardShortcuts.Shortcut(.a, modifiers: [.command, .function])) == nil)
+  }
+
+  @Test func usabilityNeedsARealModifierOrAFunctionKey() {
     #expect(HotKey.defaultPause.isUsable)
     #expect(!HotKey(keyCode: 0, modifiers: [.shift]).isUsable)
     #expect(!HotKey(keyCode: 0, modifiers: []).isUsable)
+    #expect(HotKey(keyCode: UInt32(kVK_F13), modifiers: []).isUsable)
+    #expect(HotKey(keyCode: UInt32(kVK_F5), modifiers: [.shift]).isUsable)
   }
 
-  @Test func codableRoundTrip() throws {
-    let key = HotKey(keyCode: 12, modifiers: [.option, .command])
-    let data = try JSONEncoder().encode(key)
-    #expect(try JSONDecoder().decode(HotKey.self, from: data) == key)
+  @Test @MainActor func displayStringShowsModifiersAndKey() {
+    let key = HotKey(keyCode: UInt32(kVK_F5), modifiers: [.control, .command])
+    #expect(key.displayString == "⌃⌘F5")
   }
 }
 
