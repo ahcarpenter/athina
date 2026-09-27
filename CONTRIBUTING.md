@@ -21,8 +21,6 @@ coding agents, with pointers into these docs.
   SwiftPM fetches, pinned; the rest is the system's: SwiftUI,
   ScreenCaptureKit, Vision, the accessibility API, AVFoundation and Speech
   for talking back, and the system SQLite
-- The Xcode project alone (see [The Xcode project](docs/releasing.md#the-xcode-project)) is generated with XcodeGen,
-  which SwiftPM fetches and builds, pinned, on first use; nothing else needs it
 - The UI smoke test alone (see [UI snapshot smoke test](docs/ci.md#ui-snapshot-smoke-test)) uses
   swift-snapshot-testing, which SwiftPM fetches, pinned, only when that test
   runs; the app never links it
@@ -57,8 +55,7 @@ make test-snapshots-ci       # the UI smoke test as CI runs it, compared with th
 make icons                   # rebuilds the app icon and the README's copy of it from AthinaMark.svg, and the menu bar mark from AthinaOwl.svg (their outputs are committed, so a plain build never needs it)
 make measure                 # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 make release                 # builds, signs, notarizes, and packages a direct-download release into build/release (see docs/releasing.md)
-make xcodeproj               # generates Athina.xcodeproj, the Xcode project for the App Store route, from project.yml (see docs/releasing.md)
-make clean                   # removes every build product and the generated Xcode project
+make clean                   # removes every build product
 ```
 
 None of the launch targets quits an Athina it did not start: each one stops
@@ -75,9 +72,7 @@ launching a second copy from Finder, which was equally true before.
 `Package.swift` defines the targets and `scripts/bundle.sh` wraps the release
 binary in an app bundle with `Resources/Info.plist` and
 `Resources/Athina.entitlements`, then signs it. `swift build` and `swift test`
-work directly too. The one Xcode project, for the Mac App Store route, wraps
-this package rather than replacing it, and nothing above uses it (see [The
-Xcode project](docs/releasing.md#the-xcode-project)). The bundle `make build` makes is a development one: it carries
+work directly too. The bundle `make build` makes is a development one: it carries
 the end-to-end harness's control API (the `ControlAPI` package trait, see [The
 control API](docs/e2e.md#the-control-api)), which a release never does.
 
@@ -131,8 +126,7 @@ itself and says which on the line it writes as it starts.
   [Design conventions](docs/design.md) applies them.
 - **Approved images come from CI, never from a Mac** (below).
 - **Generated files are regenerated, never edited**: the app icon, the menu
-  bar mark and the README icon come from `make icons`, and `Athina.xcodeproj`
-  from `make xcodeproj`.
+  bar mark and the README icon come from `make icons`.
 - **A make recipe stays one line**; logic beyond one command goes in a script
   in `scripts/`.
 - **Conventional Commits**: `feat(athina): ...`, `fix(e2e): ...`,

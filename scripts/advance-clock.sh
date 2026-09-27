@@ -6,7 +6,7 @@
 #
 # The API answers only a request carrying that directory's secret, and the
 # answer is what proves the clock moved: a lane that is gone, still starting,
-# or serving no API (a release build, a sandboxed one) gives none, which is a
+# or serving no API (a release build) gives none, which is a
 # failure rather than a clock nobody moved.
 #
 # Usage: scripts/advance-clock.sh <lane> <interval>

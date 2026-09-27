@@ -7,8 +7,6 @@ let package = Package(
   products: [
     .executable(name: "Athina", targets: ["Athina"]),
     .library(name: "AthinaCore", targets: ["AthinaCore"]),
-    // A product so project.yml's App Store target can link it, as the Athina target does.
-    .library(name: "SnapshotDiff", targets: ["SnapshotDiff"]),
     // The end-to-end harness's drive tool (scripts/e2e, see docs/e2e.md).
     .executable(name: "athina-drive", targets: ["AthinaDrive"]),
     // Compares UI snapshot renders with the approved baselines (scripts/snapshots.sh, see
@@ -18,8 +16,8 @@ let package = Package(
   traits: [
     // The end-to-end harness's in-app control API (docs/e2e.md "The control
     // API"), off by default: scripts/bundle.sh turns it on for the
-    // development bundle, and the release and App Store builds never do,
-    // so their binaries carry none of it.
+    // development bundle, and the release build never does, so its binary
+    // carries none of it.
     .trait(
       name: "ControlAPI",
       description:
@@ -74,10 +72,6 @@ let package = Package(
         .linkedFramework("Speech"),
       ]
     ),
-    // project.yml's App Store target compiles these same sources against
-    // AthinaCore and SnapshotDiff: a dependency or framework added here goes
-    // there too, except the ControlAPI-conditional AthinaControl, which the
-    // App Store build never carries.
     .executableTarget(
       name: "Athina",
       // SnapshotDiff so `--snapshot` judges two captures the same picture

@@ -30,9 +30,7 @@ three before it changes any approved image, so when one has no run to take
 job that published nothing), it changes nothing and fails naming each one
 missing and why. `scripts/snapshots.sh baselines-approve`, `smoke-approve`
 and `checkpoints-approve` each take one alone, from HEAD's newest run or the
-run id given, for a change that drifts only some. The
-Xcode project's archive check is out of CI until the App Store release flow
-brings it back as part of that flow (see [The Xcode project](releasing.md#the-xcode-project)).
+run id given, for a change that drifts only some.
 
 All five run on every push to main. On a pull request, `build-and-test`, `lint`,
 `e2e-api` and `ui-snapshots-smoke` (`.github/workflows/ci.yml`) run on every push, and the
@@ -80,15 +78,10 @@ order it goes in: apply, then run the job again, then merge.
 
 **Dependency updates.** Renovate (`.github/renovate.json5`) opens the update
 pull requests, weekly on Monday morning: one for the GitHub Actions the
-workflows and `.github/actions` use, and one for the packages the two
-`Package.swift` manifests pin, swift-snapshot-testing at the root and XcodeGen
-in `Tools/XcodeGenTool`. Each is a pull request like any other, checked by CI
-the same way. The runner images are left out, since moving CI to a new macOS
-image is a deliberate commit (see One Xcode, pinned, below). Renovate moves
-XcodeGen's own pin in the committed `Tools/XcodeGenTool/Package.resolved` but
-not the pins of the packages it depends on, so its pull request says to run
-`swift package --package-path Tools/XcodeGenTool resolve` and commit what that
-changes. The root `Package.resolved` stays uncommitted (see
+workflows and `.github/actions` use, and one for the packages `Package.swift`
+pins. Each is a pull request like any other, checked by CI the same way. The
+runner images are left out, since moving CI to a new macOS image is a
+deliberate commit (see One Xcode, pinned, below). The root `Package.resolved` stays uncommitted (see
 [UI snapshot smoke test](#ui-snapshot-smoke-test)), which Renovate does not
 need. Nothing runs until two steps in the repository's settings, which take an
 admin: install the Mend Renovate GitHub App on the repository, and turn on the

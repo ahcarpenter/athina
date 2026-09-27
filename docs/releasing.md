@@ -1,6 +1,6 @@
 # Releasing
 
-The first releases go out directly, as a download from outside the App Store:
+Athina's releases go out directly, as a download from outside the App Store:
 signed with a Developer ID, notarized by Apple, with no App Sandbox and no App
 Review. `make release` (`scripts/release.sh`) does all of it:
 
@@ -133,9 +133,9 @@ wherever it was installed.
   than its exact binary, so a released copy asks once, Always Allow, to read a
   key a development build saved, and later releases do not ask.
 
-The App Store is a separate route: it needs the App Sandbox, which moves the
-app's data into a container, and App Review. None of that applies here, so
-the data move and the grants above work as written.
+Athina ships only this way, not through the App Store, whose App Sandbox
+would move the app's data into a container, so the data move and the grants
+above work as written.
 
 ## Code signing
 
@@ -172,70 +172,3 @@ grant again:
 tccutil reset Accessibility com.ahcarpenter.athina
 tccutil reset ScreenCapture com.ahcarpenter.athina
 ```
-
-## A sandboxed build
-
-The same binary can run in the App Sandbox, which a Mac App Store edition
-needs; the Xcode project's `Athina App Store` target builds it, signed with
-`Resources/Athina.app-store.entitlements` (see [The Xcode project](#the-xcode-project)). At launch
-`RuntimeEnvironment` reads the process's own `com.apple.security.app-sandbox`
-entitlement, which the direct and development builds carry set to false, so
-they run exactly as described everywhere else in these docs. A sandboxed run
-differs in three ways:
-
-- Its files are in its container, its preferences domain and its keychain
-  service are its own bundle identifier rather than `com.ahcarpenter.athina`
-  (`AppPaths`), so it never shares preferences or a key with the direct build.
-- It moves nothing from Mentor, neither files, preferences nor the API key
-  (see [Coming from Mentor](coming-from-mentor.md)), since all three are out of its reach, and says so
-  once in the log.
-- `--replay` and `--settings` may name only a path inside its container or its
-  own bundle, and `--record` and `--snapshot` only one inside its container.
-  Anything else is
-  refused with one line naming the path and where it could have been.
-- `--control` is refused whatever it names: a sandboxed Athina never serves
-  the control API, even one built from the development bundle.
-
-## The Xcode project
-
-The Mac App Store route needs what only an Xcode project gives: automatic
-signing with provisioning profiles, archiving, and uploading to App Store
-Connect. `project.yml` is its committed spec, and `make xcodeproj` generates
-`Athina.xcodeproj` from it with XcodeGen, pinned by version in
-`Tools/XcodeGenTool` (its `Package.resolved` is committed), which SwiftPM
-builds on first use, so nothing is installed and every Mac generates the
-same project. The generated project is not committed, so no `project.pbxproj`
-is ever merged by hand: change `project.yml` and regenerate. Opening the
-project in Xcode starts with `make xcodeproj`, then `open Athina.xcodeproj`;
-run it again after changing `project.yml` or adding or removing a source file.
-The tools package is not part of the app's package, so `make build`, `make
-test`, `scripts/bundle.sh`, `make release` and CI never fetch or build XcodeGen.
-CI does not generate or archive the project: that check left CI until the App
-Store release flow brings it back as part of that flow.
-
-The project has one target, `Athina App Store`, and a scheme of the same name
-whose Archive action builds Release. It compiles `Sources/Athina` against the
-package's `AthinaCore` and `SnapshotDiff` and the KeyboardShortcuts package, at
-the version `Package.swift` pins, linking the frameworks the package's
-`Athina` target does (a dependency or framework added to one goes in the other
-too, except the `ControlAPI`-conditional `AthinaControl`, which the App Store
-build never carries; see [The control API](e2e.md#the-control-api)), bundles the same icon and menu bar
-marks `scripts/bundle.sh` does, and signs with
-`Resources/Athina.app-store.entitlements` (the App Sandbox, `network.client`,
-and the microphone keys of both the hardened runtime, `device.audio-input`,
-and the sandbox, `device.microphone`). Its Info.plist is `Resources/Info.plist`
-with `CFBundleIdentifier` rewritten at build time to the target's
-`PRODUCT_BUNDLE_IDENTIFIER`, so the version and every other key are still set
-in one place. That id is set only in `project.yml`, and is the development id
-`com.ahcarpenter.athina.appstore.dev` until the permanent App Store id is
-chosen, which can never change once a build is uploaded. Signing is automatic
-and `DEVELOPMENT_TEAM` is left empty: until a team id is filled in there, the
-target signs to run locally, as `xcodebuild` or Xcode builds and archives it;
-with one, Xcode signs with that
-team's Apple Development certificate and Product > Archive feeds the
-Organizer's App Store Connect upload. The built app is sandboxed, so it keeps
-its files in its own container and runs as [A sandboxed build](#a-sandboxed-build) describes. The
-App Store build is archived and uploaded through this project, while the
-direct Developer ID release keeps `scripts/release.sh` (see [Releasing](#releasing)); the
-earlier plan to package the App Store build from the package build with
-`productbuild` and `altool` is superseded.

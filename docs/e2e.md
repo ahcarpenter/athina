@@ -279,12 +279,10 @@ harness (`ControlMode`):
   linked into the app only under the `ControlAPI` package trait.
   `scripts/bundle.sh` turns the trait on for the development bundle; the
   release build (`scripts/bundle.sh --no-control`, which `make release` uses)
-  and the App Store build leave it off, and `scripts/check-no-control-api.sh`,
-  which `make release` and CI run, fails a binary that carries it.
+  leaves it off, and `scripts/check-no-control-api.sh`, which `make release`
+  and CI run, fails a binary that carries it.
 - **The launch is a replay**, which reads no key, keeps its own files, and
   bills nothing; a live or recording launch refuses `--control`.
-- **The process is not sandboxed**, so a sandboxed build made from the
-  development bundle refuses it too.
 - **The directory is the harness's own for the run**: absolute, a real
   directory owned by you with mode 0700 exactly, holding the run's
   secret in `secret`, a file closed to everyone else, and short enough for the
