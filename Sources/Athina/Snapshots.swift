@@ -529,13 +529,23 @@ enum Snapshots {
     frames: DisplayFrames?,
     agreeingWith earlier: Bitmap?
   ) async throws -> Bitmap? {
-    var previous = earlier
+    var earlier = earlier
+    var previous: Bitmap?
     for _ in 0..<8 {
       hosting.layoutSubtreeIfNeeded()
       window.displayIfNeeded()
       if let image = try await capture.take(window, hosting) {
         let bitmap = try Bitmap(image)
-        if let previous, samePicture(previous, bitmap) { return bitmap }
+        // Two captures of one window agree only as the same bytes: the end of
+        // a slow fade, such as the title bar's to a new appearance, changes
+        // less from one frame to the next than the tolerance allows, so
+        // captures that agree only within it may still be moving. The
+        // tolerance is for a picture from another window, which the window
+        // server may draw one of two ways.
+        if bitmap == previous || earlier.map({ samePicture($0, bitmap) }) == true {
+          return bitmap
+        }
+        earlier = nil
         previous = bitmap
       }
       if let frames {
