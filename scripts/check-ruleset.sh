@@ -2,7 +2,7 @@
 # Fails when the rules GitHub enforces on main differ from
 # .github/rulesets/main.json, which CI's lint job runs on every push.
 #
-# GitHub never reads that file: README "Continuous integration" applies it by
+# GitHub never reads that file: docs/ci.md applies it by
 # hand, so the two can drift apart unseen, as they once did for a day in which
 # lint was not required. This reads the rules GitHub applies to main from the
 # repository's public rules/branches/main endpoint, which needs no admin
@@ -56,7 +56,7 @@ fi
 	echo "(- the file, + GitHub):"
 	diff -u --label "$RULESET" --label "GitHub" <(echo "$committed") <(echo "$live") || true
 	echo
-	echo "Apply the file with the command in README \"Continuous integration\" (it needs"
+	echo "Apply the file with the command in docs/ci.md (it needs"
 	echo "admin rights on the repository), then run this job again. A pull request that"
 	echo "changes $RULESET fails here until its ruleset is applied."
 } >&2
