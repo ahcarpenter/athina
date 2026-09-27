@@ -3,7 +3,8 @@
 ```
 Sources/AthinaCore            library, fully testable
   Settings/                   SensingSettings (every threshold and cadence), MentorSettings (the loop's
-                              section of the same file), SettingsStore (JSON), ExcludedApps, HotKey,
+                              section of the same file), SettingsSection (either read through its synthesized Codable
+                              laid over its defaults), SettingsStore (JSON), ExcludedApps, HotKey,
                               LaunchFiles (a launch's data directory and starting settings: a replay's own
                               directory, --settings, the started line that names it, and the lock that keeps it one replay's)
   Model/ActivityObservation   FocusContext, FrameInfo, TextBlock, ActivityObservation, JournalEvent,

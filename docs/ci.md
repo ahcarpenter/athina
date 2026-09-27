@@ -5,7 +5,8 @@ the macOS 26 SDK this package targets: `build-and-test` runs `make test`: `swift
 `scripts/check-no-control-api.sh`, which must find no control API in a build
 without the `ControlAPI` trait, for which it takes the debug `Athina` the
 tests' build already made rather than compiling the package again; `lint` runs `make lint` (see [Code style](code-style.md)) and fails on any
-finding; `e2e-api` builds the development bundle with the bundle script,
+finding, then checks the rules GitHub enforces on main against the committed
+ruleset (see below); `e2e-api` builds the development bundle with the bundle script,
 checks that it carries the control API, runs every API-tier scenario of the
 end-to-end harness and compares their checkpoints with approved baselines (see
 [Checkpoints](#checkpoints));
@@ -65,7 +66,31 @@ gh api -X PUT "repos/ahcarpenter/athina/rulesets/$(gh api repos/ahcarpenter/athi
 creates it if it is gone). It requires each check from GitHub Actions itself
 (integration 15368), so a commit status of the same name cannot stand in for
 one, and it does not require a branch to be up to date with main, so a pull
-request is not rerun each time another merges.
+request is not rerun each time another merges. GitHub never reads the file, so
+the `lint` job ends by checking that the two still agree:
+`scripts/check-ruleset.sh` reads the rules GitHub applies to main from the
+public `repos/ahcarpenter/athina/rules/branches/main` endpoint and fails when
+any rule or required check differs from the file's, even after a lint failure,
+so both are reported at once. A pull request that changes the file therefore
+fails `lint` until the change is applied with the command above, which is the
+order it goes in: apply, then run the job again, then merge.
+
+**Dependency updates.** Renovate (`.github/renovate.json5`) opens the update
+pull requests, weekly on Monday morning: one for the GitHub Actions the
+workflows and `.github/actions` use, and one for the packages the two
+`Package.swift` manifests pin, swift-snapshot-testing at the root and XcodeGen
+in `Tools/XcodeGenTool`. Each is a pull request like any other, checked by CI
+the same way. The runner images are left out, since moving CI to a new macOS
+image is a deliberate commit (see One Xcode, pinned, below). Renovate moves
+XcodeGen's own pin in the committed `Tools/XcodeGenTool/Package.resolved` but
+not the pins of the packages it depends on, so its pull request says to run
+`swift package --package-path Tools/XcodeGenTool resolve` and commit what that
+changes. The root `Package.resolved` stays uncommitted (see
+[UI snapshot smoke test](#ui-snapshot-smoke-test)), which Renovate does not
+need. Nothing runs until two steps in the repository's settings, which take an
+admin: install the Mend Renovate GitHub App on the repository, and turn on the
+dependency graph and Dependabot alerts, which Renovate's security updates read;
+no Dependabot configuration is used.
 
 **A build cache.** Every macOS job that compiles the package restores
 `.build` from an earlier run of the same job through

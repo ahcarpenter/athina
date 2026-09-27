@@ -3,8 +3,8 @@ import Foundation
 /// Everything the mentor loop can be tuned with.
 ///
 /// Persisted inside `settings.json` under the `mentor` key; missing fields take
-/// their defaults.
-public struct MentorSettings: Codable, Equatable, Sendable {
+/// their defaults (`SettingsSection`).
+public struct MentorSettings: SettingsSection, Equatable, Sendable {
   // MARK: Models
 
   /// Master switch.
@@ -118,76 +118,10 @@ public struct MentorSettings: Codable, Equatable, Sendable {
   /// One whose deadline has passed no longer counts.
   public var snoozes: [Snooze] = []
 
-  // MARK: Initializers, and Codable with per-field defaults
-
-  private enum CodingKeys: String, CodingKey {
-    case enabled, triageModel, mentorModel, understandingModel
-    case triageEffort, mentorEffort, understandingEffort
-    case triageMinInterval, mentorMinInterval, triageSimilarityThreshold
-    case onlyMentorInsideContexts, contexts
-    case mentorWindowDuration, mentorWindowTokenBudget, sendThumbnail
-    case understandingRefreshInterval, understandingTokenBudget, understandingIdleGap
-    case minimumConfidence, toastTimeout, notNowSnooze
-    case showCallouts, pushToTalkHotKey
-    case hourlySpendCap, prices
-    case neverRules, snoozes
-  }
+  // MARK: Initializers
 
   /// Creates the default settings.
   public init() {}
-
-  /// Decodes the settings, giving any field missing from the file its
-  /// default, and validates them.
-  public init(from decoder: Decoder) throws {
-    let c = try decoder.container(keyedBy: CodingKeys.self)
-    let d = MentorSettings()
-    enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? d.enabled
-    triageModel = try c.decodeIfPresent(String.self, forKey: .triageModel) ?? d.triageModel
-    mentorModel = try c.decodeIfPresent(String.self, forKey: .mentorModel) ?? d.mentorModel
-    understandingModel =
-      try c.decodeIfPresent(String.self, forKey: .understandingModel) ?? d.understandingModel
-    triageEffort = try c.decodeIfPresent(Effort.self, forKey: .triageEffort) ?? d.triageEffort
-    mentorEffort = try c.decodeIfPresent(Effort.self, forKey: .mentorEffort) ?? d.mentorEffort
-    understandingEffort =
-      try c.decodeIfPresent(Effort.self, forKey: .understandingEffort) ?? d.understandingEffort
-    triageMinInterval =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .triageMinInterval) ?? d.triageMinInterval
-    mentorMinInterval =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .mentorMinInterval) ?? d.mentorMinInterval
-    triageSimilarityThreshold =
-      try c.decodeIfPresent(Double.self, forKey: .triageSimilarityThreshold)
-      ?? d.triageSimilarityThreshold
-    onlyMentorInsideContexts =
-      try c.decodeIfPresent(Bool.self, forKey: .onlyMentorInsideContexts)
-      ?? d.onlyMentorInsideContexts
-    contexts = try c.decodeIfPresent([MentorshipContext].self, forKey: .contexts) ?? d.contexts
-    mentorWindowDuration =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .mentorWindowDuration)
-      ?? d.mentorWindowDuration
-    mentorWindowTokenBudget =
-      try c.decodeIfPresent(Int.self, forKey: .mentorWindowTokenBudget) ?? d.mentorWindowTokenBudget
-    sendThumbnail = try c.decodeIfPresent(Bool.self, forKey: .sendThumbnail) ?? d.sendThumbnail
-    understandingRefreshInterval =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .understandingRefreshInterval)
-      ?? d.understandingRefreshInterval
-    understandingTokenBudget =
-      try c.decodeIfPresent(Int.self, forKey: .understandingTokenBudget)
-      ?? d.understandingTokenBudget
-    understandingIdleGap =
-      try c.decodeIfPresent(TimeInterval.self, forKey: .understandingIdleGap)
-      ?? d.understandingIdleGap
-    minimumConfidence =
-      try c.decodeIfPresent(Double.self, forKey: .minimumConfidence) ?? d.minimumConfidence
-    toastTimeout = try c.decodeIfPresent(TimeInterval.self, forKey: .toastTimeout) ?? d.toastTimeout
-    notNowSnooze = try c.decodeIfPresent(TimeInterval.self, forKey: .notNowSnooze) ?? d.notNowSnooze
-    showCallouts = try c.decodeIfPresent(Bool.self, forKey: .showCallouts) ?? d.showCallouts
-    pushToTalkHotKey = try c.decodeIfPresent(HotKey.self, forKey: .pushToTalkHotKey)
-    hourlySpendCap = try c.decodeIfPresent(Double.self, forKey: .hourlySpendCap) ?? d.hourlySpendCap
-    prices = try c.decodeIfPresent(PriceTable.self, forKey: .prices) ?? d.prices
-    neverRules = try c.decodeIfPresent([NeverRule].self, forKey: .neverRules) ?? d.neverRules
-    snoozes = try c.decodeIfPresent([Snooze].self, forKey: .snoozes) ?? d.snoozes
-    self = validated()
-  }
 
   /// Clamps every value into a range the loop can operate with.
   public func validated() -> MentorSettings {

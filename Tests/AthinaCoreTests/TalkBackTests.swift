@@ -390,10 +390,7 @@ import Testing
     let settings = MentorSettings()
     #expect(settings.showCallouts)
     #expect(settings.pushToTalkHotKey == nil)
-    let decoded = try JSONDecoder().decode(
-      MentorSettings.self,
-      from: Data(#"{"enabled": true}"#.utf8)
-    )
+    let decoded = try MentorSettings(json: Data(#"{"enabled": true}"#.utf8))
     #expect(decoded.showCallouts)
     #expect(decoded.pushToTalkHotKey == nil)
   }
@@ -406,7 +403,7 @@ import Testing
     )
     settings.mentor.showCallouts = false
     let data = try JSONEncoder().encode(settings)
-    let decoded = try JSONDecoder().decode(SensingSettings.self, from: data)
+    let decoded = try SensingSettings(json: data)
     #expect(decoded == settings)
 
     var shiftOnly = settings
@@ -425,7 +422,7 @@ import Testing
       {"pauseHotKey": {"keyCode": 17, "modifiers": 9}, "mentor": {"pushToTalkHotKey": \#
       {"keyCode": 17, "modifiers": 9}}}
       """#
-    let decoded = try JSONDecoder().decode(SensingSettings.self, from: Data(json.utf8))
+    let decoded = try SensingSettings(json: Data(json.utf8))
     #expect(decoded.pauseHotKey == HotKey(keyCode: 17, modifiers: [.control, .command]))
     #expect(decoded.mentor.pushToTalkHotKey == nil)
   }

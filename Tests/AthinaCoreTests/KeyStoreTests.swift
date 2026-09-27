@@ -59,7 +59,7 @@ import Testing
       """#
       .utf8
     )
-    let decoded = try JSONDecoder().decode(SensingSettings.self, from: data)
+    let decoded = try SensingSettings(json: data)
     #expect(decoded.mentor.mentorModel == "claude-opus-5")
     #expect(decoded.mentor.triageMinInterval == 5)
     #expect(decoded.mentor.hourlySpendCap == 1000)
@@ -95,7 +95,7 @@ import Testing
 
   @Test func oldSettingsFilesWithoutMentorSectionStillLoad() throws {
     let data = Data(#"{"floorInterval": 7, "excludedBundleIDs": ["com.x"]}"#.utf8)
-    let decoded = try JSONDecoder().decode(SensingSettings.self, from: data)
+    let decoded = try SensingSettings(json: data)
     #expect(decoded.floorInterval == 7)
     #expect(decoded.mentor == MentorSettings())
   }
