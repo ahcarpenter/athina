@@ -262,7 +262,7 @@ final class ControlCommands {
   }
 
   /// Keys for the window's first responder, such as a text field a click
-  /// just focused.
+  /// just focused, each held with `modifiers=` when it names any.
   private func type(_ request: ControlRequest) throws -> ControlReply {
     guard let title = try request.string("window"),
       var window = AppAccessibility.windows(titled: title).first
@@ -272,6 +272,14 @@ final class ControlCommands {
     guard let text = try request.string("text") else {
       return .error("type needs text=<what to type>")
     }
+    let flags: NSEvent.ModifierFlags = try request.modifiers().reduce(into: []) { flags, key in
+      switch key {
+      case .command: flags.insert(.command)
+      case .option: flags.insert(.option)
+      case .control: flags.insert(.control)
+      case .shift: flags.insert(.shift)
+      }
+    }
     // Keys go where a person's would: to the sheet up over the window.
     while let sheet = window.attachedSheet { window = sheet }
     let codes: [Character: UInt16] = ["\r": 36, "\n": 36, "\t": 48, "\u{7f}": 51, "\u{1b}": 53]
@@ -279,20 +287,24 @@ final class ControlCommands {
     for character in text {
       let string = String(character)
       for type in [NSEvent.EventType.keyDown, .keyUp] {
-        if let event = NSEvent.keyEvent(
-          with: type,
-          location: .zero,
-          modifierFlags: [],
-          timestamp: now,
-          windowNumber: window.windowNumber,
-          context: nil,
-          characters: string,
-          charactersIgnoringModifiers: string,
-          isARepeat: false,
-          keyCode: codes[character] ?? 0
-        ) {
-          window.sendEvent(event)
+        guard
+          let event = NSEvent.keyEvent(
+            with: type,
+            location: .zero,
+            modifierFlags: flags,
+            timestamp: now,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: string,
+            charactersIgnoringModifiers: string,
+            isARepeat: false,
+            keyCode: codes[character] ?? 0
+          )
+        else { continue }
+        if type == .keyDown, flags.contains(.command), performKeyEquivalent(event, in: window) {
+          continue
         }
+        window.sendEvent(event)
       }
     }
     return .ok([
@@ -300,6 +312,39 @@ final class ControlCommands {
         window.firstResponder.map { String(describing: Swift.type(of: $0)) } ?? "none"
       )
     ])
+  }
+
+  /// Offers a key held with Command as the key equivalent AppKit makes it.
+  ///
+  /// It goes where AppKit offers one before it is a key press: to the
+  /// window's own controls, then to the main menu, whose item for it, such as
+  /// Edit > Select All for Command-A, sends its action up the responder chain
+  /// from the window's first responder. AppKit sends it from the key
+  /// window's, and a hermetic run's windows are never key.
+  private func performKeyEquivalent(_ event: NSEvent, in window: NSWindow) -> Bool {
+    if window.performKeyEquivalent(with: event) { return true }
+    guard let item = NSApp.mainMenu.flatMap({ menuItem(for: event, in: $0) }),
+      let action = item.action
+    else { return false }
+    if let target = item.target { return NSApp.sendAction(action, to: target, from: item) }
+    return window.firstResponder?.tryToPerform(action, with: item) ?? false
+  }
+
+  /// Returns the item in `menu`, or in a menu under it, whose key equivalent
+  /// is the key and modifiers of `event`.
+  private func menuItem(for event: NSEvent, in menu: NSMenu) -> NSMenuItem? {
+    let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+    for item in menu.items {
+      if item.keyEquivalent == event.charactersIgnoringModifiers,
+        item.keyEquivalentModifierMask == modifiers
+      {
+        return item
+      }
+      if let submenu = item.submenu, let found = menuItem(for: event, in: submenu) {
+        return found
+      }
+    }
+    return nil
   }
 
   /// Scrolls a control into view in the scroll view that holds it, as a

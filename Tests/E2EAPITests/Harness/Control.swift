@@ -237,9 +237,18 @@
       try await send("open-link", target.arguments)
     }
 
-    /// `text` as key presses to the first responder of the window titled `window`.
-    func type(_ text: String, in window: String) async throws -> ControlReply {
-      try await send("type", ["window": .string(window), "text": .string(text)])
+    /// `text` as key presses to the first responder of the window titled `window`, each held
+    /// with `modifiers`: `type("a", holding: [.command], in: "Models")` is Command-A.
+    func type(
+      _ text: String,
+      holding modifiers: [ControlProtocol.Modifier] = [],
+      in window: String
+    ) async throws -> ControlReply {
+      var arguments: [String: ControlValue] = ["window": .string(window), "text": .string(text)]
+      if !modifiers.isEmpty {
+        arguments["modifiers"] = .string(modifiers.map(\.rawValue).joined(separator: ","))
+      }
+      return try await send("type", arguments)
     }
 
     // MARK: - The menu

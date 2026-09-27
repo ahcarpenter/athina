@@ -51,18 +51,15 @@
         let refreshInterval = { try await control.setting("mentor.understandingRefreshInterval") }
         let fieldValue = { (field: Target) in try await control.first(field)?.value ?? "" }
         // Types an amount into a duration row and ends the edit with Tab, the way a person moves
-        // on to the next field. The field is emptied first, backwards and then forwards from
-        // wherever the click put the insertion point, which in a field that lines its text up on
-        // the right is often before the text. The amount the row is left showing is what it
-        // committed, which it can take a moment to show once the edit ends on a busy Mac, so it
-        // is read until it is the amount expected, `want`, or that moment has passed.
+        // on to the next field: a click into it, Command-A to select what it holds wherever the
+        // click put the insertion point, and the amount typed over the selection. The amount the
+        // row is left showing is what it committed, which it can take a moment to show once the
+        // edit ends on a busy Mac, so it is read until it is the amount expected, `want`, or
+        // that moment has passed.
         let typeDuration = { (field: Target, typed: String, want: String) -> String in
           guard try await control.scroll(field).ok, try await control.click(field).ok,
-            try await control.type(
-              String(repeating: "\u{7f}", count: 6) + String(repeating: "\u{F728}", count: 6)
-                + typed + "\t",
-              in: "Models"
-            ).ok
+            try await control.type("a", holding: [.command], in: "Models").ok,
+            try await control.type(typed + "\t", in: "Models").ok
           else { return "" }
           return try await run.settled(want) { try await fieldValue(field) }
         }
