@@ -145,8 +145,7 @@ The pause shortcut (Settings > Privacy, Control-Option-Command-P on a new
 install) and the talk-back shortcut (Settings > General, unset until chosen)
 work from any app. Both run on
 [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts), the
-app's one third-party package (MIT), pinned exactly in `Package.swift` and
-`project.yml`. It registers each combination with the system's Carbon hot
+app's one third-party package (MIT), pinned exactly in `Package.swift`. It registers each combination with the system's Carbon hot
 keys, which report the press and the release and need no permission; while a
 menu is open, when the system holds those back, it reads the keys itself, so
 the shortcuts still work; and its recorder, the field in each pane, names

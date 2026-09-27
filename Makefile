@@ -7,7 +7,7 @@
 
 .PHONY: help build run test check lint format test-e2e doctor test-snapshots \
 	approve all run-live record test-snapshots-ci \
-	icons measure release xcodeproj clean swift-format-version
+	icons measure release clean swift-format-version
 
 ##@ Everyday
 
@@ -66,11 +66,8 @@ measure: ## sample the running app's CPU and memory for 60 seconds
 release: ## the notarized direct-download release (docs/releasing.md)
 	scripts/release.sh
 
-xcodeproj: ## generate Athina.xcodeproj, for the App Store route, from project.yml
-	swift run --package-path Tools/XcodeGenTool xcodegen generate --spec project.yml
-
-clean: ## remove every build product and the generated Xcode project
-	rm -rf .build build Athina.xcodeproj Tools/XcodeGenTool/.build
+clean: ## remove every build product
+	rm -rf .build build
 
 ##@ Variables
 

@@ -5,8 +5,8 @@ import CoreGraphics
 
 // The end-to-end harness's control API (docs/e2e.md "The control API"), compiled
 // into the app only under the ControlAPI package trait and started only on a
-// channel `ControlMode` accepted: a replay, unsandboxed, in a directory the
-// harness made for the run and holding its secret.
+// channel `ControlMode` accepted: a replay, in a directory the harness made
+// for the run and holding its secret.
 
 /// What the API needs from the app beyond its windows.
 @MainActor

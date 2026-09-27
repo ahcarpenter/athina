@@ -124,7 +124,7 @@ open -n build/Athina.app --args --replay <dir> --time-scale 60 --advance-clock 1
   prints the answer, what the clock now reads and how far it has been moved
   ahead in all. The API answers only a request carrying that directory's
   secret, so no other process can move the clock, and a replay of a release
-  build or a sandboxed one serves none, so a script cannot move theirs; the
+  build serves none, so a script cannot move its clock; the
   Advance field still does. It exits 0 once the clock moved, 1 when the replay
   refused the interval, and 2 when no replay answered.
 - The debug panel's Mentor card has an **Advance** field (accessibility label

@@ -15,10 +15,7 @@ import Foundation
 ///
 /// A command line that asks for something contradictory or incomplete is
 /// `invalid`: the app then refuses every call with the reason rather than
-/// guessing, and never falls back to live calls. So is one that names a
-/// directory a sandboxed process cannot reach (`RuntimeEnvironment`): the
-/// fixtures to replay must be inside its container or its own bundle, and a
-/// recording inside its container.
+/// guessing, and never falls back to live calls.
 public enum ModelClientMode: Equatable, Sendable {
   case live
   case record(directory: URL)
@@ -40,11 +37,9 @@ public enum ModelClientMode: Equatable, Sendable {
   ///   - arguments: The process's command line.
   ///   - defaultRecordingDirectory: Where `--record` writes when it names no
   ///     directory, and what a relative one is taken inside.
-  ///   - environment: Decides which directories a sandboxed process may name.
   public init(
     arguments: [String],
-    defaultRecordingDirectory: URL = CallFixtureFiles.defaultRecordingDirectory(),
-    environment: RuntimeEnvironment = .current
+    defaultRecordingDirectory: URL = CallFixtureFiles.defaultRecordingDirectory()
   ) {
     let recordIndex = arguments.firstIndex(of: ModelClientMode.recordFlag)
     let replayIndex = arguments.firstIndex(of: ModelClientMode.replayFlag)
@@ -66,12 +61,7 @@ public enum ModelClientMode: Equatable, Sendable {
         self = .invalid("\(ModelClientMode.replayFlag) needs the directory of fixtures to replay")
         return
       }
-      let directory = ModelClientMode.url(forPath: path)
-      if let refusal = environment.refusal(reading: directory, for: ModelClientMode.replayFlag) {
-        self = .invalid(refusal)
-        return
-      }
-      self = .replay(directory: directory, allowStale: allowStale)
+      self = .replay(directory: ModelClientMode.url(forPath: path), allowStale: allowStale)
     case (let record?, nil):
       guard !allowStale else {
         self = .invalid(
@@ -79,16 +69,12 @@ public enum ModelClientMode: Equatable, Sendable {
         )
         return
       }
-      let directory =
-        value(after: record).map {
+      self = .record(
+        directory: value(after: record).map {
           ModelClientMode.url(forPath: $0, relativeTo: defaultRecordingDirectory)
         }
-        ?? defaultRecordingDirectory
-      if let refusal = environment.refusal(writing: directory, for: ModelClientMode.recordFlag) {
-        self = .invalid(refusal)
-        return
-      }
-      self = .record(directory: directory)
+          ?? defaultRecordingDirectory
+      )
     case (nil, nil):
       self =
         allowStale
