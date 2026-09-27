@@ -5,7 +5,8 @@ the macOS 26 SDK this package targets: `build-and-test` runs `make test`: `swift
 `scripts/check-no-control-api.sh`, which must find no control API in a build
 without the `ControlAPI` trait, for which it takes the debug `Athina` the
 tests' build already made rather than compiling the package again; `lint` runs `make lint` (see [Code style](code-style.md)) and fails on any
-finding; `e2e-api` builds the development bundle with the bundle script,
+finding, then checks the rules GitHub enforces on main against the committed
+ruleset (see below); `e2e-api` builds the development bundle with the bundle script,
 checks that it carries the control API, runs every API-tier scenario of the
 end-to-end harness and compares their checkpoints with approved baselines (see
 [Checkpoints](#checkpoints));
