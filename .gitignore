@@ -8,6 +8,6 @@ build/
 # Recorded model calls hold whole requests, screen text and screenshots included.
 # The app records outside the repository; this keeps `make record RECORD_DIR=recordings` out of git.
 recordings/
-# The package's one dependency is the UI smoke test's, pinned exactly in Package.swift;
-# a committed Package.resolved would have every build fetch it (see the traits there).
+# The package's dependencies are pinned exactly in Package.swift; a committed
+# Package.resolved would have every build fetch the UI smoke test's too (see the traits there).
 /Package.resolved

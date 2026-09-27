@@ -24,6 +24,9 @@ coding agents, with pointers into these docs.
 - The UI smoke test alone (see [UI snapshot smoke test](docs/ci.md#ui-snapshot-smoke-test)) uses
   swift-snapshot-testing, which SwiftPM fetches, pinned, only when that test
   runs; the app never links it
+- The developer tools `athina-drive` and `snapshot-diff` alone take their
+  command lines with swift-argument-parser, which SwiftPM fetches, pinned,
+  with any build of the package; the app never links it
 
 Run `make doctor` after cloning: it names each missing tool, then runs the
 end-to-end harness's own doctor for the grants, the drive tool and the warm
