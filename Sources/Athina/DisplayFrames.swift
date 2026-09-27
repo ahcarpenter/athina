@@ -34,7 +34,7 @@ final class DisplayFrames: NSObject {
     await withCheckedContinuation { continuation in
       waiting[token] = continuation
       Task { @MainActor [weak self] in
-        try? await Task.sleep(for: .milliseconds(50))
+        try? await Task.sleep(until: .now + .milliseconds(50), clock: .continuous)
         self?.waiting.removeValue(forKey: token)?.resume()
       }
     }

@@ -187,8 +187,11 @@ where it was made:
   before, as a switch's knob is while it springs across, so a task that loads
   what a view shows, or an image fading in, is waited for as long as it takes
   and no longer (`DisplayFrames`). It is then
-  captured, a frame apart, until two captures in a row are the same picture,
-  and each snapshot is rendered in fresh windows until two in a row agree,
+  captured, a frame apart, until two captures in a row are identical byte for
+  byte, since the end of a slow fade, such as the title bar's to a new
+  appearance, changes too little per frame for a looser match to tell it is
+  still moving, and each snapshot is rendered in fresh windows until two in a
+  row agree,
   because AppKit now and then lays a text field out a point off in one window;
   a new window whose first capture is already the picture the last settled on
   agrees with it at once. Four snapshots render at a time, each in windows of

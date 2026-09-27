@@ -1,9 +1,16 @@
-import Foundation
+import AppKit
+import KeyboardShortcuts
 
-/// A global keyboard shortcut, stored as a virtual key code plus modifiers.
+/// A global keyboard shortcut as settings.json stores it: a virtual key code
+/// plus modifier bits of Athina's own.
+///
+/// Every build has written this form, so a saved shortcut keeps working and an
+/// older build still reads the file. `shortcut` is the same combination as the
+/// KeyboardShortcuts package has it, which registers, names and records it
+/// (docs/mentor-loop.md "Keyboard shortcuts").
 public struct HotKey: Codable, Equatable, Hashable, Sendable {
-  /// The modifier keys held with the key, in bits of Athina's own that
-  /// `HotKeyCenter` turns into Carbon's flags when it registers the shortcut.
+  /// The modifier keys held with the key, in bits of Athina's own, which is
+  /// what settings.json stores.
   public struct Modifiers: OptionSet, Codable, Hashable, Sendable {
     /// The modifier bits, which are what settings.json stores.
     public let rawValue: UInt32
@@ -32,138 +39,83 @@ public struct HotKey: Codable, Equatable, Hashable, Sendable {
     self.modifiers = modifiers
   }
 
+  /// The combination a recorder took, in the stored form; nil for one this
+  /// form cannot hold, which no recorder makes: a modifier other than Control,
+  /// Option, Shift and Command (the recorder drops Fn), or a key code out of
+  /// range.
+  public init?(_ shortcut: KeyboardShortcuts.Shortcut) {
+    guard let keyCode = UInt32(exactly: shortcut.carbonKeyCode) else { return nil }
+    var flags = shortcut.modifiers
+    var modifiers: Modifiers = []
+    for (flag, modifier) in HotKey.modifierFlags where flags.contains(flag) {
+      modifiers.insert(modifier)
+      flags.remove(flag)
+    }
+    guard flags.isEmpty else { return nil }
+    self.init(keyCode: keyCode, modifiers: modifiers)
+  }
+
   /// Control-Option-Command-P.
   public static let defaultPause = HotKey(keyCode: 35, modifiers: [.control, .option, .command])
 
-  /// Human-readable form, for example "⌃⌥⌘P".
-  public var displayString: String {
-    var s = ""
-    if modifiers.contains(.control) { s += "⌃" }
-    if modifiers.contains(.option) { s += "⌥" }
-    if modifiers.contains(.shift) { s += "⇧" }
-    if modifiers.contains(.command) { s += "⌘" }
-    return s + HotKey.keyName(for: keyCode)
+  /// The same combination as KeyboardShortcuts has it: what the app
+  /// registers with the system, shows by the current keyboard layout, and
+  /// hands its recorder.
+  public var shortcut: KeyboardShortcuts.Shortcut {
+    var flags: NSEvent.ModifierFlags = []
+    for (flag, modifier) in HotKey.modifierFlags where modifiers.contains(modifier) {
+      flags.insert(flag)
+    }
+    let key = KeyboardShortcuts.Key(rawValue: Int(keyCode))
+    return KeyboardShortcuts.Shortcut(key, modifiers: flags)
   }
 
-  /// The combination spelled out the way the Human Interface Guidelines write
-  /// shortcuts, for VoiceOver: "Control-Option-Command-P".
-  ///
-  /// Modifiers keep the standard order, and a key shown as a symbol gets its
-  /// name.
-  public var accessibilityName: String {
-    var parts: [String] = []
-    if modifiers.contains(.control) { parts.append("Control") }
-    if modifiers.contains(.option) { parts.append("Option") }
-    if modifiers.contains(.shift) { parts.append("Shift") }
-    if modifiers.contains(.command) { parts.append("Command") }
-    let key = HotKey.keyName(for: keyCode)
-    parts.append(HotKey.spokenKeyNames[key] ?? key)
-    return parts.joined(separator: "-")
+  /// The combination as macOS writes it, the key named by the current keyboard
+  /// layout: "⌃⌥⌘P".
+  @MainActor public var displayString: String {
+    shortcut.description
   }
 
-  /// Whether the combination is usable as a global hotkey: it needs at
-  /// least one non-shift modifier so ordinary typing cannot trigger it.
+  /// Whether the combination can be a global shortcut without taking a key
+  /// people type: it holds Control, Option, or Command, or its key is a
+  /// function key, the rule KeyboardShortcuts' recorder applies.
   public var isUsable: Bool {
     !modifiers.isDisjoint(with: [.control, .option, .command])
+      || HotKey.functionKeys.contains(keyCode)
   }
 
-  /// Names for ANSI virtual key codes (US layout positions).
-  public static func keyName(for keyCode: UInt32) -> String {
-    if let name = keyNames[keyCode] { return name }
-    return "Key \(keyCode)"
-  }
-
-  private static let keyNames: [UInt32: String] = [
-    0: "A",
-    1: "S",
-    2: "D",
-    3: "F",
-    4: "H",
-    5: "G",
-    6: "Z",
-    7: "X",
-    8: "C",
-    9: "V",
-    11: "B",
-    12: "Q",
-    13: "W",
-    14: "E",
-    15: "R",
-    16: "Y",
-    17: "T",
-    18: "1",
-    19: "2",
-    20: "3",
-    21: "4",
-    22: "6",
-    23: "5",
-    24: "=",
-    25: "9",
-    26: "7",
-    27: "-",
-    28: "8",
-    29: "0",
-    30: "]",
-    31: "O",
-    32: "U",
-    33: "[",
-    34: "I",
-    35: "P",
-    37: "L",
-    38: "J",
-    39: "'",
-    40: "K",
-    41: ";",
-    42: "\\",
-    43: ",",
-    44: "/",
-    45: "N",
-    46: "M",
-    47: ".",
-    50: "`",
-    36: "↩",
-    48: "⇥",
-    49: "Space",
-    51: "⌫",
-    53: "⎋",
-    96: "F5",
-    97: "F6",
-    98: "F7",
-    99: "F3",
-    100: "F8",
-    101: "F9",
-    103: "F11",
-    109: "F10",
-    111: "F12",
-    118: "F4",
-    120: "F2",
-    122: "F1",
-    123: "←",
-    124: "→",
-    125: "↓",
-    126: "↑",
+  /// Each of the stored modifiers with AppKit's flag for it.
+  private static let modifierFlags: [(NSEvent.ModifierFlags, Modifiers)] = [
+    (.control, .control),
+    (.option, .option),
+    (.shift, .shift),
+    (.command, .command),
   ]
 
-  /// Names for the keys `keyName` shows as a symbol or punctuation mark.
-  private static let spokenKeyNames: [String: String] = [
-    "↩": "Return",
-    "⇥": "Tab",
-    "⌫": "Delete",
-    "⎋": "Escape",
-    "←": "Left Arrow",
-    "→": "Right Arrow",
-    "↓": "Down Arrow",
-    "↑": "Up Arrow",
-    "=": "Equal Sign",
-    "-": "Hyphen",
-    "[": "Left Bracket",
-    "]": "Right Bracket",
-    "'": "Apostrophe",
-    ";": "Semicolon",
-    "\\": "Backslash",
-    ",": "Comma",
-    "/": "Slash",
-    ".": "Period",
-    "`": "Grave Accent",
-  ]
+  /// F1 to F20, the function keys a Mac keyboard can have.
+  private static let functionKeys: Set<UInt32> = Set(
+    [
+      KeyboardShortcuts.Key.f1,
+      .f2,
+      .f3,
+      .f4,
+      .f5,
+      .f6,
+      .f7,
+      .f8,
+      .f9,
+      .f10,
+      .f11,
+      .f12,
+      .f13,
+      .f14,
+      .f15,
+      .f16,
+      .f17,
+      .f18,
+      .f19,
+      .f20,
+    ]
+    .map { UInt32($0.rawValue) }
+  )
 }

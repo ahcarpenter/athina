@@ -64,7 +64,7 @@ final class AppState {
         await pipeline?.updateSettings(settings)
         await mentor?.updateSettings(settings.mentor)
       }
-      if settings.pauseHotKey != oldValue.pauseHotKey {
+      if settings.pauseShortcut != oldValue.pauseShortcut {
         registerPauseHotKey()
       }
       if settings.mentor.pushToTalkHotKey != oldValue.mentor.pushToTalkHotKey {
@@ -74,7 +74,7 @@ final class AppState {
     }
   }
 
-  /// False when the pause hotkey could not be registered (unusable or taken by another app).
+  /// False when no pause hotkey is set or it could not be registered.
   private(set) var hotKeyRegistered = false
   /// False when no talk-back hotkey is set or it could not be registered.
   private(set) var pushToTalkRegistered = false
@@ -451,7 +451,7 @@ final class AppState {
     resourceTask = Task { [weak self] in
       var previous = ProcessResources.sample()
       while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(2))
+        try? await Task.sleep(until: .now + .seconds(2), clock: .continuous)
         let current = ProcessResources.sample()
         if let usage = ProcessResourceUsage.between(previous, current) {
           self?.resources = usage
@@ -508,12 +508,13 @@ final class AppState {
   /// take the combination from every other app; the control API's `hotkey`
   /// presses it instead (`hotKeyPressed`), so it counts as registered.
   private func registerPauseHotKey() {
+    let key = settings.pauseShortcut
     hotKeyRegistered =
       controlMode.isHermetic
-      ? settings.pauseHotKey.isUsable : hotKeys.register(settings.pauseHotKey, for: .pause)
+      ? key?.isUsable == true : hotKeys.register(key, for: .pause)
     AppState.log.notice(
       """
-      pause hotkey \(self.settings.pauseHotKey.displayString, privacy: .public) registered: \
+      pause hotkey \(key?.displayString ?? "unset", privacy: .public) registered: \
       \(self.hotKeyRegistered)
       """
     )
@@ -542,7 +543,7 @@ final class AppState {
 
   // MARK: Actions
 
-  /// A hot key went down: from Carbon, or in a hermetic run from the control
+  /// A hot key went down: from the system, or in a hermetic run from the control
   /// API's `hotkey`, which takes the same path.
   func hotKeyPressed(_ slot: HotKeyCenter.Slot) {
     switch slot {
@@ -623,7 +624,7 @@ final class AppState {
     AppState.log.notice("requesting permission \(permission.rawValue, privacy: .public)")
     PermissionProbe.request(permission)
     Task {
-      try? await Task.sleep(for: .seconds(1))
+      try? await Task.sleep(until: .now + .seconds(1), clock: .continuous)
       refreshPermissions()
     }
   }
@@ -657,7 +658,7 @@ final class AppState {
       }
       PermissionProbe.openSystemSettings(for: permission)
       Task {
-        try? await Task.sleep(for: .seconds(1))
+        try? await Task.sleep(until: .now + .seconds(1), clock: .continuous)
         refreshPermissions()
       }
     }
@@ -1286,7 +1287,7 @@ final class AppState {
         understandingLine: understandingLine,
         talkBack: talkBackAction.map { .action($0) } ?? .line(talkBackLine),
         isPaused: isPaused,
-        pauseShortcut: settings.pauseHotKey,
+        pauseShortcut: settings.pauseShortcut,
         capturesFrames: mode.capturesFrames,
         hasLastSuggestion: lastShownSuggestion != nil,
         hasActiveSuggestion: activeSuggestion != nil,
@@ -1894,7 +1895,7 @@ final class AppState {
     let store = store
     let settings = settings
     saveTask = Task {
-      try? await Task.sleep(for: .milliseconds(300))
+      try? await Task.sleep(until: .now + .milliseconds(300), clock: .continuous)
       guard !Task.isCancelled else { return }
       try? store.save(settings)
     }

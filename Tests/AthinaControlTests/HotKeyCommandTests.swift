@@ -7,7 +7,7 @@ import Testing
 @testable import AthinaControl
 
 /// The control API's `hotkey` presses only a key a person could press: one
-/// that is not registered is refused, as Carbon never reports it.
+/// that is not registered is refused, as the app never hears it.
 @MainActor
 @Suite struct HotKeyCommandTests {
   private func hotKey(

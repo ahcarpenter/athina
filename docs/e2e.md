@@ -129,6 +129,7 @@ A change that touches none of those takes no screen time.
 | `debug-panel-access` | api | while Settings > Advanced > Enable debug panel is off, as it starts, the menu has no Debug Panel command and Open Debug Panel is dimmed, a click on it is refused, and one forced onto it opens nothing; turned on, the menu gains Debug Panel in a group of its own after Settings…, and it and the button each open the panel; turned off again, the panel closes and the command leaves the menu |
 | `settings-pane-text` | api | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link to that pane rather than Markdown, and a click on the one below the fold is refused until the pane is scrolled to it |
 | `settings-sheet` | api | Settings > Contexts' Add Context… brings up the New Context sheet; while it is up, a click on Add Context… under it is refused as covered, a name typed into the sheet's Name field lands there, and the sheet's own Cancel lands in the sheet and takes it down, adding no context |
+| `shortcut-recorder` | api | the Settings shortcut recorders: Settings > General's talk-back recorder takes a combination pressed while it records into the settings, refuses the pause shortcut's combination with an alert that says why, keeping what it had and the window parked below the desktop while the alert runs and after, and clears on Delete; Settings > Privacy's pause recorder clears on Delete too, which turns the pause shortcut off (a press of it is refused and the pane warns of nothing) while settings.json keeps its combination for earlier builds, and records it again |
 | `debug-timeline` | api | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started row appears once rather than once from the journal load and again from the live stream |
 | `launch-arguments` | api | `--open settings:advanced` after a flag that takes no value (`--allow-stale-fixtures`) still opens Settings on that pane, where AppKit once took the pane's name for a document to open and opened no window |
 
@@ -231,19 +232,20 @@ it.
 | `click` | a left click on the first such control, posted to the app's own event queue and dispatched by AppKit as a real click is after the window server; the answer comes once it has been handled. Refused as `disabled` when the control is dimmed, `offscreen` when a scroll area has it out of sight or it is outside its part of the window (the content, or the whole window for the toolbar and title bar), and `covered` when a sheet is up over its window or the window's own hit test at its centre lands on something else. A control inside a sheet is found under the title of the window the sheet covers, and judged against and clicked in the sheet. `force=true` clicks anyway, for proving a refusal |
 | `press` | an accessibility press on the first such control, as VoiceOver or Full Keyboard Access presses it: its own action, with no pointer. For the one kind of control a simulated click cannot drive: AppKit lets a destructive button (Reset Understanding…) act on no click into a window that is not in front, and a hermetic run's never are. Refused as `disabled` when the control is dimmed and `unsupported` when it offers no press |
 | `type` | `text=` as key presses to the first responder of `window=`, or of the sheet up over it, such as the field a click just focused; `modifiers=` holds `command`, `option`, `control` or `shift` down for each, a comma between two. A key held with Command goes first where AppKit offers a key equivalent, the window's controls and then the main menu, whose item for it acts from the window's first responder rather than the key window's, since a hermetic run's windows are never key: `text=a modifiers=command` is Edit > Select All in the field being typed into |
+| `key` | one key press, `code=<virtual key code>`, held with `modifiers=` as `type` holds them, posted to the app's event queue for `window=` as the window server delivers one, so an event monitor in the app, such as a shortcut recorder's, takes it as it takes a person's (`type` hands its keys to the window, past every monitor); `dispatched` says it has been handled |
 | `scroll` | the scroll view holding a control scrolls it into view |
 | `menu` | the menu bar extra's menu as the app builds it (`MenuModel`), without showing it, and with no menu bar extra at all in a hermetic run; `press="<title>"`, or `press="<submenu> > <title>"`, runs that item's command through the handler choosing it from the menu runs, refused as `missing` or `disabled`, naming the step, when an item or submenu on the way is not there or is dimmed |
 | `settings` | the live settings, or one of them with `key=<path>` |
-| `wait-setting` | waits until `key=<path>` reads `equals=<value>` |
+| `wait-setting` | waits until `key=<path>` reads `equals=<value>`, `null` for one that is unset, as `settings` reads it |
 | `wait-window` | waits until a window titled `window=` is open, or with `present=false` gone |
-| `snapshot` | a PNG of one of Athina's windows at `path=`, taken as `--snapshot` takes one once macOS has finished animating the window open (up to two seconds): once three of the display's frames in a row changed nothing in it, captured until two captures in a row are the same picture, or, for a window that moves on its own, its last capture with `settled` false; never over an existing file. `appearance=light` or `dark` draws the app in that appearance for the picture and gives it its own back after |
+| `snapshot` | a PNG of one of Athina's windows at `path=`, taken as `--snapshot` takes one once macOS has finished animating the window open (up to two seconds): once three of the display's frames in a row changed nothing in it, captured until two captures in a row are identical byte for byte, or, for a window that moves on its own, its last capture with `settled` false; never over an existing file. `appearance=light` or `dark` draws the app in that appearance for the picture and gives it its own back after |
 | `outside-click` | a click outside Athina's windows at `x=`, `y=` (points from the top left of the main display, as frames are given), handed to the suggestion toast as its system-wide listener would hand it one, which a hermetic run does not have; `heard` says whether a toast was up |
 | `observe` | what a hermetic run senses next (see [Scripted sensing](#scripted-sensing)): `app=` and `bundle=` in front, in `window=`, showing `text=`, captured at once; or `idle=true` or `idle=false` alone, input going idle or coming back. `kept` says whether the capture was journaled, `why` why not, and `after` is the newest event's sequence before it, for a `wait-event` on what it brings. Refused as `unscripted` in a run that senses the real Mac |
 | `wait-event` | waits for the first event named `name=` after the sequence `after=` (every event since launch when left out) whose fields hold every other argument: `wait-event name=feedback feedback=notNow`. The names are what the sensing pipeline and the mentor loop publish, each logged once the app has acted on it: `observation`, `focus`, `mode`, `event` (a journaled event, by `kind`), `status` (with the understanding's `revision` as `understanding`), `suggestion` (logged once its toast is up), `feedback`, `followUp` and `call` (by `tier` and `outcome`); the answer carries the event's `sequence` and fields |
 | `journal` | one of the harness's named journal queries (`journal - queries` in the drive helpers lists them), `query=<name>`, answered from the app's own journal connection, which refuses any statement that writes: the `columns`, and the `rows` as objects keyed by column |
 | `advance` | moves the replay's clock `seconds=` ahead, or `interval=` as the debug panel's Advance field takes it (`15m`, `2h`, `1d12h`), as that field does, and answers with the clock's time and how far it has been moved ahead in all |
 | `open-link` | follows a link in the app's own text, found as `click` finds a control, through the handler a click on it runs, with the URL SwiftUI carries as its identifier (`open-link window=Models identifier=athina-settings:journal`). It proves where the link goes and that the app handles it; that a click reaches it stays a real-screen check. Refused as `missing` when the control is not a link and `unhandled` when the app has no handler for its URL |
-| `hotkey` | `key=pause` or `key=talk-back` through the handler Carbon calls, pressed and let go, or only `phase=down` or `phase=up`; `heard=<words>` is what talking back hears while its key is down, since a hermetic run opens no microphone; refused as `disabled` when the key is not registered (unset, unusable, or taken), as Carbon then never reports it |
+| `hotkey` | `key=pause` or `key=talk-back` through the handler a press of the shortcut calls, pressed and let go, or only `phase=down` or `phase=up`; `heard=<words>` is what talking back hears while its key is down, since a hermetic run opens no microphone; refused as `disabled` when the key is not registered (unset, unusable, or held by another app), as the app then never hears it |
 
 The waits take `timeout=<seconds>`, 10 unless given, and poll the app's own
 state at a fixed real-time pace; the replay's clock is not involved.
@@ -316,11 +318,13 @@ serves.
   takes every click the API simulates and its checkpoints are the pictures a
   visible window gives, and nobody sees it. Moved any later, even at the end
   of the event loop pass that opened it, a window showed for a frame, and for
-  the length of its opening animation. The item stays
-  out of the menu bar (`MenuBarExtra(isInserted:)` is false), and the menu's
-  content comes from `MenuModel`, which the menu bar extra draws everywhere
-  else and the API's `menu` reads and presses here, with the same handler for
-  each command. The app never makes itself the active app: every request to
+  the length of its opening animation. A level the app sets on a window keeps
+  it parked too, such as the modal level AppKit raises a window to while an
+  alert's sheet runs on it and the normal level it drops it to after. The
+  item stays out of the menu bar (`MenuBarExtra(isInserted:)` is false), and
+  the menu's content comes from `MenuModel`, which the menu bar extra draws
+  everywhere else and the API's `menu` reads and presses here, with the same
+  handler for each command. The app never makes itself the active app: every request to
   come forward goes through `AppActivation.request()`, which does nothing
   here. So its windows draw as an inactive app's do, in checkpoints too.
 - **It senses only what it is told.** The pipeline runs with
@@ -332,8 +336,8 @@ serves.
   gives it and opens no microphone.
 - **It listens to nothing outside itself.** The toast has no system-wide
   click listener, so the owner's clicks cannot dismiss a toast they cannot
-  see, and no hot key is registered with Carbon, where it would take the
-  combination from every other app. The API's `outside-click` and `hotkey`
+  see, and no keyboard shortcut is registered with the system, where every
+  press of it by the owner would reach the run. The API's `outside-click` and `hotkey`
   run the same handlers instead.
 - **It writes nothing to the owner's preferences.** The API tier runs
   `build/e2e/Athina.app`, a copy of the development bundle the harness makes

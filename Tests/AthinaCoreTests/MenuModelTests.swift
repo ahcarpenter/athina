@@ -7,12 +7,13 @@ import Testing
 /// step when one is not there or is dimmed, as the control API's `menu press=`
 /// reports it.
 @Suite struct MenuModelTests {
-  let pause = HotKey(keyCode: 35, modifiers: [.command, .shift])
+  static let pause = HotKey(keyCode: 35, modifiers: [.command, .shift])
 
   func state(
     mentor: MenuModel.State.Either = .line("Mentor: replay mode, nothing billed"),
     talkBack: MenuModel.State.Either = .line("Talk back: no shortcut set"),
     isPaused: Bool = false,
+    pauseShortcut: HotKey? = MenuModelTests.pause,
     capturesFrames: Bool = true,
     hasLastSuggestion: Bool = false,
     hasActiveSuggestion: Bool = false,
@@ -25,7 +26,7 @@ import Testing
       understandingLine: "Goal: not worked out yet",
       talkBack: talkBack,
       isPaused: isPaused,
-      pauseShortcut: pause,
+      pauseShortcut: pauseShortcut,
       capturesFrames: capturesFrames,
       hasLastSuggestion: hasLastSuggestion,
       hasActiveSuggestion: hasActiveSuggestion,
@@ -80,8 +81,13 @@ import Testing
   @Test func pausingTurnsTheCommandRoundAndKeepsItsShortcut() {
     let model = MenuModel(state(isPaused: true))
     #expect(
-      model.items.contains(.command("Resume Watching", .togglePause, shortcut: .hotKey(pause)))
+      model.items.contains(.command("Resume Watching", .togglePause, shortcut: .hotKey(Self.pause)))
     )
+  }
+
+  @Test func aClearedPauseShortcutLeavesTheCommandWithNone() {
+    let model = MenuModel(state(pauseShortcut: nil))
+    #expect(model.items.contains(.command("Pause Watching", .togglePause, shortcut: nil)))
   }
 
   @Test func theDebugPanelIsAGroupOfItsOwnAfterSettingsOnlyWhileTurnedOn() {
