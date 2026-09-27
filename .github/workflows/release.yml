@@ -5,12 +5,14 @@ name: Release
 # as well as for a release, so a release never finds a broken build. ci.yml and
 # merge-checks.yml run the whole suite on the same pushes.
 #
-# On a push to main it signs and notarizes when the Apple secrets exist, and
-# otherwise builds it signed ad hoc, says so in the job summary and passes: a
-# missing secret never fails a run. On a pushed version tag it must sign and
-# notarize, then publishes a GitHub Release with the disk image, the zip, their
-# checksums and the debug symbols, with release.sh's notes, which list the
-# Conventional Commit titles since the previous tag. If a release already
+# It signs and notarizes when the Apple secrets exist, and otherwise builds it
+# signed ad hoc and says so in the job summary; on a push to main a missing
+# secret never fails a run. On a pushed version tag it then publishes a GitHub
+# Release with the disk image, the zip, their checksums and the debug symbols,
+# with release.sh's notes, which list the Conventional Commit titles since the
+# previous tag and, for an unsigned release, open with how to open it. A tag
+# with only some of the secrets fails, so a half-configured signing setup never
+# ships unsigned unnoticed. If a release already
 # exists for the tag, such as one release-please made, it gets the files and
 # keeps its notes.
 on:
@@ -75,11 +77,11 @@ jobs:
           done
           if [ "${#missing[@]}" -gt 0 ]; then
             echo "missing=${missing[*]}" >> "$GITHUB_OUTPUT"
-            if [ "$GITHUB_REF_TYPE" = tag ]; then
-              echo "::error::A release must be signed and notarized, and the repository has no ${missing[*]} secret(s) (docs/releasing.md \"CI's secrets\")."
+            if [ "$GITHUB_REF_TYPE" = tag ] && [ "${#missing[@]}" -lt 5 ]; then
+              echo "::error::Only some of the signing secrets are set: the repository has no ${missing[*]}. Set them all to release signed, or none to release unsigned (docs/releasing.md \"CI's secrets\")."
               exit 1
             fi
-            # Anything built now is for checking only, and says so.
+            # Built signed ad hoc, and its notes say so.
             echo "ATHINA_RELEASE_ALLOW_SKIPS=1" >> "$GITHUB_ENV"
           fi
           if [ -n "$CERTIFICATE" ] && [ -n "$CERTIFICATE_PASSWORD" ]; then
@@ -118,7 +120,7 @@ jobs:
           if [ -n "$MISSING" ]; then
             {
               echo "> [!WARNING]"
-              echo "> Not signed with Developer ID and notarized: the repository has no $MISSING secret(s) (docs/releasing.md \"CI's secrets\"). This build is for checking, not for distribution."
+              echo "> Not signed with Developer ID and notarized: the repository has no $MISSING secret(s) (docs/releasing.md \"CI's secrets\")."
               echo
             } >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -142,8 +144,8 @@ jobs:
           if-no-files-found: error
 
   publish:
-    # Only for a tag, and only once the build above signed, notarized and
-    # verified everything it uploaded.
+    # Only for a tag, and only once the build above verified everything it
+    # uploaded, signed and notarized unless no signing secret is set.
     if: github.ref_type == 'tag'
     needs: release-build
     runs-on: ubuntu-latest

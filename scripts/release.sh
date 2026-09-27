@@ -392,7 +392,20 @@ changes="$(git log --no-merges --format=%s "$range" | awk '
 [ -n "$changes" ] || changes="No features, fixes or performance changes."
 {
 	printf '# Athina %s (build %s)\n\n' "$VERSION" "$BUILD"
-	if [ "${#SKIPPED[@]}" -gt 0 ]; then
+	if [ -z "$IDENTITY" ]; then
+		# What someone downloading an unsigned release has to know first. The
+		# ad-hoc signature's requirement is the bundle identifier alone, so
+		# Screen Recording and Accessibility carry over to the next version;
+		# the keychain trusts the exact binary, so the key needs allowing again.
+		printf '> [!IMPORTANT]\n'
+		printf '> **This release is not signed with a Developer ID or notarized by Apple**, so macOS will not open it at first.\n'
+		printf '>\n'
+		printf '> - **The first time you open it** (and after each update): open Athina, choose Done when macOS says it cannot check it, then go to System Settings > Privacy & Security, scroll to Security, choose **Open Anyway** next to Athina, and confirm.\n'
+		printf '> - **After each update**, until releases are signed: macOS asks again whether Athina may read its saved API key; choose Always Allow. Screen Recording and Accessibility carry over; if System Settings shows either on but Athina reports it missing, remove Athina from that list with the minus button and add it again.\n\n'
+		printf 'This build skipped:\n\n'
+		printf -- '- %s\n' "${SKIPPED[@]}"
+		printf '\n'
+	elif [ "${#SKIPPED[@]}" -gt 0 ]; then
 		printf '**Not for distribution.** This build skipped:\n\n'
 		printf -- '- %s\n' "${SKIPPED[@]}"
 		printf '\n'
