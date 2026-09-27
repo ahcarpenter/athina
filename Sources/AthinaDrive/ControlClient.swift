@@ -1,5 +1,5 @@
+import ArgumentParser
 import AthinaControlProtocol
-import AthinaE2E
 import Darwin
 import Foundation
 
@@ -12,37 +12,57 @@ import Foundation
 /// just that field (`elements.0.enabled`, `refused`), empty when it has none.
 /// Exit 0 when the answer is ok, 1 when it is not, 2 when no app answered.
 enum ControlClient {
-  static func run(_ invocation: DriveInvocation) throws {
+  /// One request, checked before it is sent.
+  struct Request {
+    /// The run's control directory, from `ATHINA_CONTROL_DIR`.
+    let directory: URL
+    /// The control API command.
+    let command: String
+    /// Its parameters, each as its parameter takes it.
+    let arguments: [String: ControlValue]
+  }
+
+  /// `command` with its `key=value` words, sent to the directory the harness
+  /// named.
+  ///
+  /// - Throws: `ValidationError` when there is no control directory or a
+  ///   word is not `key=value`.
+  static func request(_ command: String, _ words: [String]) throws -> Request {
     guard let directory = ProcessInfo.processInfo.environment["ATHINA_CONTROL_DIR"],
       !directory.isEmpty
     else {
-      throw DriveUsageError(
-        "athina-drive api: no control directory; the harness sets ATHINA_CONTROL_DIR"
-      )
+      throw ValidationError("no control directory; the harness sets ATHINA_CONTROL_DIR")
     }
-    let command = try invocation.positional(0)
     var arguments: [String: ControlValue] = [:]
-    for text in invocation.positionals.dropFirst() {
+    for text in words {
       guard let (key, value) = ControlValue.argument(text) else {
-        throw DriveUsageError("athina-drive api: \"\(text)\" is not key=value")
+        throw ValidationError("\"\(text)\" is not key=value")
       }
       arguments[key] = value
     }
-    let base = URL(fileURLWithPath: directory, isDirectory: true)
+    return Request(
+      directory: URL(fileURLWithPath: directory, isDirectory: true),
+      command: command,
+      arguments: arguments
+    )
+  }
+
+  /// Sends `request`, prints the answer or its `field`, and exits.
+  static func run(_ request: Request, field: String?) throws -> Never {
     let line: Data
     do {
-      let request = ControlRequest(
+      let message = ControlRequest(
         id: Int(getpid()),
-        secret: try ControlConnection.secret(in: base),
-        command: command,
-        arguments: arguments
+        secret: try ControlConnection.secret(in: request.directory),
+        command: request.command,
+        arguments: request.arguments
       )
-      line = try ControlConnection.exchange(request, in: base)
+      line = try ControlConnection.exchange(message, in: request.directory)
     } catch {
       fail("athina-drive api: \(error)", code: 2)
     }
     let reply = try ControlReply.decode(line: line)
-    if let field = invocation.option("--field") {
+    if let field {
       say(reply.json[path: field]?.text ?? "")
     } else {
       say(String(decoding: line, as: UTF8.self))
