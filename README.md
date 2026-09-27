@@ -92,8 +92,8 @@ keychain while replaying.
 **What it costs.** Every call is billed to your Anthropic account at the
 prices in Settings > Models. Settings > Models > Spend at most caps each clock
 hour, $1 by default: calls slow down as the hour's spend nears the cap and stop
-at it until the next hour begins. The menu shows the spend so far this hour
-against the cap. For a receipt, these are the calls behind the pictures above,
+at it until the next hour begins ([spend control](docs/mentor-loop.md#spend-control)).
+The menu shows the spend so far this hour against the cap. For a receipt, these are the calls behind the pictures above,
 recorded live on 2026-09-15 and committed as the
 [replay fixtures](Tests/AthinaCoreTests/Fixtures/Replay/README.md):
 
