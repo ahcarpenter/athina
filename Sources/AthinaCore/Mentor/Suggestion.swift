@@ -105,6 +105,17 @@ public enum SuggestionFeedback: String, Codable, CaseIterable, Sendable {
     case .tellMeMore, .notNow, .never: false
     }
   }
+
+  /// Whether this feedback takes the place of `existing`, what the suggestion
+  /// already holds.
+  ///
+  /// A non-answer never replaces anything, so closing a re-shown toast just
+  /// closes it, and Tell me more is recorded once, so re-expanding a folded
+  /// toast is only a view change. Any other answer replaces what was there.
+  public func replaces(_ existing: SuggestionFeedback?) -> Bool {
+    guard let existing else { return true }
+    return !isNonAnswer && !(self == .tellMeMore && existing == .tellMeMore)
+  }
 }
 
 /// A suggestion the mentor tier produced, as stored in the journal.

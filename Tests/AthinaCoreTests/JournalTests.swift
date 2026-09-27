@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import GRDB
 import Testing
 
 @testable import AthinaCore
@@ -58,7 +59,7 @@ import Testing
     try await journal.record(JournalEvent(timestamp: now, kind: .paused, appName: "TextEdit"))
     let rows = try await journal.readOnlyRows("select kind, app_name from events order by id")
     #expect(rows == [["started", ""], ["paused", "TextEdit"]])
-    await #expect(throws: SQLiteError.self) {
+    await #expect(throws: DatabaseError.self) {
       try await journal.readOnlyRows("delete from events")
     }
     #expect(try await journal.readOnlyRows("select count(*) from events") == [["2"]])

@@ -636,23 +636,21 @@ import Testing
     )
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let url = dir.appendingPathComponent("journal.sqlite")
-    do {
-      let db = try SQLiteConnection(path: url.path)
-      try db.execute(
-        """
-        CREATE TABLE suggestions (
-            id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, bundle_id TEXT,
-            app_name TEXT NOT NULL, window_title TEXT, category TEXT NOT NULL,
-            title TEXT NOT NULL, body TEXT NOT NULL, explanation TEXT NOT NULL,
-            confidence REAL NOT NULL, observation_id INTEGER, model TEXT NOT NULL,
-            prompt_version INTEGER NOT NULL, feedback TEXT, feedback_at REAL
-        );
-        INSERT INTO suggestions (timestamp, app_name, category, title, body, explanation,
-            confidence, model, prompt_version)
-        VALUES (1700000000, 'A', 'tool', 'old', 'b', 'e', 0.5, 'm', 4);
-        """
-      )
-    }
+    try runSQL(
+      at: url,
+      """
+      CREATE TABLE suggestions (
+          id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, bundle_id TEXT,
+          app_name TEXT NOT NULL, window_title TEXT, category TEXT NOT NULL,
+          title TEXT NOT NULL, body TEXT NOT NULL, explanation TEXT NOT NULL,
+          confidence REAL NOT NULL, observation_id INTEGER, model TEXT NOT NULL,
+          prompt_version INTEGER NOT NULL, feedback TEXT, feedback_at REAL
+      );
+      INSERT INTO suggestions (timestamp, app_name, category, title, body, explanation,
+          confidence, model, prompt_version)
+      VALUES (1700000000, 'A', 'tool', 'old', 'b', 'e', 0.5, 'm', 4);
+      """
+    )
     let journal = try Journal(url: url)
     let old = try #require(try await journal.recentSuggestions(limit: 5).first)
     #expect(old.title == "old")
