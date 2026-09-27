@@ -10,7 +10,7 @@
     /// where the keyboard and VoiceOver reach them: Answer Suggestion holds them, live while a
     /// suggestion is up and dimmed otherwise. Tell Me More from there opens the toast's
     /// explanation and keeps it up, and Not Now answers it and takes it down. The toast comes
-    /// from scripted sensing (README "Scripted sensing") and each answer is chosen through the
+    /// from scripted sensing (docs/e2e.md "Scripted sensing") and each answer is chosen through the
     /// handler the menu runs; that an accessibility press on the menu bar item opens the menu and
     /// keeps the toast up is macOS's routing, which the real-screen tier proves.
     @Test func `toast-menu-answers`() async {
@@ -43,7 +43,7 @@
 
         let suggestion = try await run.scriptedToast()
         // Pictures kept as evidence: the toast shows what changes from run to run and moves on
-        // its own, so it is no checkpoint (README "Checkpoints").
+        // its own, so it is no checkpoint (docs/ci.md "Checkpoints").
         try await run.picture(toast, "toast")
         let up = try await answers("answers-up")
         for answer in ["Tell Me More", "Not Now", "Never for This", "Close Suggestion"] {

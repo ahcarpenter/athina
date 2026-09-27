@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # UI snapshot gates: render every snapshot the way CI does, compare the
 # renders with the approved set, and approve a drift from the renders CI made
-# (README "UI snapshot baselines" and "UI snapshot smoke test").
+# (docs/ci.md "UI snapshot baselines" and "UI snapshot smoke test").
 #
 # Usage: scripts/snapshots.sh <command>
 #   gate [<k>/<n>]  what CI runs: render twice, fail unless the two renders

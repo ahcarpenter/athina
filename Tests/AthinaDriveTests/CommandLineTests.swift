@@ -102,18 +102,18 @@ import Testing
     }
   }
 
-  /// README "Drive helpers" lists every command with the arguments it takes,
-  /// one row each, so the table cannot drift from the tool.
-  @Test func readmeListsEveryCommand() throws {
-    let readme = URL(fileURLWithPath: #filePath)
+  /// docs/e2e.md "Drive helpers" lists every command with the arguments it
+  /// takes, one row each, so the table cannot drift from the tool.
+  @Test func theE2EDocListsEveryCommand() throws {
+    let doc = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()  // AthinaDriveTests
       .deletingLastPathComponent()  // Tests
       .deletingLastPathComponent()  // the repository
-      .appendingPathComponent("README.md")
-    let text = try String(contentsOf: readme, encoding: .utf8)
+      .appendingPathComponent("docs/e2e.md")
+    let text = try String(contentsOf: doc, encoding: .utf8)
     let section =
-      try #require(text.components(separatedBy: "### Drive helpers").dropFirst().first)
-      .components(separatedBy: "\n### ").first ?? ""
+      try #require(text.components(separatedBy: "## Drive helpers").dropFirst().first)
+      .components(separatedBy: "\n## ").first ?? ""
     let documented = section.split(separator: "\n")
       .filter { $0.hasPrefix("| `") }
       .compactMap { row in
@@ -124,7 +124,7 @@ import Testing
   }
 
   /// A command's usage without the tool's name or its options, as the
-  /// README's table writes it.
+  /// e2e doc's table writes it.
   static func synopsis(_ leaf: ParsableCommand.Type) -> String {
     AthinaDrive.usageString(for: leaf)
       .replacingOccurrences(of: #"^athina-drive "#, with: "", options: .regularExpression)

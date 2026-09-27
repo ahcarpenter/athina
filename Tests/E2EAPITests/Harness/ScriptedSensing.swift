@@ -2,7 +2,7 @@
   import Foundation
   import Testing
 
-  // A hermetic run senses only what a scenario scripts through the API's `observe` (README
+  // A hermetic run senses only what a scenario scripts through the API's `observe` (docs/e2e.md
   // "Scripted sensing"). These script the moments the committed fixtures were recorded at, from
   // the documents in their scenario/ folder, each shown as a TextEdit window of its own.
   extension Run {

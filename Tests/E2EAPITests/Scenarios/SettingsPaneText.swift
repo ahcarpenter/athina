@@ -46,7 +46,7 @@
         )
 
         // Settings opens on the pane it last showed; the toolbar changes it. The toolbar's tabs
-        // carry no identifier (README "The control API"), so the tab is found by its label.
+        // carry no identifier (docs/e2e.md "The control API"), so the tab is found by its label.
         run.check(
           "a click on the Models toolbar item lands",
           true,

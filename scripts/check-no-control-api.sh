@@ -3,7 +3,7 @@
 #
 # The API exists only in development builds: the ControlAPI package trait,
 # which scripts/bundle.sh turns on for the development bundle, compiles it in,
-# and a release or App Store build must never carry it (README "The control
+# and a release or App Store build must never carry it (docs/e2e.md "The control
 # API"). Every build that has it carries the protocol's name, which is what
 # this looks for; ReleaseCheckTests runs this on a binary holding
 # ControlProtocol.name and on one without it.

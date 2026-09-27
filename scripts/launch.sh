@@ -11,7 +11,7 @@
 #
 # `replay` (`make run`) answers every model call from the fixtures in <dir>,
 # the committed set unless given: no network, no key, no spend, and serves
-# the control API (README "The control API") on a directory made here for the
+# the control API (docs/e2e.md "The control API") on a directory made here for the
 # lane, which build/<lane>.control names, so scripts/advance-clock.sh can move
 # its clock. `live`
 # (`make run-live`) is the live app, and `record` (`make record`) the live app
