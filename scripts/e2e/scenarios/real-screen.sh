@@ -79,7 +79,7 @@ real_click() {
 		status=0
 		"$DRIVE" click "$@" >>"$RUN_DIR/transcript.log" 2>&1 || status=$?
 		[ "$status" = 4 ] || return "$status"
-		log "the pointer moved before the click (attempt $attempt); aiming again after a quiet moment"
+		note "the pointer moved before click $attempt on $*, so nothing was clicked and it was aimed again after a quiet moment"
 		quiet_moment || return 1
 	done
 	return 4
@@ -173,7 +173,7 @@ measure_bar() {
 		read_bar_until "$want" && break
 		title="$(sed -n 's/.*title="\([^"]*\)".*/\1/p' <<<"$BAR_EXTRA")"
 		[ "$attempt" = 3 ] && { log "the item never said \"$want\" (it says \"$title\")"; return 1; }
-		log "the item says \"$title\", not \"$want\"; bringing pid $front forward again after a quiet moment"
+		note "the item said \"$title\", not \"$want\", at the $tag measurement, so pid $front was brought forward again after a quiet moment"
 		quiet_moment || return 1
 		"$DRIVE" activate "$front" >>"$RUN_DIR/transcript.log" 2>&1 || return 1
 	done

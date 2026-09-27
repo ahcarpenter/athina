@@ -135,7 +135,8 @@ A change that touches none of those takes no screen time.
 
 A scenario prints one JSON line on the harness's standard output, with the
 log on its standard error: its name, `pass`, `fail` or `skip`, how long
-it took, every check it made, and the directory holding its evidence (transcript,
+it took, every check it made, a `note` for every step it did again (see
+[Quarantine](testing.md#quarantine)), and the directory holding its evidence (transcript,
 screenshots, event taps, announcements, and the journal as TSV and as a copy;
 for an API-tier run, its log in `log.txt`, every request and answer in
 `api.log`, its checkpoints in `checkpoints/<scenario>/` (see [Checkpoints](ci.md#checkpoints)) and
