@@ -190,8 +190,8 @@ differs in three ways:
   (see [Coming from Mentor](coming-from-mentor.md)), since all three are out of its reach, and says so
   once in the log.
 - `--replay` and `--settings` may name only a path inside its container or its
-  own bundle, and `--record`, `--snapshot` and a clock request's reply
-  (`scripts/advance-clock.sh`) only one inside its container. Anything else is
+  own bundle, and `--record` and `--snapshot` only one inside its container.
+  Anything else is
   refused with one line naming the path and where it could have been.
 - `--control` is refused whatever it names: a sandboxed Athina never serves
   the control API, even one built from the development bundle.

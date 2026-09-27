@@ -33,8 +33,8 @@ Sources/AthinaCore            library, fully testable
   System/                     PermissionProbe (all four permissions), InputActivity (idle seconds),
                               ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags)
-                              and ClockRemote (moving a replay's clock from a script), RuntimeEnvironment
-                              (whether the process is sandboxed, and which app bundle it runs from),
+                              RuntimeEnvironment (whether the process is sandboxed, and which app bundle
+                              it runs from),
                               ControlMode (whether a launch serves the control API, see docs/e2e.md)
 Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swift cannot make (it is variadic),
                               so `DataMigration` can read the old journal without altering it

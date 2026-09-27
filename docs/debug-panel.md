@@ -22,10 +22,11 @@ The builder's paths reach it without changing the owner's setting:
 - **A recording**: `make record` passes `--open debug`, which a recording
   honours whatever the switch says, for the follow-up question typed into the
   panel's Talk back field (see [The committed fixtures](replay.md#the-committed-fixtures)).
-- **The end-to-end harness**: a scenario that needs the panel puts
-  `--open debug` in its `SCENARIO_ARGS` (`understanding-surfaces` does), and
+- **The end-to-end harness**: a scenario that needs the panel launches with
+  `--open debug` (`understanding-surfaces` does), and
   `athina-drive ax ... --scope "Debug Panel"` reaches its controls, or on the
-  API tier `athina-drive api ... window="Debug Panel"` (`debug-timeline`).
+  API tier the control API's `find` with `window="Debug Panel"`
+  (`debug-timeline`).
   Capture Now is the menu's own command, not the panel's.
 - **Snapshots**: `--snapshot` draws the panel's view directly
   (`debug-panel*`) and the Advanced pane with the switch off and on

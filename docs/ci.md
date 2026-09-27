@@ -312,15 +312,18 @@ alone. The pixel comparison with the runner's references stays in CI.
 A checkpoint is a picture of one of Athina's windows at a step of an API-tier
 scenario, in a state `--snapshot`'s sample data cannot show: a pane after its
 switch was pressed, a sheet with a name typed into it. A scenario takes one
-with the harness's `checkpoint <window> <step>`, which asks the control API's
+with `run.checkpoint(<window>, <step>)`, which asks the control API's
 `snapshot` for the window in light and in dark and writes
 `<scenario>/<step>-light.png` and `<step>-dark.png` under the run's
 checkpoints folder (`checkpoints/` in its evidence, or `run --checkpoints
 <dir>`). Only a window whose picture holds still from run to run is a
-checkpoint, and one that did not settle fails the scenario; one that shows the
+checkpoint, and one that did not settle is taken again, since a window still
+moving from the step before can take longer to settle than the snapshot waits
+on a loaded machine, and fails the scenario when it has not settled by the
+third take; one that shows the
 run's times, pid or journal path, such as the debug panel, or that moves on its
 own, such as a suggestion's countdown, would differ every run, so a scenario
-keeps its picture as plain evidence (`api snapshot path=`). An API-tier run draws dates, times and
+keeps its picture as plain evidence (`run.picture(<window>, <name>)`). An API-tier run draws dates, times and
 numbers in UTC and US English with scroll bars always shown, as `--snapshot`
 does, so a checkpoint reads the same on every machine that draws it alike.
 

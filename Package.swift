@@ -33,6 +33,12 @@ let package = Package(
     // default, so the app, `make test` and every other build neither fetch
     // nor build it; `make test-snapshots-ci` and `make test-snapshots` turn it on.
     .trait(name: "UISnapshotsSmoke"),
+    // Builds the API tier of the end-to-end harness, the one test target that
+    // launches the app (docs/e2e.md). It is off by default, so
+    // `make test` and plain `swift test` build and run none of it;
+    // scripts/e2e/athina-e2e turns it on when it runs the API tier, having
+    // built the app bundle the tests launch.
+    .trait(name: "E2EAPI"),
   ],
   dependencies: [
     // Only for the UI smoke test, and fetched only with its trait on. Pinned
@@ -124,6 +130,14 @@ let package = Package(
         ),
       ],
       exclude: ["__Snapshots__"]
+    ),
+    .testTarget(
+      // The API tier of the end-to-end harness: each test a scenario that
+      // launches a hermetic replay and drives it through the control API.
+      // Without the trait its sources compile to nothing, so `swift test`
+      // runs none of it.
+      name: "E2EAPITests",
+      dependencies: ["AthinaControlProtocol", "AthinaE2E"]
     ),
   ],
   swiftLanguageModes: [.v6]

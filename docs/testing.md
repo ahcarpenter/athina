@@ -2,7 +2,9 @@
 
 Each layer proves one thing, and a change is checked by the layers that can
 see it. The unit tests are Swift Testing, run by `swift test`; the end-to-end
-layers are the harness in `scripts/e2e` ([End-to-end harness](e2e.md)); the
+layers are the harness in `scripts/e2e` ([End-to-end harness](e2e.md)), whose
+API-tier scenarios are Swift Testing tests too, in `Tests/E2EAPITests`, built
+only with the `E2EAPI` package trait and run through the harness; the
 pixel layers compare the one list of snapshots, `Snapshots.specs()`, and the
 API tier's checkpoints with images CI approved ([Continuous integration](ci.md)).
 
@@ -18,7 +20,9 @@ API tier's checkpoints with images CI approved ([Continuous integration](ci.md))
 
 ## What the tests and snapshots cover
 
-No test waits on real time (see [A faster clock](replay.md#a-faster-clock)). The tests
+No test of the suite waits on real time (see [A faster clock](replay.md#a-faster-clock)); the API tier's
+end-to-end tests, which `swift test` builds only with the `E2EAPI` trait, poll
+the app they launch in real time, as UI polling does. The tests
 exercise the pure parts
 (hashing, cadence, journal, retention and its in-place migration, settings, the
 mentor scheduler and every gate, mentorship context rules and placement, spend
@@ -28,9 +32,8 @@ with and without one, request and response coding against fixture JSON,
 recording, redaction, replay matching and stale refusal, launch flags, a
 replay's separate files, per-launch directories with their locks and pruning,
 the replay-only `--settings` flag, the line a launch writes as it starts, the
-clocks, a replay's clock flags, the clock requests a script sends and where a
-replay may answer them, the toast countdown, which variant of the mark the menu
-bar shows and that every variant is committed at one size, callout mapping and
+clocks, a replay's clock flags, the toast countdown, which variant of the mark
+the menu bar shows and that every variant is committed at one size, callout mapping and
 every anchor rejection, a callout aging out, transcript matching, the follow-up
 prompt and gate, the toast rule for voice input, the whole loop against a
 scripted client, follow-ups included, and the whole loop against the committed
