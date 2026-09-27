@@ -27,8 +27,6 @@ E2E_APP="$ROOT/build/e2e/Athina.app"
 E2E_BINARY="$E2E_APP/Contents/MacOS/Athina"
 E2E_BUNDLE_ID="com.ahcarpenter.athina.e2e"
 DRIVE="$ROOT/.build/debug/athina-drive"
-# When the build that last brought athina-drive up to date started (ensure_drive).
-DRIVE_BUILT="$ROOT/build/athina-drive.built"
 FIXTURES="$ROOT/Tests/AthinaCoreTests/Fixtures/Replay"
 SETTINGS_SEED="$E2E_DIR/lib/settings.json"
 # The API tier's scenarios: Swift Testing tests, one per scenario, run with
@@ -229,10 +227,10 @@ sources_newer_than() {
 # Is anything under the given directories newer than the stamp of the build
 # that last brought the built product up to date? Not the product itself: a
 # source saved during a build, after it was compiled, is older than the product
-# that build lands, and SwiftPM leaves athina-drive as it was when no source
-# really changed, so after a touch-only edit it stays older than that source
-# however often it is built. The stamp, made when that build started, is what
-# says the source was built.
+# that build lands, and SwiftPM leaves a binary as it was when no source really
+# changed, so after a touch-only edit it stays older than that source however
+# often it is built. The stamp, made when that build started, is what says the
+# source was built.
 sources_newer_than_build() {
 	local product="$1" stamp="$2"
 	shift 2
@@ -252,15 +250,12 @@ build_when() {
 	fi
 }
 
+# The harness's drive tool. SwiftPM decides what is out of date, so this takes
+# a second or two when nothing is, and the entry point runs it before it takes
+# the screen lock.
 ensure_drive() {
-	sources_newer_than_build "$DRIVE" "$DRIVE_BUILT" "$ROOT/Sources/AthinaDrive" "$ROOT/Sources/AthinaE2E" "$ROOT/Sources/AthinaControlProtocol" || return 0
 	log "building athina-drive $(build_when)"
-	# Stamped when the build starts, so a source saved during it is still newer.
-	mkdir -p "$(dirname "$DRIVE_BUILT")"
-	local started
-	started="$(mktemp "$DRIVE_BUILT.XXXXXX")"
-	(cd "$ROOT" && swift build --product athina-drive >/dev/null) || { rm -f "$started"; die "could not build athina-drive"; }
-	mv -f "$started" "$DRIVE_BUILT"
+	(cd "$ROOT" && swift build -q --product athina-drive >&2 8>&- 9>&-) || die "could not build athina-drive"
 }
 
 # A check of a stale bundle proves nothing, so the app is rebuilt when a source

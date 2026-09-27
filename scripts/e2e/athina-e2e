@@ -129,7 +129,6 @@ cmd_warm() {
 		return 0
 	fi
 	ensure_app
-	ensure_drive
 	RUN_DIR="$RUNS_ROOT/warm-$(date '+%Y%m%d-%H%M%S')"
 	mkdir -p "$RUN_DIR"
 	# Keep the half-built home if this fails: its journal is the only place
@@ -192,7 +191,6 @@ cmd_run() {
 	chosen="$(scenarios_to_run "${TIER:-all}" "$@")" || exit 1
 	mapfile -t names <<<"$chosen"
 	ensure_app
-	ensure_drive
 	local api=() screen=()
 	for name in "${names[@]}"; do
 		if [ "$(scenario_tier_of "$name")" = api ]; then api+=("$name"); else screen+=("$name"); fi
@@ -487,8 +485,9 @@ main() {
 		# down their holder files. warm sets its own trap, which does both.
 		trap locks_release EXIT
 		# Built before the screen lock is taken, so no other checkout waits
-		# on this one's build. The commands build again only if a source file
-		# is saved after this build starts.
+		# on this one's build. The commands build the app again only if a
+		# source file is saved after this build starts; athina-drive is built
+		# here alone.
 		ensure_app
 		ensure_drive
 	fi
