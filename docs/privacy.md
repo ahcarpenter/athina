@@ -153,3 +153,20 @@ policy, this document on the repository's main branch
 
 The end-to-end harness seeds an Allow ([e2e](e2e.md) "The warm fixture home"),
 so its scenarios start sensing as the owner's own Athina does.
+
+## Permissions
+
+The [README](../README.md#permissions) lists each permission, what it is used
+for, and how Athina works without it. Athina explains each in a window that opens
+at launch whenever one is missing, once consent is given. The window explains before it asks: no
+system prompt appears when it opens. Each missing permission has one button. For
+the sensing pair it is Open System Settings, which registers Athina in that
+permission's System Settings list (macOS may show its own note pointing there)
+and opens the matching pane; the window shows live status and re-checks every
+second while open and when the app regains focus. The two optional permissions
+serve only talking back; the window lists them below the required pair and asks
+for them only when you press Request Access (Open System Settings once the
+system has asked) or first hold the talk-back shortcut.
+
+Idle detection uses `CGEventSource.secondsSinceLastEventType`, which needs no
+permission. Input Monitoring is never requested.

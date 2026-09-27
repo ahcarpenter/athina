@@ -339,6 +339,12 @@ scenario and an empty journal:
    can fill a required field with an empty string), replace the fixture directory's
    recordings with the ones you keep, update its README, delete the rest, put
    the journal and settings back, and run `make test`.
+5. The README shows this set: its receipt table lists each call's tokens and
+   cost, and its two pictures are one screen capture of the suggestion and its
+   callout, taken from a replay of the set with the `scenario/` documents
+   staged as they were recorded, TextEdit's text enlarged and the window moved
+   so the recorded region lands on its line. Update the table and retake the
+   pictures with the new set.
 
 `ScriptedClaudeClient` stays for unit tests that need one exact hand-written
 answer, such as a refusal, an unparseable reply, or a slow call.
