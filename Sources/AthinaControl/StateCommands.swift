@@ -120,12 +120,24 @@ extension ControlCommands {
 
   // MARK: - The clock
 
-  /// Moves the replay's clock `seconds=` ahead, as the debug panel's Advance
-  /// field does, and answers with its time (`now`, ISO 8601) and how far it
-  /// has been moved ahead in all.
+  /// Moves the replay's clock `seconds=` ahead, or `interval=` as the debug
+  /// panel's Advance field takes it (`15m`, `2h`, `1d12h`), as that field
+  /// does, and answers with its time (`now`, ISO 8601) and how far it has
+  /// been moved ahead in all.
   func advance(_ request: ControlRequest) throws -> ControlReply {
-    guard let seconds = try request.number("seconds") else {
-      return .error("advance needs seconds=<how far>")
+    let seconds: TimeInterval
+    switch (try request.number("seconds"), try request.string("interval")) {
+    case (let given?, nil):
+      seconds = given
+    case (nil, let interval?):
+      guard let parsed = ClockInterval.seconds(from: interval) else {
+        return .error("\"\(interval)\" is not an interval such as 15m, 2h, or 1d")
+      }
+      seconds = parsed
+    case (.some, .some):
+      return .error("advance takes seconds= or interval=, not both")
+    case (nil, nil):
+      return .error("advance needs seconds=<how far> or interval=<such as 15m, 2h, or 1d>")
     }
     if let refusal = host.controlAdvanceClock(by: seconds) { return .error(refusal) }
     let clock = host.controlClock

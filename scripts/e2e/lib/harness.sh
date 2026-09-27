@@ -31,6 +31,11 @@ DRIVE="$ROOT/.build/debug/athina-drive"
 DRIVE_BUILT="$ROOT/build/athina-drive.built"
 FIXTURES="$ROOT/Tests/AthinaCoreTests/Fixtures/Replay"
 SETTINGS_SEED="$E2E_DIR/lib/settings.json"
+# The API tier's scenarios: Swift Testing tests, one per scenario, run with
+# the E2EAPI trait in a build directory of their own (run_api_tier), so
+# running them never makes `make test` compile the package again.
+API_SCENARIO_DIR="$ROOT/Tests/E2EAPITests/Scenarios"
+API_BUILD="$ROOT/.build/e2e-api"
 
 # The owner's real data, which every run is sandboxed away from: where the app
 # keeps it now, and where it kept it as Mentor (README "Coming from Mentor").
@@ -38,17 +43,20 @@ LIVE_SUPPORT="$HOME/Library/Application Support/athina"
 LEGACY_SUPPORT="$HOME/Library/Application Support/mentor"
 PREFS_DOMAIN="com.ahcarpenter.athina"
 
-# How many API-tier scenarios `run` runs at once (--jobs), read by the entry
-# point.
+# Read by the entry point: how many API-tier scenarios `run` runs at once
+# (--jobs), and what it hands the API tier's tests (run_api_tier): 1 leaves
+# their windows on screen (--show-windows); how their app is launched
+# (--launch): sandbox, exec'd under sandbox-exec, or open, through
+# LaunchServices; and where their checkpoints go (--checkpoints), each
+# scenario's in a folder named after it, each run's own evidence directory
+# when empty.
 # shellcheck disable=SC2034
 JOBS=1
-# 1 leaves an API-tier run's windows on screen (--show-windows).
+# shellcheck disable=SC2034
 SHOW_WINDOWS=0
-# How an API-tier run's app is launched (--launch): sandbox, exec'd under
-# sandbox-exec from the harness, or open, through LaunchServices (launch_athina).
+# shellcheck disable=SC2034
 LAUNCH_WITH=sandbox
-# Where an API-tier run's checkpoints go (--checkpoints), each scenario's in a
-# folder named after it; the run's own evidence directory when empty.
+# shellcheck disable=SC2034
 CHECKPOINTS_ROOT=""
 # Before every line a scenario logs while others run beside it.
 LOG_TAG=""
@@ -129,24 +137,58 @@ step() {
 
 SCENARIO_DIR="$E2E_DIR/scenarios"
 
-scenario_names() {
-	local path
-	for path in "$SCENARIO_DIR"/*.sh; do
-		[ -e "$path" ] || continue
-		basename "$path" .sh
+# The API tier's scenarios, one to a line as "<name><tab><summary>": each is a
+# Swift Testing test in $API_SCENARIO_DIR whose name is the scenario's, a raw
+# identifier such as `about-panel`, and the first paragraph of whose doc
+# comment is its summary. Read from the source, so listing them builds
+# nothing.
+api_scenarios() {
+	local file
+	for file in "$API_SCENARIO_DIR"/*.swift; do
+		[ -e "$file" ] || continue
+		awk '
+			/^[[:space:]]*\/\/\// {
+				line = $0
+				sub(/^[[:space:]]*\/\/\/[[:space:]]?/, "", line)
+				if (line == "") ended = 1
+				else if (!ended) summary = summary (summary == "" ? "" : " ") line
+				next
+			}
+			/func `[^`]+`\(/ {
+				match($0, /func `[^`]+`/)
+				printf "%s\t%s\n", substr($0, RSTART + 6, RLENGTH - 7), summary
+			}
+			!/^[[:space:]]*@/ { summary = ""; ended = 0 }
+		' "$file"
 	done
 }
 
-scenario_summary_of() {
-	# Read the summary without running anything the scenario defines.
-	sed -n 's/^SCENARIO_SUMMARY="\(.*\)"$/\1/p' "$SCENARIO_DIR/$1.sh" | head -1
+# Every scenario, one name to a line, in order: the real-screen tier's, each a
+# script in $SCENARIO_DIR, and the API tier's.
+scenario_names() {
+	{
+		local path
+		for path in "$SCENARIO_DIR"/*.sh; do
+			[ -e "$path" ] || continue
+			basename "$path" .sh
+		done
+		api_scenarios | cut -f 1
+	} | LC_ALL=C sort
 }
 
-# The tier a scenario names, read the same way; screen when it names none.
+scenario_summary_of() {
+	if [ -f "$SCENARIO_DIR/$1.sh" ]; then
+		# Read the summary without running anything the scenario defines.
+		sed -n 's/^SCENARIO_SUMMARY="\(.*\)"$/\1/p' "$SCENARIO_DIR/$1.sh" | head -1
+	else
+		api_scenarios | awk -F '\t' -v name="$1" '$1 == name { print $2; exit }'
+	fi
+}
+
+# A script in $SCENARIO_DIR is on the real screen; a test in
+# $API_SCENARIO_DIR is on the API tier.
 scenario_tier_of() {
-	local tier
-	tier="$(sed -n 's/^SCENARIO_TIER=\([a-z]*\)$/\1/p' "$SCENARIO_DIR/$1.sh" 2>/dev/null | head -1)"
-	printf '%s\n' "${tier:-screen}"
+	if [ -f "$SCENARIO_DIR/$1.sh" ]; then echo screen; else echo api; fi
 }
 
 # The scenarios `run` runs, one to a line, in the order given: those named, or
@@ -160,8 +202,10 @@ scenarios_to_run() {
 		# shellcheck disable=SC2046 # a scenario's name is one word
 		set -- $(scenario_names)
 	fi
+	local known
+	known="$(scenario_names)"
 	for name in "$@"; do
-		[ -f "$SCENARIO_DIR/$name.sh" ] || die "no scenario named $name"
+		grep -qxF -- "$name" <<<"$known" || die "no scenario named $name"
 	done
 	for name in "$@"; do
 		if [ "$tier" = all ] || [ "$(scenario_tier_of "$name")" = "$tier" ]; then
@@ -293,6 +337,15 @@ ensure_e2e_app() {
 	printf '%s\n' "$source" >"$E2E_APP.source"
 }
 
+# The API tier's tests, built with the E2EAPI trait in a build directory of
+# their own, as the app is built, before any scenario starts. SwiftPM decides
+# what is out of date, so this takes seconds when nothing is.
+ensure_api_tests() {
+	log "building the API tier's tests $(build_when)"
+	(cd "$ROOT" && swift build -q --build-tests --traits E2EAPI --scratch-path "$API_BUILD" >&2 8>&- 9>&-) \
+		|| die "could not build the API tier's tests"
+}
+
 # What was run, for whoever reads the evidence later.
 record_build_provenance() {
 	{
@@ -350,14 +403,6 @@ have_warm_home() { [ -s "$WARM_HOME/.athina-e2e-warm" ]; }
 # journal shows events with no observations.
 new_home() {
 	local dest="$1"
-	# A hermetic run reads no screen and runs no text recognition, so it needs
-	# no text-recognition cache, and it never reads the warm home that `warm`
-	# may be rebuilding.
-	if [ "${SCENARIO_TIER:-screen}" = api ]; then
-		rm -rf "$dest"
-		mkdir -p "$dest/Library/Application Support/athina"
-		return 0
-	fi
 	have_warm_home || die "no warm home yet: run scripts/e2e/athina-e2e warm first"
 	rm -rf "$dest"
 	cp -c -R "$WARM_HOME" "$dest" || die "could not clone the warm home into $dest"
@@ -412,36 +457,17 @@ PY
 launch_athina() {
 	local home="$1"
 	shift
-	local profile="$RUN_DIR/isolate.sb" binary="$APP_BINARY"
+	local profile="$RUN_DIR/isolate.sb"
 	LAUNCH_ARGS=("$@")
-	local args=(--replay "$FIXTURES" --replay-latency immediate) zone=()
-	if [ "${SCENARIO_TIER:-screen}" = api ]; then
-		# An API-tier run is hermetic (README "Hermetic runs"), from the copy
-		# with preferences of its own, and draws dates, times, numbers and
-		# scroll bars as the UI snapshots do, whatever this Mac is set to, so
-		# its checkpoints read the same on every run (scripts/snapshots.sh).
-		# Ahead of the scenario's own arguments: AppKit reads every argument
-		# after `-Name value` pairs as a document to open, and an app asked to
-		# open one at launch opens none of its windows, so each pair has to
-		# come before a flag that takes no value, such as --hermetic.
-		binary="$E2E_BINARY"
-		zone=(TZ=UTC)
-		args+=(-AppleLocale en_US -AppleLanguages '(en-US)' -AppleICUForce24HourTime NO -AppleShowScrollBars Always)
-	fi
-	args+=("$@")
-	if [ "${SCENARIO_TIER:-screen}" = api ] && [ "$LAUNCH_WITH" = open ]; then
-		launch_athina_open "$home" "${args[@]}"
-		return
-	fi
+	local args=(--replay "$FIXTURES" --replay-latency immediate "$@")
 	# `8>&- 9>&-` here and on every helper started in the background: the
 	# locks' descriptors (lib/lock.sh) stay with the harness, so nothing that
 	# outlives a killed run can keep a lock.
 	sed -e "s#__LIVE_SUPPORT__#$LIVE_SUPPORT#" -e "s#__LEGACY_SUPPORT__#$LEGACY_SUPPORT#" "$E2E_DIR/lib/isolate.sb" >"$profile"
-	env ${zone[@]+"${zone[@]}"} CFFIXED_USER_HOME="$home" HOME="$home" \
-		sandbox-exec -f "$profile" "$binary" "${args[@]}" \
+	env CFFIXED_USER_HOME="$home" HOME="$home" \
+		sandbox-exec -f "$profile" "$APP_BINARY" "${args[@]}" \
 		>>"$RUN_DIR/app.log" 2>&1 8>&- 9>&- &
 	ATHINA_PID=$!
-	[ "${SCENARIO_TIER:-screen}" = api ] && watch_hermetic
 	LAUNCHED_AT=$(date +%s)
 	JOURNAL=""
 	log "launched Athina pid=$ATHINA_PID (replay, sandboxed, home=$home)"
@@ -455,9 +481,6 @@ launch_athina() {
 	done
 	[ -n "$JOURNAL" ] || die "Athina never said where it keeps its journal; see $RUN_DIR/app.log"
 	log "journal at $JOURNAL"
-	# A hermetic run has no menu bar extra to be ready by; the control API
-	# answering (control_wait) is its readiness.
-	[ "${SCENARIO_TIER:-screen}" = api ] && return 0
 	for i in $(seq 1 90); do
 		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited during launch; see $RUN_DIR/app.log"
 		if "$DRIVE" ready "$ATHINA_PID" 2>/dev/null | grep -q READY; then
@@ -474,48 +497,6 @@ launch_athina() {
 	done
 	die "Athina never became ready; see $RUN_DIR/app.log"
 }
-
-# An API-tier launch through LaunchServices (--launch open), for the CI runner.
-# A process exec'd from a job step inherits the grants the runner image gives
-# the step's shell, Accessibility among them, so the app would run trusted and
-# the run could never catch a change that made the API tier need a grant it
-# does not have on a Mac; opened, it is its own responsible process, as
-# untrusted as it is on the owner's Mac. `open` gives no pid and runs the app
-# outside sandbox-exec, so the pid comes from the line the app writes as it
-# starts, and the harness refuses this on a Mac with Athina data of its own.
-# open hands the app's output to two files of its own, and on the runner the
-# app's stderr lines, that one among them, land in the stdout one, so the
-# harness reads both (app_output).
-launch_athina_open() {
-	local home="$1"
-	shift
-	[ ! -e "$LIVE_SUPPORT" ] && [ ! -e "$LEGACY_SUPPORT" ] \
-		|| die "--launch open runs the app outside the sandbox, so it is only for a machine with no Athina data, such as a CI runner; this one has $LIVE_SUPPORT"
-	open -n -g --env CFFIXED_USER_HOME="$home" --env HOME="$home" --env TZ=UTC \
-		--stdout "$RUN_DIR/app-stdout.log" --stderr "$RUN_DIR/app.log" "$E2E_APP" --args "$@" \
-		|| die "open could not launch $E2E_APP"
-	LAUNCHED_AT=$(date +%s)
-	JOURNAL=""
-	ATHINA_PID=""
-	local i started
-	for i in $(seq 1 90); do
-		started="$(app_output | grep -m 1 -E '^Athina started: pid [0-9]+ in ' || true)"
-		if [ -n "$started" ]; then
-			ATHINA_PID="$(printf '%s\n' "$started" | sed -E 's/^Athina started: pid ([0-9]+) in .*/\1/')"
-			JOURNAL="${started#* in }/journal.sqlite"
-			break
-		fi
-		sleep 0.5
-	done
-	[ -n "$ATHINA_PID" ] || die "Athina never said it started; see $RUN_DIR/app.log"
-	watch_hermetic
-	log "launched Athina pid=$ATHINA_PID (replay, through open, home=$home)"
-	log "journal at $JOURNAL"
-}
-
-# Everything the run's app has written: app.log, and app-stdout.log beside it
-# for a launch through open.
-app_output() { cat "$RUN_DIR"/app.log "$RUN_DIR"/app-stdout.log 2>/dev/null || true; }
 
 stop_pid() {
 	local pid="$1" i
@@ -824,10 +805,10 @@ window_id() {
 
 # --- The control API ----------------------------------------------------------
 
-# An API-tier scenario (SCENARIO_TIER=api) drives Athina through its control
-# API (README "The control API") rather than the pointer and accessibility from
-# outside: the app finds its own controls and clicks them through its own event
-# path, so no step waits for idle input.
+# The API tier drives Athina through its control API (README "The control
+# API") from Swift (Tests/E2EAPITests); a real-screen scenario that says
+# SCENARIO_CONTROL=yes reads the app through it too, with these, to set what
+# macOS shows beside what the app built.
 
 # Whether the bundle under test carries the control API, as the release check
 # (scripts/check-no-control-api.sh) finds it: a release build carries none.
@@ -865,25 +846,12 @@ control_wait() {
 			log "control API answering after $((i / 10)).$((i % 10))s"
 			return 0
 		fi
-		refusal="$(app_output | grep -m 1 -E '^control API (refused|failed): ' || true)"
+		refusal="$(grep -m 1 -E '^control API (refused|failed): ' "$RUN_DIR/app.log" 2>/dev/null || true)"
 		[ -n "$refusal" ] && die "$refusal"
 		kill -0 "$ATHINA_PID" 2>/dev/null || die "Athina exited before its control API answered; see $RUN_DIR/app.log"
 		sleep 0.1
 	done
 	die "the control API never answered; see $RUN_DIR/app.log and $RUN_DIR/api.log"
-}
-
-# Reads $2 (a function) until it prints $1, for up to two seconds, and prints
-# the last read: SwiftUI redraws a control a moment after the click that
-# changed it has been handled.
-settled() {
-	local want="$1" read="$2" got="" i
-	for i in $(seq 1 20); do
-		got="$("$read")"
-		[ "$got" = "$want" ] && break
-		sleep 0.1
-	done
-	printf '%s\n' "$got"
 }
 
 # A Python expression over a JSON answer, bound to `r`, printed: for checks
@@ -903,148 +871,7 @@ api() {
 	return "$status"
 }
 
-# --- Scripted sensing ---------------------------------------------------------
-
-# A hermetic run senses only what a scenario scripts through the API's
-# `observe` (README "Scripted sensing"). These script the moments the committed
-# fixtures were recorded at, from the documents in their scenario/ folder,
-# each shown as a TextEdit window of its own.
-
-# Seconds since 1970 to the microsecond, for timing a wait in real time.
-now_seconds() {
-	printf '%s\n' "${EPOCHREALTIME:-$(python3 -c 'import time; print(time.time())')}"
-}
-
-# Shows the fixtures' scenario document $1 as the TextEdit window in front,
-# captured at once. Prints the answer; its `after` is where to wait for what
-# the observation brings.
-observe_document() {
-	local file="$FIXTURES/scenario/$1"
-	[ -f "$file" ] || die "no scenario document $1 in $FIXTURES/scenario"
-	api observe app=TextEdit bundle=com.apple.TextEdit window="$1" text="$(cat "$file")"
-}
-
-# Brings up the replay's first suggestion as the fixtures were recorded:
-# reading-notes.txt in front, whose triage finds nothing worth a look, then a
-# switch to cleanup-script.txt, whose triage finds something and whose mentor
-# call makes the suggestion. The triage gate holds a second triage for its 5
-# second floor, which the replay clock is moved past rather than waited out.
-# Checks that the toast is up within 2 seconds of the second observe, and sets
-# SUGGESTION_ID. Not called in a subshell, since its check has to count.
-SUGGESTION_ID=""
-scripted_toast() {
-	local answer started elapsed
-	answer="$(observe_document reading-notes.txt)" || { log "reading-notes.txt was not observed: $answer"; return 1; }
-	api wait-event name=call tier=triage after="$(json_eval "$answer" 'int(r["after"])')" timeout=10 >/dev/null \
-		|| { log "no triage call came after the first observation"; return 1; }
-	api advance seconds=6 >/dev/null || { log "the replay clock would not move past the triage gate"; return 1; }
-	started="$(now_seconds)"
-	answer="$(observe_document cleanup-script.txt)" || { log "cleanup-script.txt was not observed: $answer"; return 1; }
-	SUGGESTION_ID="$(api wait-event name=suggestion after="$(json_eval "$answer" 'int(r["after"])')" timeout=10 --field event.id)" \
-		|| { log "no suggestion came after the second observation"; return 1; }
-	api wait-window window="Athina suggestion" timeout=2 >/dev/null || { log "suggestion $SUGGESTION_ID showed no toast"; return 1; }
-	elapsed="$(awk -v a="$started" -v b="$(now_seconds)" 'BEGIN { printf "%.2f", b - a }')"
-	log "toast up for suggestion $SUGGESTION_ID ${elapsed}s after the second observe"
-	check "the toast is up within 2 seconds of the second observe" "yes" \
-		"$(awk -v e="$elapsed" 'BEGIN { print (e <= 2 ? "yes" : "no") }')"
-}
-
-# A suggestion's feedback as the app's own journal holds it, `none` when it
-# has none.
-api_feedback() {
-	json_eval "$(api journal query=suggestions)" \
-		'next(("none" if s["feedback"] == "-" else s["feedback"] for s in r["rows"] if s["id"] == a[0]), "missing")' "$1"
-}
-
-# A checkpoint: pictures of one of Athina's windows at a step of an API-tier
-# scenario, in light and in dark, as <scenario>/<step>-light.png and
-# <step>-dark.png under the run's checkpoints folder (--checkpoints, or
-# checkpoints/ in its evidence). CI compares each with its approved baseline in
-# Tests/Checkpoints, as ui-snapshots compares a snapshot (README "Checkpoints");
-# on a Mac they are evidence only, since a Mac draws them otherwise. A window
-# that shows something that changes from run to run, a time, a path, a pid,
-# never gives the same picture twice, so a scenario keeps its picture as plain
-# evidence with `api snapshot path=` instead.
-checkpoint() {
-	local window="$1" step="$2" dir appearance file
-	dir="${CHECKPOINTS_ROOT:-$RUN_DIR/checkpoints}/$SCENARIO_NAME"
-	mkdir -p "$dir"
-	for appearance in light dark; do
-		file="$dir/$step-$appearance.png"
-		# Settled, or it would not be the same picture on the next run.
-		check "checkpoint $SCENARIO_NAME/$step-$appearance of $window is taken, settled" "true" \
-			"$(api snapshot window="$window" path="$file" appearance="$appearance" --field settled)"
-	done
-}
-
 # --- Watchers -----------------------------------------------------------------
-
-# A hermetic run shows nothing, and this is what says so: from the moment the
-# app starts to the moment it stops, Athina's windows above the desktop picture
-# are counted five times a second, and its items in the menu bar as often as
-# reading the bar allows, about once every two seconds. Both counts must stay
-# at 0 (hermetic_checks). The windows seen, if any, are named in the log. A
-# look that could not be made is logged as failed rather than as 0, and each
-# look at the bar logs every app's items it saw beside Athina's, since a drive
-# macOS does not trust reads a bar with nothing in it.
-watch_hermetic() {
-	local pid="$ATHINA_PID"
-	(
-		local seen
-		while kill -0 "$pid" 2>/dev/null; do
-			if seen="$("$DRIVE" windows "$pid" 2>/dev/null)"; then
-				printf '%s %s %s\n' "$(date '+%H:%M:%S')" "$(printf '%s' "$seen" | grep -c . || true)" "$(printf '%s' "$seen" | tr '\n' ' ')"
-			else
-				printf '%s failed\n' "$(date '+%H:%M:%S')"
-			fi
-			sleep 0.2
-		done
-	) >"$RUN_DIR/hermetic-windows.log" 2>&1 8>&- 9>&- &
-	track_helper $!
-	(
-		local seen
-		while kill -0 "$pid" 2>/dev/null; do
-			if seen="$("$DRIVE" bar 2>/dev/null)"; then
-				printf '%s %s %s\n' "$(date '+%H:%M:%S')" \
-					"$(printf '%s\n' "$seen" | grep -c "^extra .*pid=$pid " || true)" \
-					"$(printf '%s\n' "$seen" | grep -c '^extra ' || true)"
-			else
-				printf '%s failed\n' "$(date '+%H:%M:%S')"
-			fi
-			sleep 0.2
-		done
-	) >"$RUN_DIR/hermetic-bar.log" 2>&1 8>&- 9>&- &
-	track_helper $!
-}
-
-# The checks every API-tier run ends with, over what watch_hermetic saw: every
-# look was made, none found Athina, and the bar was really read.
-hermetic_checks() {
-	local file what log
-	for file in windows bar; do
-		# --show-windows leaves them on screen on purpose.
-		[ "$file" = windows ] && [ "$SHOW_WINDOWS" = 1 ] && continue
-		log="$RUN_DIR/hermetic-$file.log"
-		# A look at the bar takes seconds, longer than the shortest scenarios.
-		for _ in $(seq 1 100); do
-			[ -s "$log" ] && break
-			sleep 0.1
-		done
-		[ -s "$log" ] || { check "the $file were looked at during the run" "yes" "no"; continue; }
-		case "$file" in
-		windows) what="an Athina window above the desktop picture" ;;
-		bar) what="an Athina item in the menu bar" ;;
-		esac
-		check "looks at the $file during the run that failed" "0" \
-			"$(awk '$2 == "failed" { n++ } END { print n + 0 }' "$log")"
-		check "looks during the run that found $what" "0" \
-			"$(awk '$2 != "failed" && $2 > 0 { n++ } END { print n + 0 }' "$log")"
-		if [ "$file" = bar ]; then
-			check "looks at the bar that saw any app's item in it" "yes" \
-				"$(awk '$3 > 0 { n++ } END { print (n > 0 ? "yes" : "no") }' "$log")"
-		fi
-	done
-}
 
 watch_announcements() {
 	"$DRIVE" announce "$ATHINA_PID" >"$RUN_DIR/announcements.log" 2>&1 8>&- 9>&- &
