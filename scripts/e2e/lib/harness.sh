@@ -123,6 +123,18 @@ check() {
 	fi
 }
 
+# A line on the result that is neither a pass nor a failure: a step done again
+# because whoever is at the Mac got in its way, so the result shows it rather
+# than only the log. A scenario never runs a failed check again. Kept in a file
+# the result line reads, so a note made in a command substitution's subshell
+# still reaches it.
+note() {
+	local line="$1"
+	[ -n "$STEP" ] && line="step $STEP: $line"
+	log "  note $line"
+	printf 'note %s\n' "$line" >>"$RUN_DIR/notes.txt"
+}
+
 # Start the next step of a scenario that runs several, named
 # "<number> <what it proves>", so a failed check, or a scenario that stops at
 # it, says which step it was.
@@ -694,7 +706,7 @@ keep_toast_up() {
 			return 1
 		fi
 		relaunched=$((relaunched + 1))
-		log "the toast went away (suggestion $newest: $(suggestion_feedback "$newest")); relaunching for a new one"
+		note "the toast went away (suggestion $newest: $(suggestion_feedback "$newest")), so Athina was relaunched for a new one"
 		relaunch_athina
 		wait_toast >/dev/null || return 1
 	done
@@ -910,10 +922,12 @@ write_evidence() {
 
 # One machine-readable line per scenario, on stdout, whatever the log says, in
 # the shape an API-tier test writes its own (Tests/E2EAPITests): one line of
-# JSON with its keys sorted.
+# JSON with its keys sorted: its checks, then its notes.
 result_line() {
+	local notes=()
+	if [ -n "$RUN_DIR" ] && [ -f "$RUN_DIR/notes.txt" ]; then mapfile -t notes <"$RUN_DIR/notes.txt"; fi
 	jq -n -c -S --arg scenario "$1" --arg result "$2" --argjson seconds "$3" --arg detail "$4" \
 		--arg evidence "$RUN_DIR" \
 		'{$scenario, $result, $seconds, $detail, $evidence, checks: $ARGS.positional}' \
-		--args ${CHECK_LINES[@]+"${CHECK_LINES[@]}"}
+		--args ${CHECK_LINES[@]+"${CHECK_LINES[@]}"} ${notes[@]+"${notes[@]}"}
 }

@@ -183,11 +183,16 @@ cmd_warm() {
 
 # How run_scenario says a scenario was skipped, neither passed nor failed.
 SCENARIO_SKIPPED=77
+# How an outcome records a failure of a scenario on the quarantine list,
+# Tests/quarantine.json: reported, not counted as failed, and never run again
+# (docs/testing.md "Quarantine").
+SCENARIO_QUARANTINED=78
 
 cmd_run() {
 	local names=() name chosen
 	[ $# -gt 0 ] || [ -n "$TIER" ] || { usage; exit 64; }
 	chosen="$(scenarios_to_run "${TIER:-all}" "$@")" || exit 1
+	"$ROOT/scripts/quarantine.sh" check || exit 1
 	mapfile -t names <<<"$chosen"
 	ensure_app
 	local api=() screen=()
@@ -229,7 +234,7 @@ run_api_tier() {
 		for name in "$@"; do
 			log "=== $name: skipped, $reason"
 			result_line "$name" skip 0 "$reason"
-			printf '%s\n' "$SCENARIO_SKIPPED" >"$(mktemp "$OUTCOMES/outcome.XXXXXX")"
+			keep_outcome "$name" "$SCENARIO_SKIPPED"
 		done
 		return 0
 	fi
@@ -258,14 +263,14 @@ run_api_tier() {
 			cat "$file"
 			result="$(sed -n 's/.*"result":"\([a-z]*\)".*/\1/p' "$file")"
 			case "$result" in
-			pass) printf '0\n' ;;
-			skip) printf '%s\n' "$SCENARIO_SKIPPED" ;;
-			*) printf '1\n' ;;
-			esac >"$(mktemp "$OUTCOMES/outcome.XXXXXX")"
+			pass) keep_outcome "$name" 0 ;;
+			skip) keep_outcome "$name" "$SCENARIO_SKIPPED" ;;
+			*) keep_outcome "$name" 1 ;;
+			esac
 		done
 		if [ "$found" = 0 ]; then
 			result_line "$name" fail 0 "it left no result: swift test stopped, with status $status, before it ended"
-			printf '1\n' >"$(mktemp "$OUTCOMES/outcome.XXXXXX")"
+			keep_outcome "$name" 1
 		fi
 	done
 	rm -rf "$results"
@@ -275,22 +280,35 @@ run_api_tier() {
 run_one() {
 	local outcome=0
 	run_scenario "$1" || outcome=$?
+	keep_outcome "$1" "$outcome"
+}
+
+# Keeps scenario $1's outcome $2 where tally finds it; a failure of a
+# quarantined scenario is reported and kept as quarantined instead.
+keep_outcome() {
+	local name="$1" outcome="$2"
+	if [ "$outcome" != 0 ] && [ "$outcome" != "$SCENARIO_SKIPPED" ] \
+		&& "$ROOT/scripts/quarantine.sh" scenario "$name"; then
+		"$ROOT/scripts/quarantine.sh" report "$name"
+		outcome="$SCENARIO_QUARANTINED"
+	fi
 	printf '%s\n' "$outcome" >"$(mktemp "$OUTCOMES/outcome.XXXXXX")"
 }
 
 tally() {
-	local passed=0 failed=0 skipped=0 outcome file
+	local passed=0 failed=0 skipped=0 quarantined=0 outcome file
 	for file in "$OUTCOMES"/outcome.*; do
 		[ -e "$file" ] || continue
 		outcome="$(cat "$file")"
 		case "$outcome" in
 		0) passed=$((passed + 1)) ;;
 		"$SCENARIO_SKIPPED") skipped=$((skipped + 1)) ;;
+		"$SCENARIO_QUARANTINED") quarantined=$((quarantined + 1)) ;;
 		*) failed=$((failed + 1)) ;;
 		esac
 	done
 	rm -rf "$OUTCOMES"
-	log "$passed passed, $failed failed, $skipped skipped"
+	log "$passed passed, $failed failed, $skipped skipped$([ "$quarantined" = 0 ] || echo ", and $quarantined quarantined failed, not counted")"
 	[ "$failed" = 0 ]
 }
 

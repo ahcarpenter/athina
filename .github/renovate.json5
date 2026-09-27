@@ -1,6 +1,7 @@
 // Renovate's dependency updates (docs/ci.md): once a
 // week, one pull request for the GitHub Actions the workflows use and one for
-// the Swift packages, each checked by CI like any other. Nothing runs until
+// the Swift packages, each checked by CI like any other, and each taking only
+// releases at least three days old. Nothing runs until
 // the Mend Renovate GitHub App is installed on the repository; its security
 // updates read the repository's Dependabot alerts, which are turned on in its
 // settings, with no Dependabot configuration of its own.
@@ -12,6 +13,12 @@
   // and .github/actions, and the packages Package.swift pins.
   enabledManagers: ['github-actions', 'swift'],
   semanticCommits: 'enabled',
+  // A release is offered only once it is three days old, time for a broken or
+  // compromised one to be pulled first; one without a release date waits too
+  // (minimumReleaseAgeBehaviour's default). Security updates from the
+  // Dependabot alerts come at once, as Renovate always raises them.
+  minimumReleaseAge: '3 days',
+  internalChecksFilter: 'strict',
   packageRules: [
     {
       matchManagers: ['github-actions'],

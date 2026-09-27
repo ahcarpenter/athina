@@ -79,7 +79,10 @@ order it goes in: apply, then run the job again, then merge.
 **Dependency updates.** Renovate (`.github/renovate.json5`) opens the update
 pull requests, weekly on Monday morning: one for the GitHub Actions the
 workflows and `.github/actions` use, and one for the packages `Package.swift`
-pins. Each is a pull request like any other, checked by CI the same way. The
+pins. Each is a pull request like any other, checked by CI the same way. A
+release is offered only once it is three days old (`minimumReleaseAge`), time
+for a broken or compromised release to be pulled first; one whose registry
+gives no release date waits too, and security updates come at once. The
 runner images are left out, since moving CI to a new macOS image is a
 deliberate commit (see One Xcode, pinned, below). The root `Package.resolved` stays uncommitted (see
 [UI snapshot smoke test](#ui-snapshot-smoke-test)), which Renovate does not
@@ -87,6 +90,22 @@ need. Nothing runs until two steps in the repository's settings, which take an
 admin: install the Mend Renovate GitHub App on the repository, and turn on the
 dependency graph and Dependabot alerts, which Renovate's security updates read;
 no Dependabot configuration is used.
+
+**Nightly.** `.github/workflows/nightly.yml` runs every night on main, and by
+hand from the Actions tab: `make test FILTER='ReplayLoopTests|ReplayInterventionTests'`,
+the check that fails a pull request on a stale replay fixture (see [The
+committed fixtures](replay.md#the-committed-fixtures)) and the strict replay
+of the committed set through the loop. It is replay only: no key, no call to a
+model, no spend. When it fails it opens one issue, "Nightly: the replay
+fixtures no longer match the current prompts", or comments the failed run on
+that issue while it is open; close the issue once a run passes. No check
+requires it.
+
+**Flaky tests.** Nothing in CI or the end-to-end harness runs a failed test
+or scenario again to get a pass. A flaky one goes on the quarantine list,
+`Tests/quarantine.json`, with an owner and the issue tracking its fix (see
+[Quarantine](testing.md#quarantine)): it still runs in every job, and its
+failure is reported as a warning on the run, not counted.
 
 **A build cache.** Every macOS job that compiles the package restores
 `.build` from an earlier run of the same job through
