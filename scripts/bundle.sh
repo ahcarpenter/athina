@@ -56,7 +56,9 @@ cd "$ROOT"
 mkdir -p "$OUT_DIR"
 started="$(mktemp "$BUILT.XXXXXX")"
 trap 'rm -f "$started"' EXIT
-swift build "${build_args[@]}"
+began="$(date +%s)"
+scripts/quietly.sh build swift build "${build_args[@]}" \
+  || { echo "bundle: swift build failed; make doctor names a missing or mismatched Xcode" >&2; exit 1; }
 BIN="$(swift build "${build_args[@]}" --show-bin-path)/Athina"
 
 rm -rf "$APP"
@@ -82,7 +84,7 @@ printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 if [ "$SIGN" = 0 ]; then
   mv -f "$started" "$BUILT"
-  echo "bundle: $APP (unsigned)"
+  echo "bundle: $APP ($CONFIG, unsigned) in $(($(date +%s) - began)) s"
   exit 0
 fi
 
@@ -96,12 +98,12 @@ requirement_args=()
 if [ -z "$identity" ]; then
   identity="-"
   requirement_args=(--requirements '=designated => identifier "com.ahcarpenter.athina"')
-  echo "bundle: no code-signing identity found, signing ad-hoc with a bundle-identifier requirement" >&2
+  signed="signed ad hoc, no code-signing identity found"
 else
-  echo "bundle: signing with \"$identity\"" >&2
+  signed="signed with \"$identity\""
 fi
 
-codesign --force --sign "$identity" \
+scripts/quietly.sh sign codesign --force --sign "$identity" \
   --identifier com.ahcarpenter.athina \
   --entitlements "$ROOT/Resources/Athina.entitlements" \
   --timestamp=none \
@@ -109,4 +111,4 @@ codesign --force --sign "$identity" \
   "$APP"
 codesign --verify --deep --strict "$APP"
 mv -f "$started" "$BUILT"
-echo "bundle: $APP"
+echo "bundle: $APP ($CONFIG, $signed) in $(($(date +%s) - began)) s"

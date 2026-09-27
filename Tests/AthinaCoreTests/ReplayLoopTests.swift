@@ -493,7 +493,7 @@ struct ReplayLoopTests {
     let report =
       [
         """
-        The committed fixtures are not current. Re-record them live with make record in this \
+        The committed fixtures are not current. Re-record them live with make record SPEND=1 in this \
         same change, as docs/replay.md, The committed fixtures, describes:
         """
       ] + findings.map { "- \($0)" }

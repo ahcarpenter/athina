@@ -37,26 +37,31 @@ with `--force` after a macOS upgrade (see
 ## Build, run, test
 
 ```sh
-make                         # lists every command and variable, grouped Everyday and Occasional
+make doctor                  # start here: names what this Mac is missing (Xcode, bash 4, gh, the grants, the warm e2e home) and how to get each
+make                         # lists every command with its variables under it, grouped Everyday and Occasional
 make build                   # builds build/Athina.app, the development bundle (make all is the same)
 make run                     # builds and launches a replay: recorded fixtures, no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
 make test                    # runs swift test, the replayed loop and the fixture freshness check included (FILTER=<name> for some), then checks a build without the ControlAPI trait carries no control API, as CI's build-and-test does
 make test-e2e                # runs the end-to-end scenarios, replays only (SCENARIO=<name>, JOBS=<n>; see docs/e2e.md)
-make test-snapshots          # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported
-make check                   # lint, test and test-snapshots: what local validation runs before a push
-make approve                 # after an intended UI change, takes the ui-snapshots baselines, smoke references and e2e checkpoints from CI's runs of HEAD, all or none (see docs/ci.md)
+make snapshots               # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported
+make check                   # lint, test and snapshots: the one command to run before a push, and what local validation runs
+make approve                 # after an intended UI change, takes the ui-snapshots baselines, smoke references and e2e checkpoints from CI's runs of HEAD, all or none, listing each image before it writes it (see docs/ci.md)
 make lint                    # checks every Swift file against the style without changing it, as CI does
 make format                  # formats every Swift file in place to Google's Swift style (see docs/code-style.md)
-make doctor                  # names what this Mac is missing: Xcode, bash 4, gh, the grants, the warm e2e home
 
-make run-live                # builds and launches the live app, replacing only the copy this checkout's run-live or record launched (spends API credits)
-make record                  # the same, writing every model call to a fixture file (spends API credits)
-make test-snapshots-ci       # the UI smoke test as CI runs it, compared with the runner's references
+make run-live SPEND=1        # builds and launches the live app, replacing only the copy this checkout's run-live or record launched (spends API credits, up to the spend cap it prints first; refused without SPEND=1)
+make record SPEND=1          # the same, writing every model call to a fixture file (spends API credits; refused without SPEND=1)
+make snapshots-ci            # the UI smoke test as CI runs it, compared with the runner's references, which a Mac unlike the runner drifts from
 make icons                   # rebuilds the app icon and the README's copy of it from AthinaMark.svg, and the menu bar mark from AthinaOwl.svg (their outputs are committed, so a plain build never needs it)
 make measure                 # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 make release                 # builds, signs, notarizes, and packages a direct-download release into build/release (see docs/releasing.md)
 make clean                   # removes every build product
 ```
+
+Each target ends in one summary line, saying whether it passed, what it
+counted and where its evidence is, and on a failure the command to run next;
+swift's own output goes to `build/logs/<name>.log` unless `VERBOSE=1` is set,
+or `CI` is, as it is in GitHub Actions (`scripts/quietly.sh`).
 
 None of the launch targets quits an Athina it did not start: each one stops
 only the copy its own lane launched earlier from this checkout, by the pid
@@ -111,9 +116,10 @@ itself and says which on the line it writes as it starts.
 - **Replay, never a live call.** Build, test and verify against recorded
   fixtures: `make run`, the tests and the end-to-end harness all replay, with
   no key and no spend. `make run-live` and `make record` are the only targets
-  that spend API credits, and a recording is deliberate: a change that bumps
-  the prompt version in `Prompts.swift` or adds a call kind re-records the
-  committed fixtures in the same change (see
+  that spend API credits, and each refuses to start without `SPEND=1`; a
+  recording is deliberate: a change that bumps the prompt version in
+  `Prompts.swift` or adds a call kind re-records the committed fixtures in the
+  same change (see
   [The committed fixtures](docs/replay.md#the-committed-fixtures)).
 - **The end-to-end harness, never hand-written driving.** Check the running
   app with `scripts/e2e/athina-e2e`, called bare. A change's evidence runs the
@@ -136,7 +142,7 @@ itself and says which on the line it writes as it starts.
 ## How a change reaches main
 
 1. **Before the push**, `make check` runs `make lint`, `make test` and
-   `make test-snapshots`, which draws the UI smoke set on this Mac at HEAD and
+   `make snapshots`, which draws the UI smoke set on this Mac at HEAD and
    at main and reports every screen the change altered, added or removed.
    Local validation never runs the full `ui-snapshots` gate, the checkpoint
    gate or `make approve`, which only CI proves, nor the Xcode project steps.

@@ -29,7 +29,7 @@ let package = Package(
     // Builds the UI smoke test, the one target that uses
     // swift-snapshot-testing (docs/ci.md "UI snapshot smoke test"). It is off by
     // default, so the app, `make test` and every other build neither fetch
-    // nor build it; `make test-snapshots-ci` and `make test-snapshots` turn it on.
+    // nor build it; `make snapshots-ci` and `make snapshots` turn it on.
     .trait(name: "UISnapshotsSmoke"),
     // Builds the API tier of the end-to-end harness, the one test target that
     // launches the app (docs/e2e.md). It is off by default, so

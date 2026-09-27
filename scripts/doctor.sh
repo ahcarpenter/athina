@@ -2,8 +2,8 @@
 # `make doctor`: says what this Mac is missing to build, test and check
 # Athina, one line per requirement (CONTRIBUTING.md "Requirements"), then runs the
 # end-to-end harness's own doctor for the grants, the drive tool and the warm
-# home. Changes nothing but building the harness's drive tool. Exits 1 when
-# anything is missing.
+# home. Changes nothing but building the harness's drive tool. Ends in one
+# summary line, and exits 1 when anything is missing.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
@@ -12,7 +12,7 @@ missing=0
 report() { printf '%-16s %s\n' "$1" "$2"; }
 lack() {
 	report "$1" "missing: $2"
-	missing=1
+	missing=$((missing + 1))
 }
 
 xcode="$(xcodebuild -version 2>/dev/null | head -n1)"
@@ -50,8 +50,14 @@ fi
 
 echo
 if [ "$bash_major" -ge 4 ]; then
-	"$ROOT/scripts/e2e/athina-e2e" doctor || missing=1
+	"$ROOT/scripts/e2e/athina-e2e" doctor || e2e=1
 else
 	echo "e2e doctor skipped: it needs bash 4"
 fi
-exit "$missing"
+echo
+if [ "$missing" -eq 0 ] && [ "${e2e:-0}" -eq 0 ]; then
+	echo "doctor: passed, this Mac has everything make needs"
+	exit 0
+fi
+echo "doctor: failed, ${missing} tool(s) missing${e2e:+ and the e2e harness lacks something above}; each line marked missing says how to get it" >&2
+exit 1
