@@ -11,7 +11,7 @@ import Foundation
 /// is a prompt change: it bumps `version`, which makes every committed
 /// fixture stale until they are recorded again live, at the captain's
 /// expense. So the model's picture of itself moves in one deliberate
-/// re-recording change rather than with the rename (README, "The committed
+/// re-recording change rather than with the rename (docs/replay.md, "The committed
 /// fixtures").
 public enum MentorPrompts {
   /// The version of every prompt and schema here, recorded with each model

@@ -6,7 +6,7 @@ description: >-
   unchanged to SwiftPM in a fresh checkout. Whether a build is up to date is
   still SwiftPM's own decision, from each source's time and size: a restored
   cache only saves work, a changed source is always compiled again, and a miss
-  is a full build (README "Continuous integration"). Run it after
+  is a full build (docs/ci.md). Run it after
   select-xcode, which the key reads, and before anything builds.
 inputs:
   name:

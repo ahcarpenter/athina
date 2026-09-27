@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Move the clock of a replay `make run` launched ahead from a script, with no
-# accessibility and no window: the control API's `advance` (README "The
+# accessibility and no window: the control API's `advance` (docs/e2e.md "The
 # control API"), sent by athina-drive to the directory scripts/launch.sh made
 # for the lane and named in build/<lane>.control.
 #

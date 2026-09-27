@@ -9,7 +9,7 @@
     /// The mentor call that raises the first suggestion also writes the first understanding, so
     /// this follows that record out to the menu, the debug panel's card, and Settings > Models,
     /// and then through Reset Understanding, which asks before it forgets every revision. The
-    /// suggestion comes from scripted sensing (README "Scripted sensing"), every control is
+    /// suggestion comes from scripted sensing (docs/e2e.md "Scripted sensing"), every control is
     /// clicked or typed into through Athina's own event path, and the journal is read through the
     /// app. The footer's link to the Journal pane is followed through the handler a click on it
     /// runs (`open-link`); that a real click on it reaches that handler is the real-screen tier's

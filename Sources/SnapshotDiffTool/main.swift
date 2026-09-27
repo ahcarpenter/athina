@@ -2,7 +2,7 @@ import Foundation
 import SnapshotDiff
 
 // Compares UI snapshot renders against the approved baselines, checks that two
-// renders of one build agree, and approves a drift (README "UI snapshot
+// renders of one build agree, and approves a drift (docs/ci.md "UI snapshot
 // baselines"). scripts/snapshots.sh is how CI and a person call it.
 //
 //   snapshot-diff compare <baseline> <render> [--report <dir>] [--shard <k>/<n>]

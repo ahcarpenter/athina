@@ -3,11 +3,11 @@
   import Foundation
 
   /// The run's Athina: launched replay only, answered at once, hermetic, in a scratch home, and
-  /// stopped by the pid it reported, never by name (README "Hermetic runs").
+  /// stopped by the pid it reported, never by name (docs/e2e.md "Hermetic runs").
   ///
   /// Where the run's journal is, is the app's to say: a replay makes a directory per launch
   /// and names it on the line it writes as it starts, which the harness reads rather than
-  /// dictating a path (README "Replays side by side").
+  /// dictating a path (docs/replay.md "Replays side by side").
   final class AppProcess {
     let pid: Int32
     /// The journal of this launch.

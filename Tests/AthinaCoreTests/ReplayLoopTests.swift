@@ -494,7 +494,7 @@ struct ReplayLoopTests {
       [
         """
         The committed fixtures are not current. Re-record them live with make record in this \
-        same change, as README.md, The committed fixtures, describes:
+        same change, as docs/replay.md, The committed fixtures, describes:
         """
       ] + findings.map { "- \($0)" }
     Issue.record(Comment(rawValue: report.joined(separator: "\n")))

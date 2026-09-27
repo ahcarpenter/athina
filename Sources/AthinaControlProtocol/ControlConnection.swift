@@ -3,7 +3,7 @@ import Foundation
 
 /// The client's end of the control API: one request over a run's socket and
 /// the one answer line that comes back, as athina-drive's `api` and the API
-/// tier's tests send them (README "The control API").
+/// tier's tests send them (docs/e2e.md "The control API").
 public enum ControlConnection {
   /// Why no answer came back.
   public struct Failure: Error, CustomStringConvertible {

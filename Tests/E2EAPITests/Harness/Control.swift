@@ -11,7 +11,7 @@
     }
   }
 
-  /// A control a request names, as `find`, `click` and the other commands take it (README "The
+  /// A control a request names, as `find`, `click` and the other commands take it (docs/e2e.md "The
   /// control API"): in the window titled `window`, or any window when that is nil, by its
   /// accessibility identifier, or by role, subrole and label.
   struct Target: Sendable, CustomStringConvertible {
@@ -115,7 +115,7 @@
     let why: String?
   }
 
-  /// The replay's control API, typed (README "The control API"): one request per call over the
+  /// The replay's control API, typed (docs/e2e.md "The control API"): one request per call over the
   /// run's socket, each written to `api.log` with its answer.
   ///
   /// An answer that says no (`ok` false) comes back for the scenario to check; only a request

@@ -3,8 +3,7 @@ description: >-
   Selects the Xcode that .xcode-version pins, by its exact path on the runner,
   and fails when the runner does not have it. Every macOS job uses it, so the
   build, the tests, both UI checks and swift-format run on one Xcode, and a new
-  runner image never changes any of them unannounced (README "Continuous
-  integration").
+  runner image never changes any of them unannounced (docs/ci.md).
 runs:
   using: composite
   steps:
@@ -20,7 +19,7 @@ runs:
           [ -z "$xcode" ] || [ -d "$xcode" ] && break
         done
         if [ -z "$xcode" ]; then
-          echo "::error::The runner has no Xcode $pin at /Applications/Xcode_$pin.app or /Applications/Xcode_$pin.0.app, the Xcode .xcode-version pins; it has $(ls -d /Applications/Xcode_*.app | xargs). Bump the pin (README \"Continuous integration\")."
+          echo "::error::The runner has no Xcode $pin at /Applications/Xcode_$pin.app or /Applications/Xcode_$pin.0.app, the Xcode .xcode-version pins; it has $(ls -d /Applications/Xcode_*.app | xargs). Bump the pin (docs/ci.md)."
           exit 1
         fi
         echo "Using $xcode"

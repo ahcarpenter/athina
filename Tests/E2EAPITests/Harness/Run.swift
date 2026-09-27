@@ -9,7 +9,7 @@
 
   /// One scenario of the API tier, run end to end: its own evidence directory and scratch
   /// home, a hermetic replay launched there and driven through its control API, and what the run
-  /// leaves behind (README "End-to-end harness").
+  /// leaves behind (docs/e2e.md).
   ///
   /// Every check a scenario makes goes through `check`, which logs it, keeps it for the result
   /// line, and fails the test at the check's own line when it does not hold, so a scenario goes
@@ -113,7 +113,7 @@
         say("control directory \(directory.url.path)")
         var launchArguments = arguments
         if let scale = configuration.timeScale { launchArguments += ["--time-scale", scale] }
-        // Hermetic (README "Hermetic runs"), which --control alone is not.
+        // Hermetic (docs/e2e.md "Hermetic runs"), which --control alone is not.
         launchArguments += ["--control", directory.url.path, "--hermetic"]
         if configuration.showWindows { launchArguments.append("--show-windows") }
         let process = try await AppProcess.launch(
@@ -253,7 +253,7 @@
 
     // MARK: - Pictures
 
-    /// Takes a checkpoint (README "Checkpoints") of the window titled `window` at step `step`.
+    /// Takes a checkpoint (docs/ci.md "Checkpoints") of the window titled `window` at step `step`.
     ///
     /// It is drawn in light and in dark, as `<scenario>/<step>-light.png` and
     /// `<step>-dark.png` under the run's checkpoints folder, which CI compares with its approved
