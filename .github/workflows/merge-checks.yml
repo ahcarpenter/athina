@@ -1,11 +1,11 @@
 name: Merge checks
 
 # The slow UI snapshot gate, kept out of ci.yml so it does not hold up every
-# pull request, and split across four runners. It runs on every push to main
-# and, for a pull request, only while the pull request carries the
-# merge-checks label: adding the label runs it, and so does every push, or any
-# other label added, while it is on. The main ruleset requires ui-snapshots at
-# the pull request's head (.github/rulesets/main.json, docs/ci.md).
+# push to a pull request, and split across four runners. It runs on every push
+# to main and on a pull request that is ready for review: marking a draft ready
+# runs it, and so does every push while it is ready, while a draft gets only
+# ci.yml's fast lane. The main ruleset requires ui-snapshots at the pull
+# request's head (.github/rulesets/main.json, docs/ci.md).
 #
 # A job that an `if` skips still reports a check run, and a skipped check
 # counts as passed for a required one, so a skipped ui-snapshots takes another
@@ -16,9 +16,9 @@ on:
   push:
     branches: [main]
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    types: [opened, synchronize, reopened, ready_for_review]
 
-# A new push to a pull request, or a label added to it, cancels that pull
+# A new push to a pull request, or marking it ready, cancels that pull
 # request's run still going; every push to main keeps its own run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
@@ -33,7 +33,7 @@ jobs:
     # refresh (docs/ci.md "UI snapshot baselines"). This condition, the one on
     # ui-snapshots and the one in its name are the same and change together.
     name: ui-snapshots shard ${{ matrix.shard }}
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'merge-checks')
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
       # Every shard runs to the end, so one drift never hides another's.
       fail-fast: false
@@ -86,12 +86,49 @@ jobs:
   ui-snapshots:
     # The one check the main ruleset requires: passes only when every shard
     # ran and passed.
-    name: ${{ (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'merge-checks')) && 'ui-snapshots' || 'ui-snapshots (add the merge-checks label to run)' }}
+    name: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && 'ui-snapshots' || 'ui-snapshots (mark the pull request ready for review to run)' }}
     needs: ui-snapshots-shard
-    if: always() && (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'merge-checks'))
+    if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:
       - name: Every shard passed
         run: |
           echo "The shards: ${{ needs.ui-snapshots-shard.result }}"
           [ "${{ needs.ui-snapshots-shard.result }}" = success ]
+
+  ui-snapshots-drift-comment:
+    # Shows a pull request's drift where its reviewer already is: one comment,
+    # updated in place on every later run, with each drifted snapshot's
+    # approved image, this run's render and their difference inline
+    # (docs/ci.md "UI snapshot baselines"). A comment's image must be at a
+    # public address, and an artifact needs a login to fetch, so the images are
+    # pushed to refs/ui-snapshots-drift/pr-<number>, a ref outside refs/heads
+    # that a clone never fetches, replaced on each run and read through
+    # raw.githubusercontent.com at its commit. Not a required check, and a
+    # pull request from a fork, whose token cannot write, gets no comment.
+    name: ui-snapshots drift comment
+    needs: ui-snapshots-shard
+    if: >-
+      !cancelled() && github.event_name == 'pull_request' && !github.event.pull_request.draft
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Download the drift reports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: ui-snapshot-report-shard-*
+          path: build/snapshots/shards
+      - name: Post or update the comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SHARDS_RESULT: ${{ needs.ui-snapshots-shard.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: scripts/snapshot-drift-comment.sh build/snapshots/shards

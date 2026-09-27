@@ -140,13 +140,13 @@ itself and says which on the line it writes as it starts.
    at main and reports every screen the change altered, added or removed.
    Local validation never runs the full `ui-snapshots` gate, the checkpoint
    gate or `make approve`, which only CI proves, nor the Xcode project steps.
-2. **On the pull request**, CI runs `build-and-test`, `lint`, `e2e-api` and
-   `ui-snapshots-smoke` on every push, and a newer push cancels the runs still
-   going.
-3. **At merge**, the `merge-checks` label
-   (`gh pr edit <number> --add-label merge-checks`) runs `ui-snapshots`, the
-   full-fidelity gate, on four runners. The `main` ruleset requires all five
-   checks at the pull request's head.
+2. **On the pull request**, opened as a draft, CI runs the fast lane,
+   `build-and-test`, `lint`, `e2e-api` and `ui-snapshots-smoke`, on every
+   push, and a newer push cancels the runs still going.
+3. **Ready for review**: once the fast lane passes, mark the pull request
+   ready (`gh pr ready <number>`), which runs `ui-snapshots`, the
+   full-fidelity gate, on four runners, and runs it on every push after. The
+   `main` ruleset requires all five checks at the pull request's head.
 4. **An intended UI change** fails the image gates until it is approved: read
    each report, then `make approve` takes the `ui-snapshots` baselines, the
    smoke references and the e2e checkpoints from CI's runs of HEAD, all or

@@ -55,3 +55,10 @@ document:
     API"). A change that moves or renames a section updates every reference
     to it, in code comments, scripts, CI files and error messages too.
     Never use the em dash; use a plain dash.
+
+# A pull request opens as a draft, which CI's fast lane checks on every push;
+# marking it ready for review once that passes runs the full ui-snapshots gate
+# (docs/ci.md "Continuous integration").
+providers:
+  github:
+    draft_pull_requests: true
