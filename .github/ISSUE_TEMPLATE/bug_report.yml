@@ -1,0 +1,103 @@
+name: Bug report
+description: Something in Athina does not work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. For a security or privacy vulnerability, do not
+        file an issue: report it privately as SECURITY.md describes.
+
+        Leave real screen content, journals and API keys out of this report.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: From launching Athina, as exactly as you can.
+      placeholder: |
+        1. Open ...
+        2. Press ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: athina-version
+    attributes:
+      label: Athina version
+      description: From About Athina in the menu bar menu, or the commit you built.
+      placeholder: 0.1.0 (1)
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      description: From About This Mac, for example 26.0 (25A354).
+    validations:
+      required: true
+  - type: dropdown
+    id: screen-recording
+    attributes:
+      label: Screen Recording permission
+      description: System Settings > Privacy & Security > Screen & System Audio Recording.
+      options:
+        - Granted
+        - Not granted
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: accessibility
+    attributes:
+      label: Accessibility permission
+      description: System Settings > Privacy & Security > Accessibility.
+      options:
+        - Granted
+        - Not granted
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: microphone
+    attributes:
+      label: Microphone permission (optional, for talking back)
+      options:
+        - Granted
+        - Not granted
+        - Never asked
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: speech-recognition
+    attributes:
+      label: Speech Recognition permission (optional, for talking back)
+      options:
+        - Granted
+        - Not granted
+        - Never asked
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: debug-panel
+    attributes:
+      label: Debug panel
+      description: |
+        Turn on Settings > Advanced > Enable debug panel and open it. Paste or
+        attach what it shows about the problem: the status bar (mode,
+        permission state, last and next capture), the Mentor loop card, and
+        the Model Calls entries around the time it happened. A screenshot
+        works; crop out screen content you would not share.
+  - type: textarea
+    id: anything-else
+    attributes:
+      label: Anything else
+      description: Logs, screenshots, or what you already tried.
