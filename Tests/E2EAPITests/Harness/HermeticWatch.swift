@@ -5,7 +5,7 @@
   import Foundation
   import Synchronization
 
-  /// What says a hermetic run showed nothing (README "Hermetic runs").
+  /// What says a hermetic run showed nothing (docs/e2e.md "Hermetic runs").
   ///
   /// From the moment the app starts to the moment it stops, its windows above the desktop
   /// picture are counted five times a second, and its items in the menu bar as often as

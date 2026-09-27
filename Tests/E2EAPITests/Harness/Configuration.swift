@@ -4,14 +4,14 @@
   import Foundation
 
   /// What a run of the API tier was asked for, as `scripts/e2e/athina-e2e run` hands it over
-  /// in the environment (README "End-to-end harness").
+  /// in the environment (docs/e2e.md).
   ///
   /// The harness builds the development bundle and its hermetic copy before it runs these
   /// tests, since a test run cannot build the package it is part of, so a run started any other
   /// way than through it has no copy to launch and fails, saying so.
   struct Configuration: Sendable {
     /// How the app is started: exec'd under `sandbox-exec`, or opened through LaunchServices,
-    /// as CI does (README "Checkpoints").
+    /// as CI does (docs/ci.md "Checkpoints").
     enum Launch: String, Sendable {
       case sandbox
       case open
@@ -27,7 +27,7 @@
     /// The one configuration of this test run.
     static let current = Configuration(ProcessInfo.processInfo.environment)
 
-    /// The hermetic copy of the app under its own identifier (README "Hermetic runs"), or nil
+    /// The hermetic copy of the app under its own identifier (docs/e2e.md "Hermetic runs"), or nil
     /// when the tests were not started by the harness.
     let app: URL?
     /// The bundle the copy was made from, for the run's provenance.
@@ -80,7 +80,7 @@
     }
 
     /// The owner's real data, which every run is kept away from: where the app keeps it now,
-    /// and where it kept it as Mentor (README "Coming from Mentor").
+    /// and where it kept it as Mentor (docs/coming-from-mentor.md).
     static let liveData = [
       FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/athina"),

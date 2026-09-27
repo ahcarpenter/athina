@@ -719,7 +719,7 @@ public actor Journal {
   /// Returns every row of `sql`, a query that changes nothing, each column as text.
   ///
   /// It is how the control API answers the end-to-end harness's named journal
-  /// queries from the app's own connection (README "The control API"). A
+  /// queries from the app's own connection (docs/e2e.md "The control API"). A
   /// statement that would write is refused rather than run.
   public func readOnlyRows(_ sql: String) throws -> [[String]] {
     try db.readOnlyRows(sql)

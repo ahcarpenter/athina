@@ -1,7 +1,7 @@
 import Foundation
 
 /// The events a launch serving the control API has handled, numbered in the
-/// order it handled them, for the API's `wait-event` (README "The control
+/// order it handled them, for the API's `wait-event` (docs/e2e.md "The control
 /// API").
 ///
 /// It holds what the sensing pipeline and the mentor loop publish, each once

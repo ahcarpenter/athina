@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # `make doctor`: says what this Mac is missing to build, test and check
-# Athina, one line per requirement (README "Requirements"), then runs the
+# Athina, one line per requirement (CONTRIBUTING.md "Requirements"), then runs the
 # end-to-end harness's own doctor for the grants, the drive tool and the warm
 # home. Changes nothing but building the harness's drive tool. Exits 1 when
 # anything is missing.

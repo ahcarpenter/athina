@@ -1,4 +1,4 @@
-# The Xcode project for the Mac App Store route (README "The Xcode project").
+# The Xcode project for the Mac App Store route (docs/releasing.md "The Xcode project").
 #
 # `make xcodeproj` generates Athina.xcodeproj from this file with the XcodeGen
 # pinned in Tools/XcodeGenTool. The generated project is not committed, so no

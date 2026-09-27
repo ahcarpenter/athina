@@ -1,5 +1,5 @@
 // Built only with the UISnapshotsSmoke trait on (Package.swift), which `make test-snapshots-ci`
-// turns on, so `make test` compiles none of this.
+// and `make test-snapshots` turn on, so `make test` compiles none of this.
 #if UISnapshotsSmoke
   import AppKit
   import Foundation
@@ -9,7 +9,7 @@
 
   @testable import Athina
 
-  /// The UI smoke test (README "UI snapshot smoke test"): every snapshot `--snapshot` renders,
+  /// The UI smoke test (docs/ci.md "UI snapshot smoke test"): every snapshot `--snapshot` renders,
   /// from the same specs and sample data, drawn inside this process by swift-snapshot-testing and
   /// compared with the reference image the CI runner recorded for it.
   ///

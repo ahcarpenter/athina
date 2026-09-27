@@ -11,7 +11,7 @@
 E2E_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROOT="$(cd "$E2E_DIR/../.." && pwd)"
 # ATHINA_E2E_APP runs the scenarios against another bundle, such as the
-# hardened release build `make release` leaves in build/release (README
+# hardened release build `make release` leaves in build/release (docs/releasing.md
 # "Releasing"); the harness then checks that bundle as it is and never rebuilds it.
 APP="$ROOT/build/Athina.app"
 if [ -n "${ATHINA_E2E_APP:-}" ]; then
@@ -38,7 +38,7 @@ API_SCENARIO_DIR="$ROOT/Tests/E2EAPITests/Scenarios"
 API_BUILD="$ROOT/.build/e2e-api"
 
 # The owner's real data, which every run is sandboxed away from: where the app
-# keeps it now, and where it kept it as Mentor (README "Coming from Mentor").
+# keeps it now, and where it kept it as Mentor (docs/coming-from-mentor.md).
 LIVE_SUPPORT="$HOME/Library/Application Support/athina"
 LEGACY_SUPPORT="$HOME/Library/Application Support/mentor"
 PREFS_DOMAIN="com.ahcarpenter.athina"
@@ -305,7 +305,7 @@ ensure_app_bundle() {
 	(cd "$ROOT" && scripts/bundle.sh release >/dev/null 2>&1) || die "could not build the app bundle"
 }
 
-# The API tier's copy of $APP (README "Hermetic runs"): the same binary under
+# The API tier's copy of $APP (docs/e2e.md "Hermetic runs"): the same binary under
 # the identifier $E2E_BUNDLE_ID, re-signed ad hoc with a requirement on that
 # identifier as scripts/bundle.sh signs the development bundle. Its
 # preferences are then a domain of its own, so a run never writes to the
@@ -450,7 +450,7 @@ PY
 # other lanes' and the owner's own.
 #
 # Where the run's journal is, is the app's to say: a replay makes a directory
-# per launch inside the home's `replay` (README "Replays side by side") and
+# per launch inside the home's `replay` (docs/replay.md "Replays side by side") and
 # names it on the line it writes when it starts, which app.log catches. Reading
 # it from there rather than dictating it means the path is known only once it
 # is real, and the run never guesses at a directory the app did not make.
@@ -805,7 +805,7 @@ window_id() {
 
 # --- The control API ----------------------------------------------------------
 
-# The API tier drives Athina through its control API (README "The control
+# The API tier drives Athina through its control API (docs/e2e.md "The control
 # API") from Swift (Tests/E2EAPITests); a real-screen scenario that says
 # SCENARIO_CONTROL=yes reads the app through it too, with these, to set what
 # macOS shows beside what the app built.

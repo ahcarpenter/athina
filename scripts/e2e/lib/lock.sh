@@ -75,7 +75,7 @@ lock_set() { printf -v "$1$2" '%s' "$3"; }
 
 # The commands that take the screen lock for all they do: they launch the app
 # on the screen or change the shared warm home. run takes it for each
-# real-screen scenario instead, and no API-tier one takes it at all (README
+# real-screen scenario instead, and no API-tier one takes it at all (docs/e2e.md
 # "Hermetic runs"); list, doctor, and journal never wait.
 screen_lock_needed() {
 	case "$1" in

@@ -6,7 +6,7 @@ import Foundation
 /// app's window in front, filling a display, with a text area holding `text`
 /// focused, as a document in an editor is.
 ///
-/// The control API's `observe` scripts it (README "Scripted sensing"), and
+/// The control API's `observe` scripts it (docs/e2e.md "Scripted sensing"), and
 /// `SensingPipeline.observe(_:)` journals it the way a capture of that window
 /// is journaled: the app or window switch it makes, then an observation whose
 /// frame is the text drawn a line at a time and whose recognised text is those
