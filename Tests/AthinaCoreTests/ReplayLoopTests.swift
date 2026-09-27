@@ -264,8 +264,8 @@ struct ReplayLoopTests {
     defer { try? FileManager.default.removeItem(at: directory) }
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let url = directory.appendingPathComponent("journal.sqlite")
-    let old = try SQLiteConnection(path: url.path)
-    try old.execute(
+    try runSQL(
+      at: url,
       """
       CREATE TABLE model_calls (
           id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, tier TEXT NOT NULL, model TEXT NOT NULL,

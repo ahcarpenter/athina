@@ -48,6 +48,9 @@ struct DebugPanelView: View {
     .task {
       await state.refreshJournalStats()
     }
+    .task(id: state.isJournalOpen) {
+      await state.followTimeline()
+    }
     .task(id: selectedEntryID) {
       guard let selectedEntryID,
         selectedEntryID.hasPrefix("o"),
@@ -642,7 +645,7 @@ private struct TimelinePane: View {
         .frame(width: 180)
         Text(
           page == .timeline
-            ? Plural.count(state.timeline.entries.count, "entry", "entries")
+            ? Plural.count(state.timeline.count, "entry", "entries")
             : Plural.count(state.callLog.count, "call", "calls")
         )
         .foregroundStyle(.secondary)
@@ -656,14 +659,14 @@ private struct TimelinePane: View {
       Divider()
       switch page {
       case .timeline:
-        List(state.timeline.entries, selection: $selectedID) { entry in
+        List(state.timeline, selection: $selectedID) { entry in
           TimelineRow(entry: entry)
             .tag(entry.id)
             .listRowSeparator(.visible)
         }
         .listStyle(.inset)
         .overlay {
-          if state.timeline.entries.isEmpty {
+          if state.timeline.isEmpty {
             ContentUnavailableView("Nothing Journaled Yet", systemImage: "clock")
           }
         }
@@ -706,7 +709,7 @@ private struct TimelineRow: View {
   private var primary: String {
     switch entry {
     case .observation(let o):
-      return "\(o.focus.appName) · \(o.reason.label)"
+      return "\(o.appName) · \(o.reason.label)"
     case .event(let e):
       if let app = e.appName { return "\(e.kind.label) · \(app)" }
       return e.kind.label
@@ -716,8 +719,8 @@ private struct TimelineRow: View {
   private var secondary: String? {
     switch entry {
     case .observation(let o):
-      let title = o.focus.windowTitle.map { "\"\($0)\" · " } ?? ""
-      return "\(title)\(o.textBlocks.count) text blocks"
+      let title = o.windowTitle.map { "\"\($0)\" · " } ?? ""
+      return "\(title)\(o.textBlockCount) text blocks"
     case .event(let e): return e.detail
     }
   }

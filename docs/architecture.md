@@ -8,11 +8,13 @@ Sources/AthinaCore            library, fully testable
                               LaunchFiles (a launch's data directory and starting settings: a replay's own
                               directory, --settings, the started line that names it, and the lock that keeps it one replay's)
   Model/ActivityObservation   FocusContext, FrameInfo, TextBlock, ActivityObservation, JournalEvent,
+                              JournalEntry and ObservationSummary (the debug panel's timeline rows),
                               SensingEvent (the stream the mentor loop consumes), SensingMode, CadenceStatus
   Scheduling/                 CaptureScheduler (pure trigger and cadence state machine),
                               FrameKeepPolicy (near-duplicate drop rule)
   Imaging/                    PerceptualHash (256-bit dHash), FrameImaging (downscale, hash, JPEG)
-  Journal/                    Journal actor over the system SQLite, RetentionPolicy
+  Journal/                    Journal actor over the system SQLite through GRDB, with its live lists,
+                              RetentionPolicy
   Sensing/                    AXActor (run-loop thread for the AX API), FocusTracker (NSWorkspace + AXObserver),
                               ScreenCapturer (ScreenCaptureKit), TextRecognizer (Vision),
                               SensingPipeline (orchestration), EventBroadcaster (fan-out AsyncStream)
@@ -35,8 +37,9 @@ Sources/AthinaCore            library, fully testable
                               ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags),
                               ControlMode (whether a launch serves the control API, see docs/e2e.md)
-Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` call Swift cannot make (it is variadic),
-                              so `DataMigration` can read the old journal without altering it
+Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` setting neither Swift (the call is
+                              variadic) nor GRDB makes, so `DataMigration` can read the old journal without
+                              altering it
 Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
                               (on-device speech recognition), HotKeyCenter (the global keyboard shortcuts,
@@ -104,6 +107,19 @@ understanding goes with the oldest observations and events in a size-cap sweep,
 and all five are emptied by Clear Journal. A journal written by an earlier build
 is migrated in place when it is opened: missing tables are created and columns
 added or dropped, so nothing has to be thrown away.
+
+`Journal` reaches the file through [GRDB](https://github.com/groue/GRDB.swift),
+pinned exactly in `Package.swift`: a pool of connections, one writer that every
+write goes through and readers beside it. The lists the app shows from the
+journal are live queries (GRDB's `ValueObservation`): the History window's
+suggestions and their follow-ups and the debug panel's call log from launch,
+and its Timeline while the panel is open, since that one's query reads the text
+of every observation it lists to count its blocks. Each lists what is
+journaled when it starts and fetches again from a reader after every write to
+its tables, so a row written just after launch is never missed and none is
+listed twice; no list is written to by hand. The rule a suggestion's feedback
+keeps to, that a non-answer never replaces anything and Tell me more is recorded
+once, is checked in the same transaction as the write.
 
 Settings live next to it in `settings.json`; missing or unknown keys fall back
 to defaults so older files keep working. A replay keeps both files in a data

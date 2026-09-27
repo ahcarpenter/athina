@@ -798,6 +798,13 @@ struct MentorLoopTests {
     #expect(events.first?.kind == .feedback)
     #expect(events.first?.detail == "Never for this: T")
     #expect(await h.loop.recordFeedback(suggestionID: 9999, feedback: .notNow) == nil)
+
+    // A non-answer after it, a toast closed from the History window's copy
+    // before the list had the answer back, keeps the answer and journals
+    // nothing more.
+    #expect(await h.loop.recordFeedback(suggestionID: stored.id, feedback: .dismissed) == nil)
+    #expect(try await h.journal.suggestion(id: stored.id)?.feedback == .never)
+    #expect(try await h.journal.recentEvents(limit: 3) == events)
   }
 
   /// The history a relaunched app loads must carry the expiry recorded for a
@@ -2385,8 +2392,8 @@ struct MentorLoopTests {
     defer { try? FileManager.default.removeItem(at: url) }
 
     // The phase-two schema, without judged_goal and without understanding.
-    let old = try SQLiteConnection(path: url.path)
-    try old.execute(
+    try runSQL(
+      at: url,
       """
       CREATE TABLE suggestions (
           id INTEGER PRIMARY KEY, timestamp REAL NOT NULL, bundle_id TEXT, app_name TEXT NOT NULL,
@@ -2444,8 +2451,8 @@ struct MentorLoopTests {
       .appendingPathComponent("athina-migration-\(UUID().uuidString).sqlite")
     defer { try? FileManager.default.removeItem(at: url) }
 
-    let old = try SQLiteConnection(path: url.path)
-    try old.execute(
+    try runSQL(
+      at: url,
       """
       CREATE TABLE understanding (
           id INTEGER PRIMARY KEY, updated_at REAL NOT NULL, started_at REAL NOT NULL,
