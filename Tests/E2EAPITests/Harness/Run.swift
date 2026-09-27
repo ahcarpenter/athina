@@ -50,11 +50,16 @@
     /// its own, such as `["--open", "debug"]`, then checks the run showed nothing, keeps its
     /// evidence, writes its result line and takes it all down, whatever happened.
     ///
+    /// The run starts from the seeded settings, which carry an Allow in the consent window
+    /// (docs/privacy.md "Consent"); `consented: false` starts it without one, as a first launch
+    /// does.
+    ///
     /// No more scenarios run at once than the harness's `--jobs` allows; the wait for a turn is
     /// not part of the time limit.
     static func scenario(
       _ name: String,
       arguments: [String] = [],
+      consented: Bool = true,
       timeLimit: Duration = defaultTimeLimit,
       _ body: (Run) async throws -> Void
     ) async {
@@ -70,7 +75,7 @@
       }
       await Turns.shared.take()
       do {
-        try await perform(name, app, arguments, timeLimit, configuration, body)
+        try await perform(name, app, arguments, consented, timeLimit, configuration, body)
       } catch {
         Issue.record("\(name) left no evidence: \(error)")
       }
@@ -81,6 +86,7 @@
       _ name: String,
       _ app: URL,
       _ arguments: [String],
+      _ consented: Bool,
       _ timeLimit: Duration,
       _ configuration: Configuration,
       _ body: (Run) async throws -> Void
@@ -107,7 +113,7 @@
       var run: Run?
       var failure: String?
       do {
-        try seed(home, from: configuration.settings)
+        try seed(home, from: configuration.settings, consented: consented)
         let directory = try ControlDirectory.make()
         control = directory
         say("control directory \(directory.url.path)")
@@ -387,14 +393,23 @@
     }
 
     /// A fresh home with the seeded settings: the owner's own apps excluded, so a replayed
-    /// callout never lands on his work, and the triage gate at its 5 second floor.
-    private static func seed(_ home: URL, from settings: URL) throws {
+    /// callout never lands on his work, the triage gate at its 5 second floor, and, unless
+    /// `consented` is false, an Allow in the consent window.
+    private static func seed(_ home: URL, from settings: URL, consented: Bool) throws {
       let support = home.appendingPathComponent("Library/Application Support/athina")
       try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
-      try FileManager.default.copyItem(
-        at: settings,
-        to: support.appendingPathComponent("settings.json")
-      )
+      let seeded = support.appendingPathComponent("settings.json")
+      guard !consented else {
+        try FileManager.default.copyItem(at: settings, to: seeded)
+        return
+      }
+      guard
+        var fields = try JSONSerialization.jsonObject(with: Data(contentsOf: settings))
+          as? [String: Any]
+      else { throw AppProcess.Failure("\(settings.path) holds no settings object") }
+      fields["consent"] = nil
+      try JSONSerialization.data(withJSONObject: fields, options: [.prettyPrinted, .sortedKeys])
+        .write(to: seeded)
     }
 
     /// What was run, for whoever reads the evidence later.

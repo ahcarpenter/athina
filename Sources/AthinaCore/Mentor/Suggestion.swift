@@ -345,6 +345,8 @@ public struct ModelCallRecord: Codable, Equatable, Sendable, Identifiable {
 public struct MentorStatus: Equatable, Sendable {
   /// Whether the mentor loop can make calls now, and if not, why.
   public enum Availability: Equatable, Sendable {
+    /// The person has not allowed Athina to watch and send (`Consent`).
+    case noConsent
     case ready
     case disabled
     case noAPIKey
@@ -353,6 +355,7 @@ public struct MentorStatus: Equatable, Sendable {
     /// The availability as the debug panel's badge reads it.
     public var label: String {
       switch self {
+      case .noConsent: "Not allowed"
       case .ready: "Ready"
       case .disabled: "Off in Settings"
       case .noAPIKey: "No API key"
@@ -367,7 +370,7 @@ public struct MentorStatus: Equatable, Sendable {
     public var formsUnderstanding: Bool {
       switch self {
       case .ready, .capReached: true
-      case .disabled, .noAPIKey: false
+      case .noConsent, .disabled, .noAPIKey: false
       }
     }
   }

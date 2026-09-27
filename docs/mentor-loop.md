@@ -9,7 +9,8 @@ each kept observation it runs, in order:
    one call per `triageMinInterval` (20 s by default) and skipped when the
    screen text is near-identical to the last triaged screen of the same window
    (line-set overlap of at least `triageSimilarityThreshold`, 0.9). Nothing
-   runs while paused, idle, on an excluded app, without permissions, without an
+   runs before the person's Allow (see [Consent](privacy.md#consent)), while
+   paused, idle, on an excluded app, without permissions, without an
    API key, while another call is in flight, or while the spend cap holds.
 2. **Triage call** on the cheap model (`claude-haiku-4-5-20251001` by default;
    Sonnet 5, Opus 5, Opus 5.5, and Fable 5.1 are offered too) with structured output:

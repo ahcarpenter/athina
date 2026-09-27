@@ -23,6 +23,7 @@ import Testing
   ) -> MentorScheduler.Conditions {
     MentorScheduler.Conditions(
       mode: mode,
+      consented: true,
       hasAPIKey: key,
       callInFlight: inFlight,
       spendFraction: spend,

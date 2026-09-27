@@ -130,6 +130,7 @@ A change that touches none of those takes no screen time.
 | `settings-pane-text` | api | every link from one Settings pane's text to another (Contexts to Privacy, Models to Journal) shows as a link to that pane rather than Markdown, and a click on the one below the fold is refused until the pane is scrolled to it |
 | `settings-sheet` | api | Settings > Contexts' Add Context… brings up the New Context sheet; while it is up, a click on Add Context… under it is refused as covered, a name typed into the sheet's Name field lands there, and the sheet's own Cancel lands in the sheet and takes it down, adding no context |
 | `shortcut-recorder` | api | the Settings shortcut recorders: Settings > General's talk-back recorder takes a combination pressed while it records into the settings, refuses the pause shortcut's combination with an alert that says why, keeping what it had and the window parked below the desktop while the alert runs and after, and clears on Delete; Settings > Privacy's pause recorder clears on Delete too, which turns the pause shortcut off (a press of it is refused and the pane warns of nothing) while settings.json keeps its combination for earlier builds, and records it again |
+| `consent-first` | api | started without the seeded Allow, as a first launch is, the consent window is the first window, ahead of Permissions; windows scripted in front while it waits are not kept, and nothing is journaled or called however far the clock moves; the menu says Athina is not watching and offers Allow Watching…; Allow, clicked in the window, is recorded and closes it, and the replay's first suggestion then comes up; Withdraw Consent in Settings > Privacy is recorded, the pane offers Review and Allow…, and nothing more is journaled or called |
 | `debug-timeline` | api | the debug panel's Timeline, open from launch, lists each journal row once: its entry count matches the journal, and the startup Started row appears once rather than once from the journal load and again from the live stream |
 | `launch-arguments` | api | `--open settings:advanced` after a flag that takes no value (`--allow-stale-fixtures`) still opens Settings on that pane, where AppKit once took the pane's name for a document to open and opened no window |
 
@@ -164,6 +165,13 @@ time and no disk, and starts from an empty journal in a home of its own. An
 API-tier run captures nothing, so it starts from an empty home and needs no
 warm one. A run's **first capture
 then lands in 1 second**. Re-warm with `warm --force` after a macOS upgrade.
+
+The settings every run starts from, `scripts/e2e/lib/settings.json`, carry an
+Allow to the current consent disclosure (see [Consent](privacy.md#consent)),
+so a scenario starts sensing as the owner's own Athina does; `consent-first`
+starts without one (`Run.scenario(consented: false)`), as a fresh install
+does. A disclosure version bump fails the unit tests until the seed is bumped
+with it.
 
 ## Drive helpers
 

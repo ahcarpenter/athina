@@ -40,7 +40,8 @@ struct MentorLoopTests {
       screens: [ActivityObservation] = [],
       understanding: UnderstandingRecord? = nil,
       activeUse: TimeInterval? = nil,
-      start: Date = Harness.start
+      start: Date = Harness.start,
+      consented: Bool = true
     ) async throws {
       let journal = try Journal.inMemory()
       for screen in screens { try await journal.record(screen) }
@@ -62,7 +63,8 @@ struct MentorLoopTests {
         key: key,
         journal: journal,
         client: ScriptedClaudeClient(clock: clock),
-        clock: clock
+        clock: clock,
+        consented: consented
       )
     }
 
@@ -72,7 +74,8 @@ struct MentorLoopTests {
       key: String? = "sk-ant-test",
       journal: Journal,
       client: ScriptedClaudeClient,
-      clock: AdjustableClock
+      clock: AdjustableClock,
+      consented: Bool = true
     ) async {
       self.journal = journal
       self.client = client
@@ -86,6 +89,7 @@ struct MentorLoopTests {
         client: client,
         keyStore: keyStore,
         events: stream,
+        consented: consented,
         clock: clock,
         calendar: MentorLoopTests.calendar
       )
@@ -814,6 +818,7 @@ struct MentorLoopTests {
         client: ScriptedClaudeClient(),
         keyStore: InMemoryKeyStore(key: "sk-ant-test"),
         events: stream,
+        consented: true,
         clock: AdjustableClock(startingAt: now)
       )
       let stored = try await journal.record(
@@ -1870,6 +1875,7 @@ struct MentorLoopTests {
       client: h.client,
       keyStore: h.keyStore,
       events: stream,
+      consented: true,
       clock: h.clock,
       calendar: Self.calendar
     )
@@ -1909,6 +1915,7 @@ struct MentorLoopTests {
       client: h.client,
       keyStore: h.keyStore,
       events: stream,
+      consented: true,
       clock: h.clock,
       calendar: Self.calendar
     )
@@ -1942,6 +1949,7 @@ struct MentorLoopTests {
       client: h.client,
       keyStore: h.keyStore,
       events: stream,
+      consented: true,
       clock: h.clock,
       calendar: Self.calendar
     )

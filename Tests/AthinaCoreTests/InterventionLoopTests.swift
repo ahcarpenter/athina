@@ -574,6 +574,7 @@ struct ReplayInterventionTests {
       client: client,
       keyStore: InMemoryKeyStore(),
       events: stream,
+      consented: true,
       clock: clock,
       calendar: MentorLoopTests.calendar
     )

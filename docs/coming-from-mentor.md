@@ -7,8 +7,10 @@ grants made to Mentor do not carry over. The first launch of Athina therefore
 senses nothing until they are granted again, once, by hand:
 
 1. Open System Settings > Privacy & Security > Screen Recording, turn Athina
-   on, and do the same under Accessibility. Athina's own first-run window has
-   a button for each, and shows live status as they are granted.
+   on, and do the same under Accessibility. Athina's Permissions window, which
+   opens once the consent window is answered with Allow (see
+   [Consent](privacy.md#consent)), has a button for each, and shows live
+   status as they are granted.
 2. Quit and reopen Athina, so it picks up both grants. Mentor can be removed
    from both lists at the same time; it is no longer built.
 

@@ -65,6 +65,20 @@ struct AthinaApp: App {
     )
     .restorationBehavior(.disabled)
 
+    // The first thing a launch shows until the person allows Athina to
+    // watch and send, before any permission is asked about.
+    Window("Athina and Your Privacy", id: WindowID.consent) {
+      ConsentView()
+        .environment(state)
+    }
+    .windowResizability(.contentSize)
+    .defaultLaunchBehavior(
+      !Snapshots.isActive
+        && (state.needsConsentAtLaunch || LaunchArguments.windowToOpen == WindowID.consent)
+        ? .presented : .suppressed
+    )
+    .restorationBehavior(.disabled)
+
     Window("Permissions", id: WindowID.permissions) {
       PermissionsView()
         .environment(state)
@@ -72,8 +86,7 @@ struct AthinaApp: App {
     .windowResizability(.contentSize)
     .defaultLaunchBehavior(
       !Snapshots.isActive
-        && (state.needsPermissionsOnboarding
-          || LaunchArguments.windowToOpen == WindowID.permissions)
+        && (state.opensPermissionsAtLaunch || LaunchArguments.windowToOpen == WindowID.permissions)
         ? .presented : .suppressed
     )
     .restorationBehavior(.disabled)
@@ -170,6 +183,7 @@ struct WindowFrameAutosave: NSViewRepresentable {
 }
 
 enum WindowID {
+  static let consent = "consent"
   static let debug = "debug"
   static let permissions = "permissions"
   static let settings = "settings"
@@ -202,7 +216,7 @@ final class WindowOpener {
 
 /// Developer aids on the command line.
 ///
-/// `Athina --open debug|settings|permissions|history` presents that window at
+/// `Athina --open debug|settings|consent|permissions|history` presents that window at
 /// launch, the debug panel on a live launch only while Settings > Advanced
 /// turns it on (`DebugPanelAccess`) (for example
 /// `open -n build/Athina.app --args --replay <dir> --open debug`; a plain

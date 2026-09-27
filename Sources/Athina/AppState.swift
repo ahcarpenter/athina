@@ -60,7 +60,14 @@ final class AppState {
       let pipeline = pipeline
       let mentor = mentor
       let settings = settings
+      let consentChanged = settings.hasConsent != oldValue.hasConsent
+      if consentChanged {
+        consentDidChange(to: settings.hasConsent)
+      }
       Task {
+        // The loop first on a withdrawal, so no call starts while the
+        // pipeline is still being told.
+        if consentChanged { await mentor?.setConsented(settings.hasConsent) }
         await pipeline?.updateSettings(settings)
         await mentor?.updateSettings(settings.mentor)
       }
@@ -381,6 +388,7 @@ final class AppState {
     )
     self.pipeline = pipeline
     let mentorSettings = settings.mentor
+    let consented = settings.hasConsent
     let keyStore = keyStore
     let clientSetup = clientMode.makeClient(
       prices: settings.mentor.prices,
@@ -421,6 +429,7 @@ final class AppState {
         client: clientSetup.client,
         keyStore: keyStore,
         events: mentorStream,
+        consented: consented,
         clock: clock
       )
       // The timeline is read before anything this launch journals, which
@@ -458,6 +467,8 @@ final class AppState {
 
   private func attach(mentor: MentorLoop, journal: Journal) async {
     self.mentor = mentor
+    // An answer given while the loop was being made reached no loop.
+    await mentor.setConsented(settings.hasConsent)
     let mentorEvents = await mentor.events()
     await mentor.start()
     mentorTask = Task { [weak self] in
@@ -596,6 +607,46 @@ final class AppState {
     Task { await pipeline?.captureNow() }
   }
 
+  // MARK: Consent
+
+  /// Whether the consent window opens at launch: whenever the person has
+  /// not allowed Athina to watch and send to the current disclosure.
+  ///
+  /// It is the first thing a launch shows, ahead of the Permissions window
+  /// (`opensPermissionsAtLaunch`).
+  var needsConsentAtLaunch: Bool { !settings.hasConsent }
+
+  /// Whether the Permissions window opens at launch: only once consent is
+  /// given, so no permission is asked about before it.
+  ///
+  /// The consent window opens it after Allow when a permission is missing.
+  var opensPermissionsAtLaunch: Bool { settings.hasConsent && needsPermissionsOnboarding }
+
+  /// The consent window's Allow: Athina may watch and send from now on.
+  func allowConsent() {
+    AppState.log.notice("consent allowed")
+    settings.consent = Consent(answer: .allowed, at: clock.date)
+  }
+
+  /// The consent window's Not Now, and Settings > Privacy's Withdraw
+  /// Consent: nothing is sensed or sent from now on.
+  func declineConsent() {
+    AppState.log.notice("consent declined")
+    settings.consent = Consent(answer: .declined, at: clock.date)
+  }
+
+  /// What a withdrawal stops on screen at once: listening, the toast and
+  /// its callout.
+  ///
+  /// The pipeline and the loop hear it through the settings.
+  private func consentDidChange(to granted: Bool) {
+    guard !granted else { return }
+    cancelTalkBack()
+    if let active = activeSuggestion {
+      respond(to: active.id, with: .expired)
+    }
+  }
+
   func refreshPermissions() {
     guard !isSample, !controlMode.isHermetic else { return }
     let undetermined = Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
@@ -662,6 +713,7 @@ final class AppState {
     case .answer(let feedback): answerActiveSuggestion(feedback)
     case .openSuggestions: windows.open(WindowID.history)
     case .openPermissions: windows.open(WindowID.permissions)
+    case .openConsent: windows.open(WindowID.consent)
     case .openSettings(let pane):
       pane.flatMap(SettingsPane.init(rawValue:))?.select()
       windows.openSettings()
@@ -1241,7 +1293,8 @@ final class AppState {
   /// The menu command that sets talking back up, when it is not yet usable
   /// for a reason the person can fix.
   var talkBackAction: MenuModel.StatusAction? {
-    guard speechAvailability.isAvailable else { return nil }
+    // Nothing is set up, and no permission asked about, before consent.
+    guard settings.hasConsent, speechAvailability.isAvailable else { return nil }
     if settings.mentor.pushToTalkHotKey == nil {
       return MenuModel.StatusAction(
         title: "Set Up Talk Back…",
@@ -1254,8 +1307,12 @@ final class AppState {
     return nil
   }
 
-  /// The menu command that lets the mentor loop run, when a missing key holds it.
+  /// The menu command that lets Athina watch, before the person has allowed
+  /// it, or that lets the mentor loop run, when a missing key holds it.
   var menuStatusAction: MenuModel.StatusAction? {
+    if !settings.hasConsent {
+      return MenuModel.StatusAction(title: "Allow Watching…", command: .openConsent)
+    }
     guard !clientMode.isOffline, mentorStatus.availability == .noAPIKey else { return nil }
     return MenuModel.StatusAction(
       title: "Add API Key…",
@@ -1291,6 +1348,7 @@ final class AppState {
 
   /// One line for the menu on talking back: how to do it, or what it needs.
   var talkBackLine: String {
+    guard settings.hasConsent else { return "Talk back: off until you allow watching" }
     if case .unavailable = speechAvailability {
       return "Talk back: no on-device recognition for this language"
     }
@@ -1338,6 +1396,12 @@ final class AppState {
   /// place.
   private func pushToTalkPressed() {
     guard talkBack.acceptsAQuestion else { return }
+    guard settings.hasConsent else {
+      toast.showNote(
+        "Athina is not listening: it is not allowed to watch. Choose Allow Watching in the Athina menu."
+      )
+      return
+    }
     guard activeSuggestion != nil || lastShownSuggestion != nil else {
       toast.showNote("Nothing to reply to yet: Athina has not made a suggestion.")
       return
@@ -1422,7 +1486,8 @@ final class AppState {
 
   /// Whether the debug panel's Talk back field may send now.
   var canTalkBackTyped: Bool {
-    talkBack.acceptsAQuestion && (activeSuggestion != nil || lastShownSuggestion != nil)
+    settings.hasConsent && talkBack.acceptsAQuestion
+      && (activeSuggestion != nil || lastShownSuggestion != nil)
   }
 
   /// The debug panel's Talk back field: typed words take the path a released
@@ -1577,6 +1642,7 @@ final class AppState {
     case .paused: return "Paused"
     case .excluded: return "Not watching \(focus?.appName ?? "excluded app")"
     case .waitingForPermissions: return "Waiting for permissions"
+    case .waitingForConsent: return "Not watching until you allow it"
     case .stopped: return journalError == nil ? "Starting…" : "Stopped: journal unavailable"
     }
   }
@@ -1764,6 +1830,7 @@ final class AppState {
       }
       return "Mentor: \(spend) of \(cap) this hour"
     case .disabled: return "Mentor: off"
+    case .noConsent: return "Mentor: not allowed to send"
     case .noAPIKey: return "Mentor: no API key"
     }
   }

@@ -465,6 +465,43 @@ struct PrivacySettings: View {
         content: {
           LabeledContent(
             content: {
+              StatusBadge(
+                text: state.settings.hasConsent ? "Allowed" : "Not allowed",
+                tint: state.settings.hasConsent ? .green : .orange
+              )
+            },
+            label: {
+              Text("Watch the screen and send to Anthropic")
+              Text(consentDetail)
+            }
+          )
+          HStack {
+            Link("Privacy Policy", destination: Consent.privacyPolicyURL)
+            Spacer()
+            if state.settings.hasConsent {
+              Button("Withdraw Consent") { state.declineConsent() }
+                .accessibilityIdentifier("privacy.withdrawConsent")
+            } else {
+              Button("Review and Allow…") { state.perform(.openConsent) }
+                .accessibilityIdentifier("privacy.reviewConsent")
+            }
+          }
+        },
+        header: {
+          Text("Consent")
+        },
+        footer: {
+          Text(
+            settingsMarkdown:
+              "Withdrawing stops all capturing and sending at once. What the journal already holds stays until it expires or you clear it in \(SettingsPane.journal.link("Journal"))."
+          )
+          .settingsPaneLinks()
+        }
+      )
+      Section(
+        content: {
+          LabeledContent(
+            content: {
               ShortcutRecorder(
                 title: "Pause shortcut",
                 identifier: "privacy.pauseShortcut",
@@ -529,6 +566,22 @@ struct PrivacySettings: View {
           )
         }
       )
+    }
+  }
+}
+
+extension PrivacySettings {
+  /// What the answer is and when it was given, or what not having one means.
+  private var consentDetail: String {
+    guard let consent = state.settings.consent else {
+      return "Not asked yet. Athina captures nothing and sends nothing until you allow it."
+    }
+    let when = consent.at.formatted(date: .abbreviated, time: .shortened)
+    if state.settings.hasConsent { return "Allowed \(when)." }
+    switch consent.answer {
+    case .allowed:
+      return "Allowed \(when) to an earlier description of what is sent, so Athina asks again."
+    case .declined: return "Not allowed since \(when). Athina captures nothing and sends nothing."
     }
   }
 }

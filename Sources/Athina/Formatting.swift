@@ -40,6 +40,15 @@ enum Formatting {
     return "\(Int(interval / 86400))d"
   }
 
+  /// A duration in words, in its largest whole unit: "6 hours", "7 days".
+  static func spelledDuration(_ interval: TimeInterval) -> String {
+    let formatter = DateComponentsFormatter()
+    formatter.unitsStyle = .full
+    formatter.allowedUnits = [.minute, .hour, .day]
+    formatter.maximumUnitCount = 1
+    return formatter.string(from: interval) ?? duration(interval)
+  }
+
   /// The text with its spaces made non-breaking, so a wrapping label never
   /// splits a number from its unit or a short phrase in two.
   static func unbroken(_ text: String) -> String {
