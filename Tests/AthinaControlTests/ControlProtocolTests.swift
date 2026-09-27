@@ -49,6 +49,26 @@ import Testing
     )
   }
 
+  @Test func modifiersAreNamedWithACommaBetweenTwo() throws {
+    let request = { (modifiers: ControlValue?) in
+      ControlRequest(
+        id: 1,
+        secret: "s",
+        command: "type",
+        arguments: modifiers.map { ["modifiers": $0] } ?? [:]
+      )
+    }
+    #expect(try request(nil).modifiers() == [])
+    #expect(try request(.string("command")).modifiers() == [.command])
+    #expect(try request(.string("command,shift")).modifiers() == [.command, .shift])
+    let expected = "command, option, control or shift, a comma between two"
+    for wrong: ControlValue in [.string("cmd"), .string("command,"), .string(""), .bool(true)] {
+      #expect(throws: ControlArgumentError(key: "modifiers", expected: expected, given: wrong)) {
+        try request(wrong).modifiers()
+      }
+    }
+  }
+
   @Test func aRequestMissingAFieldIsNotARequest() {
     #expect(throws: (any Error).self) {
       try ControlRequest.decode(line: Data(#"{"id":1,"command":"ping","arguments":{}}"#.utf8))

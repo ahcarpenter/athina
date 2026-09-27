@@ -9,6 +9,10 @@
 #   scripts/e2e/athina-e2e run all       run them, one line of JSON each
 #   scripts/e2e/athina-e2e doctor        what is missing before a run
 #
+# The real-screen tier's scenarios are scripts in scenarios/; the API tier's
+# are Swift Testing tests in Tests/E2EAPITests, which `run` builds and runs
+# with `swift test`, printing and counting their results with the others.
+#
 # Every run is replay only: no API key is read, no network is reachable, and
 # nothing is billed. See README, "End-to-end harness".
 set -euo pipefail
@@ -198,28 +202,76 @@ cmd_run() {
 	if [ ${#screen[@]} -gt 0 ]; then
 		have_warm_home || die "no warm home yet: run scripts/e2e/athina-e2e warm first"
 	fi
+	[ ${#api[@]} -eq 0 ] || [ "$CONTROL_API" = no ] || ensure_api_tests
 	OUTCOMES="$(mktemp -d "${TMPDIR:-/tmp}/athina-e2e-outcomes.XXXXXX")"
 	if [ "$JOBS" -le 1 ]; then
-		for name in "${names[@]}"; do run_one "$name"; done
+		for name in ${screen[@]+"${screen[@]}"}; do run_one "$name"; done
+		run_api_tier ${api[@]+"${api[@]}"}
 	else
-		# The real-screen tier one at a time beside the pool, each scenario
-		# taking the screen lock for itself, and the API tier up to $JOBS at a
-		# time, taking none.
+		# The real-screen tier one at a time beside the API tier, each of its
+		# scenarios taking the screen lock for itself, and the API tier up to
+		# $JOBS at a time, taking none.
 		(for name in ${screen[@]+"${screen[@]}"}; do run_one "$name"; done) 8>&- &
-		local pool=() alive pid
-		for name in ${api[@]+"${api[@]}"}; do
-			while :; do
-				alive=0
-				for pid in ${pool[@]+"${pool[@]}"}; do kill -0 "$pid" 2>/dev/null && alive=$((alive + 1)); done
-				[ "$alive" -lt "$JOBS" ] && break
-				sleep 0.2
-			done
-			run_one "$name" 8>&- &
-			pool+=($!)
-		done
+		run_api_tier ${api[@]+"${api[@]}"}
 		wait
 	fi
 	tally
+}
+
+# The API tier's scenarios named, through `swift test` (Tests/E2EAPITests), up
+# to $JOBS at once, each launching a hermetic replay of its own. Every test
+# writes its result line where this finds it, and each is printed and counted
+# as a real-screen scenario's is; a scenario that left none, because the test
+# run stopped before it ended, fails. A bundle without the control API, as
+# every release build is, cannot run them, so each is skipped.
+run_api_tier() {
+	[ $# -gt 0 ] || return 0
+	local name
+	if [ "$CONTROL_API" = no ]; then
+		local reason="$APP carries no control API, which the API tier drives; run it on the development build of the same commit"
+		for name in "$@"; do
+			log "=== $name: skipped, $reason"
+			result_line "$name" skip 0 "$reason"
+			printf '%s\n' "$SCENARIO_SKIPPED" >"$(mktemp "$OUTCOMES/outcome.XXXXXX")"
+		done
+		return 0
+	fi
+	local results status=0 file found result
+	results="$(mktemp -d "${TMPDIR:-/tmp}/athina-e2e-results.XXXXXX")"
+	log "=== the API tier: $* (up to $JOBS at once)"
+	(
+		# Windows left on screen to watch put the run on the screen, so it
+		# takes the machine-wide lock for as long as it runs.
+		if [ "$SHOW_WINDOWS" = 1 ]; then
+			lock_acquire SCREEN_LOCK "run the API tier" "$LOCK_TIMEOUT" || exit $?
+		fi
+		cd "$ROOT" && ATHINA_E2E_HERMETIC_APP="$E2E_APP" ATHINA_E2E_BUNDLE="$APP" \
+			ATHINA_E2E_OUT="${OUT_ROOT:-$RUNS_ROOT}" ATHINA_E2E_CHECKPOINTS="$CHECKPOINTS_ROOT" \
+			ATHINA_E2E_RESULTS="$results" ATHINA_E2E_LAUNCH="$LAUNCH_WITH" \
+			ATHINA_E2E_SHOW_WINDOWS="$SHOW_WINDOWS" ATHINA_E2E_KEEP_HOME="$KEEP_HOME" \
+			ATHINA_E2E_TIME_SCALE="$TIME_SCALE" ATHINA_E2E_JOBS="$JOBS" \
+			swift test --skip-build --traits E2EAPI --scratch-path "$API_BUILD" \
+			--filter "Scenarios/\`($(IFS='|'; printf '%s' "$*"))\`\\(\\)" >&2 8>&- 9>&-
+	) || status=$?
+	for name in "$@"; do
+		found=0
+		for file in "$results/$name"-*.json; do
+			[ -e "$file" ] || continue
+			found=1
+			cat "$file"
+			result="$(sed -n 's/.*"result":"\([a-z]*\)".*/\1/p' "$file")"
+			case "$result" in
+			pass) printf '0\n' ;;
+			skip) printf '%s\n' "$SCENARIO_SKIPPED" ;;
+			*) printf '1\n' ;;
+			esac >"$(mktemp "$OUTCOMES/outcome.XXXXXX")"
+		done
+		if [ "$found" = 0 ]; then
+			result_line "$name" fail 0 "it left no result: swift test stopped, with status $status, before it ended"
+			printf '1\n' >"$(mktemp "$OUTCOMES/outcome.XXXXXX")"
+		fi
+	done
+	rm -rf "$results"
 }
 
 # One scenario, its outcome kept where tally finds it.
@@ -259,21 +311,17 @@ make_run_dir() {
 	printf '%s\n' "$dir"
 }
 
+# One real-screen scenario, driven from outside with the real pointer and
+# accessibility.
 run_scenario() (
 	# A subshell per scenario: its trap, its variables, and its exit cannot
 	# reach the next one.
 	local name="$1"
 	local file="$SCENARIO_DIR/$name.sh"
 
-	# Read by the harness's checkpoint.
-	# shellcheck disable=SC2034
-	SCENARIO_NAME="$name"
 	SCENARIO_SUMMARY=""
 	SCENARIO_ARGS=()
 	SCENARIO_SETTINGS='{}'
-	# screen: driven from outside, with the real pointer and accessibility;
-	# api: driven through the app's control API (README "The control API").
-	SCENARIO_TIER=screen
 	# A real-screen scenario that also reads Athina through its control API,
 	# to set what macOS shows beside what the app built, says yes. It gets one
 	# only from a bundle that carries it, and reads CONTROL_API to know.
@@ -281,54 +329,37 @@ run_scenario() (
 	# A scenario that takes the screen only once the keyboard and mouse have
 	# been quiet says yes.
 	SCENARIO_IDLE_FIRST=no
-	# A screen-tier run watches a staged TextEdit window; an API-tier one
-	# stages nothing unless its scenario says so.
-	scenario_stage() { [ "$SCENARIO_TIER" = api ] || stage_text_document; }
+	# What sensing watches: a staged TextEdit window, unless the scenario
+	# stages something else.
+	scenario_stage() { stage_text_document; }
 	# shellcheck disable=SC1090
 	source "$file"
-	case "$SCENARIO_TIER" in
-	screen | api) ;;
-	*) die "$name: SCENARIO_TIER is screen or api, not $SCENARIO_TIER" ;;
-	esac
-	# A release build carries no control API, so it can run only the real-screen
-	# tier; the API tier runs on the development build of the same commit.
-	if [ "$SCENARIO_TIER" = api ] && [ "$CONTROL_API" = no ]; then
-		local reason="$APP carries no control API, which the API tier drives; run it on the development build of the same commit"
-		log "=== $name: skipped, $reason"
-		result_line "$name" skip 0 "$reason"
-		exit "$SCENARIO_SKIPPED"
-	fi
 
 	[ "$JOBS" -gt 1 ] && LOG_TAG="[$name] "
-	# A real-screen run is on the screen, and so is an API-tier one whose
-	# windows are left there to watch: each takes the machine-wide lock for as
+	# A real-screen run is on the screen: it takes the machine-wide lock for as
 	# long as it runs, so other checkouts' runs interleave with this one's. A
 	# scenario that needs a quiet keyboard and mouse waits for them before it
 	# takes it, rather than inside it.
-	if [ "$SCENARIO_TIER" = screen ] || [ "$SHOW_WINDOWS" = 1 ]; then
-		local status=0
-		if [ "$SCENARIO_IDLE_FIRST" = yes ]; then
-			lock_acquire_when_idle SCREEN_LOCK "run $name" "$LOCK_TIMEOUT" "$IDLE_BEFORE_SCREEN" hid_idle_seconds || status=$?
-		else
-			lock_acquire SCREEN_LOCK "run $name" "$LOCK_TIMEOUT" || status=$?
-		fi
-		if [ "$status" != 0 ]; then
-			result_line "$name" fail 0 "could not take the screen lock"
-			exit "$status"
-		fi
+	local status=0
+	if [ "$SCENARIO_IDLE_FIRST" = yes ]; then
+		lock_acquire_when_idle SCREEN_LOCK "run $name" "$LOCK_TIMEOUT" "$IDLE_BEFORE_SCREEN" hid_idle_seconds || status=$?
+	else
+		lock_acquire SCREEN_LOCK "run $name" "$LOCK_TIMEOUT" || status=$?
+	fi
+	if [ "$status" != 0 ]; then
+		result_line "$name" fail 0 "could not take the screen lock"
+		exit "$status"
 	fi
 
 	RUN_DIR="$(make_run_dir "$name")"
 	# While this is here, clean leaves the run alone.
 	printf '%s\n' "$BASHPID" >"$RUN_DIR/.running"
-	log "=== $name ($SCENARIO_TIER tier): $SCENARIO_SUMMARY"
+	log "=== $name (screen tier): $SCENARIO_SUMMARY"
 	log "evidence: $RUN_DIR"
 
 	trap cleanup EXIT
 	record_build_provenance
-	# A hermetic run has preferences of its own (ensure_e2e_app), so it never
-	# touches the owner's and has nothing to save.
-	[ "$SCENARIO_TIER" = api ] || prefs_save
+	prefs_save
 	HOME_DIR="$RUN_DIR/home"
 	new_home "$HOME_DIR"
 	seed_settings "$HOME_DIR" "$SCENARIO_SETTINGS"
@@ -340,29 +371,19 @@ run_scenario() (
 	started=$(date +%s)
 
 	scenario_stage
-	if [ "$SCENARIO_TIER" = api ]; then
+	if [ "$SCENARIO_CONTROL" = yes ] && [ "$CONTROL_API" = yes ]; then
 		control_prepare
-		# Hermetic (README "Hermetic runs"), which --control alone is not.
-		args+=(--control "$CONTROL_DIR" --hermetic)
-		[ "$SHOW_WINDOWS" = 1 ] && args+=(--show-windows)
-		launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
-		control_wait
-	else
-		if [ "$SCENARIO_CONTROL" = yes ] && [ "$CONTROL_API" = yes ]; then
-			control_prepare
-			args+=(--control "$CONTROL_DIR")
-		fi
-		launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
-		[ -n "$CONTROL_DIR" ] && control_wait
-		watch_announcements
-		watch_clicks
-		wait_first_observation 90 || log "WARNING: no capture yet; the home may not be warm"
+		args+=(--control "$CONTROL_DIR")
 	fi
+	launch_athina "$HOME_DIR" ${args[@]+"${args[@]}"}
+	[ -n "$CONTROL_DIR" ] && control_wait
+	watch_announcements
+	watch_clicks
+	wait_first_observation 90 || log "WARNING: no capture yet; the home may not be warm"
 
 	detail=""
 	local ran=0
 	scenario_run || ran=$?
-	[ "$SCENARIO_TIER" = api ] && hermetic_checks
 	if [ "$ran" = 0 ]; then
 		if [ "$CHECKS_FAILED" = 0 ]; then
 			result=pass
