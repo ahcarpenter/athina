@@ -85,6 +85,8 @@
   struct AppWindow: Decodable, Sendable {
     let title: String
     let number: Int
+    /// Its window level, which a hermetic run keeps below the desktop picture.
+    let level: Int
   }
 
   /// A row of the menu bar extra's menu as the app builds it, as `menu` reads it.
@@ -251,6 +253,23 @@
       return try await send("type", arguments)
     }
 
+    /// One key press, virtual key code `code` held with `modifiers`, posted to the app's event
+    /// queue for the window titled `window`, where an event monitor in the app, such as a
+    /// shortcut recorder's, takes it as it takes a person's.
+    func key(
+      _ code: Int,
+      holding modifiers: [ControlProtocol.Modifier] = [],
+      in window: String
+    ) async throws -> ControlReply {
+      var arguments: [String: ControlValue] = [
+        "window": .string(window), "code": .number(Double(code)),
+      ]
+      if !modifiers.isEmpty {
+        arguments["modifiers"] = .string(modifiers.map(\.rawValue).joined(separator: ","))
+      }
+      return try await send("key", arguments)
+    }
+
     // MARK: - The menu
 
     func menu() async throws -> [MenuItem] {
@@ -279,6 +298,12 @@
     /// A click outside Athina's windows at `x`, `y`, handed to the suggestion toast.
     func outsideClick(x: Double, y: Double) async throws -> ControlReply {
       try await send("outside-click", ["x": .number(x), "y": .number(y)])
+    }
+
+    /// A press of the global shortcut `key`, `pause` or `talk-back`, as the system reports one;
+    /// refused as `disabled` when it is not registered.
+    func hotKey(_ key: String) async throws -> ControlReply {
+      try await send("hotkey", ["key": .string(key)])
     }
 
     // MARK: - Sensing, events, the journal and the clock
