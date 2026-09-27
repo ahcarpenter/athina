@@ -96,8 +96,17 @@ import Testing
     let fable = try! #require(table.cost(of: usage, model: ModelCatalog.fable51.id))
     // 10 + 5 + 2.5 + 0.125
     #expect(abs(fable - 17.625) < 1e-9)
+    let opus55 = try! #require(table.cost(of: usage, model: ModelCatalog.opus55.id))
+    // 4 + 2 + 1 + 0.1
+    #expect(abs(opus55 - 7.10) < 1e-9)
     #expect(table.cost(of: usage, model: "unknown-model") == nil)
     #expect(table.checkedOn == PriceTable.defaultCheckedOn)
+  }
+
+  @Test func everyCatalogModelHasADefaultPriceRow() {
+    for model in ModelCatalog.all {
+      #expect(PriceTable.defaults.price(for: model.id) != nil, "\(model.id)")
+    }
   }
 
   @Test func priceTableValidationRestoresMissingRowsAndClampsNegatives() {

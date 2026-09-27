@@ -40,6 +40,12 @@ public enum ModelCatalog {
     displayName: "Claude Opus 5",
     supportsEffort: true
   )
+  /// Claude Opus 5.5, the next Opus, priced below Opus 5.
+  public static let opus55 = ClaudeModel(
+    id: "claude-opus-5-5",
+    displayName: "Claude Opus 5.5",
+    supportsEffort: true
+  )
   /// Claude Fable 5.1, the priciest model in the catalog.
   public static let fable51 = ClaudeModel(
     id: "claude-fable-5-1",
@@ -48,17 +54,19 @@ public enum ModelCatalog {
   )
 
   /// Every model in the catalog, in the order the price table lists them.
-  public static let all: [ClaudeModel] = [haiku45, sonnet5, opus5, fable51]
+  public static let all: [ClaudeModel] = [haiku45, sonnet5, opus5, opus55, fable51]
   /// Models offered for the triage tier: the cheap default plus every
   /// effort-capable model, so extra-high effort is reachable there too.
-  public static let triageChoices: [ClaudeModel] = [haiku45, sonnet5, opus5, fable51]
+  public static let triageChoices: [ClaudeModel] = [haiku45, sonnet5, opus5, opus55, fable51]
   /// Models offered for the mentor tier.
-  public static let mentorChoices: [ClaudeModel] = [sonnet5, opus5, fable51]
+  public static let mentorChoices: [ClaudeModel] = [sonnet5, opus5, opus55, fable51]
   /// Models offered for the understanding refresh.
   ///
   /// Rewriting the record is summarising work, so the cheap model is offered
   /// here as well.
-  public static let understandingChoices: [ClaudeModel] = [haiku45, sonnet5, opus5, fable51]
+  public static let understandingChoices: [ClaudeModel] = [
+    haiku45, sonnet5, opus5, opus55, fable51,
+  ]
 
   /// Returns the catalog model with `id`, or nil when the catalog has none.
   public static func model(id: String) -> ClaudeModel? {
@@ -80,7 +88,8 @@ public struct ModelPrice: Codable, Equatable, Sendable {
   public var outputPerMillion: Double
   /// Five-minute cache write, 1.25x the base input price.
   public var cacheWritePerMillion: Double
-  /// Cache read, 0.1x the base input price (0.025x on Claude Fable 5.1).
+  /// Cache read, 0.1x the base input price (0.05x on Claude Opus 5.5, 0.025x on
+  /// Claude Fable 5.1).
   public var cacheReadPerMillion: Double
 
   /// Creates a price row.
@@ -108,7 +117,7 @@ public struct ModelPrice: Codable, Equatable, Sendable {
 /// Editable price table, with the date the defaults were checked.
 public struct PriceTable: Codable, Equatable, Sendable {
   /// ISO date on which `defaults` matched the Anthropic pricing page.
-  public static let defaultCheckedOn = "2026-09-13"
+  public static let defaultCheckedOn = "2026-09-26"
 
   /// The ISO date the prices were checked on, as Settings > Models shows it.
   public var checkedOn: String
@@ -145,6 +154,12 @@ public struct PriceTable: Codable, Equatable, Sendable {
         outputPerMillion: 25,
         cacheWritePerMillion: 6.25,
         cacheReadPerMillion: 0.50
+      ),
+      ModelCatalog.opus55.id: ModelPrice(
+        inputPerMillion: 4,
+        outputPerMillion: 20,
+        cacheWritePerMillion: 5,
+        cacheReadPerMillion: 0.20
       ),
       ModelCatalog.fable51.id: ModelPrice(
         inputPerMillion: 10,
