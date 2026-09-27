@@ -147,9 +147,9 @@ drops a capture in flight before it is journaled, the loop drops a waiting
 question and takes down the toast and callout, and a call already on the
 network finishes but its suggestion is never shown. What the journal already
 holds stays until it expires or is cleared. Review and Allow… opens the window
-again. The privacy policy is linked from both places once
-`Consent.privacyPolicyURL` names it; until the policy is published it is nil
-and no link is shown.
+again. Both the consent window and Settings > Privacy link to the privacy
+policy, this document on the repository's main branch
+(`Consent.privacyPolicyURL`).
 
 The end-to-end harness seeds an Allow ([e2e](e2e.md) "The warm fixture home"),
 so its scenarios start sensing as the owner's own Athina does.

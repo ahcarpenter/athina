@@ -476,9 +476,7 @@ struct PrivacySettings: View {
             }
           )
           HStack {
-            if let policy = Consent.privacyPolicyURL {
-              Link("Privacy Policy", destination: policy)
-            }
+            Link("Privacy Policy", destination: Consent.privacyPolicyURL)
             Spacer()
             if state.settings.hasConsent {
               Button("Withdraw Consent") { state.declineConsent() }

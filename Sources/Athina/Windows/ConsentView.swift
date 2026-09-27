@@ -104,9 +104,7 @@ struct ConsentView: View {
       .fixedSize(horizontal: false, vertical: true)
 
       HStack {
-        if let policy = Consent.privacyPolicyURL {
-          Link("Privacy Policy", destination: policy)
-        }
+        Link("Privacy Policy", destination: Consent.privacyPolicyURL)
         Spacer()
         Button("Not Now") {
           state.declineConsent()

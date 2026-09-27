@@ -40,11 +40,11 @@ public struct Consent: Codable, Equatable, Sendable {
   /// again.
   public static let disclosureVersion = 1
 
-  /// The privacy policy the consent window and Settings > Privacy link to.
-  ///
-  /// Nil until the policy is published: where it is hosted is still to be
-  /// decided, and neither surface shows a link until this names one.
-  public static let privacyPolicyURL: URL? = nil
+  /// The privacy policy the consent window and Settings > Privacy both link
+  /// to: docs/privacy.md on the repository's main branch.
+  public static let privacyPolicyURL = URL(
+    string: "https://github.com/ahcarpenter/athina/blob/main/docs/privacy.md"
+  )!
 
   /// Whether this answer lets Athina watch and send: Allow, given to the
   /// current disclosure or a later one.

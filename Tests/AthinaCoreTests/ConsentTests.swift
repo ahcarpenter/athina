@@ -73,10 +73,11 @@ import Testing
     #expect(!SettingsStore(url: url).load().hasConsent)
   }
 
-  @Test func noPrivacyPolicyIsLinkedUntilItsAddressIsDecided() {
-    // The owner has yet to choose where the policy lives; this fails as a
-    // reminder to check both surfaces once the constant names one.
-    #expect(Consent.privacyPolicyURL == nil)
+  @Test func thePrivacyPolicyLinksToThePublishedDocument() {
+    #expect(
+      Consent.privacyPolicyURL.absoluteString
+        == "https://github.com/ahcarpenter/athina/blob/main/docs/privacy.md"
+    )
   }
 
   /// The end-to-end harness starts every existing scenario from these
