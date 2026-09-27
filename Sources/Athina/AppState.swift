@@ -1328,6 +1328,7 @@ final class AppState {
         statusLines: [statusLine, clientModeLine, clockLine, launchRefusalsLine, controlLine]
           .compactMap { $0 },
         mentor: menuStatusAction.map { .action($0) } ?? .line(mentorLine),
+        answerLine: MenuModel.answerLine(calls: callLog, now: clock.date),
         mentorContextLine: mentorContextLine,
         understandingLine: understandingLine,
         talkBack: talkBackAction.map { .action($0) } ?? .line(talkBackLine),

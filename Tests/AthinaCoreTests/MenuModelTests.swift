@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import AthinaCore
@@ -11,6 +12,7 @@ import Testing
 
   func state(
     mentor: MenuModel.State.Either = .line("Mentor: replay mode, nothing billed"),
+    answerLine: String? = nil,
     talkBack: MenuModel.State.Either = .line("Talk back: no shortcut set"),
     isPaused: Bool = false,
     pauseShortcut: HotKey? = MenuModelTests.pause,
@@ -22,6 +24,7 @@ import Testing
     MenuModel.State(
       statusLines: ["Watching", "Replaying 7 recorded calls"],
       mentor: mentor,
+      answerLine: answerLine,
       mentorContextLine: nil,
       understandingLine: "Goal: not worked out yet",
       talkBack: talkBack,
@@ -158,6 +161,86 @@ import Testing
     #expect(
       dimmed.target("Pause > For an Hour")
         == .refused(reason: "disabled", message: #""Pause" is dimmed"#)
+    )
+  }
+
+  func call(
+    _ tier: ModelTier,
+    _ model: String,
+    at timestamp: Date,
+    outcome: ModelCallOutcome = .quiet
+  ) -> ModelCallRecord {
+    ModelCallRecord(
+      timestamp: timestamp,
+      tier: tier,
+      model: model,
+      promptVersion: 1,
+      promptCharacters: 100,
+      imageBytes: 0,
+      usage: Usage(inputTokens: 10, outputTokens: 5),
+      cost: 0.001,
+      latency: 1,
+      outcome: outcome,
+      detail: nil
+    )
+  }
+
+  @Test func whichModelAnsweredSitsUnderTheMentorsSpend() {
+    let lines = titles(
+      MenuModel(state(answerLine: "Last answer: Claude Haiku 4.5 (Triage), 15:23:06"))
+    )
+    let index = lines.firstIndex(of: "Mentor: replay mode, nothing billed")!
+    #expect(lines[index + 1] == "Last answer: Claude Haiku 4.5 (Triage), 15:23:06")
+    #expect(
+      MenuModel(state(answerLine: "Last answer: Claude Haiku 4.5 (Triage), 15:23:06"))
+        .items[index + 1] == .status("Last answer: Claude Haiku 4.5 (Triage), 15:23:06")
+    )
+  }
+
+  @Test func theLatestCallNamesTheModelThatAnsweredAndTheTierThatAsked() {
+    let now = Calendar.current.date(bySettingHour: 15, minute: 30, second: 0, of: Date())!
+    let triage = call(.triage, "claude-haiku-4-5-20251001", at: now.addingTimeInterval(-60))
+    let mentor = call(
+      .mentor,
+      "claude-opus-5-5",
+      at: now.addingTimeInterval(-30),
+      outcome: .suggested
+    )
+    // The log is newest first, but the line reads the times, not the order.
+    #expect(
+      MenuModel.answerLine(calls: [triage, mentor], now: now)
+        == "Last answer: Claude Opus 5.5 (Mentor), \(ClockFormat.time(mentor.timestamp))"
+    )
+  }
+
+  @Test func aFailedCallAnsweredNothingSoTheLineNamesTheOneBefore() {
+    let now = Calendar.current.date(bySettingHour: 15, minute: 30, second: 0, of: Date())!
+    let triage = call(.triage, "claude-haiku-4-5-20251001", at: now.addingTimeInterval(-60))
+    let failed = call(.mentor, "claude-opus-5-5", at: now.addingTimeInterval(-30), outcome: .error)
+    #expect(
+      MenuModel.answerLine(calls: [failed, triage], now: now)
+        == "Last answer: Claude Haiku 4.5 (Triage), \(ClockFormat.time(triage.timestamp))"
+    )
+    #expect(MenuModel.answerLine(calls: [failed], now: now) == nil)
+    #expect(MenuModel.answerLine(calls: [], now: now) == nil)
+  }
+
+  @Test func anAnswerFromAnEarlierDaySaysWhichDay() {
+    let now = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date())!
+    let yesterday = Calendar.current.date(byAdding: .day, value: -1, to: now)!
+    let old = call(.followUp, "claude-sonnet-5", at: yesterday, outcome: .answered)
+    #expect(
+      MenuModel.answerLine(calls: [old], now: now)
+        == "Last answer: Claude Sonnet 5 (Follow-up), \(ClockFormat.dayAndTime(yesterday))"
+    )
+  }
+
+  @Test func aModelTheCatalogDoesNotKnowIsNamedByItsID() {
+    let now = Date()
+    let replayed = call(.triage, "claude-retired-1", at: now)
+    #expect(
+      MenuModel.answerLine(calls: [replayed], now: now)
+        == "Last answer: claude-retired-1 (Triage), \(ClockFormat.time(now))"
     )
   }
 }
