@@ -13,18 +13,29 @@
 #   ATHINA_NOTARY_PROFILE    the `xcrun notarytool store-credentials` keychain
 #                            profile to submit with
 #
+# Two more serve CI's release workflow (.github/workflows/release.yml), which
+# keeps the credentials in a keychain of its own:
+#
+#   ATHINA_NOTARY_KEYCHAIN   the keychain file that holds the notary profile;
+#                            by default the keychain search list
+#   ATHINA_RELEASE_ALLOW_SKIPS
+#                            1 to exit 0 rather than 1 when steps that need
+#                            Apple credentials were skipped
+#
 # Writes to build/release: Athina.app, Athina-<version>.dmg (the app beside a
-# link to Applications), Athina-<version>.zip, Athina-<version>.dSYM.zip for
-# crash reports, and Athina-<version>-notes.md, the notes written by hand and
-# committed in docs/release-notes/<version>.md set among this build's version
-# and checksums. The version is Resources/Info.plist's own, the one place it is
+# link to Applications), Athina-<version>.zip, Athina-<version>-checksums.txt
+# (their SHA-256, as shasum -a 256 -c reads it), Athina-<version>.dSYM.zip for
+# crash reports, and Athina-<version>-notes.md: any notes written by hand and
+# committed in docs/release-notes/<version>.md, then the Conventional Commit
+# titles since the previous release, set among this build's version and
+# checksums. The version is Resources/Info.plist's own, the one place it is
 # set. Nothing under docs/ is ever written here, only read.
 #
 # Without a Developer ID identity or a notary profile it still runs every step
 # that needs no Apple credentials (the hardened runtime build, signed ad-hoc,
 # the disk image and zip, and every check that needs no Apple service), names
-# each step it skipped and why, and exits 1: what it built is for checking, not
-# for distribution.
+# each step it skipped and why, and exits 1 (0 with ATHINA_RELEASE_ALLOW_SKIPS):
+# what it built is for checking, not for distribution.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -61,6 +72,7 @@ BUILD="$("$PLIST_BUDDY" -c 'Print :CFBundleVersion' "$INFO")"
 TAG="v$VERSION"
 DMG="$OUT/Athina-$VERSION.dmg"
 ZIP="$OUT/Athina-$VERSION.zip"
+CHECKSUMS="$OUT/Athina-$VERSION-checksums.txt"
 DSYM_ZIP="$OUT/Athina-$VERSION.dSYM.zip"
 NOTES="$OUT/Athina-$VERSION-notes.md"
 WRITTEN_NOTES="docs/release-notes/$VERSION.md"
@@ -106,6 +118,8 @@ fi
 NO_IDENTITY="no Developer ID Application identity in the keychain; set ATHINA_RELEASE_IDENTITY"
 
 PROFILE="${ATHINA_NOTARY_PROFILE:-}"
+NOTARY_AUTH=(--keychain-profile "$PROFILE")
+if [ -n "${ATHINA_NOTARY_KEYCHAIN:-}" ]; then NOTARY_AUTH+=(--keychain "$ATHINA_NOTARY_KEYCHAIN"); fi
 NOTARIZE=0
 if [ -z "$IDENTITY" ]; then
 	NO_NOTARY="Apple notarizes only a Developer ID signature, skipped above"
@@ -117,7 +131,7 @@ else
 	fi
 	# Fail now, not after a build: a profile that cannot be used is a setup
 	# mistake, not a step to skip.
-	if ! err="$(xcrun notarytool history --keychain-profile "$PROFILE" 2>&1 >/dev/null)"; then
+	if ! err="$(xcrun notarytool history "${NOTARY_AUTH[@]}" 2>&1 >/dev/null)"; then
 		fail "ATHINA_NOTARY_PROFILE is \"$PROFILE\", but notarytool cannot use it: ${err:-no reason given}. Store it with: xcrun notarytool store-credentials \"$PROFILE\" --apple-id <Apple ID> --team-id <team ID>"
 	fi
 	NOTARIZE=1
@@ -243,12 +257,12 @@ notarize() {
 	local file="$1" label="$2" result status id
 	result="$WORK/notary-$label.json"
 	say "submitting $(basename "$file") to Apple's notary service and waiting for the verdict"
-	xcrun notarytool submit "$file" --keychain-profile "$PROFILE" --wait --timeout 2h \
+	xcrun notarytool submit "$file" "${NOTARY_AUTH[@]}" --wait --timeout 2h \
 		--output-format json >"$result" 2>"$WORK/notary-$label.err" || true
 	status="$(plutil -extract status raw -o - "$result" 2>/dev/null || true)"
 	id="$(plutil -extract id raw -o - "$result" 2>/dev/null || true)"
 	if [ -n "$id" ]; then
-		xcrun notarytool log "$id" --keychain-profile "$PROFILE" "$OUT/notary-$label-log.json" >/dev/null 2>&1 || true
+		xcrun notarytool log "$id" "${NOTARY_AUTH[@]}" "$OUT/notary-$label-log.json" >/dev/null 2>&1 || true
 	fi
 	if [ "$status" != Accepted ]; then
 		sed 's/^/  /' "$WORK/notary-$label.err" >&2 || true
@@ -299,6 +313,8 @@ fi
 # The zip carries the stapled app; a zip itself cannot hold a ticket.
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$ZIP"
 ok "zip $(basename "$ZIP")"
+(cd "$OUT" && shasum -a 256 "$(basename "$DMG")" "$(basename "$ZIP")") >"$CHECKSUMS"
+ok "checksums $(basename "$CHECKSUMS")"
 
 # --- Verify what people download ----------------------------------------------
 
@@ -346,14 +362,34 @@ fi
 
 # --- Release notes ------------------------------------------------------------
 
-# What changed is written by hand and committed with the version, outside
-# build/release, which every run replaces; the facts of this build go around it.
-if [ -f "$WRITTEN_NOTES" ]; then
-	written="$(cat "$WRITTEN_NOTES")"
+# What changed: any notes written by hand and committed with the version,
+# outside build/release, which every run replaces, then the Conventional Commit
+# titles since the previous release, by type. Only the types people using
+# Athina notice are listed (as release-please does), and a breaking change
+# (type!:) goes first whatever its type. The facts of this build go around them.
+written=""
+if [ -f "$WRITTEN_NOTES" ]; then written="$(cat "$WRITTEN_NOTES")"$'\n\n'; fi
+if [ -n "$PREVIOUS_TAG" ]; then
+	range="$PREVIOUS_TAG..HEAD"
+	since="since $PREVIOUS_TAG"
 else
-	written="## What's new"$'\n\n'"TODO: write this release's notes in $WRITTEN_NOTES and commit them before releasing."
-	say "no release notes for $VERSION: create $WRITTEN_NOTES and commit it before releasing"
+	range="HEAD"
+	since="since the first commit"
 fi
+changes="$(git log --no-merges --format=%s "$range" | awk '
+	match($0, /^[a-z]+(\([^)]*\))?!?: /) {
+		head = substr($0, 1, RLENGTH - 2); text = substr($0, RLENGTH + 1)
+		type = head; sub(/[(!].*/, "", type)
+		section = head ~ /!$/ ? "Breaking changes" : \
+			type == "feat" ? "Features" : type == "fix" ? "Bug fixes" : \
+			type == "perf" ? "Performance" : type == "revert" ? "Reverts" : ""
+		if (section != "") lines[section] = lines[section] "- " text "\n"
+	}
+	END {
+		split("Breaking changes,Features,Bug fixes,Performance,Reverts", order, ",")
+		for (i = 1; i <= 5; i++) if (order[i] in lines) printf "### %s\n\n%s\n", order[i], lines[order[i]]
+	}')"
+[ -n "$changes" ] || changes="No features, fixes or performance changes."
 {
 	printf '# Athina %s (build %s)\n\n' "$VERSION" "$BUILD"
 	if [ "${#SKIPPED[@]}" -gt 0 ]; then
@@ -364,9 +400,9 @@ fi
 	printf 'Requires macOS 26 or later, on Apple silicon or Intel.\n\n'
 	printf '## Install\n\n'
 	printf 'Open %s and drag Athina onto Applications, or unzip %s into Applications.\n\n' "\`$(basename "$DMG")\`" "\`$(basename "$ZIP")\`"
-	printf '%s\n\n' "$written"
+	printf '%s## Changes %s\n\n%s\n\n' "$written" "$since" "$changes"
 	printf '## Checksums (SHA-256)\n\n```\n'
-	(cd "$OUT" && shasum -a 256 "$(basename "$DMG")" "$(basename "$ZIP")")
+	cat "$CHECKSUMS"
 	printf '```\n\nBuilt from %s%s.\n' "$(git rev-parse HEAD)" \
 		"$([ -z "$(git status --porcelain)" ] || echo ', with uncommitted changes')"
 } >"$NOTES"
@@ -375,11 +411,12 @@ ok "release notes $(basename "$NOTES")"
 # --- Summary ------------------------------------------------------------------
 
 say "built in $OUT:"
-for file in "$APP" "$DMG" "$ZIP" "$DSYM_ZIP" "$NOTES"; do say "  $(basename "$file")"; done
+for file in "$APP" "$DMG" "$ZIP" "$CHECKSUMS" "$DSYM_ZIP" "$NOTES"; do say "  $(basename "$file")"; done
 if [ "${#SKIPPED[@]}" -gt 0 ]; then
 	say "skipped ${#SKIPPED[@]} step(s) that need Apple credentials:"
 	for line in "${SKIPPED[@]}"; do say "  - $line"; done
 	say "every other step passed; this build is for checking, not for distribution (docs/releasing.md)"
-	exit 1
+	[ "${ATHINA_RELEASE_ALLOW_SKIPS:-}" = 1 ] || exit 1
+	exit 0
 fi
-say "Athina $VERSION is signed, notarized, stapled, and verified; publish $(basename "$DMG") and tag it: git tag $TAG"
+say "Athina $VERSION is signed, notarized, stapled, and verified; push its tag and CI publishes it: git tag $TAG && git push origin $TAG"

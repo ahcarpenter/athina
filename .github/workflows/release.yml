@@ -1,0 +1,172 @@
+name: Release
+
+# Builds the direct-download release with make release (scripts/release.sh,
+# docs/releasing.md), the artifact people would be sent, on every push to main
+# as well as for a release, so a release never finds a broken build. ci.yml and
+# merge-checks.yml run the whole suite on the same pushes.
+#
+# On a push to main it signs and notarizes when the Apple secrets exist, and
+# otherwise builds it signed ad hoc, says so in the job summary and passes: a
+# missing secret never fails a run. On a pushed version tag it must sign and
+# notarize, then publishes a GitHub Release with the disk image, the zip, their
+# checksums and the debug symbols, with release.sh's notes, which list the
+# Conventional Commit titles since the previous tag. If a release already
+# exists for the tag, such as one release-please made, it gets the files and
+# keeps its notes.
+on:
+  push:
+    branches: [main]
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+# Every push to main keeps its own run (the run id is its group); a tag is
+# built once, and a second push of it waits rather than cancels.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref_type == 'tag' && github.ref || github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release-build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Every commit and tag: release.sh finds the previous release by its
+          # tag and lists the commits since it.
+          fetch-depth: 0
+      - name: Check the tag
+        # A release is exactly the version Resources/Info.plist sets, from a
+        # commit on main.
+        if: github.ref_type == 'tag'
+        run: |
+          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::The tag is $GITHUB_REF_NAME, but Resources/Info.plist sets version $version; tag v$version instead."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::$GITHUB_REF_NAME points at $(git rev-parse HEAD), which is not on main; a release is built only from main."
+            exit 1
+          fi
+      - uses: ./.github/actions/select-xcode
+      - uses: ./.github/actions/swiftpm-cache
+        with:
+          name: release-build
+      - name: Put the Apple credentials in a keychain of this run
+        # The Developer ID certificate and its private key, and the notary
+        # service's credentials as the profile release.sh names, in a keychain
+        # made for this run and deleted at its end (docs/releasing.md "CI's
+        # secrets"). Whatever is missing is named in the summary.
+        id: credentials
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          missing=()
+          for name in CERTIFICATE CERTIFICATE_PASSWORD NOTARY_APPLE_ID NOTARY_TEAM_ID NOTARY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              case "$name" in CERTIFICATE*) missing+=("DEVELOPER_ID_$name") ;; *) missing+=("$name") ;; esac
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "missing=${missing[*]}" >> "$GITHUB_OUTPUT"
+            if [ "$GITHUB_REF_TYPE" = tag ]; then
+              echo "::error::A release must be signed and notarized, and the repository has no ${missing[*]} secret(s) (docs/releasing.md \"CI's secrets\")."
+              exit 1
+            fi
+            # Anything built now is for checking only, and says so.
+            echo "ATHINA_RELEASE_ALLOW_SKIPS=1" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$CERTIFICATE" ] && [ -n "$CERTIFICATE_PASSWORD" ]; then
+            keychain="$RUNNER_TEMP/release.keychain-db"
+            password="$(uuidgen)"
+            security create-keychain -p "$password" "$keychain"
+            security set-keychain-settings -lut 21600 "$keychain"
+            security unlock-keychain -p "$password" "$keychain"
+            printf '%s' "$CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+            security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            rm "$RUNNER_TEMP/certificate.p12"
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+            # Searched first, so release.sh finds the identity in it.
+            keychains=("$keychain")
+            while IFS= read -r line; do
+              keychains+=("$(sed -E 's/^[[:space:]]*"(.*)"$/\1/' <<<"$line")")
+            done < <(security list-keychains -d user)
+            security list-keychains -d user -s "${keychains[@]}"
+            if [ -n "$NOTARY_APPLE_ID" ] && [ -n "$NOTARY_TEAM_ID" ] && [ -n "$NOTARY_PASSWORD" ]; then
+              # Checked with Apple as it is stored, so wrong credentials fail here.
+              xcrun notarytool store-credentials athina-notary --keychain "$keychain" \
+                --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_PASSWORD"
+              echo "ATHINA_NOTARY_PROFILE=athina-notary" >> "$GITHUB_ENV"
+              echo "ATHINA_NOTARY_KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+            fi
+          fi
+      - name: Build, sign, notarize and verify
+        # Notarization waits on Apple, usually minutes, sometimes much longer.
+        timeout-minutes: 120
+        run: make release
+      - name: Summarize
+        if: always()
+        env:
+          MISSING: ${{ steps.credentials.outputs.missing }}
+        run: |
+          if [ -n "$MISSING" ]; then
+            {
+              echo "> [!WARNING]"
+              echo "> Not signed with Developer ID and notarized: the repository has no $MISSING secret(s) (docs/releasing.md \"CI's secrets\"). This build is for checking, not for distribution."
+              echo
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+          for notes in build/release/Athina-*-notes.md; do
+            if [ -f "$notes" ]; then cat "$notes" >> "$GITHUB_STEP_SUMMARY"; fi
+          done
+      - name: Delete the keychain
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/release.keychain-db" ]; then security delete-keychain "$RUNNER_TEMP/release.keychain-db"; fi
+      - name: Upload the release
+        # Everything release.sh wrote but Athina.app itself, which an artifact
+        # would not keep intact (its symbolic links and signature); the disk
+        # image and the zip each hold it as signed.
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-build
+          path: |
+            build/release
+            !build/release/Athina.app*
+          if-no-files-found: error
+
+  publish:
+    # Only for a tag, and only once the build above signed, notarized and
+    # verified everything it uploaded.
+    if: github.ref_type == 'tag'
+    needs: release-build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: release-build
+          path: release
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd release
+          version="${GITHUB_REF_NAME#v}"
+          sha256sum --check "Athina-$version-checksums.txt"
+          files=("Athina-$version.dmg" "Athina-$version.zip" "Athina-$version-checksums.txt" "Athina-$version.dSYM.zip")
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+          else
+            # The notes without their first line, the title the release shows.
+            sed '1{/^# /d;}' "Athina-$version-notes.md" > notes.md
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" --repo "$GITHUB_REPOSITORY" \
+              --verify-tag --title "Athina $version" --notes-file notes.md
+          fi
