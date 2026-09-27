@@ -69,9 +69,12 @@ one, and it does not require a branch to be up to date with main, so a pull
 request is not rerun each time another merges. GitHub never reads the file, so
 the `lint` job ends by checking that the two still agree:
 `scripts/check-ruleset.sh` reads the rules GitHub applies to main from the
-public `repos/ahcarpenter/athina/rules/branches/main` endpoint and fails when
-any rule or required check differs from the file's, even after a lint failure,
-so both are reported at once. A pull request that changes the file therefore
+public `repos/ahcarpenter/athina/rules/branches/main` endpoint and fails,
+naming each one, when the required checks (each a context and its integration)
+differ from the file's, even after a lint failure, so both are reported at
+once. It compares nothing else: that endpoint merges the rules of every active
+ruleset on main, so another ruleset, or a parameter GitHub adds to a rule, must
+not fail it. A pull request that changes the file therefore
 fails `lint` until the change is applied with the command above, which is the
 order it goes in: apply, then run the job again, then merge.
 

@@ -1,10 +1,11 @@
 import Foundation
 import Testing
 
-/// scripts/check-ruleset.sh, which CI's lint job runs to catch the rules
-/// GitHub enforces on main drifting from `.github/rulesets/main.json`: it has
+/// scripts/check-ruleset.sh, which CI's lint job runs to catch the checks
+/// GitHub requires on main drifting from `.github/rulesets/main.json`: it has
 /// to pass on GitHub's answer for the committed ruleset, however that answer
-/// orders things, and fail on any difference in what is enforced.
+/// orders things and whatever other rules it merges in, and fail on any
+/// difference in the required checks.
 @Suite struct RulesetCheckTests {
   private static let repository = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()  // AthinaCoreTests
@@ -103,9 +104,45 @@ import Testing
     #expect(try check(answer) == 1)
   }
 
-  @Test func aRuleGitHubDoesNotEnforceFails() throws {
-    let answer = try answer().filter { $0["type"] as? String != "non_fast_forward" }
-    #expect(try check(answer) == 1)
+  /// The answer merges every active ruleset on main, so a rule another
+  /// ruleset adds, or one it leaves out, does not tell.
+  @Test func anotherRuleOrOneMissingStillPasses() throws {
+    let answer =
+      try answer().filter { $0["type"] as? String != "non_fast_forward" }
+      + [["type": "required_signatures", "ruleset_id": 1]]
+    #expect(try check(answer) == 0)
+  }
+
+  /// Nor does a parameter GitHub adds to a rule, or another ruleset
+  /// requiring a check the committed one already requires.
+  @Test func aNewParameterOrARepeatedCheckStillPasses() throws {
+    let answer = try withRequiredChecks(try answer()) { checks in
+      checks.map { check in
+        var check = check
+        check["app_slug"] = "github-actions"
+        return check
+      }
+    }
+    let lint = try #require(
+      try requiredChecks(in: answer).first { $0["context"] as? String == "lint" }
+    )
+    let second: [String: Any] = [
+      "type": "required_status_checks",
+      "parameters": [
+        "strict_required_status_checks_policy": true, "required_status_checks": [lint],
+      ],
+      "ruleset_id": 1,
+    ]
+    #expect(try check(answer + [second]) == 0)
+  }
+
+  @Test func aRequiredCheckOnlyAnotherRulesetEnforcesFails() throws {
+    let second: [String: Any] = [
+      "type": "required_status_checks",
+      "parameters": ["required_status_checks": [["context": "archive", "integration_id": 15368]]],
+      "ruleset_id": 1,
+    ]
+    #expect(try check(try answer() + [second]) == 1)
   }
 
   /// A ruleset switched off or set to evaluate only applies no rules at all.
