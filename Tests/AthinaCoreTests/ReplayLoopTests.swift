@@ -49,6 +49,7 @@ struct ReplayLoopTests {
         client: client,
         keyStore: keyStore,
         events: stream,
+        consented: true,
         clock: clock,
         calendar: MentorLoopTests.calendar
       )

@@ -87,6 +87,15 @@ public struct SensingSettings: SettingsSection, Equatable, Sendable {
   /// Whether the person cleared the pause shortcut, which earlier builds do
   /// not read.
   private var pauseHotKeyCleared = false
+  /// The answer to the consent window, or nil when it was never given.
+  ///
+  /// Nil on every install until the person answers, including one from before
+  /// the window existed, so nothing is sensed or sent before Allow.
+  public var consent: Consent?
+
+  /// Whether the person has allowed Athina to watch and send
+  /// (`Consent.grants`).
+  public var hasConsent: Bool { Consent.grants(consent) }
 
   // MARK: Mentor loop
 

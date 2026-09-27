@@ -187,7 +187,7 @@ struct ModeBadge: View {
     case .watching: .green
     case .screenOnly, .accessibilityOnly: .yellow
     case .idle: .gray
-    case .paused, .stopped: .orange
+    case .paused, .stopped, .waitingForConsent: .orange
     case .excluded: .purple
     case .waitingForPermissions: .red
     }
@@ -1197,7 +1197,7 @@ private struct AvailabilityBadge: View {
     switch availability {
     case .ready: .green
     case .disabled: .gray
-    case .noAPIKey: .orange
+    case .noConsent, .noAPIKey: .orange
     case .capReached: .red
     }
   }

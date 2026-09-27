@@ -61,8 +61,11 @@ keychain while replaying.
 
 ## Permissions
 
-Athina needs two permissions and explains each in a first-run window that
-opens whenever one is missing. The window explains before it asks: no system
+Before anything else, a first launch asks whether Athina may watch the screen
+and send what it reads to Anthropic, and nothing is sensed or sent until you
+choose Allow (see [Consent](docs/privacy.md#consent)). Athina then needs two
+permissions and explains each in a window that opens at launch whenever one
+is missing, once you have allowed it. The window explains before it asks: no system
 prompt appears when it opens. Each missing permission has one button. For the
 sensing pair it is Open System Settings, which registers Athina in that
 permission's System Settings list (macOS may show its own note pointing
@@ -86,6 +89,8 @@ when a key is saved (see [Privacy model](docs/privacy.md)).
 
 ## Privacy
 
+- Nothing is captured or sent until you choose Allow in the consent window
+  that opens first, and Settings > Privacy withdraws it at once.
 - The journal, settings and audio stay on this Mac; the only network peer is
   `api.anthropic.com`, and only the mentor loop reaches it.
 - A model call carries text read from the screen (the app, the window title,

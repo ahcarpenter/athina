@@ -29,5 +29,10 @@
     "triageMinInterval": 5,
     "toastTimeout": 600,
     "mentorMinInterval": 30
+  },
+  "consent": {
+    "answer": "allowed",
+    "at": 780000000,
+    "disclosureVersion": 1
   }
 }

@@ -20,6 +20,14 @@ import Testing
     return seen
   }
 
+  /// Default settings with the person's Allow, as every run the pipeline
+  /// senses in has (`Consent`).
+  static var consented: SensingSettings {
+    var settings = SensingSettings()
+    settings.consent = Consent(answer: .allowed, at: Date(timeIntervalSinceReferenceDate: 0))
+    return settings
+  }
+
   func isMode(_ mode: SensingMode) -> (SensingEvent) -> Bool {
     { event in
       if case .modeChanged(mode) = event { return true }
@@ -35,7 +43,7 @@ import Testing
     let journal = try Journal(url: directory.appendingPathComponent("journal.sqlite"))
     let clock = AdjustableClock(startingAt: Date(timeIntervalSinceReferenceDate: 800_000_000))
     let pipeline = SensingPipeline(
-      settings: SensingSettings(),
+      settings: Self.consented,
       journal: journal,
       tracker: FocusTracker(clock: clock),
       clock: clock,
@@ -73,7 +81,7 @@ import Testing
     )
     let journal = try Journal(url: directory.appendingPathComponent("journal.sqlite"))
     let clock = AdjustableClock(startingAt: Date(timeIntervalSinceReferenceDate: 800_000_000))
-    var settings = SensingSettings()
+    var settings = Self.consented
     settings.excludedBundleIDs = ["com.apple.calculator"]
     let pipeline = SensingPipeline(
       settings: settings,
@@ -193,6 +201,49 @@ import Testing
     let kinds = try await journal.recentEvents(limit: 20).map(\.kind)
     #expect(kinds.contains(.idleStart))
     #expect(kinds.contains(.idleEnd))
+  }
+
+  @Test func withoutConsentAScriptedWindowIsNeitherSensedNorJournaled() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "athina-tests-\(UUID().uuidString)"
+    )
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let journal = try Journal(url: directory.appendingPathComponent("journal.sqlite"))
+    let clock = AdjustableClock(startingAt: Date(timeIntervalSinceReferenceDate: 800_000_000))
+    let pipeline = SensingPipeline(
+      settings: SensingSettings(),
+      journal: journal,
+      tracker: FocusTracker(clock: clock),
+      clock: clock,
+      source: .hermetic
+    )
+    var events = await pipeline.events().makeAsyncIterator()
+    await pipeline.start()
+    _ = await read(&events, until: isMode(.waitingForConsent))
+
+    guard case .notKept = await pipeline.observe(notes) else {
+      Issue.record("a scripted window was kept before Allow")
+      return
+    }
+    #expect(try await journal.stats().observationCount == 0)
+    #expect(try await journal.recentEvents(limit: 10).map(\.kind) == [.started])
+
+    // Allowed, the same window is kept; withdrawn, the next one is not.
+    await pipeline.updateSettings(Self.consented)
+    _ = await read(&events, until: isMode(.watching))
+    guard case .kept = await pipeline.observe(notes) else {
+      Issue.record("the scripted window was not kept after Allow")
+      return
+    }
+    var withdrawn = Self.consented
+    withdrawn.consent?.answer = .declined
+    await pipeline.updateSettings(withdrawn)
+    guard case .notKept = await pipeline.observe(notes) else {
+      Issue.record("a scripted window was kept after the withdrawal")
+      return
+    }
+    #expect(try await journal.stats().observationCount == 1)
+    await pipeline.stop()
   }
 
   @Test func aPipelineSensingTheRealMacTakesNoScript() async throws {

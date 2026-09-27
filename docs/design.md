@@ -51,7 +51,8 @@ particular to this app:
   away, also gets two z's drifting off it, drawn in the clear upper left of the
   owl's own bounding box: with the pupils gone the eyes are the whitest thing
   in the set and read wide awake rather than shut, so the z's are what actually
-  say asleep. Paused, the deliberate stop, takes the half-lidded eyes. Every
+  say asleep. Paused, the deliberate stop, takes the half-lidded eyes, as does
+  waiting for consent, since nothing is captured either way. Every
   state, the z's included, is made inside the owl's own box, which is what
   keeps the item one width throughout, so the other extras never shift
   sideways when Athina's state changes. Which variant a mode gets is
@@ -98,6 +99,13 @@ particular to this app:
   Understanding… open a confirmation that names what is lost; the confirming
   button is plain, since it is what the person chose, and Cancel is always
   there.
+- **Consent comes first and asks plainly.** The consent window is the first
+  thing a launch shows until there is an Allow, as the HIG (Privacy) asks
+  for data collection to be explained before it starts; it says who receives
+  what in short rows, leads with its answer as the default button (Allow)
+  beside Not Now as the cancel button, and shows the menu bar owl itself as
+  the sign that Athina is watching. Withdrawing is a button beside the
+  answer in Settings > Privacy with no confirmation, since Allow undoes it.
 - **Permissions explain before they ask.** The window never prompts on its own,
   each permission has one button, and the purpose strings in
   `Resources/Info.plist` say the same as the window in one sentence.
