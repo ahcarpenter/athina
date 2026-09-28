@@ -279,10 +279,14 @@ public actor MentorLoop {
     settings = validated
     scheduler.settings = validated
     spend.cap = validated.hourlySpendCap
-    // Another provider calls with its own key, and none until it is read.
+    // Another provider calls with its own key, and none until it is read,
+    // which can wait on a keychain prompt and so is not waited for here.
     if providerChanged {
       loadedKey = nil
-      await reloadKey()
+      Task {
+        await self.reloadKey()
+        await self.publishStatus()
+      }
     }
     await publishStatus()
   }
