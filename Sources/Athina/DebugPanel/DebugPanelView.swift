@@ -356,11 +356,6 @@ private struct NowPane: View {
         }
 
         Card(title: "Journal") {
-          if let note = state.dataMigration.note {
-            StatusLabel(note, kind: state.dataMigration.needsAttention ? .warning : .info)
-              .font(.caption)
-              .textSelection(.enabled)
-          }
           if let error = state.journalError {
             StatusLabel(error, kind: .error)
               .font(.caption)

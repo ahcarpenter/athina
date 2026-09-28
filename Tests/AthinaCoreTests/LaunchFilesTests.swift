@@ -139,6 +139,62 @@ private func finishedLaunch(_ name: String, in support: URL, written: Date) thro
     #expect(files.settingsSource.path == "/s/settings.json")
   }
 
+  /// A live launch on a Mac with no Athina files yet starts its own journal
+  /// and default settings in `athina`, whether or not a `mentor` folder, left
+  /// by the app's earlier name, sits beside it; that folder is never read,
+  /// moved or changed, and nothing about it is reported.
+  @Test(arguments: [false, true])
+  func aFirstLiveLaunchStartsItsOwnFilesAndLeavesAnyMentorFolderAlone(
+    mentorFolder: Bool
+  ) async throws {
+    let root = scratch()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let support = root.appendingPathComponent(AppPaths.directoryName, isDirectory: true)
+    let mentor = root.appendingPathComponent("mentor", isDirectory: true)
+    var mentorFiles: [String: Data] = [:]
+    if mentorFolder {
+      try FileManager.default.createDirectory(at: mentor, withIntermediateDirectories: true)
+      var kept = SensingSettings()
+      kept.excludedBundleIDs.append("com.apple.MobileSMS")
+      try SettingsStore(url: SettingsStore.defaultURL(in: mentor)).save(kept)
+      // Closed before its files are read, as a quit Mentor left them.
+      do {
+        let journal = try Journal(url: Journal.defaultURL(in: mentor))
+        _ = try await journal.record(Fixtures.observation(at: Date(timeIntervalSince1970: 1_000)))
+      }
+      mentorFiles = try contents(of: mentor)
+      #expect(mentorFiles.keys.contains("journal.sqlite"))
+    }
+
+    var files = LaunchFiles(arguments: ["Athina"], clientMode: .live, supportDirectory: support)
+    let settings = files.loadSettings(supportDirectory: support)
+    guard case .notNeeded = files.claim(clientMode: .live, supportDirectory: support) else {
+      Issue.record("a live launch holds nothing and is never refused")
+      return
+    }
+    let journal = try Journal(url: Journal.defaultURL(in: files.dataDirectory))
+
+    #expect(files.dataDirectory == support)
+    #expect(files.refusals.isEmpty)
+    #expect(settings == SensingSettings())
+    #expect(try await journal.stats().observationCount == 0)
+    #expect(FileManager.default.fileExists(atPath: Journal.defaultURL(in: support).path))
+    if mentorFolder {
+      #expect(try contents(of: mentor) == mentorFiles)
+    } else {
+      #expect(!FileManager.default.fileExists(atPath: mentor.path))
+    }
+  }
+
+  /// Every file directly in `directory`, by name.
+  private func contents(of directory: URL) throws -> [String: Data] {
+    var files: [String: Data] = [:]
+    for name in try FileManager.default.contentsOfDirectory(atPath: directory.path) {
+      files[name] = try Data(contentsOf: directory.appendingPathComponent(name))
+    }
+    return files
+  }
+
   // MARK: Settings
 
   /// A replay started from a settings file of its own reads it and never

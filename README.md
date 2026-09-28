@@ -68,10 +68,8 @@ asks once to read the saved key (see
 automatic updates yet: a new version is downloaded and dragged over the old
 one. A released copy uses the same journal, settings and keychain item as a
 development build (see
-[A released copy and your data, grants, and key](docs/releasing.md#a-released-copy-and-your-data-grants-and-key)),
-and the first live launch of either moves what an earlier Mentor kept (see
-[Coming from Mentor](docs/coming-from-mentor.md)). To build Athina from source
-instead, see [CONTRIBUTING.md](CONTRIBUTING.md).
+[A released copy and your data, grants, and key](docs/releasing.md#a-released-copy-and-your-data-grants-and-key)).
+To build Athina from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **Try it without a key.** From a source checkout, `make run` starts a replay:
 Athina watches your real screen but answers from model calls recorded in the
@@ -152,4 +150,3 @@ how a change reaches `main`; `docs/` holds the reference:
 | [e2e.md](docs/e2e.md) | the end-to-end harness, its scenarios and tiers, the control API, hermetic runs |
 | [ci.md](docs/ci.md) | the CI checks, the ready-for-review snapshot gate, checkpoints |
 | [releasing.md](docs/releasing.md) | releases, unsigned releases, code signing |
-| [coming-from-mentor.md](docs/coming-from-mentor.md) | what moves from Mentor on the first launch |

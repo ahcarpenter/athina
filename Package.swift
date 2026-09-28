@@ -43,8 +43,7 @@ let package = Package(
     // committed one has every build fetch every package it names. None
     // depends on another package.
     //
-    // The journal's SQLite access and its live queries (Journal.swift), and
-    // DataMigration's read of the journal Mentor kept.
+    // The journal's SQLite access and its live queries (Journal.swift).
     .package(url: "https://github.com/groue/GRDB.swift", exact: "7.11.1"),
     // The command lines of athina-drive and snapshot-diff, the developer
     // tools; the app and its release builds never link it.
@@ -57,13 +56,10 @@ let package = Package(
     .package(url: "https://github.com/pointfreeco/swift-snapshot-testing", exact: "1.19.6"),
   ],
   targets: [
-    // The one SQLite call neither Swift nor GRDB makes (see the header).
-    .target(name: "AthinaSQLiteShim", linkerSettings: [.linkedLibrary("sqlite3")]),
     .target(
       name: "AthinaCore",
       // KeyboardShortcuts for the stored shortcut's own form of the combination.
       dependencies: [
-        "AthinaSQLiteShim",
         .product(name: "GRDB", package: "GRDB.swift"),
         .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
       ],

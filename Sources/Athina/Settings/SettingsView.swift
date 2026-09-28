@@ -383,10 +383,6 @@ struct JournalSettings: View {
       )
       Section(
         content: {
-          if let note = state.dataMigration.note {
-            StatusLabel(note, kind: state.dataMigration.needsAttention ? .warning : .info)
-              .textSelection(.enabled)
-          }
           LabeledContent("Location") {
             Text(Formatting.path(state.journalURL))
               .textSelection(.enabled)
