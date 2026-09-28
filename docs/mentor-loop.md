@@ -1,5 +1,21 @@
 # Mentor loop
 
+Athina is built in layers. The **foundation** is a menu-bar app that senses
+what you are doing (accessibility context plus low-cadence screen capture with
+on-device OCR), records it in a local journal (see
+[Architecture](architecture.md)), and, once turned on in Settings > Advanced,
+shows a [debug panel](debug-panel.md) with what it currently thinks you are
+doing. The **mentor loop** subscribes to that stream and asks Claude, in two
+tiers, whether there is a genuinely more helpful way to approach what you are
+doing; when there is, a small toast says so and learns from your answer. The
+**standing understanding** carries what you appear to be working toward from
+one call to the next, so Athina can look out for you: it calls out an approach
+that will not reach your goal, one that is slower than an alternative you have,
+or one that will reach it and bring a side effect you would not want.
+**Callouts and voice** let a suggestion point at the spot on screen it is about
+and take a spoken reply: an answer to the toast, or a question the mentor tier
+answers. Reading suggestions aloud is deferred.
+
 `MentorLoop` is an actor with one consumer task over the sensing stream. For
 each kept observation it runs, in order:
 

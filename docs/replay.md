@@ -339,6 +339,9 @@ scenario and an empty journal:
    can fill a required field with an empty string), replace the fixture directory's
    recordings with the ones you keep, update its README, delete the rest, put
    the journal and settings back, and run `make test`.
+5. The receipt table in the top-level README's
+   [What it costs](../README.md#setup-the-anthropic-api-key) lists each call of this set with its tokens and
+   cost. Update it with the new set.
 
 `ScriptedClaudeClient` stays for unit tests that need one exact hand-written
 answer, such as a refusal, an unparseable reply, or a slow call.
