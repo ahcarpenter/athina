@@ -295,12 +295,14 @@ struct InterventionLoopTests {
   }
 
   /// What the app lists, as it does: the journal's live suggestions less the
-  /// ones the loop's floor or latest status holds, each value it would show kept.
+  /// ones the loop's floor or latest status holds, each value it would show kept
+  /// with the floor as it stood then.
   @MainActor private final class ListedSuggestions {
     var status: MentorStatus
     let floor: SuggestionFloor
     var journaled: [Suggestion] = []
     private(set) var listed: [[Int64]] = []
+    private(set) var floors: [Int64?] = []
     let changes: AsyncStream<Void>
     private let changed: AsyncStream<Void>.Continuation
 
@@ -311,6 +313,7 @@ struct InterventionLoopTests {
     }
 
     func list() {
+      floors.append(floor.value)
       listed.append(status.shown(journaled, floor: floor).map(\.id))
       changed.yield()
     }
@@ -371,7 +374,9 @@ struct InterventionLoopTests {
   }
 
   /// Talking back that begins while a new suggestion's row is being journaled
-  /// still keeps it out of every list until the loop shows it.
+  /// still keeps it out of every list until the loop shows it, whether talking
+  /// back caught it, so it is held until the exchange ends, or missed it, so
+  /// it is shown at once.
   @Test @MainActor func aSuggestionJournaledAsTalkBackBeginsIsListedOnlyOnceShown() async throws {
     let h = try await MentorLoopTests.Harness()
     let a = try await journaledSuggestion(h)
@@ -412,15 +417,41 @@ struct InterventionLoopTests {
     let b = try #require(try await h.journal.recentSuggestions(limit: 1).first)
     #expect(b.id != a.id)
     await view.wait { view.journaled.contains { $0.id == b.id } }
-    // Whether talking back caught B depends on where the loop was; when it
-    // did, B stays held from before its row was journaled until released.
-    let whileUndecided = view.listed
+    // Whether talking back caught B depends on where the loop was. Caught,
+    // B is held, and no list has it before the exchange ends.
     let held = h.loop.suggestionFloor.value != nil
+    let beforeRelease = view.listed
 
     await h.loop.setTalkingBack(false)
     await view.wait { view.listed.last == [b.id, a.id] }
 
-    if held { #expect(whileUndecided.allSatisfy { !$0.contains(b.id) }) }
+    if held { #expect(beforeRelease.allSatisfy { !$0.contains(b.id) }) }
+    // On either timing, the floor the loop raised above A as it began
+    // journaling B stays up until the loop shows B and comes down only then,
+    // and no list made while it was up has B.
+    let untilShown = await h.drain { @Sendable in
+      if case .suggestion = $0 { return true } else { return false }
+    }
+    let afterShown = await h.drain { @Sendable in
+      if case .status = $0 { return true } else { return false }
+    }
+    guard case .suggestion(let shown)? = untilShown.last,
+      case .status(let lowered)? = afterShown.last
+    else {
+      Issue.record("expected B to be shown, then the floor lowered")
+      return
+    }
+    #expect(shown.id == b.id)
+    let raised = untilShown.compactMap { event -> Int64?? in
+      guard case .status(let status) = event else { return nil }
+      return status.holdsSuggestionsAfter
+    }.drop { $0 == nil }
+    #expect(!raised.isEmpty)
+    #expect(raised.allSatisfy { $0 == a.id })
+    #expect(lowered.holdsSuggestionsAfter == nil)
+    for (ids, floor) in zip(view.listed, view.floors) where ids.contains(b.id) {
+      #expect(floor == nil)
+    }
   }
 
   @Test func aHeldSuggestionThatOutlivedTheExchangeExpiresUnseen() async throws {
