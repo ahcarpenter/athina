@@ -35,8 +35,8 @@ any, and on a terminal asks first. `scripts/snapshots.sh baselines-approve`,
 newest run or the run id given, for a change that drifts only some, listing
 theirs the same way.
 
-All five run on every push to main and on every group the merge queue
-builds (see the merge queue, below), and every push to main also runs
+All five run on every push to main and on every run the merge queue
+starts (see "The merge queue", below), and every push to main also runs
 `release-build` (`.github/workflows/release.yml`), which builds the direct-download release
 with `make release`, signed and notarized when the Apple secrets exist, and
 which a pushed version tag turns into a GitHub Release (see
@@ -71,7 +71,7 @@ Only the pull request's draft state decides: editing it, labelling it or
 changing its title starts and cancels nothing.
 
 All five must pass at a pull request's head before it can enter the merge
-queue, and again on the queue's group before it lands: the `main` ruleset
+queue, and again in its merge queue run before it lands: the `main` ruleset
 requires them, with no bypass, and until `ui-snapshots` has run there,
 the pull request lists it as expected and cannot merge. Two traps shape this.
 A job that an `if` skips still reports a check run, and a skipped check counts
@@ -204,7 +204,7 @@ swift-format (see [Code style](code-style.md) and [UI snapshot baselines](#ui-sn
 **Superseded runs.** A new push to a pull request cancels that pull request's
 runs still going, in both workflows, so a superseded commit stops holding runners: the account
 runs five macOS jobs at once. Pushes to main are never cancelled; each keeps
-its own run, and so does every merge queue group.
+its own run, and so does every merge queue run.
 
 Local validation, the no-mistakes pipeline a change goes through before its
 pull request, never runs the Xcode project steps, the full `ui-snapshots` gate,
