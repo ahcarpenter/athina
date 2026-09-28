@@ -12,13 +12,6 @@
 
 <h3 align="center"><strong>A live mentor for your Mac.</strong> It watches how you work and shows you a better way when there is one.</h3>
 
-<p align="center">
-  <img src="docs/images/toast.png" width="390" alt="Athina's note under the menu bar: Risk in TextEdit. Unset BUILD_ROOT could rm -rf your whole disk. If ~/.config/nightly/build-root is missing or empty, BUILD_ROOT is blank and rm -rf $BUILD_ROOT/* becomes rm -rf /*, wiping the root filesystem. Add a check before deleting. Buttons: Tell Me More, Not Now, Never for This.">
-  <br>
-  <img src="docs/images/callout.png" width="800" alt="The shell script in TextEdit that the note is about, with a blue outline around the line rm -rf $BUILD_ROOT/* and a label beside it: empty BUILD_ROOT expands to rm -rf /*">
-</p>
-<p align="center"><sub>Someone is about to paste a cleanup script into the terminal: Athina notes the risk and outlines the line it means. Both pictures are one frame of the real screen, taken from a replay of the committed fixtures.</sub></p>
-
 **Status:** early. Athina runs on macOS 26 or later, and feedback is wanted:
 [issues](https://github.com/ahcarpenter/athina/issues) are welcome. It is
 open source under the [MIT License](LICENSE).
@@ -102,9 +95,9 @@ keychain while replaying.
 prices in Settings > Models. Settings > Models > Spend at most caps each clock
 hour, $1 by default: calls slow down as the hour's spend nears the cap and stop
 at it until the next hour begins ([spend control](docs/mentor-loop.md#spend-control)).
-The menu shows the spend so far this hour against the cap. For a receipt, these are the calls behind the pictures above,
-recorded live on 2026-09-15 and committed as the
-[replay fixtures](Tests/AthinaCoreTests/Fixtures/Replay/README.md):
+The menu shows the spend so far this hour against the cap. For a receipt,
+these are the calls of one short session, made live on 2026-09-15 and
+committed as the [replay fixtures](Tests/AthinaCoreTests/Fixtures/Replay/README.md):
 
 | Call | Model | Tokens in / out | Cost |
 | --- | --- | --- | --- |
