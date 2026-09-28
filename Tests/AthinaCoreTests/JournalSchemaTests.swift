@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 
 @testable import AthinaCore
@@ -31,27 +32,29 @@ import Testing
   /// Each column takes a value of its declared type: an INTEGER 1 and a REAL
   /// 0, so every time a row carries is at the epoch, older than any cutoff.
   private func fillEveryTable(of url: URL) throws {
-    let db = try SQLiteConnection(path: url.path, create: false)
-    let tables = try db.query(
-      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
-    ) { $0.text(0) ?? "" }
-    for table in tables {
-      let columns = try db.query("PRAGMA table_info(\(table))") { row in
-        (name: row.text(1) ?? "", type: (row.text(2) ?? "").uppercased())
-      }
-      let values: [SQLiteConnection.Value] = columns.map { column in
-        if column.type.contains("INT") { return .int(1) }
-        if column.type.contains("REAL") { return .double(0) }
-        if column.type.contains("BLOB") { return .blob(Data([0])) }
-        return .text("")
-      }
-      try db.run(
-        """
-        INSERT INTO \(table) (\(columns.map(\.name).joined(separator: ", ")))
-        VALUES (\(Array(repeating: "?", count: columns.count).joined(separator: ", ")))
-        """,
-        values
+    try DatabaseQueue(path: url.path).write { db in
+      let tables = try String.fetchAll(
+        db,
+        sql: "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
       )
+      for table in tables {
+        let columns = try Row.fetchAll(db, sql: "PRAGMA table_info(\(table))").map { row in
+          (name: row["name"] as String, type: (row["type"] as String).uppercased())
+        }
+        let values: [any DatabaseValueConvertible] = columns.map { column in
+          if column.type.contains("INT") { return 1 }
+          if column.type.contains("REAL") { return 0.0 }
+          if column.type.contains("BLOB") { return Data([0]) }
+          return ""
+        }
+        try db.execute(
+          sql: """
+            INSERT INTO \(table) (\(columns.map(\.name).joined(separator: ", ")))
+            VALUES (\(Array(repeating: "?", count: columns.count).joined(separator: ", ")))
+            """,
+          arguments: StatementArguments(values)
+        )
+      }
     }
   }
 
@@ -233,12 +236,10 @@ import Testing
       at: url.deletingLastPathComponent(),
       withIntermediateDirectories: true
     )
-    let oldTables: Set<String>
-    do {
-      let db = try SQLiteConnection(path: url.path)
-      try db.execute(Self.oldestTables)
-      oldTables = Set(
-        try db.query("SELECT name FROM sqlite_master WHERE type = 'table'") { $0.text(0) ?? "" }
+    let oldTables = try await DatabaseQueue(path: url.path).write { db in
+      try db.execute(sql: Self.oldestTables)
+      return Set(
+        try String.fetchAll(db, sql: "SELECT name FROM sqlite_master WHERE type = 'table'")
       )
     }
     let upgraded = try Journal(url: url)

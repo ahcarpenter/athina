@@ -89,6 +89,16 @@ public actor MentorLoop {
   private var talkingBack = false
   /// A suggestion made while that toast was up, waiting for it to close.
   private var heldSuggestion: Suggestion?
+  /// `MentorStatus.holdsSuggestionsAfter`, set before a new suggestion is
+  /// journaled and kept until it and any held one are decided.
+  private var holdsSuggestionsAfter: Int64? {
+    didSet { suggestionFloor.set(holdsSuggestionsAfter) }
+  }
+  /// `holdsSuggestionsAfter` as it is now, readable without waiting for the
+  /// status that carries it, which can reach a list after the held row does.
+  public nonisolated let suggestionFloor = SuggestionFloor()
+  /// A new suggestion is being journaled and not yet decided by `publish`.
+  private var journalingSuggestion = false
   /// The one question waiting for the call in flight to return; a newer one takes its place.
   private struct PendingQuestion {
     var record: MentorStatus.PendingFollowUp
@@ -226,6 +236,14 @@ public actor MentorLoop {
     guard let held = heldSuggestion else { return }
     heldSuggestion = nil
     await expireUnseen(held, now: now ?? clock.date)
+    liftSuggestionFloorIfDecided()
+    await publishStatus()
+  }
+
+  /// Clears `holdsSuggestionsAfter` once no suggestion is held or being
+  /// journaled.
+  private func liftSuggestionFloorIfDecided() {
+    if heldSuggestion == nil, !journalingSuggestion { holdsSuggestionsAfter = nil }
   }
 
   private func expireUnseen(_ suggestion: Suggestion, now: Date) async {
@@ -704,6 +722,12 @@ public actor MentorLoop {
     status.lastMentor = await store(record)
 
     guard let suggestion = toShow else { return }
+    journalingSuggestion = true
+    if holdsSuggestionsAfter == nil {
+      let newest = (try? await journal.recentSuggestions(limit: 1).first?.id) ?? 0
+      if holdsSuggestionsAfter == nil { holdsSuggestionsAfter = newest }
+    }
+    await publishStatus()
     var stored = suggestion
     do {
       stored = try await journal.record(suggestion)
@@ -721,6 +745,7 @@ public actor MentorLoop {
         detail: "\(stored.category.label): \(stored.title)"
       )
     )
+    journalingSuggestion = false
     await publish(stored, now: clock.date)
   }
 
@@ -743,6 +768,8 @@ public actor MentorLoop {
     case .expired, .withdrawn:
       await expireUnseen(suggestion, now: now)
     }
+    liftSuggestionFloorIfDecided()
+    await publishStatus()
   }
 
   /// The spot the model pointed at, kept only when it saw the image and the
@@ -1365,6 +1392,7 @@ public actor MentorLoop {
       multiplier: multiplier
     )
     status.inFlight = ModelTier.allCases.first { inFlight.contains($0) }
+    status.holdsSuggestionsAfter = holdsSuggestionsAfter
     guard status != lastPublishedStatus else { return }
     lastPublishedStatus = status
     await broadcaster.send(.status(status))

@@ -1,4 +1,5 @@
 import Foundation
+import GRDB
 import Testing
 
 @testable import AthinaCore
@@ -31,17 +32,21 @@ import Testing
 
   /// A real write-ahead-log journal holding `notes`, closed cleanly.
   private func writeJournal(at url: URL, notes: [String]) throws {
-    let journal = try SQLiteConnection(path: url.path)
-    try journal.execute("PRAGMA journal_mode = WAL")
-    try journal.execute(
-      "CREATE TABLE IF NOT EXISTS note (id INTEGER PRIMARY KEY, body TEXT NOT NULL)"
-    )
-    for note in notes { try journal.run("INSERT INTO note (body) VALUES (?)", [.text(note)]) }
+    try DatabaseQueue(path: url.path).writeWithoutTransaction { journal in
+      try journal.execute(sql: "PRAGMA journal_mode = WAL")
+      try journal.execute(
+        sql: "CREATE TABLE IF NOT EXISTS note (id INTEGER PRIMARY KEY, body TEXT NOT NULL)"
+      )
+      for note in notes {
+        try journal.execute(sql: "INSERT INTO note (body) VALUES (?)", arguments: [note])
+      }
+    }
   }
 
   private func notes(in url: URL) throws -> [String] {
-    try SQLiteConnection(path: url.path, create: false).query("SELECT body FROM note ORDER BY id") {
-      $0.text(0) ?? ""
+    try #require(FileManager.default.fileExists(atPath: url.path))
+    return try DatabaseQueue(path: url.path).read { db in
+      try String.fetchAll(db, sql: "SELECT body FROM note ORDER BY id")
     }
   }
 
@@ -154,10 +159,12 @@ import Testing
     try manager.createDirectory(at: files.old, withIntermediateDirectories: true)
     // Copied while the writer is still open and idle, which is what a
     // crash leaves behind: a database with its log beside it.
-    let writer = try SQLiteConnection(path: live.appendingPathComponent("journal.sqlite").path)
-    try writer.execute("PRAGMA journal_mode = WAL")
-    try writer.execute("CREATE TABLE note (id INTEGER PRIMARY KEY, body TEXT NOT NULL)")
-    try writer.run("INSERT INTO note (body) VALUES (?)", [.text("only in the log")])
+    let writer = try DatabaseQueue(path: live.appendingPathComponent("journal.sqlite").path)
+    try writer.writeWithoutTransaction { db in
+      try db.execute(sql: "PRAGMA journal_mode = WAL")
+      try db.execute(sql: "CREATE TABLE note (id INTEGER PRIMARY KEY, body TEXT NOT NULL)")
+      try db.execute(sql: "INSERT INTO note (body) VALUES (?)", arguments: ["only in the log"])
+    }
     for name in ["journal.sqlite", "journal.sqlite-wal"] {
       try manager.copyItem(
         at: live.appendingPathComponent(name),
@@ -307,10 +314,10 @@ import Testing
     let files = try support()
     defer { try? manager.removeItem(at: files.root) }
     try writeMentorData(at: files.old)
-    var mentor: SQLiteConnection? = try SQLiteConnection(
+    var mentor: DatabaseQueue? = try DatabaseQueue(
       path: files.old.appendingPathComponent("journal.sqlite").path
     )
-    #expect(try mentor?.scalarInt("SELECT count(*) FROM note") == 2)
+    #expect(try mentor?.read { try Int.fetchOne($0, sql: "SELECT count(*) FROM note") } == 2)
 
     let outcome = DataMigration.run(from: files.old, to: files.new)
     guard case .inUse(let reason) = outcome else {
@@ -326,7 +333,12 @@ import Testing
     )
 
     // Still Mentor's to write, and what it writes next is not lost.
-    try mentor?.run("INSERT INTO note (body) VALUES (?)", [.text("written while Athina waited")])
+    try mentor?.write { db in
+      try db.execute(
+        sql: "INSERT INTO note (body) VALUES (?)",
+        arguments: ["written while Athina waited"]
+      )
+    }
     mentor = nil
     #expect(DataMigration.run(from: files.old, to: files.new) == .moved(moved))
     #expect(
@@ -497,10 +509,7 @@ import Testing
     try writeMentorData(at: files.old)
     let copy = files.root.appendingPathComponent("copy", isDirectory: true)
     try manager.copyItem(at: files.old, to: copy)
-    let original = try SQLiteConnection(
-      path: files.old.appendingPathComponent("journal.sqlite").path,
-      create: false
-    )
+    let original = try DatabaseQueue(path: files.old.appendingPathComponent("journal.sqlite").path)
     #expect(
       try DataMigration.firstDifference(
         between: files.old,
@@ -510,8 +519,7 @@ import Testing
       ) == nil
     )
 
-    try SQLiteConnection(path: copy.appendingPathComponent("journal.sqlite").path, create: false)
-      .run("DELETE FROM note WHERE id = 1")
+    try runSQL(at: copy.appendingPathComponent("journal.sqlite"), "DELETE FROM note WHERE id = 1")
     let short = try DataMigration.firstDifference(
       between: files.old,
       and: copy,

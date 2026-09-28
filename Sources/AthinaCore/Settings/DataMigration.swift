@@ -1,5 +1,7 @@
+import AthinaSQLiteShim
 import CryptoKit
 import Foundation
+internal import GRDB
 import SQLite3
 
 /// Moves the files the app kept under its old name to the ones it keeps now.
@@ -199,11 +201,11 @@ public enum DataMigration {
     }
 
     let journal = old.appendingPathComponent(journalName)
-    var source: SQLiteConnection?
+    var source: DatabaseQueue?
     if manager.fileExists(atPath: journal.path) {
       do {
         source = try lockedJournal(at: journal, manager: manager)
-      } catch let error as SQLiteError where error.code & 0xff == SQLITE_BUSY {
+      } catch let error as DatabaseError where error.resultCode == .SQLITE_BUSY {
         return .inUse(
           """
           Could not move \(old.path) to \(new.path): \(journal.path) is open in Mentor or another \
@@ -246,7 +248,7 @@ public enum DataMigration {
         )
         return .moved(names)
       } catch {
-        let reason = (error as? SQLiteError)?.description ?? error.localizedDescription
+        let reason = (error as? DatabaseError)?.description ?? error.localizedDescription
         return .failed(
           "Could not move \(old.path) to \(new.path): \(sentence(reason)) \(untouched)"
         )
@@ -304,21 +306,62 @@ public enum DataMigration {
   /// and a log that was there beforehand (Mentor did not quit cleanly) is
   /// left as found rather than folded into the database on close, while one
   /// opening the journal made is deleted on close rather than left behind.
-  private static func lockedJournal(at url: URL, manager: FileManager) throws -> SQLiteConnection {
+  private static func lockedJournal(at url: URL, manager: FileManager) throws -> DatabaseQueue {
     let hadLog = manager.fileExists(atPath: url.path + "-wal")
-    let connection = try SQLiteConnection(path: url.path, create: false)
-    if hadLog {
-      try connection.keepWriteAheadLogOnClose()
-    } else {
-      try connection.deleteWriteAheadLogOnClose()
-    }
+    var configuration = Configuration()
     // Another copy of the app holding the journal is not about to let go,
     // so the launch says so promptly rather than sitting on the wait a
     // journal gives its own writers.
-    try connection.execute("PRAGMA busy_timeout = 500")
-    try connection.execute("PRAGMA locking_mode = EXCLUSIVE")
-    _ = try connection.scalarInt("SELECT count(*) FROM sqlite_master")
-    return connection
+    configuration.busyMode = .timeout(0.5)
+    configuration.prepareDatabase { db in
+      if hadLog {
+        try keepWriteAheadLogOnClose(db)
+      } else {
+        try deleteWriteAheadLogOnClose(db)
+      }
+      try db.execute(sql: "PRAGMA locking_mode = EXCLUSIVE")
+    }
+    // GRDB reads the schema as it opens, which takes the lock.
+    return try DatabaseQueue(
+      path: try existing(url, manager: manager),
+      configuration: configuration
+    )
+  }
+
+  /// Leaves the write-ahead log as it was found when `db` closes, rather than
+  /// folding it into the database file: for a database that is only being
+  /// read and must stay byte for byte what it was.
+  private static func keepWriteAheadLogOnClose(_ db: Database) throws {
+    let code = athina_sqlite_keep_wal_on_close(db.sqliteConnection)
+    guard code == ResultCode.SQLITE_OK.rawValue else {
+      throw DatabaseError(
+        resultCode: ResultCode(rawValue: code),
+        message: "could not keep the write-ahead log on close"
+      )
+    }
+  }
+
+  /// Deletes the write-ahead log when `db` closes, where the system SQLite
+  /// would keep an empty one: for a database that had none beside it and
+  /// must be left with none.
+  private static func deleteWriteAheadLogOnClose(_ db: Database) throws {
+    var persist: Int32 = 0
+    let code = sqlite3_file_control(db.sqliteConnection, "main", SQLITE_FCNTL_PERSIST_WAL, &persist)
+    guard code == SQLITE_OK else {
+      throw DatabaseError(
+        resultCode: ResultCode(rawValue: code),
+        message: "could not delete the write-ahead log on close"
+      )
+    }
+  }
+
+  /// The path of a database that must already be there, since opening one
+  /// that is not makes a new, empty file.
+  private static func existing(_ url: URL, manager: FileManager) throws -> String {
+    guard manager.fileExists(atPath: url.path) else {
+      throw DatabaseError(resultCode: .SQLITE_CANTOPEN, message: "\(url.path) is not there")
+    }
+    return url.path
   }
 
   /// Assembles the copy in `staging`, thrown away first if an earlier attempt
@@ -328,7 +371,7 @@ public enum DataMigration {
   private static func stage(
     _ old: URL,
     in staging: URL,
-    journal: SQLiteConnection?,
+    journal: DatabaseQueue?,
     manager: FileManager
   ) throws -> [String] {
     if manager.fileExists(atPath: staging.path) { try manager.removeItem(at: staging) }
@@ -343,9 +386,9 @@ public enum DataMigration {
     for name in names {
       let target = staging.appendingPathComponent(name)
       if name == journalName, let journal {
-        try journal.execute(
-          "VACUUM INTO '\(target.path.replacingOccurrences(of: "'", with: "''"))'"
-        )
+        try journal.inDatabase { db in
+          try db.execute(sql: "VACUUM INTO ?", arguments: [target.path])
+        }
       } else {
         try manager.copyItem(at: old.appendingPathComponent(name), to: target)
       }
@@ -406,7 +449,7 @@ public enum DataMigration {
   static func firstDifference(
     between source: URL,
     and copy: URL,
-    journal: SQLiteConnection? = nil,
+    journal: DatabaseQueue? = nil,
     manager: FileManager
   ) throws -> String? {
     let ownCheck: Set<String> = journal == nil ? [] : [journalName]
@@ -421,31 +464,37 @@ public enum DataMigration {
       return "\(path) is in the copy but not in \(source.lastPathComponent)"
     }
     guard let journal else { return nil }
-    return try journalDifference(between: journal, and: copy.appendingPathComponent(journalName))
+    return try journalDifference(
+      between: journal,
+      and: copy.appendingPathComponent(journalName),
+      manager: manager
+    )
   }
 
   /// How the journal SQLite copied differs from the original: it fails the
   /// integrity check, or a table is missing, extra, or another length.
   private static func journalDifference(
-    between original: SQLiteConnection,
-    and copyURL: URL
+    between original: DatabaseQueue,
+    and copyURL: URL,
+    manager: FileManager
   ) throws -> String? {
-    let copy = try SQLiteConnection(path: copyURL.path, create: false)
-    let verdict = try copy.query("PRAGMA integrity_check") { $0.text(0) ?? "" }
+    let copy = try DatabaseQueue(path: try existing(copyURL, manager: manager))
+    let verdict = try copy.read { try String.fetchAll($0, sql: "PRAGMA integrity_check") }
     guard verdict == ["ok"] else {
       return "the copied journal fails SQLite's integrity check (\(verdict.first ?? "no verdict"))"
     }
     let listing = "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
-    let tables = try original.query(listing) { $0.text(0) ?? "" }
-    let copied = try copy.query(listing) { $0.text(0) ?? "" }
+    let tables = try original.read { try String.fetchAll($0, sql: listing) }
+    let copied = try copy.read { try String.fetchAll($0, sql: listing) }
     guard copied == tables else {
       return "the copied journal does not hold the same tables"
     }
     for table in tables {
-      let count = "SELECT count(*) FROM \"\(table.replacingOccurrences(of: "\"", with: "\"\""))\""
-      let (was, came) = (try original.scalarInt(count), try copy.scalarInt(count))
+      let count = "SELECT count(*) FROM \(table.quotedDatabaseIdentifier)"
+      let was = try original.read { try Int.fetchOne($0, sql: count) }
+      let came = try copy.read { try Int.fetchOne($0, sql: count) }
       guard was == came else {
-        return "the copied journal's \(table) came out \(came) rows, not \(was)"
+        return "the copied journal's \(table) came out \(came ?? 0) rows, not \(was ?? 0)"
       }
     }
     return nil

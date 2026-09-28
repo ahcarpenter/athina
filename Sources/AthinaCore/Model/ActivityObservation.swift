@@ -380,9 +380,55 @@ public struct JournalEvent: Codable, Equatable, Sendable, Identifiable {
   }
 }
 
+/// What a timeline shows of a journaled observation: enough for its row,
+/// without its text or frame, which are read when the row is chosen.
+public struct ObservationSummary: Equatable, Sendable, Identifiable {
+  /// The observation's journal id.
+  public var id: Int64
+  /// When the frame was captured.
+  public var timestamp: Date
+  /// The frontmost app when it was captured.
+  public var appName: String
+  /// The focused window's title, when it had one.
+  public var windowTitle: String?
+  /// Why the frame was captured.
+  public var reason: CaptureReason
+  /// How many blocks of text were recognized in the frame.
+  public var textBlockCount: Int
+
+  /// Creates a summary from each of its parts.
+  public init(
+    id: Int64,
+    timestamp: Date,
+    appName: String,
+    windowTitle: String?,
+    reason: CaptureReason,
+    textBlockCount: Int
+  ) {
+    self.id = id
+    self.timestamp = timestamp
+    self.appName = appName
+    self.windowTitle = windowTitle
+    self.reason = reason
+    self.textBlockCount = textBlockCount
+  }
+
+  /// The summary of a whole observation.
+  public init(_ observation: ActivityObservation) {
+    self.init(
+      id: observation.id,
+      timestamp: observation.timestamp,
+      appName: observation.focus.appName,
+      windowTitle: observation.focus.windowTitle,
+      reason: observation.reason,
+      textBlockCount: observation.textBlocks.count
+    )
+  }
+}
+
 /// A journal row of either kind, for timelines.
 public enum JournalEntry: Equatable, Sendable, Identifiable {
-  case observation(ActivityObservation)
+  case observation(ObservationSummary)
   case event(JournalEvent)
 
   /// A key unique across both kinds of row: the row id after an o for an
@@ -399,6 +445,18 @@ public enum JournalEntry: Equatable, Sendable, Identifiable {
     switch self {
     case .observation(let o): o.timestamp
     case .event(let e): e.timestamp
+    }
+  }
+
+  /// The order timelines show rows in: newest first, and among rows journaled
+  /// at the same instant the later id first, observations ahead of events.
+  public static func newerFirst(_ a: JournalEntry, _ b: JournalEntry) -> Bool {
+    if a.timestamp != b.timestamp { return a.timestamp > b.timestamp }
+    switch (a, b) {
+    case (.observation(let x), .observation(let y)): return x.id > y.id
+    case (.event(let x), .event(let y)): return x.id > y.id
+    case (.observation, .event): return true
+    case (.event, .observation): return false
     }
   }
 }
