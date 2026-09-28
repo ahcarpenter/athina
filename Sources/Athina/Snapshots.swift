@@ -96,6 +96,18 @@ enum Snapshots {
         AnyView(ConsentView()),
         AppState.sampleWithoutConsent()
       ),
+      Spec(
+        "consent-openai",
+        CGSize(width: 600, height: 900),
+        AnyView(ConsentView()),
+        AppState.sampleWithoutConsent(for: .openAI)
+      ),
+      Spec(
+        "consent-opencode",
+        CGSize(width: 600, height: 900),
+        AnyView(ConsentView()),
+        AppState.sampleWithoutConsent(for: .openCode)
+      ),
       Spec("permissions", CGSize(width: 580, height: 780), AnyView(PermissionsView()), state),
       Spec("debug-panel", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), state),
       Spec(
@@ -164,6 +176,18 @@ enum Snapshots {
         noSpeech
       ),
       Spec("settings-models", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), state),
+      Spec(
+        "settings-models-openai",
+        whole(1980),
+        AnyView(ModelSettings().formStyle(.grouped)),
+        AppState.sample(provider: .openAI)
+      ),
+      Spec(
+        "settings-models-opencode",
+        whole(1980),
+        AnyView(ModelSettings().formStyle(.grouped)),
+        AppState.sample(provider: .openCode)
+      ),
       Spec(
         "settings-models-empty",
         whole(1980),
@@ -689,10 +713,12 @@ extension AppState {
   static func sample(
     at now: Date? = nil,
     speechAvailability: SpeechListener.Availability = .available(locale: "English (US)"),
-    showDebugPanel: Bool = false
+    showDebugPanel: Bool = false,
+    provider: ModelProvider = .anthropic
   ) -> AppState {
     var settings = SensingSettings()
-    settings.consent = sampleConsent
+    settings.mentor.provider = provider
+    settings.setConsent(sampleConsent, for: provider)
     settings.showDebugPanel = showDebugPanel
     settings.mentor.onlyMentorInsideContexts = true
     settings.mentor.contexts = SampleSuggestions.contexts
@@ -959,6 +985,17 @@ extension AppState {
 }
 
 extension AppState {
+  /// The consent window as it asks about `provider`: a first launch, or a
+  /// switch to a provider that was never allowed.
+  static func sampleWithoutConsent(for provider: ModelProvider) -> AppState {
+    var settings = SensingSettings()
+    settings.mentor.provider = provider
+    let state = AppState(sampleWithSettings: settings)
+    state.mode = .waitingForConsent
+    state.mentorStatus = MentorStatus(availability: .noConsent, mode: .waitingForConsent)
+    return state
+  }
+
   /// A state with nothing in it yet: no suggestions, frames, journal
   /// entries, calls, or declared contexts, for the empty states.
   static func sampleEmpty() -> AppState {
@@ -1170,19 +1207,28 @@ struct StatusMessagesPreview: View {
   var body: some View {
     Form {
       Section("Connection") {
-        LabeledContent("Testing") { ConnectionResult(testing: true, result: nil, replayed: false) }
+        LabeledContent("Testing") {
+          ConnectionResult(
+            testing: true,
+            result: nil,
+            replayed: false,
+            host: "api.anthropic.com"
+          )
+        }
         LabeledContent("Connected") {
           ConnectionResult(
             testing: false,
             result: .success("claude-haiku-4-5-20251001"),
-            replayed: false
+            replayed: false,
+            host: "api.anthropic.com"
           )
         }
         LabeledContent("Replayed") {
           ConnectionResult(
             testing: false,
             result: .success("claude-haiku-4-5-20251001"),
-            replayed: true
+            replayed: true,
+            host: "api.anthropic.com"
           )
         }
         LabeledContent("Failed") {
@@ -1191,7 +1237,8 @@ struct StatusMessagesPreview: View {
             result: .failure(
               .api(status: 401, type: "authentication_error", message: "invalid x-api-key")
             ),
-            replayed: false
+            replayed: false,
+            host: "api.anthropic.com"
           )
         }
         StatusLabel("Paste the whole key. It is one word with no spaces.", kind: .error)

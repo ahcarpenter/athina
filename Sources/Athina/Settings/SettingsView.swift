@@ -472,7 +472,7 @@ struct PrivacySettings: View {
               )
             },
             label: {
-              Text("Watch the screen and send to Anthropic")
+              Text("Watch the screen and send to \(state.settings.mentor.provider.name)")
               Text(consentDetail)
             }
           )
@@ -480,7 +480,7 @@ struct PrivacySettings: View {
             Link("Privacy Policy", destination: Consent.privacyPolicyURL)
             Spacer()
             if state.settings.hasConsent {
-              Button("Withdraw Consent") { state.declineConsent() }
+              Button("Withdraw Consent") { state.withdrawConsent() }
                 .accessibilityIdentifier("privacy.withdrawConsent")
             } else {
               Button("Review and Allow…") { state.perform(.openConsent) }
@@ -574,7 +574,7 @@ struct PrivacySettings: View {
 extension PrivacySettings {
   /// What the answer is and when it was given, or what not having one means.
   private var consentDetail: String {
-    guard let consent = state.settings.consent else {
+    guard let consent = state.settings.consent(for: state.settings.mentor.provider) else {
       return "Not asked yet. Athina captures nothing and sends nothing until you allow it."
     }
     let when = consent.at.formatted(date: .abbreviated, time: .shortened)
@@ -707,7 +707,7 @@ private struct AddExcludedAppPopover: View {
 
 /// The unit a number row counts in, written out for the row and for VoiceOver.
 enum SettingsUnit {
-  case seconds, pixels, bits, tokens, megabytes
+  case seconds, pixels, bits, tokens, megabytes, calls
 
   func label(for value: Double) -> String {
     let one = value == 1
@@ -717,6 +717,7 @@ enum SettingsUnit {
     case .bits: return one ? "bit" : "bits"
     case .tokens: return one ? "token" : "tokens"
     case .megabytes: return "MB"
+    case .calls: return one ? "call" : "calls"
     }
   }
 }

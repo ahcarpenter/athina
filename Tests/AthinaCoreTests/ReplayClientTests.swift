@@ -102,7 +102,7 @@ struct ReplayClientTests {
     let answer = try await recorder.send(
       request,
       call: Self.identity("triage"),
-      apiKey: CallFixtureTests.realisticKey,
+      route: CallRoute(.anthropic, key: CallFixtureTests.realisticKey),
       timeout: 30
     )
     #expect(answer.model == "claude-haiku-4-5-20251001")
@@ -112,13 +112,15 @@ struct ReplayClientTests {
       try await recorder.send(
         Self.unrelatedRequest,
         call: Self.identity("mentor"),
-        apiKey: CallFixtureTests.realisticKey,
+        route: CallRoute(.anthropic, key: CallFixtureTests.realisticKey),
         timeout: 30
       )
     }
     // The wrapped client saw the call exactly as the loop sent it.
     #expect(await inner.sent.first?.request == request)
-    #expect(await inner.sent.first?.apiKey == CallFixtureTests.realisticKey)
+    #expect(
+      await inner.sent.first?.route == CallRoute(.anthropic, key: CallFixtureTests.realisticKey)
+    )
 
     let written = await recorder.written
     #expect(written.count == 2)
@@ -175,7 +177,7 @@ struct ReplayClientTests {
         try await client.send(
           Self.unrelatedRequest,
           call: Self.identity(kind),
-          apiKey: "",
+          route: CallRoute(.anthropic, key: ""),
           timeout: 1
         ).text
       )
@@ -216,7 +218,7 @@ struct ReplayClientTests {
       try await client.send(
         Self.unrelatedRequest,
         call: Self.identity("test"),
-        apiKey: "",
+        route: CallRoute(.anthropic, key: ""),
         timeout: 1
       )
     }
@@ -236,7 +238,7 @@ struct ReplayClientTests {
       try await client.send(
         Self.unrelatedRequest,
         call: Self.identity("triage"),
-        apiKey: "",
+        route: CallRoute(.anthropic, key: ""),
         timeout: 1
       )
     }
@@ -272,7 +274,7 @@ struct ReplayClientTests {
       try await strict.send(
         Self.unrelatedRequest,
         call: Self.identity("mentor"),
-        apiKey: "",
+        route: CallRoute(.anthropic, key: ""),
         timeout: 1
       )
     }
@@ -281,7 +283,7 @@ struct ReplayClientTests {
       try await strict.send(
         Self.unrelatedRequest,
         call: Self.identity("mentor"),
-        apiKey: "",
+        route: CallRoute(.anthropic, key: ""),
         timeout: 1
       ).text == "new"
     )
@@ -291,7 +293,7 @@ struct ReplayClientTests {
       try await lenient.send(
         Self.unrelatedRequest,
         call: Self.identity("mentor"),
-        apiKey: "",
+        route: CallRoute(.anthropic, key: ""),
         timeout: 1
       ).text == "old"
     )
@@ -315,7 +317,12 @@ struct ReplayClientTests {
     ]
     let clock = AdjustableClock(startingAt: Date(timeIntervalSince1970: 1_789_000_000))
     _ = try await ReplayClaudeClient(entries: entries, clock: clock)
-      .send(Self.unrelatedRequest, call: Self.identity("triage"), apiKey: "", timeout: 30)
+      .send(
+        Self.unrelatedRequest,
+        call: Self.identity("triage"),
+        route: CallRoute(.anthropic, key: ""),
+        timeout: 30
+      )
     #expect(clock.sleeperCount == 0)
 
     let recorded = ReplayClaudeClient(entries: entries, latency: .recorded, clock: clock)
@@ -323,7 +330,7 @@ struct ReplayClientTests {
       try await recorded.send(
         Self.unrelatedRequest,
         call: Self.identity("triage"),
-        apiKey: "",
+        route: CallRoute(.anthropic, key: ""),
         timeout: 30
       )
     }
@@ -338,7 +345,7 @@ struct ReplayClientTests {
       try await capped.send(
         Self.unrelatedRequest,
         call: Self.identity("triage"),
-        apiKey: "",
+        route: CallRoute(.anthropic, key: ""),
         timeout: 5
       )
     }
@@ -354,7 +361,7 @@ struct ReplayClientTests {
       try await client.send(
         Self.unrelatedRequest,
         call: Self.identity("triage"),
-        apiKey: "",
+        route: CallRoute(.anthropic, key: ""),
         timeout: 1
       )
     }
@@ -499,7 +506,7 @@ struct ReplayClientTests {
     let plain = ModelClientMode.live.makeClient(prices: .defaults, live: live)
     #expect(plain.client is ScriptedClaudeClient)
     #expect(plain.replay == nil)
-    #expect(ModelClientMode.live.makeClient(prices: .defaults).client is AnthropicClient)
+    #expect(ModelClientMode.live.makeClient(prices: .defaults).client is LiveModelClient)
     #expect(!ModelClientMode.live.isOffline)
 
     let recording = ModelClientMode.record(directory: directory).makeClient(
@@ -587,7 +594,7 @@ struct ReplayClientTests {
       try await setup.client.send(
         Self.unrelatedRequest,
         call: Self.identity("triage"),
-        apiKey: CallFixtureTests.realisticKey,
+        route: CallRoute(.anthropic, key: CallFixtureTests.realisticKey),
         timeout: 1
       )
     }

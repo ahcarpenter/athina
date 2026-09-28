@@ -12,8 +12,8 @@ public actor ScriptedClaudeClient: ClaudeClient {
     public var request: MessagesRequest
     /// The identity the call was made with.
     public var call: CallIdentity
-    /// The key the call was made with.
-    public var apiKey: String
+    /// The route the call was made by: the backend and, for the API, the key.
+    public var route: CallRoute
     /// The call's timeout, in seconds.
     public var timeout: TimeInterval
   }
@@ -79,10 +79,10 @@ public actor ScriptedClaudeClient: ClaudeClient {
   public func send(
     _ request: MessagesRequest,
     call: CallIdentity,
-    apiKey: String,
+    route: CallRoute,
     timeout: TimeInterval
   ) async throws -> MessagesResponse {
-    sent.append(Sent(request: request, call: call, apiKey: apiKey, timeout: timeout))
+    sent.append(Sent(request: request, call: call, route: route, timeout: timeout))
     if delay > .zero {
       try? await clock.sleep(for: delay)
     }

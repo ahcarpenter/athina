@@ -17,10 +17,14 @@ Sources/AthinaCore            library, fully testable
                               ScreenCapturer (ScreenCaptureKit), TextRecognizer (Vision),
                               SensingPipeline (orchestration), EventBroadcaster (fan-out AsyncStream)
   Claude/                     ClaudeClient (Messages API request and response types, CallIdentity, AnthropicClient
-                              over URLSession), CallFixture (recorded call format and files), RecordingClaudeClient,
-                              ReplayClaudeClient, ModelClientMode (live, record, or replay from the command line),
-                              ScriptedClaudeClient (hand-written answers for tests), ModelCatalog and PriceTable,
-                              KeyStore (Keychain and in-memory), JSONValue (schemas)
+                              over URLSession, LiveModelClient routing each call by provider), ModelProvider
+                              (Anthropic, OpenAI, OpenCode, and CallRoute), OpenAIClient (the Responses API
+                              shape, and OpenCodeClient for Zen's two endpoints), JSONSchemaCheck (a reply
+                              against its schema), CallFixture (recorded call format and files),
+                              RecordingClaudeClient, ReplayClaudeClient, ModelClientMode (live, record, or replay
+                              from the command line), ScriptedClaudeClient (hand-written answers for tests),
+                              ModelCatalog and PriceTable (every provider's models and prices), KeyStore (Keychain
+                              and in-memory, one key per provider), JSONValue (schemas)
   Mentor/                     MentorScheduler (pure trigger, debounce, and gate state machine, including the
                               refresh gate), SpendMeter, SuppressionRules (snooze and never-for-this),
                               MentorshipContexts (declared contexts, normalizing, placement), ContextBuilder

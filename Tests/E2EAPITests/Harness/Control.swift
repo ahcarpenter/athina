@@ -239,6 +239,12 @@
       try await send("open-link", target.arguments)
     }
 
+    /// Chooses the item titled `item` in a pop-up button, as choosing it from the button's menu
+    /// does, without opening the menu.
+    func choose(_ target: Target, item: String) async throws -> ControlReply {
+      try await send("choose", target.arguments.merging(["item": .string(item)]) { _, new in new })
+    }
+
     /// `text` as key presses to the first responder of the window titled `window`, each held
     /// with `modifiers`: `type("a", holding: [.command], in: "Models")` is Command-A.
     func type(

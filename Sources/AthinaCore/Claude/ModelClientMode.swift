@@ -126,7 +126,7 @@ public enum ModelClientMode: Equatable, Sendable {
     clock: any AthinaClock = SystemClock(),
     latency: ReplayClaudeClient.Latency = .recorded,
     promptVersion: Int = MentorPrompts.version,
-    live: @Sendable () -> any ClaudeClient = { AnthropicClient() }
+    live: @Sendable () -> any ClaudeClient = { LiveModelClient() }
   ) -> Setup {
     switch self {
     case .live:

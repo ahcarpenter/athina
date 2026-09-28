@@ -1,25 +1,37 @@
 import Foundation
 import Security
 
-/// Where the Anthropic API key lives.
+/// Where each provider's API key lives.
 ///
 /// The app uses the Keychain; tests use memory.
 public protocol KeyStore: Sendable {
-  func load() throws -> String?
-  func save(_ key: String) throws
-  func delete() throws
+  /// Returns the saved key for `provider`, or nil when there is none.
+  func load(for provider: ModelProvider) throws -> String?
+  /// Saves `key` for `provider`, replacing any other.
+  func save(_ key: String, for provider: ModelProvider) throws
+  /// Deletes the key for `provider`; one that is not there is not an error.
+  func delete(for provider: ModelProvider) throws
 }
 
 extension KeyStore {
-  /// `load()` on a background queue.
+  /// The Anthropic key.
+  public func load() throws -> String? { try load(for: .anthropic) }
+  /// Saves `key` as the Anthropic key.
+  public func save(_ key: String) throws { try save(key, for: .anthropic) }
+  /// Deletes the Anthropic key.
+  public func delete() throws { try delete(for: .anthropic) }
+
+  /// `load(for:)` on a background queue.
   ///
   /// The keychain can block on its own prompt for as long as the user takes to
   /// answer it, and neither the main thread nor an actor's executor should wait
   /// on that.
-  public func loadInBackground() async throws -> String? {
+  public func loadInBackground(
+    for provider: ModelProvider = .anthropic
+  ) async throws -> String? {
     try await withCheckedThrowingContinuation { continuation in
       DispatchQueue.global(qos: .userInitiated).async {
-        continuation.resume(with: Result { try load() })
+        continuation.resume(with: Result { try load(for: provider) })
       }
     }
   }
@@ -40,7 +52,8 @@ public struct KeyStoreError: Error, CustomStringConvertible, Equatable, Sendable
   }
 }
 
-/// A generic password item in the login keychain.
+/// Generic password items in the login keychain, one per provider, all under
+/// the service `AppPaths` names.
 ///
 /// The keychain trusts a non-Apple-signed app by the hash of its binary, not by
 /// the designated requirement that keeps the TCC grants, so the first read
@@ -53,8 +66,9 @@ public struct KeychainKeyStore: KeyStore {
   /// The service the item was saved under while the app was called Mentor.
   /// `KeyMigration` copies that item to the one above on the first launch.
   public static let legacyService = AppPaths.legacyBundleIdentifier
-  /// The account name of the key's item, the same under every service.
-  public static let account = "anthropic-api-key"
+  /// The account name of the Anthropic key's item, the same under every
+  /// service; each other provider has its own (`ModelProvider.keychainAccount`).
+  public static let account = ModelProvider.anthropic.keychainAccount
 
   /// Which item this store reads and writes.
   ///
@@ -66,21 +80,21 @@ public struct KeychainKeyStore: KeyStore {
     self.service = service
   }
 
-  private var baseQuery: [String: Any] {
+  private func baseQuery(_ provider: ModelProvider) -> [String: Any] {
     [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
-      kSecAttrAccount as String: KeychainKeyStore.account,
+      kSecAttrAccount as String: provider.keychainAccount,
     ]
   }
 
-  /// Returns the saved key, or nil when there is none.
+  /// Returns the saved key for `provider`, or nil when there is none.
   ///
   /// The first read after a rebuild can wait on the system's keychain prompt.
   ///
   /// - Throws: `KeyStoreError` for any failure but a missing item.
-  public func load() throws -> String? {
-    var query = baseQuery
+  public func load(for provider: ModelProvider) throws -> String? {
+    var query = baseQuery(provider)
     query[kSecReturnData as String] = true
     query[kSecMatchLimit as String] = kSecMatchLimitOne
     var result: CFTypeRef?
@@ -96,21 +110,21 @@ public struct KeychainKeyStore: KeyStore {
     }
   }
 
-  /// Saves `key`, replacing the item's key or adding the item when there is
-  /// none.
+  /// Saves `key` for `provider`, replacing the item's key or adding the item
+  /// when there is none.
   ///
   /// - Throws: `KeyStoreError` when the keychain refuses the update or the add.
-  public func save(_ key: String) throws {
+  public func save(_ key: String, for provider: ModelProvider) throws {
     let data = Data(key.utf8)
     let update: [String: Any] = [kSecValueData as String: data]
-    let status = SecItemUpdate(baseQuery as CFDictionary, update as CFDictionary)
+    let status = SecItemUpdate(baseQuery(provider) as CFDictionary, update as CFDictionary)
     switch status {
     case errSecSuccess:
       return
     case errSecItemNotFound:
-      var insert = baseQuery
+      var insert = baseQuery(provider)
       insert[kSecValueData as String] = data
-      insert[kSecAttrLabel as String] = "Athina Anthropic API key"
+      insert[kSecAttrLabel as String] = "Athina \(provider.name) API key"
       let addStatus = SecItemAdd(insert as CFDictionary, nil)
       guard addStatus == errSecSuccess else {
         throw KeyStoreError(status: addStatus, operation: "add")
@@ -120,11 +134,11 @@ public struct KeychainKeyStore: KeyStore {
     }
   }
 
-  /// Deletes the item; one that is not there is not an error.
+  /// Deletes the item for `provider`; one that is not there is not an error.
   ///
   /// - Throws: `KeyStoreError` when the keychain refuses the delete.
-  public func delete() throws {
-    let status = SecItemDelete(baseQuery as CFDictionary)
+  public func delete(for provider: ModelProvider) throws {
+    let status = SecItemDelete(baseQuery(provider) as CFDictionary)
     guard status == errSecSuccess || status == errSecItemNotFound else {
       throw KeyStoreError(status: status, operation: "delete")
     }
@@ -220,26 +234,31 @@ public enum KeyMigration {
 /// A key store that forgets on exit, for tests and snapshots.
 public final class InMemoryKeyStore: KeyStore, @unchecked Sendable {
   private let lock = NSLock()
-  private var key: String?
+  private var keys: [ModelProvider: String]
 
-  /// Creates a store holding `key`, or none.
+  /// Creates a store holding `key` as the Anthropic key, or none.
   public init(key: String? = nil) {
-    self.key = key
+    keys = key.map { [.anthropic: $0] } ?? [:]
   }
 
-  /// Returns the key held, or nil.
-  public func load() throws -> String? {
-    lock.withLock { key }
+  /// Creates a store holding these keys.
+  public init(keys: [ModelProvider: String]) {
+    self.keys = keys
   }
 
-  /// Holds `key` in place of any other.
-  public func save(_ key: String) throws {
-    lock.withLock { self.key = key }
+  /// Returns the key held for `provider`, or nil.
+  public func load(for provider: ModelProvider) throws -> String? {
+    lock.withLock { keys[provider] }
   }
 
-  /// Forgets the key.
-  public func delete() throws {
-    lock.withLock { key = nil }
+  /// Holds `key` for `provider` in place of any other.
+  public func save(_ key: String, for provider: ModelProvider) throws {
+    lock.withLock { keys[provider] = key }
+  }
+
+  /// Forgets the key for `provider`.
+  public func delete(for provider: ModelProvider) throws {
+    _ = lock.withLock { keys.removeValue(forKey: provider) }
   }
 }
 

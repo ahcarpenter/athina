@@ -1,3 +1,4 @@
+import AppKit
 import AthinaControlProtocol
 import AthinaCore
 import AthinaE2E
@@ -5,7 +6,8 @@ import Foundation
 
 // The control API's commands over the app's state rather than its windows:
 // scripted sensing, the events the app has handled, its journal, its clock,
-// and the links in its own text (docs/e2e.md "The control API").
+// the links in its own text, and the items of its pop-up buttons (docs/e2e.md
+// "The control API").
 extension ControlCommands {
   /// The names `wait-event` waits for (`ControlEventLog.Entry.name`).
   static let eventNames = [
@@ -178,4 +180,104 @@ extension ControlCommands {
     }
     return .ok(["url": .string(url.absoluteString), "dispatched": .bool(await EventFlush.flush())])
   }
+
+  // MARK: - Pop-up buttons
+
+  /// Chooses the item titled `item=` in a pop-up button, as VoiceOver does:
+  /// the button is pressed, which opens its menu, and the menu's item is
+  /// pressed.
+  ///
+  /// The button is found as `click` finds a control. A SwiftUI pop-up button
+  /// offers its items to no assistive app until its menu is open, and the
+  /// menu runs its own tracking loop until an item is chosen. So the press
+  /// that opens it is made from a run-loop block rather than from this
+  /// command, leaving the main queue free inside that loop, and this command
+  /// goes on there to find the item among the app's open menus and press it,
+  /// which closes the menu. Refused as `missing` when the control is not a
+  /// pop-up button or its menu has no such item (the menu is then closed
+  /// again), and `disabled` when it is dimmed.
+  func choose(_ request: ControlRequest) async throws -> ControlReply {
+    let node: AppAccessibility.Node
+    switch try control(request) {
+    case .found(let found): node = found
+    case .answer(let answer): return answer
+    }
+    guard node.role == "AXPopUpButton" else {
+      return .refused(
+        "missing",
+        "that control is a \(node.role), not a pop-up button",
+        ["target": node.summary]
+      )
+    }
+    guard let title = try request.string("item") else {
+      return .error("choose needs item=<the title of the item to choose>")
+    }
+    guard node.enabled else {
+      return .refused("disabled", "the control is dimmed", ["target": node.summary])
+    }
+    let button = UncheckedElement(node.element)
+    RunLoop.main.perform(inModes: [.common]) {
+      _ = AXUIElementPerformAction(button.element, kAXPressAction as CFString)
+    }
+    let app = AXUIElementCreateApplication(getpid())
+    var shown: [String] = []
+    for _ in 0..<50 {
+      try await Task.sleep(for: .milliseconds(100))
+      let items = Self.elements(under: app, role: kAXMenuItemRole as String)
+      guard !items.isEmpty else { continue }
+      shown = items.compactMap { Self.string($0, kAXTitleAttribute) }.filter { !$0.isEmpty }
+      if let item = items.first(where: { Self.string($0, kAXTitleAttribute) == title }) {
+        AXUIElementPerformAction(item, kAXPressAction as CFString)
+        return .ok([
+          "target": node.summary,
+          "chosen": .string(title),
+          "dispatched": .bool(await EventFlush.flush()),
+        ])
+      }
+      break
+    }
+    // Close the menu again, so nothing is left open over the window.
+    for menu in Self.elements(under: app, role: kAXMenuRole as String) {
+      AXUIElementPerformAction(menu, kAXCancelAction as CFString)
+    }
+    return .refused(
+      "missing",
+      shown.isEmpty
+        ? "the pop-up button's menu never opened"
+        : "the menu has no item titled \(title); it has \(shown.joined(separator: ", "))",
+      ["target": node.summary]
+    )
+  }
+
+  /// Every element under `root` with `role`, breadth first, a few levels deep.
+  private static func elements(under root: AXUIElement, role: String) -> [AXUIElement] {
+    var found: [AXUIElement] = []
+    var level = [root]
+    for _ in 0..<8 where !level.isEmpty {
+      var next: [AXUIElement] = []
+      for element in level {
+        var children: CFTypeRef?
+        AXUIElementCopyAttributeValue(element, kAXChildrenAttribute as CFString, &children)
+        for child in (children as? [AXUIElement]) ?? [] {
+          if string(child, kAXRoleAttribute) == role { found.append(child) }
+          next.append(child)
+        }
+      }
+      level = next
+    }
+    return found
+  }
+
+  private static func string(_ element: AXUIElement, _ attribute: String) -> String? {
+    var value: CFTypeRef?
+    AXUIElementCopyAttributeValue(element, attribute as CFString, &value)
+    return value as? String
+  }
+}
+
+/// An accessibility element carried into a run-loop block on the main thread
+/// it was read on.
+private struct UncheckedElement: @unchecked Sendable {
+  let element: AXUIElement
+  init(_ element: AXUIElement) { self.element = element }
 }

@@ -308,6 +308,10 @@ public struct ModelCallRecord: Codable, Equatable, Sendable, Identifiable {
   ///
   /// The usage is the recorded call's; the cost is zero.
   public var replayed: Bool
+  /// Whose API answered, which the menu names with the model.
+  ///
+  /// For a replayed call, the provider in force when it was replayed.
+  public var provider: ModelProvider
 
   /// Creates a call record, with an id of 0 until the journal stores it.
   public init(
@@ -323,7 +327,8 @@ public struct ModelCallRecord: Codable, Equatable, Sendable, Identifiable {
     latency: TimeInterval,
     outcome: ModelCallOutcome,
     detail: String?,
-    replayed: Bool = false
+    replayed: Bool = false,
+    provider: ModelProvider = .anthropic
   ) {
     self.id = id
     self.timestamp = timestamp
@@ -338,6 +343,7 @@ public struct ModelCallRecord: Codable, Equatable, Sendable, Identifiable {
     self.outcome = outcome
     self.detail = detail
     self.replayed = replayed
+    self.provider = provider
   }
 }
 

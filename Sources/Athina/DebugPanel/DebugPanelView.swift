@@ -1064,7 +1064,8 @@ private struct MentorCard: View {
     return
       """
       \(Formatting.dollars(status.spendThisHour)) of \
-      \(Formatting.dollars(state.settings.mentor.hourlySpendCap)) this hour over \
+      \(Formatting.dollars(state.settings.mentor.hourlySpendCap)) this hour via \
+      \(state.settings.mentor.provider.name) over \
       \(Plural.count(status.callsThisHour, "call", "calls")), hour rolls over \(rollover)
       """
   }

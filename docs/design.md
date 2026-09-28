@@ -74,6 +74,17 @@ particular to this app:
   lists the units the range holds a whole amount of, and an amount typed outside
   the range settles at the nearest allowed one as the edit ends, rather than
   being clamped out of sight afterwards.
+- **The model provider is a pop-up button at the top of Settings > Models**,
+  with the chosen provider's key rows below it in the same section: the HIG
+  (Pop-up buttons) gives a pop-up button to a flat list of mutually exclusive
+  options, the usual control for a choice in a settings form, and it matches the
+  model pickers just below. Each item shows the provider's mark before its name
+  (`ProviderMark`), a single-colour template image, so it takes the control's
+  own text colour in both appearances and while highlighted, as the HIG
+  (Images) asks of template images. The section's footer says whose account a
+  call is billed to and that choosing a provider that sends to another company
+  asks for consent again, which the consent window then does (HIG Privacy: ask
+  in context, and say why).
 - **Tools for looking inside Athina are opted into in the Advanced pane.** The
   debug panel is offered only once Settings > Advanced > Enable debug panel
   is on, the pane last in the toolbar as Safari's is, whose Advanced pane holds

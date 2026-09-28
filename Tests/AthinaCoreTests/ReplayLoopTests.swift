@@ -14,12 +14,12 @@ struct ReplayLoopTests {
     private let lock = NSLock()
     private var reads = 0
     var loadCount: Int { lock.withLock { reads } }
-    func load() throws -> String? {
+    func load(for provider: ModelProvider) throws -> String? {
       lock.withLock { reads += 1 }
       return nil
     }
-    func save(_ key: String) throws {}
-    func delete() throws {}
+    func save(_ key: String, for provider: ModelProvider) throws {}
+    func delete(for provider: ModelProvider) throws {}
   }
 
   private struct Harness {
