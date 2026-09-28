@@ -153,3 +153,4 @@ how a change reaches `main`; `docs/` holds the reference:
 | [ci.md](docs/ci.md) | the CI checks, the ready-for-review snapshot gate, checkpoints |
 | [releasing.md](docs/releasing.md) | releases, unsigned releases, code signing |
 | [coming-from-mentor.md](docs/coming-from-mentor.md) | what moves from Mentor on the first launch |
+
