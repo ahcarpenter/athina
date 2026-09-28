@@ -130,7 +130,7 @@ public actor ReplayClaudeClient: ClaudeClient {
   public func send(
     _ request: MessagesRequest,
     call: CallIdentity,
-    apiKey: String,
+    route: CallRoute,
     timeout: TimeInterval
   ) async throws -> MessagesResponse {
     if let unavailableReason {

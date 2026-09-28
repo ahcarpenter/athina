@@ -77,6 +77,12 @@ final class AppState {
       if settings.mentor.pushToTalkHotKey != oldValue.mentor.pushToTalkHotKey {
         registerPushToTalkHotKey()
       }
+      if settings.mentor.provider != oldValue.mentor.provider {
+        // Each provider has its own key, and sends to its own company, so
+        // one never allowed asks first.
+        reloadKeyHint()
+        if !settings.hasConsent, !isSample { perform(.openConsent) }
+      }
       toast.setTalkBackKey(talkBackKey)
     }
   }
@@ -125,7 +131,8 @@ final class AppState {
   var suggestionHistory: [Suggestion] {
     mentorStatus.shown(journaledSuggestions, floor: mentor?.suggestionFloor)
   }
-  /// Last four characters of the saved key, or nil when there is none.
+  /// Last four characters of the provider in force's saved key, or nil when
+  /// there is none.
   private(set) var apiKeyHint: String?
   private(set) var apiKeyError: String?
 
@@ -316,7 +323,12 @@ final class AppState {
     settingsURL = launchFiles.store.url
     keyStore =
       clientMode.isOffline
-      ? InMemoryKeyStore() : InMemoryKeyStore(key: "sk-ant-sample-key-0000-7Q2x")
+      ? InMemoryKeyStore()
+      : InMemoryKeyStore(keys: [
+        .anthropic: "sk-ant-sample-key-0000-7Q2x",
+        .openAI: "sk-proj-sample-key-0000-Vn3c",
+        .openCode: "sk-sample-zen-key-0000-Qp8d",
+      ])
     isSample = true
     self.settings = settings
     permissions = PermissionStatus(screenRecording: true, accessibility: true)
@@ -662,17 +674,27 @@ final class AppState {
   /// The consent window opens it after Allow when a permission is missing.
   var opensPermissionsAtLaunch: Bool { settings.hasConsent && needsPermissionsOnboarding }
 
-  /// The consent window's Allow: Athina may watch and send from now on.
+  /// The consent window's Allow: Athina may watch and send to the provider
+  /// in force from now on.
   func allowConsent() {
-    AppState.log.notice("consent allowed")
-    settings.consent = Consent(answer: .allowed, at: clock.date)
+    let provider = settings.mentor.provider
+    AppState.log.notice("consent allowed for \(provider.rawValue, privacy: .public)")
+    settings.setConsent(Consent(answer: .allowed, at: clock.date), for: provider)
   }
 
-  /// The consent window's Not Now, and Settings > Privacy's Withdraw
-  /// Consent: nothing is sensed or sent from now on.
+  /// The consent window's Not Now: nothing is sensed or sent to the provider
+  /// in force.
   func declineConsent() {
-    AppState.log.notice("consent declined")
-    settings.consent = Consent(answer: .declined, at: clock.date)
+    let provider = settings.mentor.provider
+    AppState.log.notice("consent declined for \(provider.rawValue, privacy: .public)")
+    settings.setConsent(Consent(answer: .declined, at: clock.date), for: provider)
+  }
+
+  /// Settings > Privacy's Withdraw Consent: nothing is sensed or sent from
+  /// now on, whichever provider is chosen later.
+  func withdrawConsent() {
+    AppState.log.notice("consent withdrawn")
+    settings.withdrawConsent(at: clock.date)
   }
 
   /// What a withdrawal stops on screen at once: listening, the toast and
@@ -807,17 +829,23 @@ final class AppState {
 
   var hasAPIKey: Bool { apiKeyHint != nil }
 
-  /// Saves a new key to the Keychain.
+  /// Saves a new key for the provider in force to the Keychain.
   ///
   /// Returns false when the text is not usable as a key, or when the
   /// Keychain save fails, which `apiKeyError` then says.
   @discardableResult
   func saveAPIKey(_ raw: String) -> Bool {
     guard let key = APIKey.normalized(raw) else { return false }
+    let provider = settings.mentor.provider
     do {
-      try keyStore.save(key)
+      try keyStore.save(key, for: provider)
       apiKeyError = nil
-      AppState.log.notice("api key saved (ends in \(APIKey.lastFour(key), privacy: .public))")
+      AppState.log.notice(
+        """
+        \(provider.rawValue, privacy: .public) api key saved \
+        (ends in \(APIKey.lastFour(key), privacy: .public))
+        """
+      )
     } catch {
       apiKeyError = "Could not save the key: \(error)"
       AppState.log.error("api key save failed: \(String(describing: error), privacy: .public)")
@@ -827,11 +855,13 @@ final class AppState {
     return apiKeyError == nil
   }
 
+  /// Deletes the provider in force's key from the Keychain.
   func removeAPIKey() {
+    let provider = settings.mentor.provider
     do {
-      try keyStore.delete()
+      try keyStore.delete(for: provider)
       apiKeyError = nil
-      AppState.log.notice("api key removed")
+      AppState.log.notice("\(provider.rawValue, privacy: .public) api key removed")
     } catch {
       apiKeyError = "Could not remove the key: \(error)"
     }
@@ -845,18 +875,23 @@ final class AppState {
     return await mentor.testConnection()
   }
 
-  /// Reads the key's last four characters off the main thread: the keychain
-  /// can block on its own prompt, and the rest of the app must not wait.
+  /// Reads the provider in force's key's last four characters off the main
+  /// thread: the keychain can block on its own prompt, and the rest of the
+  /// app must not wait.
   private func reloadKeyHint() {
     let keyStore = keyStore
+    let provider = settings.mentor.provider
     Task { [weak self] in
       let outcome: Result<String?, Error>
       do {
-        outcome = .success(try await keyStore.loadInBackground().map(APIKey.lastFour))
+        outcome = .success(
+          try await keyStore.loadInBackground(for: provider).map(APIKey.lastFour)
+        )
       } catch {
         outcome = .failure(error)
       }
-      guard let self else { return }
+      // A switch while the keychain was read reads again for the new one.
+      guard let self, self.settings.mentor.provider == provider else { return }
       switch outcome {
       case .success(let hint):
         self.apiKeyHint = hint
@@ -1821,20 +1856,17 @@ final class AppState {
     case .ready, .capReached:
       let spend = Formatting.dollars(mentorStatus.spendThisHour)
       let cap = Formatting.dollars(settings.mentor.hourlySpendCap)
+      let line = "Mentor: \(spend) of \(cap) this hour via \(settings.mentor.provider.name)"
       if case .capReached = mentorStatus.availability {
-        return "Mentor: \(spend) of \(cap) this hour, cap reached"
+        return "\(line), cap reached"
       }
       if mentorStatus.isCadenceSlowed {
-        return
-          """
-          Mentor: \(spend) of \(cap) this hour, slowed \
-          \(Formatting.multiplier(mentorStatus.cadenceMultiplier))
-          """
+        return "\(line), slowed \(Formatting.multiplier(mentorStatus.cadenceMultiplier))"
       }
-      return "Mentor: \(spend) of \(cap) this hour"
+      return line
     case .disabled: return "Mentor: off"
     case .noConsent: return "Mentor: not allowed to send"
-    case .noAPIKey: return "Mentor: no API key"
+    case .noAPIKey: return "Mentor: no \(settings.mentor.provider.name) API key"
     }
   }
 

@@ -270,16 +270,21 @@ import Testing
     await client.enqueue(.failure(.transport("offline")))
     let request = MessagesRequest(model: "m", maxTokens: 1, system: [], messages: [])
     let call = CallIdentity(kind: "triage", promptVersion: 1)
-    let first = try await client.send(request, call: call, apiKey: "k", timeout: 1)
+    let first = try await client.send(
+      request,
+      call: call,
+      route: CallRoute(.anthropic, key: "k"),
+      timeout: 1
+    )
     #expect(first.model == "m1")
     await #expect(throws: ClaudeClientError.transport("offline")) {
-      try await client.send(request, call: call, apiKey: "k", timeout: 1)
+      try await client.send(request, call: call, route: CallRoute(.anthropic, key: "k"), timeout: 1)
     }
     await #expect(throws: ClaudeClientError.self) {
-      try await client.send(request, call: call, apiKey: "k", timeout: 1)
+      try await client.send(request, call: call, route: CallRoute(.anthropic, key: "k"), timeout: 1)
     }
     #expect(await client.sent.count == 3)
-    #expect(await client.sent.first?.apiKey == "k")
+    #expect(await client.sent.first?.route == CallRoute(.anthropic, key: "k"))
     #expect(await client.sent.first?.call == call)
     #expect(!client.isReplay)
   }

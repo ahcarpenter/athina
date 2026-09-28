@@ -206,13 +206,14 @@ public struct MenuModel: Equatable, Sendable {
     self.items = items
   }
 
-  /// One line naming the model that answered the latest call and the tier
-  /// that asked, such as "Last answer: Claude Haiku 4.5 (Triage), 15:23:06",
-  /// or nil before any call has answered.
+  /// One line naming the model that answered the latest call, the backend it
+  /// went by and the tier that asked, such as "Last answer: Claude Haiku 4.5
+  /// via Anthropic (Triage), 15:23:06", or nil before any call has answered.
   ///
   /// A call that failed got no answer, so the line passes over it. A
-  /// replayed call names the model its recording came from. A call from an
-  /// earlier day says which day, since the log outlives a launch.
+  /// replayed call names the model its recording came from and says it was a
+  /// replay. A call from an earlier day says which day, since the log
+  /// outlives a launch.
   public static func answerLine(calls: [ModelCallRecord], now: Date) -> String? {
     let answered = calls.filter { $0.outcome != .error }
     guard let call = answered.max(by: { $0.timestamp < $1.timestamp }) else { return nil }
@@ -220,7 +221,8 @@ public struct MenuModel: Equatable, Sendable {
       Calendar.current.isDate(call.timestamp, inSameDayAs: now)
       ? ClockFormat.time(call.timestamp) : ClockFormat.dayAndTime(call.timestamp)
     let model = ModelCatalog.displayName(for: call.model)
-    return "Last answer: \(model) (\(call.tier.label)), \(when)"
+    let via = call.replayed ? "replay" : call.provider.name
+    return "Last answer: \(model) via \(via) (\(call.tier.label)), \(when)"
   }
 
   private static func row(_ either: State.Either) -> Item {

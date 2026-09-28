@@ -1,40 +1,40 @@
 import AthinaCore
 import SwiftUI
 
-/// The Models pane: the Anthropic connection, each model and its effort,
-/// how often they are called, what the mentor model sees, and spend.
+/// The Models pane: which provider answers and its key, each model and its
+/// effort, how often they are called, what the mentor model sees, and spend.
 struct ModelSettings: View {
   @Environment(AppState.self)
   private var state
 
   var body: some View {
     @Bindable var state = state
+    let provider = state.settings.mentor.provider
     Form {
-      if state.clientMode.isOffline {
-        ReplayConnectionSection()
-      } else {
-        APIKeySection()
-      }
+      ProviderSection()
 
       Section(
         content: {
           TierRows(
             tier: "Triage",
-            choices: ModelCatalog.triageChoices,
-            model: $state.settings.mentor.triageModel,
-            effort: $state.settings.mentor.triageEffort
+            choices: ModelCatalog.choices(for: .triage, provider: provider),
+            provider: provider,
+            model: $state.settings.mentor.tierModels.triage,
+            effort: $state.settings.mentor.tierModels.triageEffort
           )
           TierRows(
             tier: "Mentor",
-            choices: ModelCatalog.mentorChoices,
-            model: $state.settings.mentor.mentorModel,
-            effort: $state.settings.mentor.mentorEffort
+            choices: ModelCatalog.choices(for: .mentor, provider: provider),
+            provider: provider,
+            model: $state.settings.mentor.tierModels.mentor,
+            effort: $state.settings.mentor.tierModels.mentorEffort
           )
           TierRows(
             tier: "Understanding",
-            choices: ModelCatalog.understandingChoices,
-            model: $state.settings.mentor.understandingModel,
-            effort: $state.settings.mentor.understandingEffort
+            choices: ModelCatalog.choices(for: .understanding, provider: provider),
+            provider: provider,
+            model: $state.settings.mentor.tierModels.understanding,
+            effort: $state.settings.mentor.tierModels.understandingEffort
           )
         },
         header: {
@@ -47,7 +47,7 @@ struct ModelSettings: View {
             decides whether the mentor model should look closer. The understanding model \
             rewrites what Athina believes you are working toward, only when no mentor call has \
             done so recently. Effort sets how much a model thinks before answering and is sent \
-            only to models that accept it.
+            only to models that accept it. Each provider keeps its own choices.
             """
           )
         }
@@ -131,6 +131,39 @@ struct ModelSettings: View {
   }
 }
 
+/// Which provider answers, as a pop-up button with each provider's mark,
+/// then the chosen provider's key or, while calls are replayed, what they are
+/// replayed from.
+///
+/// The picker stays in a replay, since the provider still decides the models,
+/// the consent window and the menu; only the key has nothing to do there.
+private struct ProviderSection: View {
+  @Environment(AppState.self)
+  private var state
+
+  var body: some View {
+    @Bindable var state = state
+    let picker = Picker("Provider", selection: $state.settings.mentor.provider) {
+      ForEach(ModelProvider.allCases) { choice in
+        Label {
+          Text(choice.name)
+        } icon: {
+          Image(nsImage: ProviderMark.image(for: choice))
+        }
+        .tag(choice)
+      }
+    }
+    .accessibilityIdentifier("models.provider")
+    if state.clientMode.isOffline {
+      ReplayConnectionSection(header: "Model provider") { picker }
+    } else {
+      APIKeySection(provider: state.settings.mentor.provider, header: "Model provider") {
+        picker
+      }
+    }
+  }
+}
+
 /// A tier's model picker and effort picker.
 ///
 /// The effort picker is disabled, with a note, when the chosen model does not
@@ -138,11 +171,12 @@ struct ModelSettings: View {
 private struct TierRows: View {
   let tier: String
   let choices: [ClaudeModel]
+  let provider: ModelProvider
   @Binding var model: String
   @Binding var effort: Effort
 
   private var supportsEffort: Bool {
-    ModelCatalog.model(id: model)?.supportsEffort ?? false
+    ModelCatalog.model(id: model, provider: provider)?.supportsEffort ?? false
   }
 
   var body: some View {
@@ -175,23 +209,35 @@ private struct TierRows: View {
   }
 }
 
-// MARK: - Anthropic
-
-private struct APIKeySection: View {
+/// The provider in force's key: pasted here, kept in the login keychain, and
+/// tested with one tiny call, with `leading` first when the layout keeps the
+/// picker in this section.
+private struct APIKeySection<Leading: View>: View {
   @Environment(AppState.self)
   private var state
+
+  let provider: ModelProvider
+  let header: String
+  let leading: Leading
 
   @State private var draft = ""
   @State private var testing = false
   @State private var testResult: Result<String, ClaudeClientError>?
   @State private var saveFailed = false
 
+  init(provider: ModelProvider, header: String, @ViewBuilder leading: () -> Leading) {
+    self.provider = provider
+    self.header = header
+    self.leading = leading()
+  }
+
   var body: some View {
     Section(
       content: {
+        leading
         LabeledContent("API key") {
           HStack(spacing: 8) {
-            SecureField("API key", text: $draft, prompt: Text("Paste a key, sk-ant-…"))
+            SecureField("API key", text: $draft, prompt: Text(provider.keyPlaceholder))
               .labelsHidden()
               .onSubmit(save)
             Button("Save", action: save)
@@ -227,23 +273,42 @@ private struct APIKeySection: View {
           },
           label: {
             Text("Connection")
-            ConnectionResult(testing: testing, result: testResult, replayed: false)
+            ConnectionResult(
+              testing: testing,
+              result: testResult,
+              replayed: false,
+              host: provider.host
+            )
           }
         )
       },
       header: {
-        Text("Anthropic")
+        Text(header)
       },
       footer: {
-        Text(
-          """
-          The key stays in your login keychain and is never written to the journal, the logs, \
-          or the debug panel. Athina connects only to api.anthropic.com, and only while a key \
-          is saved.
-          """
-        )
+        Text(footer)
       }
     )
+    // A key typed for one provider is never saved as another's.
+    .onChange(of: provider) {
+      draft = ""
+      testResult = nil
+      saveFailed = false
+    }
+  }
+
+  private var footer: String {
+    var text =
+      """
+      Calls are billed to your own account with \(provider.name), with the key you add here, \
+      and choosing a provider that sends to another company asks for your consent again. The \
+      key stays in your login keychain and is never written to the journal, the logs, or the \
+      debug panel. Athina connects only to \(provider.host), and only while a key is saved.
+      """
+    if provider == .openCode {
+      text += " OpenCode passes each call to Anthropic or OpenAI, whichever makes the model."
+    }
+    return text
   }
 
   private func save() {
@@ -266,16 +331,25 @@ private struct APIKeySection: View {
 
 /// Stands in for the key section while calls are replayed: there is no key to
 /// save, and Test Connection replays a recorded test call.
-private struct ReplayConnectionSection: View {
+private struct ReplayConnectionSection<Leading: View>: View {
   @Environment(AppState.self)
   private var state
+
+  let header: String
+  let leading: Leading
 
   @State private var testing = false
   @State private var testResult: Result<String, ClaudeClientError>?
 
+  init(header: String, @ViewBuilder leading: () -> Leading) {
+    self.header = header
+    self.leading = leading()
+  }
+
   var body: some View {
     Section(
       content: {
+        leading
         LabeledContent("Model calls") {
           Text(state.clientModeLine ?? "Replay mode")
             .multilineTextAlignment(.trailing)
@@ -289,19 +363,19 @@ private struct ReplayConnectionSection: View {
           },
           label: {
             Text("Connection")
-            ConnectionResult(testing: testing, result: testResult, replayed: true)
+            ConnectionResult(testing: testing, result: testResult, replayed: true, host: nil)
           }
         )
       },
       header: {
-        Text("Anthropic")
+        Text(header)
       },
       footer: {
         Text(
           """
           Athina was launched to replay recorded calls, so every call is answered from fixture \
-          files. No key is read, nothing is sent to api.anthropic.com, and nothing is billed. \
-          Launch Athina without --replay to use the saved key.
+          files, whichever provider is chosen. No key is read, nothing is sent to any provider, \
+          and nothing is billed. Launch Athina without --replay to use your saved keys.
           """
         )
       }
@@ -323,10 +397,12 @@ struct ConnectionResult: View {
   let testing: Bool
   let result: Result<String, ClaudeClientError>?
   let replayed: Bool
+  /// The host a live test contacts.
+  let host: String?
 
   var body: some View {
     if testing {
-      Text(replayed ? "Replaying the recorded test call…" : "Contacting api.anthropic.com…")
+      Text(replayed ? "Replaying the recorded test call…" : "Contacting \(host ?? "the provider")…")
     } else {
       switch result {
       case nil:
@@ -385,7 +461,10 @@ private struct SpendSection: View {
             .monospacedDigit()
           }
         }
-        PriceTableEditor(table: $state.settings.mentor.prices)
+        PriceTableEditor(
+          table: $state.settings.mentor.prices,
+          models: ModelCatalog.models(for: state.settings.mentor.provider)
+        )
       },
       header: {
         Text("Spend per hour")
@@ -394,7 +473,8 @@ private struct SpendSection: View {
         Text(
           """
           Cost is estimated from the tokens each response reports and these prices, in dollars \
-          per million tokens. Update them when Anthropic's pricing changes.
+          per million tokens, across every provider. Update them when \
+          \(state.settings.mentor.provider.name)'s pricing changes.
           """
         )
       }
@@ -402,8 +482,11 @@ private struct SpendSection: View {
   }
 }
 
+/// The prices of the provider in force's models, and the button that puts
+/// every provider's back.
 private struct PriceTableEditor: View {
   @Binding var table: PriceTable
+  let models: [ClaudeModel]
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -418,7 +501,7 @@ private struct PriceTableEditor: View {
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
         .accessibilityAddTraits(.isHeader)
-        ForEach(ModelCatalog.all) { model in
+        ForEach(models) { model in
           GridRow {
             Text(model.displayName)
               .gridColumnAlignment(.leading)
@@ -447,10 +530,10 @@ private struct PriceTableEditor: View {
     TextField(
       "\(model.displayName) \(column) price",
       value: Binding(
-        get: { table.prices[model.id]?[keyPath: keyPath] ?? 0 },
+        get: { table.prices[model.priceKey]?[keyPath: keyPath] ?? 0 },
         set: { value in
           var price =
-            table.prices[model.id] ?? PriceTable.defaults.prices[model.id]
+            table.prices[model.priceKey] ?? PriceTable.defaults.prices[model.priceKey]
             ?? ModelPrice(
               inputPerMillion: 0,
               outputPerMillion: 0,
@@ -458,7 +541,7 @@ private struct PriceTableEditor: View {
               cacheReadPerMillion: 0
             )
           price[keyPath: keyPath] = max(0, value)
-          table.prices[model.id] = price
+          table.prices[model.priceKey] = price
         }
       ),
       format: .number.precision(.fractionLength(2...4))
