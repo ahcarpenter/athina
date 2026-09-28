@@ -239,8 +239,8 @@
       try await send("open-link", target.arguments)
     }
 
-    /// Chooses the item titled `item` in a pop-up button, as choosing it from the button's menu
-    /// does, without opening the menu.
+    /// Chooses the item titled `item` in a pop-up button as VoiceOver does: the button is pressed,
+    /// which opens its menu, and the item is then pressed, which closes it.
     func choose(_ target: Target, item: String) async throws -> ControlReply {
       try await send("choose", target.arguments.merging(["item": .string(item)]) { _, new in new })
     }
