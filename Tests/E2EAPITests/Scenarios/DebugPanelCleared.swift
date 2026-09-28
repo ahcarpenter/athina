@@ -96,11 +96,10 @@
           "Clear Journal",
           try await run.settled("Clear Journal") { try await control.first(confirm)?.label ?? "" }
         )
-        run.check(
-          "the confirmation's Clear Journal is pressed",
-          true,
-          try await control.press(confirm).ok
-        )
+        // The press takes the alert down while it is still being answered, so its reply can
+        // come back as a failure (-25205) after it cleared the journal; the empty journal
+        // below is what proves it landed.
+        _ = try await control.press(confirm)
         run.check(
           "the journal holds no observation",
           0,
