@@ -12,6 +12,11 @@ name: Merge checks
 # name and the required check stays expected until the job really runs. A
 # dispatched run would not do either: its check runs are on the commit, but a
 # pull request's required checks ignore them.
+#
+# A pull request that touches only documentation renders nothing: the changes
+# job decides, as ci.yml's does, the shards and the drift comment are skipped,
+# and ui-snapshots runs under its own name and passes (docs/ci.md "Docs-only
+# pull requests").
 on:
   push:
     branches: [main]
@@ -25,15 +30,39 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    # Whether this pull request touches only documentation nothing builds,
+    # tests or runs (scripts/docs-only.sh), as in ci.yml, where the job is
+    # described. Should it fail, the shards see no answer and run.
+    runs-on: ubuntu-latest
+    outputs:
+      docs-only: ${{ steps.classify.outputs.docs-only || 'false' }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
+      - name: Classify the change
+        id: classify
+        if: github.event_name == 'pull_request'
+        run: |
+          docs_only="$(scripts/docs-only.sh HEAD^1 HEAD)"
+          echo "Docs-only: $docs_only"
+          echo "docs-only=$docs_only" >> "$GITHUB_OUTPUT"
+
   ui-snapshots-shard:
     # One of four runners, each rendering and comparing the quarter of the
     # snapshots SnapshotShard (Sources/SnapshotDiff) gives it. The approved
     # renders in Tests/Snapshots were made on this image with the Xcode that
     # .xcode-version pins, so a change to either is a deliberate baseline
-    # refresh (docs/ci.md "UI snapshot baselines"). This condition, the one on
-    # ui-snapshots and the one in its name are the same and change together.
+    # refresh (docs/ci.md "UI snapshot baselines"). This condition's draft
+    # part, the one on ui-snapshots and the one in its name are the same and
+    # change together; a docs-only pull request skips the shards alone.
     name: ui-snapshots shard ${{ matrix.shard }}
-    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    needs: changes
+    if: >-
+      !cancelled() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
+      && needs.changes.outputs.docs-only != 'true'
     strategy:
       # Every shard runs to the end, so one drift never hides another's.
       fail-fast: false
@@ -85,15 +114,21 @@ jobs:
 
   ui-snapshots:
     # The one check the main ruleset requires: passes only when every shard
-    # ran and passed.
+    # ran and passed, or when the changes job found a docs-only pull request
+    # and the shards were skipped for it.
     name: ${{ (github.event_name != 'pull_request' || !github.event.pull_request.draft) && 'ui-snapshots' || 'ui-snapshots (mark the pull request ready for review to run)' }}
-    needs: ui-snapshots-shard
+    needs: [changes, ui-snapshots-shard]
     if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.draft)
     runs-on: ubuntu-latest
     steps:
       - name: Every shard passed
         run: |
+          echo "Docs-only: ${{ needs.changes.outputs.docs-only }}"
           echo "The shards: ${{ needs.ui-snapshots-shard.result }}"
+          if [ "${{ needs.changes.outputs.docs-only }}" = true ] && [ "${{ needs.ui-snapshots-shard.result }}" = skipped ]; then
+            echo "Only documentation changed, so there is nothing to render."
+            exit 0
+          fi
           [ "${{ needs.ui-snapshots-shard.result }}" = success ]
 
   ui-snapshots-drift-comment:
@@ -107,10 +142,11 @@ jobs:
     # raw.githubusercontent.com at its commit. Not a required check, and a
     # pull request from a fork, whose token cannot write, gets no comment.
     name: ui-snapshots drift comment
-    needs: ui-snapshots-shard
+    needs: [changes, ui-snapshots-shard]
     if: >-
       !cancelled() && github.event_name == 'pull_request' && !github.event.pull_request.draft
       && github.event.pull_request.head.repo.full_name == github.repository
+      && needs.changes.outputs.docs-only != 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write

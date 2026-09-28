@@ -1,14 +1,14 @@
 # no-mistakes repository configuration (read from the default branch).
 # Local validation runs the make targets people run, and together its lint and
-# test steps run exactly what `make check` composes (docs/ci.md): `make lint`,
-# as CI's lint job runs it, `make test`, as CI's build-and-test runs it, and
+# test steps run exactly what `make check` composes (docs/ci.md): `make lint`
+# and `make links`, as CI's lint job runs them, `make test`, as CI's build-and-test runs it, and
 # `make snapshots`, which draws the UI smoke set at HEAD and at main on
 # this Mac and compares them (docs/ci.md "UI snapshot smoke test"), where CI's
 # ui-snapshots-smoke runs `make snapshots-ci` against the runner's
 # references. The comparison stays in the test command so its summary is fresh
 # when the test step's evidence pass reads it.
 commands:
-  lint: "make lint"
+  lint: "make lint && make links"
   test: "make test && make snapshots"
 # test.instructions steers the agent-driven evidence pass of the test step.
 test:

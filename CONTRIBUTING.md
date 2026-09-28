@@ -46,9 +46,10 @@ make run                     # builds and launches a replay: recorded fixtures, 
 make test                    # runs swift test, the replayed loop and the fixture freshness check included (FILTER=<name> for some), then checks a build without the ControlAPI trait carries no control API, as CI's build-and-test does
 make test-e2e                # runs the end-to-end scenarios, replays only (SCENARIO=<name>, JOBS=<n>; see docs/e2e.md)
 make snapshots               # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported
-make check                   # lint, test and snapshots: the one command to run before a push, and what local validation runs
+make check                   # lint, links, test and snapshots: the one command to run before a push, and what local validation runs
 make approve                 # after an intended UI change, takes the ui-snapshots baselines, smoke references and e2e checkpoints from CI's runs of HEAD, all or none, listing each image before it writes it (see docs/ci.md)
 make lint                    # checks every Swift file against the style without changing it, as CI does
+make links                   # checks every relative link and anchor in the Markdown resolves, offline, as CI's lint does
 make format                  # formats every Swift file in place to Google's Swift style (see docs/code-style.md)
 
 make run-live SPEND=1        # builds and launches the live app, replacing only the copy this checkout's run-live or record launched (spends API credits, up to the spend cap it prints first; refused without SPEND=1)
@@ -143,8 +144,8 @@ itself and says which on the line it writes as it starts.
 
 ## How a change reaches main
 
-1. **Before the push**, `make check` runs `make lint`, `make test` and
-   `make snapshots`, which draws the UI smoke set on this Mac at HEAD and
+1. **Before the push**, `make check` runs `make lint`, `make links`,
+   `make test` and `make snapshots`, which draws the UI smoke set on this Mac at HEAD and
    at main and reports every screen the change altered, added or removed.
    Local validation never runs the full `ui-snapshots` gate, the checkpoint
    gate or `make approve`, which only CI proves, nor the Xcode project steps.
@@ -154,7 +155,10 @@ itself and says which on the line it writes as it starts.
 3. **Ready for review**: once the fast lane passes, mark the pull request
    ready (`gh pr ready <number>`), which runs `ui-snapshots`, the
    full-fidelity gate, on four runners, and runs it on every push after. The
-   `main` ruleset requires all five checks at the pull request's head.
+   `main` ruleset requires all five checks at the pull request's head. A
+   pull request that changes only documentation runs `lint` alone and
+   reports the other four as skipped, which passes them (see [Docs-only pull
+   requests](docs/ci.md#docs-only-pull-requests)).
 4. **An intended UI change** fails the image gates until it is approved: read
    each report, then `make approve` takes the `ui-snapshots` baselines, the
    smoke references and the e2e checkpoints from CI's runs of HEAD, all or
