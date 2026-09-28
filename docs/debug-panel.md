@@ -26,7 +26,7 @@ The builder's paths reach it without changing the owner's setting:
   `--open debug` (`understanding-surfaces` does), and
   `athina-drive ax ... --scope "Debug Panel"` reaches its controls, or on the
   API tier the control API's `find` with `window="Debug Panel"`
-  (`debug-timeline`).
+  (`debug-timeline`, `debug-panel-cleared`).
   Capture Now is the menu's own command, not the panel's.
 - **Snapshots**: `--snapshot` draws the panel's view directly
   (`debug-panel*`) and the Advanced pane with the switch off and on
@@ -50,8 +50,13 @@ due, running, or why it is held, size against the budget, what refresh calls
 have cost since it began, the last refresh call, and Reset Understanding…),
 focused element (role, title, description, text), cadence settings and
 counters, journal size and path. Centre: the latest kept frame with OCR boxes
-overlaid and the recognized text below; selecting an observation in the
-timeline shows that frame instead. Right: a live timeline of observations and
+overlaid and the recognized text below, or, with no frame to show, why there is
+none, such as a journal just cleared, Screen Recording missing, or an excluded
+app in front (`EmptyFrame`); selecting an observation in the timeline shows
+that frame instead. After Clear Journal the panel names none of what it
+deleted: no gate decision or model call about a deleted row, no transcript, and
+no callout record unless that callout is still on screen (`debug-panel-cleared`).
+Right: a live timeline of observations and
 events from the journal (suggestions and feedback included), or, under Model
 Calls, a scrolling log of every API call with prompt size, tokens, cost,
 latency, outcome, and the model's reason. The status bar shows mode, permission
