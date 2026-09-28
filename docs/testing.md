@@ -101,3 +101,4 @@ handles](e2e.md#what-the-harness-already-handles-so-a-scenario-need-not)), and
 the API tier takes a checkpoint again while its window has not settled; each
 such repeat is a `note` line in the scenario's result, so it is seen, and none
 repeats a check that failed.
+
