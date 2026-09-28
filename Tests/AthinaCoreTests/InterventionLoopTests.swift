@@ -301,6 +301,7 @@ struct InterventionLoopTests {
     var status: MentorStatus
     let floor: SuggestionFloor
     var journaled: [Suggestion] = []
+    var talking = false
     private(set) var listed: [[Int64]] = []
     private(set) var floors: [Int64?] = []
     let changes: AsyncStream<Void>
@@ -313,8 +314,10 @@ struct InterventionLoopTests {
     }
 
     func list() {
-      floors.append(floor.value)
-      listed.append(status.shown(journaled, floor: floor).map(\.id))
+      let now = SuggestionFloor()
+      now.set(floor.value)
+      floors.append(now.value)
+      listed.append(status.shown(journaled, floor: now).map(\.id))
       changed.yield()
     }
 
@@ -390,14 +393,16 @@ struct InterventionLoopTests {
     let loop = h.loop
     let following = [
       Task { @MainActor in
-        var talking = false
+        var asked = false
         for await event in events {
           guard case .status(let status) = event else { continue }
           view.status = status
           view.list()
-          if !talking, status.holdsSuggestionsAfter != nil {
-            talking = true
+          if !asked, status.holdsSuggestionsAfter != nil {
+            asked = true
             await loop.setTalkingBack(true)
+            view.talking = true
+            view.list()
           }
         }
       },
@@ -416,7 +421,7 @@ struct InterventionLoopTests {
     await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
     let b = try #require(try await h.journal.recentSuggestions(limit: 1).first)
     #expect(b.id != a.id)
-    await view.wait { view.journaled.contains { $0.id == b.id } }
+    await view.wait { view.journaled.contains { $0.id == b.id } && view.talking }
     // Whether talking back caught B depends on where the loop was. Caught,
     // B is held, and no list has it before the exchange ends.
     let held = h.loop.suggestionFloor.value != nil
