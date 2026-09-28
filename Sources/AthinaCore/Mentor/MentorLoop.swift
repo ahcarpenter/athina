@@ -1034,6 +1034,22 @@ public actor MentorLoop {
     await publishStatus()
   }
 
+  /// Drops every status record that describes a row Clear Journal deleted.
+  ///
+  /// Each is dropped rather than left pointing at a row that is gone: the
+  /// triage gate's observation, the last call of each tier, and the mentor
+  /// gate's hold on a deleted triage verdict. What describes the present
+  /// stays: the mode, the context verdict, the cadence floors in force, and
+  /// the spend already incurred this hour, which still counts against the cap.
+  public func journalCleared() async {
+    status.lastGate = nil
+    status.lastTriage = nil
+    status.lastMentorHold = nil
+    status.lastMentor = nil
+    status.lastRefresh = nil
+    await publishStatus()
+  }
+
   /// Returns the understanding carried between calls, or nil until one forms.
   public func currentUnderstanding() -> UnderstandingRecord? { understanding }
 
