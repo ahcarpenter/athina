@@ -30,7 +30,7 @@ import Testing
         rule["parameters"] = parameters
       }
       rule["ruleset_source_type"] = "Repository"
-      rule["ruleset_source"] = "ahcarpenter/athina"
+      rule["ruleset_source"] = "getathina/athina"
       rule["ruleset_id"] = 23_971_698
       return rule
     }

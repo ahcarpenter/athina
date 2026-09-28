@@ -36,8 +36,9 @@ any, and on a terminal asks first. `scripts/snapshots.sh baselines-approve`,
 newest run or the run id given, for a change that drifts only some, listing
 theirs the same way.
 
-All five run on every push to main, and so does `release-build`
-(`.github/workflows/release.yml`), which builds the direct-download release
+All five run on every push to main and on every run the merge queue
+starts (see "The merge queue", below), and every push to main also runs
+`release-build` (`.github/workflows/release.yml`), which builds the direct-download release
 with `make release`, signed and notarized when the Apple secrets exist, and
 which a pushed version tag turns into a GitHub Release (see
 [Releasing](releasing.md#ci)); no pull request runs it or waits for it. On a
@@ -58,15 +59,21 @@ goes through it in these steps, whoever opens it:
    expected, not run.
 3. Mark it ready: `gh pr ready <number>` (or `gh-axi pr ready <number>`). That
    runs `ui-snapshots` on the same head; the fast lane does not run again.
-4. Wait for `ui-snapshots` to pass; the pull request can then merge. A push
-   after this runs both again, and should the change need more work first,
-   `gh pr ready --undo <number>` makes it a draft again.
+4. Wait for `ui-snapshots` to pass. A push after this runs both again, and
+   should the change need more work first, `gh pr ready --undo <number>`
+   makes it a draft again.
+5. Add it to the merge queue: `gh pr merge --auto --squash <number>` (or
+   `gh-axi pr merge <number> --auto --squash`), which queues it as soon as it
+   is green, or the Merge when ready button once it is. The
+   queue runs all five checks once more on it merged with main and everything
+   queued ahead of it, then squashes it onto main; nobody merges by hand.
 
 Only the pull request's draft state decides: editing it, labelling it or
 changing its title starts and cancels nothing.
 
-All five must pass at a pull request's head before it can merge: the `main`
-ruleset requires them, with no bypass, and until `ui-snapshots` has run there,
+All five must pass at a pull request's head before it can enter the merge
+queue, and again in its merge queue run before it lands: the `main` ruleset
+requires them, with no bypass, and until `ui-snapshots` has run there,
 the pull request lists it as expected and cannot merge. Two traps shape this.
 A job that an `if` skips still reports a check run, and a skipped check counts
 as passed for a required one, so the skipped job takes another name: GitHub
@@ -82,17 +89,18 @@ The ruleset is kept in `.github/rulesets/main.json`; after a change to it,
 apply it with
 
 ```sh
-gh api -X PUT "repos/ahcarpenter/athina/rulesets/$(gh api repos/ahcarpenter/athina/rulesets --jq '.[] | select(.name == "main") | .id')" --input .github/rulesets/main.json
+gh api -X PUT "repos/getathina/athina/rulesets/$(gh api repos/getathina/athina/rulesets --jq '.[] | select(.name == "main") | .id')" --input .github/rulesets/main.json
 ```
 
-(`gh api -X POST repos/ahcarpenter/athina/rulesets --input .github/rulesets/main.json`
+(`gh api -X POST repos/getathina/athina/rulesets --input .github/rulesets/main.json`
 creates it if it is gone). It requires each check from GitHub Actions itself
 (integration 15368), so a commit status of the same name cannot stand in for
 one, and it does not require a branch to be up to date with main, so a pull
-request is not rerun each time another merges. GitHub never reads the file, so
+request is not rerun each time another merges: the merge queue tests it
+against main instead. GitHub never reads the file, so
 the `lint` job ends by checking that the two still agree:
 `scripts/check-ruleset.sh` reads the rules GitHub applies to main from the
-public `repos/ahcarpenter/athina/rules/branches/main` endpoint and fails,
+public `repos/getathina/athina/rules/branches/main` endpoint and fails,
 naming each one, when the required checks (each a context and its integration)
 differ from the file's, even after a lint failure, so both are reported at
 once. It compares nothing else: that endpoint merges the rules of every active
@@ -100,6 +108,36 @@ ruleset on main, so another ruleset, or a parameter GitHub adds to a rule, must
 not fail it. A pull request that changes the file therefore
 fails `lint` until the change is applied with the command above, which is the
 order it goes in: apply, then run the job again, then merge.
+
+**The merge queue.** The `main` ruleset's `merge_queue` rule makes every pull request land through
+GitHub's merge queue, so a merge to main never knocks the other open pull
+requests out of date. A pull request enters it once its five checks
+pass at its head (step 5 above); the queue then tests it on top of main plus
+every pull request queued ahead of it, on a temporary
+`gh-readonly-queue/main/...` branch, and runs both workflows there as a
+`merge_group` event. There is no draft there, so `ui-snapshots` always runs in
+full, and no pull request, so no drift comment is posted and no image is
+approved from it: approval stays with the ready pull request's own runs. Each
+queue run keeps its own concurrency group, so a push to a pull request never
+cancels a queued run.
+
+The rule's settings: squash merges, so main keeps one commit per pull request
+titled with its number; one pull request per run and one run at a time
+(`max_entries_to_merge` and `max_entries_to_build` both 1); and all green
+(`ALLGREEN`), so each queued pull request is tested in its own run and lands in
+turn once that run passes. A required check that has not reported
+within 60 minutes counts as failed. A failure removes only that pull request
+from the queue; the ones behind it are tested again without it and keep their
+place. A removed pull request needs a fix pushed and step 5 again.
+
+The queue runs one at a time because each run takes eight macOS jobs (four
+fast-lane jobs and four `ui-snapshots` shards), the account runs five at once,
+and pull requests' own runs want the same runners: a second run alongside
+would mostly wait for them, and a check still queued after 60 minutes fails
+like any other failure. Testing each pull request in its own run also keeps
+attribution precise, so a flaky screenshot job ejects only the pull request it
+ran for. Athina lands a handful of pull requests a day, so a run of roughly ten
+minutes each is fine.
 
 **The pull request title.** `pr-title` (`.github/workflows/pr-title.yml`)
 fails unless a pull request's title is Conventional Commits, `type(scope):
@@ -171,7 +209,7 @@ swift-format (see [Code style](code-style.md) and [UI snapshot baselines](#ui-sn
 **Superseded runs.** A new push to a pull request cancels that pull request's
 runs still going, in both workflows, so a superseded commit stops holding runners: the account
 runs five macOS jobs at once. Pushes to main are never cancelled; each keeps
-its own run.
+its own run, and so does every merge queue run.
 
 Local validation, the no-mistakes pipeline a change goes through before its
 pull request, never runs the Xcode project steps, the full `ui-snapshots` gate,

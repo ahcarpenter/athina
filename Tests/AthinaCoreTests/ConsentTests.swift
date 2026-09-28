@@ -76,7 +76,7 @@ import Testing
   @Test func thePrivacyPolicyLinksToThePublishedDocument() {
     #expect(
       Consent.privacyPolicyURL.absoluteString
-        == "https://github.com/ahcarpenter/athina/blob/main/docs/privacy.md"
+        == "https://github.com/getathina/athina/blob/main/docs/privacy.md"
     )
   }
 
