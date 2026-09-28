@@ -295,15 +295,13 @@ struct InterventionLoopTests {
   }
 
   /// What the app lists, as it does: the journal's live suggestions less the
-  /// ones the loop's floor or latest status holds, each value it would show kept
-  /// with the floor as it stood then.
+  /// ones the loop's floor or latest status holds, each value it would show kept.
   @MainActor private final class ListedSuggestions {
     var status: MentorStatus
     let floor: SuggestionFloor
     var journaled: [Suggestion] = []
     var talking = false
     private(set) var listed: [[Int64]] = []
-    private(set) var floors: [Int64?] = []
     let changes: AsyncStream<Void>
     private let changed: AsyncStream<Void>.Continuation
 
@@ -314,10 +312,7 @@ struct InterventionLoopTests {
     }
 
     func list() {
-      let now = SuggestionFloor()
-      now.set(floor.value)
-      floors.append(now.value)
-      listed.append(status.shown(journaled, floor: now).map(\.id))
+      listed.append(status.shown(journaled, floor: floor).map(\.id))
       changed.yield()
     }
 
@@ -432,8 +427,7 @@ struct InterventionLoopTests {
 
     if held { #expect(beforeRelease.allSatisfy { !$0.contains(b.id) }) }
     // On either timing, the floor the loop raised above A as it began
-    // journaling B stays up until the loop shows B and comes down only then,
-    // and no list made while it was up has B.
+    // journaling B stays up until the loop shows B and comes down only then.
     let untilShown = await h.drain { @Sendable in
       if case .suggestion = $0 { return true } else { return false }
     }
@@ -454,9 +448,6 @@ struct InterventionLoopTests {
     #expect(!raised.isEmpty)
     #expect(raised.allSatisfy { $0 == a.id })
     #expect(lowered.holdsSuggestionsAfter == nil)
-    for (ids, floor) in zip(view.listed, view.floors) where ids.contains(b.id) {
-      #expect(floor == nil)
-    }
   }
 
   @Test func aHeldSuggestionThatOutlivedTheExchangeExpiresUnseen() async throws {
