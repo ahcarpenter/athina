@@ -12,7 +12,7 @@ Athina promises; a way to break one of those promises is a security issue.
 
 Report privately through GitHub's private vulnerability reporting: open the
 repository's **Security** tab and choose **Report a vulnerability**
-(<https://github.com/ahcarpenter/athina/security/advisories/new>). Only the
+(<https://github.com/getathina/athina/security/advisories/new>). Only the
 maintainer sees the report. Please do not open a public issue, pull request or
 discussion for a vulnerability until a fix has shipped.
 

@@ -164,6 +164,12 @@ itself and says which on the line it writes as it starts.
    smoke references and the e2e checkpoints from CI's runs of HEAD, all or
    none, naming any run it is missing. Commit the images with the change.
    Approve only a drift the change meant.
+5. **The merge queue** lands it: once the pull request is green,
+   `gh pr merge --auto --squash <number>`, or the Merge when ready button,
+   queues it. The queue runs all five checks again on it merged with main and
+   everything queued ahead of it, one run at a time, then squashes it onto
+   main in turn. A failure removes only that pull request; the others stay
+   queued.
 
 [Continuous integration](docs/ci.md) has the detail, and
 [Testing](docs/testing.md) says what each layer proves.
