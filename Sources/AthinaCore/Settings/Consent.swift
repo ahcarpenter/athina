@@ -43,7 +43,7 @@ public struct Consent: Codable, Equatable, Sendable {
   /// The privacy policy the consent window and Settings > Privacy both link
   /// to: docs/privacy.md on the repository's main branch.
   public static let privacyPolicyURL = URL(
-    string: "https://github.com/ahcarpenter/athina/blob/main/docs/privacy.md"
+    string: "https://github.com/getathina/athina/blob/main/docs/privacy.md"
   )!
 
   /// Whether this answer lets Athina watch and send: Allow, given to the

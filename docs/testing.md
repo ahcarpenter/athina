@@ -70,13 +70,13 @@ tracks. It is a JSON array of entries like
   {
     "test": "AthinaCoreTests.ToastCountdownTests/aToastRunsForItsTimeout",
     "owner": "ahcarpenter",
-    "issue": "https://github.com/ahcarpenter/athina/issues/123",
+    "issue": "https://github.com/getathina/athina/issues/123",
     "reason": "misses the last tick about once in twenty runs on a loaded runner"
   },
   {
     "scenario": "toast-buttons",
     "owner": "ahcarpenter",
-    "issue": "https://github.com/ahcarpenter/athina/issues/124"
+    "issue": "https://github.com/getathina/athina/issues/124"
   }
 ]
 ```

@@ -13,7 +13,7 @@ import Testing
   private static let script = repository.appendingPathComponent("scripts/quarantine.sh")
   private static let committed = repository.appendingPathComponent("Tests/quarantine.json")
 
-  private static let issue = "https://github.com/ahcarpenter/athina/issues/1"
+  private static let issue = "https://github.com/getathina/athina/issues/1"
 
   /// Runs the script on `list` with `arguments`, returning its status and standard output.
   private func run(_ list: URL, _ arguments: [String]) throws -> (status: Int32, output: String) {
