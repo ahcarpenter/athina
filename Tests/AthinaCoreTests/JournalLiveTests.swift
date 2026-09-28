@@ -70,7 +70,9 @@ import Testing
   /// replaced. A live list is loaded once too, and then lists every row
   /// written after, so none is missed.
   @Test func aListFollowedFromLaunchListsTheRowsJournaledJustAfter() async throws {
-    let journal = try Journal(url: temporaryURL())
+    let url = temporaryURL()
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let journal = try Journal(url: url)
     var calls = journal.liveModelCalls(limit: 10).makeAsyncIterator()
     let atLaunch = try await calls.next()
     #expect(atLaunch == [])
@@ -90,7 +92,9 @@ import Testing
   /// one after the back-off, so it lists the rows written while it waited and
   /// every row after, instead of standing still until relaunch.
   @Test func aListFollowsTheJournalAgainAfterAFailedFetch() async throws {
-    let journal = try Journal(url: temporaryURL())
+    let url = temporaryURL()
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let journal = try Journal(url: url)
     let clock = AdjustableClock(startingAt: now)
     let (lists, delivered) = AsyncStream.makeStream(of: [ModelCallRecord].self)
     let (failures, failed) = AsyncStream.makeStream(of: Void.self)
@@ -134,7 +138,9 @@ import Testing
   /// sensing journal while the app launches, are each listed once, newest
   /// first.
   @Test func rowsJournaledWhileTheListStartsAreEachListedOnce() async throws {
-    let journal = try Journal(url: temporaryURL())
+    let url = temporaryURL()
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let journal = try Journal(url: url)
     let written = Task {
       var ids: [Int64] = []
       for i in 0..<20 { ids.append(try await journal.record(suggestion(at: now + Double(i))).id) }
@@ -150,7 +156,9 @@ import Testing
   /// journal's order, and after Clear Journal holds only the cleared event,
   /// though the journal gives new rows the ids of the ones it deleted.
   @Test func theTimelineListsEachRowOnceAndEmptiesWithTheJournal() async throws {
-    let journal = try Journal(url: temporaryURL())
+    let url = temporaryURL()
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    let journal = try Journal(url: url)
     var entries = journal.liveEntries(limit: 10).makeAsyncIterator()
     #expect(try await entries.next() == [])
 
@@ -208,6 +216,7 @@ import Testing
   /// checked on the file itself.
   @Test func aJournalFileLogsAheadAndVacuumsIncrementally() async throws {
     let url = temporaryURL()
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
     let journal = try Journal(url: url)
     try await journal.record(JournalEvent(timestamp: now, kind: .started))
     let (mode, vacuum) = try await DatabaseQueue(path: url.path).read { db in
