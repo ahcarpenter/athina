@@ -21,8 +21,8 @@ Sources/AthinaCore            library, fully testable
   Claude/                     ClaudeClient (Messages API request and response types, CallIdentity, AnthropicClient
                               over URLSession, LiveModelClient routing each call by provider), ModelProvider
                               (Anthropic, OpenAI, OpenCode, and CallRoute), OpenAIClient (the Responses API
-                              shape, and OpenCodeClient for Zen's two endpoints), JSONSchemaCheck (a reply
-                              against its schema), CallFixture (recorded call format and files),
+                              shape, and OpenCodeClient for Zen's two endpoints), CallFixture (recorded call
+                              format and files),
                               RecordingClaudeClient, ReplayClaudeClient, ModelClientMode (live, record, or replay
                               from the command line), ScriptedClaudeClient (hand-written answers for tests),
                               ModelCatalog and PriceTable (every provider's models and prices), KeyStore (Keychain
