@@ -65,13 +65,18 @@ final class AppState {
         consentDidChange(to: settings.hasConsent)
       }
       Task {
-        // The loop first on a withdrawal, so no call starts while the
-        // pipeline is still being told, and a grant only once the loop
-        // has the provider it was given for.
-        if consentChanged, !settings.hasConsent { await mentor?.setConsented(false) }
-        await mentor?.updateSettings(settings.mentor)
-        if consentChanged, settings.hasConsent { await mentor?.setConsented(true) }
-        await pipeline?.updateSettings(settings)
+        // A withdrawal reaches the loop, then the pipeline, before anything
+        // else; a grant reaches the loop only once it has the provider it
+        // was given for.
+        if consentChanged, !settings.hasConsent {
+          await mentor?.setConsented(false)
+          await pipeline?.updateSettings(settings)
+          await mentor?.updateSettings(settings.mentor)
+        } else {
+          await mentor?.updateSettings(settings.mentor)
+          if consentChanged { await mentor?.setConsented(true) }
+          await pipeline?.updateSettings(settings)
+        }
       }
       if settings.pauseShortcut != oldValue.pauseShortcut {
         registerPauseHotKey()
