@@ -9,7 +9,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help doctor build all run test test-e2e snapshots check approve lint \
-	format run-live record snapshots-ci icons measure release clean
+	links format run-live record snapshots-ci icons measure release clean
 
 help:
 	@awk -f scripts/make-help.awk $(MAKEFILE_LIST)
@@ -53,7 +53,7 @@ snapshots: ## screenshots of your change vs main, drawn here, listing every diff
 	@scripts/snapshots.sh smoke-local $(BASE)
 ##= BASE=<commit> compare with this commit rather than main
 
-check: ## lint, test and snapshots: the one command to run before a push
+check: ## lint, links, test and snapshots: the one command to run before a push
 	@scripts/check.sh
 
 approve: ## accept CI's new screenshots of HEAD, listing each before writing it
@@ -61,6 +61,9 @@ approve: ## accept CI's new screenshots of HEAD, listing each before writing it
 
 lint: ## the Swift style check, as CI runs it
 	@scripts/swift-format.sh lint
+
+links: ## every relative link and anchor in the Markdown resolves, offline, as CI checks it
+	@scripts/check-links.swift
 
 format: ## fix the Swift style of every file in place
 	@scripts/swift-format.sh format
