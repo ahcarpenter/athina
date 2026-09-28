@@ -40,7 +40,7 @@ fi
 if [ "$#" -eq 1 ]; then
 	live_json="$(cat "$1")" || exit 2
 else
-	repository="${GITHUB_REPOSITORY:-ahcarpenter/athina}"
+	repository="${GITHUB_REPOSITORY:-getathina/athina}"
 	live_json="$(gh api "repos/$repository/rules/branches/main")" || {
 		echo "check-ruleset: could not read the rules GitHub enforces on main" >&2
 		exit 2
