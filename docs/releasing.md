@@ -214,10 +214,6 @@ run-live`, so do not run both: `make run-live` refuses to start while a live
 Athina runs,
 wherever it was installed.
 
-- **Coming from Mentor.** The move of `~/Library/Application Support/mentor`,
-  the preferences and the key ([Coming from Mentor](coming-from-mentor.md)) runs on the first live
-  launch of whichever Athina comes first, released or development, and only
-  once.
 - **Grants.** A grant made to a released copy is recorded against its Developer
   ID requirement, so every later release keeps it. Grants made earlier to an
   ad-hoc development build, recorded against the bundle identifier alone,

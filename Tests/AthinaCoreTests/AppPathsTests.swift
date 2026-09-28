@@ -23,6 +23,8 @@ private func scratch() throws -> URL {
     #expect(AppPaths.preferencesDomain == "com.ahcarpenter.athina")
     #expect(AppPaths.keychainService == "com.ahcarpenter.athina")
     #expect(KeychainKeyStore.service == "com.ahcarpenter.athina")
+    #expect(KeychainKeyStore().service == KeychainKeyStore.service)
+    #expect(KeychainKeyStore.account == "anthropic-api-key")
   }
 
   /// The identifier comes from the app bundle the process runs from, so the

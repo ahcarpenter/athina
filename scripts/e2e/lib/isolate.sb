@@ -6,8 +6,7 @@
 ;;
 ;; __LIVE_SUPPORT__ is replaced with the owner's Application Support directory
 ;; when a run writes its copy of this profile, and __LEGACY_SUPPORT__ with the
-;; one the app kept as Mentor: the only copy of the owner's data until the
-;; first live launch moves it, and a copy that is kept after.
+;; one the app kept while it was called Mentor, which stays on the owner's Mac.
 (version 1)
 (allow default)
 (deny file* (subpath "__LIVE_SUPPORT__"))

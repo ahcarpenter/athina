@@ -51,18 +51,10 @@ public struct SettingsStore: Sendable {
 /// Where Athina keeps its files.
 public enum AppPaths {
   /// The application support directory's name.
-  ///
-  /// The app was called Mentor and kept its files under `mentor`;
-  /// `DataMigration` moves what is there to this one on the first launch under
-  /// the new name.
   public static let directoryName = "athina"
-  /// The name the app kept its files under before it was renamed.
-  public static let legacyDirectoryName = "mentor"
   /// The bundle identifier of the direct and development builds, and the one
   /// a process running from no app bundle (`swift run`, tests) goes by.
   public static let defaultBundleIdentifier = "com.ahcarpenter.athina"
-  /// The identifier the app had before it was renamed.
-  public static let legacyBundleIdentifier = "com.ahcarpenter.mentor"
 
   /// The running app's bundle identifier, so a copy signed under another
   /// one (the end-to-end harness's hermetic copy, docs/e2e.md) keeps its
@@ -89,12 +81,6 @@ public enum AppPaths {
   /// the journal and settings.
   public static func supportDirectory() -> URL {
     applicationSupport().appendingPathComponent(directoryName, isDirectory: true)
-  }
-
-  /// Where the app kept its files before it was renamed, which is what
-  /// `DataMigration` moves across.
-  public static func legacySupportDirectory() -> URL {
-    applicationSupport().appendingPathComponent(legacyDirectoryName, isDirectory: true)
   }
 
   private static func applicationSupport() -> URL {

@@ -46,7 +46,7 @@ document:
       everyday make commands, the rules, and how a change reaches main.
     - docs/<topic>.md owns the detail of its topic (architecture,
       mentor-loop, privacy, debug-panel, design, code-style, testing, replay,
-      e2e, ci, releasing, coming-from-mentor); docs/testing.md states each
+      e2e, ci, releasing); docs/testing.md states each
       test layer's job and where it runs.
     - AGENTS.md holds rules only, one line each, each with a pointer to the
       doc or code that explains it where there is one: never a doc's detail

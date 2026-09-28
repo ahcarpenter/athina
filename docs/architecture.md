@@ -37,9 +37,6 @@ Sources/AthinaCore            library, fully testable
                               ProcessResources (CPU, memory), AthinaClock (the one time source: SystemClock,
                               and AdjustableClock for tests and a replay), ClockMode (a replay's clock flags),
                               ControlMode (whether a launch serves the control API, see docs/e2e.md)
-Sources/AthinaSQLiteShim      C, one function: the `sqlite3_db_config` setting neither Swift (the call is
-                              variadic) nor GRDB makes, so `DataMigration` can read the old journal without
-                              altering it
 Sources/Athina                the app: MenuBarExtra, AppState, windows, ToastController (floating panel),
                               Overlay/CalloutController (click-through overlay), Voice/SpeechListener
                               (on-device speech recognition), HotKeyCenter (the global keyboard shortcuts,
