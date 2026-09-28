@@ -84,6 +84,52 @@ import Testing
     #expect(loadedOnce.isEmpty, "the load itself is not what lists them")
   }
 
+  private struct FetchFailed: Error {}
+
+  /// A live query ends at its first failed fetch; the list follows a fresh
+  /// one after the back-off, so it lists the rows written while it waited and
+  /// every row after, instead of standing still until relaunch.
+  @Test func aListFollowsTheJournalAgainAfterAFailedFetch() async throws {
+    let journal = try Journal(url: temporaryURL())
+    let clock = AdjustableClock(startingAt: now)
+    let (lists, delivered) = AsyncStream.makeStream(of: [ModelCallRecord].self)
+    let (failures, failed) = AsyncStream.makeStream(of: Void.self)
+    let following = Task {
+      var attempts = 0
+      await followLiveList(
+        {
+          attempts += 1
+          let fails = attempts == 1
+          return journal.liveModelCalls(limit: 10).map { list in
+            if fails { throw FetchFailed() }
+            return list
+          }
+        },
+        clock: clock,
+        backOff: .seconds(5),
+        restarting: { _ in failed.yield() },
+        deliver: { delivered.yield($0) }
+      )
+      delivered.finish()
+    }
+    var failure = failures.makeAsyncIterator()
+    #expect(await failure.next() != nil)
+
+    let whileWaiting = try await journal.record(call(at: now))
+    await clock.waitForSleepers()
+    clock.advance(by: .seconds(5))
+    var list = lists.makeAsyncIterator()
+    let recovered = try await firstList(from: &list) { $0.count == 1 }
+    #expect(recovered?.map(\.id) == [whileWaiting.id])
+
+    let after = try await journal.record(call(at: now + 1))
+    let live = try await firstList(from: &list) { $0.count == 2 }
+    #expect(live?.map(\.id) == [after.id, whileWaiting.id])
+
+    following.cancel()
+    await following.value
+  }
+
   /// Rows journaled from another task while the list starts, as the loop and
   /// sensing journal while the app launches, are each listed once, newest
   /// first.
