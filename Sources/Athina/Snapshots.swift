@@ -175,22 +175,22 @@ enum Snapshots {
         AnyView(StatusMessagesPreview()),
         noSpeech
       ),
-      Spec("settings-models", whole(1980), AnyView(ModelSettings().formStyle(.grouped)), state),
+      Spec("settings-models", whole(2140), AnyView(ModelSettings().formStyle(.grouped)), state),
       Spec(
         "settings-models-openai",
-        whole(1980),
+        whole(2140),
         AnyView(ModelSettings().formStyle(.grouped)),
         AppState.sample(provider: .openAI)
       ),
       Spec(
         "settings-models-opencode",
-        whole(1980),
+        whole(2140),
         AnyView(ModelSettings().formStyle(.grouped)),
         AppState.sample(provider: .openCode)
       ),
       Spec(
         "settings-models-empty",
-        whole(1980),
+        whole(2140),
         AnyView(ModelSettings().formStyle(.grouped)),
         empty
       ),
@@ -308,7 +308,7 @@ enum Snapshots {
       ),
       Spec(
         "settings-models-replay",
-        whole(1980),
+        whole(2140),
         AnyView(ModelSettings().formStyle(.grouped)),
         replay
       ),
