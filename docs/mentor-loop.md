@@ -117,9 +117,12 @@ sends it to the provider in force. `AnthropicClient` posts it as it is.
 system blocks become one developer message with a text part per block, the
 screenshot a base64 JPEG data URL, the schema a strict `json_schema` format
 named after the call's kind, the effort `reasoning.effort`, and `store:
-false`; the reply maps back, a refusal part to `refusal`, a reply cut off at
-`max_output_tokens` to `max_tokens`, cached input tokens to cache reads and
-cache writes to cache writes. `OpenCodeClient` sends Zen's Claude models to
+false`. Reasoning counts against `max_output_tokens`, so a budget shorter
+than `MentorLoop.thinkingAllowance` (triage, Test Connection) gets that
+allowance added; the longer budgets already include it. The reply maps
+back, a refusal part to `refusal`, a reply cut off at `max_output_tokens` to
+`max_tokens`, cached input tokens to cache reads and cache writes to cache
+writes. `OpenCodeClient` sends Zen's Claude models to
 its Messages endpoint and its GPT models to its Responses endpoint, with the
 same two shapes. No prompt or schema changes with the provider, so the
 prompt version and the committed fixtures stay as they are, and a replay
