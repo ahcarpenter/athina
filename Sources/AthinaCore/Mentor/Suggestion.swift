@@ -523,11 +523,11 @@ public struct MentorStatus: Equatable, Sendable {
   /// The follow-up question waiting for the call in flight, or nil when none
   /// waits.
   public var pendingFollowUp: PendingFollowUp?
-  /// While a suggestion is held for a talked-to toast, or about to be
-  /// (`MentorScheduler.publishGate`), the newest suggestion id journaled
-  /// before it; nil when none is.
+  /// While a new suggestion is being journaled and decided, or one is held
+  /// for a talked-to toast (`MentorScheduler.publishGate`), the newest
+  /// suggestion id journaled before it; nil when none is.
   ///
-  /// A later suggestion with no feedback is held, not shown.
+  /// A later suggestion with no feedback is not listed yet.
   public var holdsSuggestionsAfter: Int64?
 
   /// Creates a status, by default the one before the loop has started: no API

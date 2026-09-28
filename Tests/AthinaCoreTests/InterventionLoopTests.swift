@@ -299,7 +299,11 @@ struct InterventionLoopTests {
   @MainActor private final class ListedSuggestions {
     var status: MentorStatus
     var journaled: [Suggestion] = []
+    /// The suggestions the loop has sent to be shown so far.
+    var sent: Set<Int64> = []
     private(set) var listed: [[Int64]] = []
+    /// `sent` as each value in `listed` was made.
+    private(set) var sentWhenListed: [Set<Int64>] = []
     let changes: AsyncStream<Void>
     private let changed: AsyncStream<Void>.Continuation
 
@@ -310,6 +314,7 @@ struct InterventionLoopTests {
 
     func list() {
       listed.append(status.shown(journaled).map(\.id))
+      sentWhenListed.append(sent)
       changed.yield()
     }
 
@@ -347,7 +352,7 @@ struct InterventionLoopTests {
         }
       },
     ]
-    defer { following.forEach { $0.cancel() } }
+    defer { for task in following { task.cancel() } }
     await view.wait { view.journaled.map(\.id) == [a.id] }
 
     await h.client.enqueue(json: Self.yes)
@@ -363,6 +368,60 @@ struct InterventionLoopTests {
 
     #expect(whileHeld.allSatisfy { !$0.contains(b.id) })
     #expect(whileHeld.last == [a.id])
+  }
+
+  /// Talking back that begins while a new suggestion's row is being journaled
+  /// still keeps it out of every list until the loop shows it.
+  @Test @MainActor func aSuggestionJournaledAsTalkBackBeginsIsListedOnlyOnceShown() async throws {
+    let h = try await MentorLoopTests.Harness()
+    let a = try await journaledSuggestion(h)
+
+    let view = await ListedSuggestions(status: h.loop.currentStatus())
+    let events = await h.loop.events()
+    let journal = h.journal
+    let loop = h.loop
+    let following = [
+      Task { @MainActor in
+        var talking = false
+        for await event in events {
+          switch event {
+          case .suggestion(let shown):
+            view.sent.insert(shown.id)
+          case .status(let status):
+            view.status = status
+            view.list()
+            if !talking, status.holdsSuggestionsAfter != nil {
+              talking = true
+              await loop.setTalkingBack(true)
+            }
+          default:
+            continue
+          }
+        }
+      },
+      Task { @MainActor in
+        for try await suggestions in journal.liveSuggestions(limit: 10) {
+          view.journaled = suggestions
+          view.list()
+        }
+      },
+    ]
+    defer { for task in following { task.cancel() } }
+    await view.wait { view.journaled.map(\.id) == [a.id] }
+
+    await h.client.enqueue(json: Self.yes)
+    await h.client.enqueue(json: Self.suggestion(region: "null"))
+    await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
+    let b = try #require(try await h.journal.recentSuggestions(limit: 1).first)
+    #expect(b.id != a.id)
+    await view.wait { view.journaled.contains { $0.id == b.id } }
+
+    await h.loop.setTalkingBack(false)
+    await view.wait { view.listed.last == [b.id, a.id] }
+
+    for (ids, sent) in zip(view.listed, view.sentWhenListed) where ids.contains(b.id) {
+      #expect(sent.contains(b.id))
+    }
   }
 
   @Test func aHeldSuggestionThatOutlivedTheExchangeExpiresUnseen() async throws {

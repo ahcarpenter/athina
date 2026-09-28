@@ -89,9 +89,11 @@ public actor MentorLoop {
   private var talkingBack = false
   /// A suggestion made while that toast was up, waiting for it to close.
   private var heldSuggestion: Suggestion?
-  /// `MentorStatus.holdsSuggestionsAfter`, set before a suggestion that will
-  /// be held is journaled.
+  /// `MentorStatus.holdsSuggestionsAfter`, set before a new suggestion is
+  /// journaled and kept until it and any held one are decided.
   private var holdsSuggestionsAfter: Int64?
+  /// A new suggestion is being journaled and not yet decided by `publish`.
+  private var journalingSuggestion = false
   /// The one question waiting for the call in flight to return; a newer one takes its place.
   private struct PendingQuestion {
     var record: MentorStatus.PendingFollowUp
@@ -228,9 +230,15 @@ public actor MentorLoop {
   public func expireHeldSuggestion(now: Date? = nil) async {
     guard let held = heldSuggestion else { return }
     heldSuggestion = nil
-    holdsSuggestionsAfter = nil
     await expireUnseen(held, now: now ?? clock.date)
+    liftSuggestionFloorIfDecided()
     await publishStatus()
+  }
+
+  /// Clears `holdsSuggestionsAfter` once no suggestion is held or being
+  /// journaled.
+  private func liftSuggestionFloorIfDecided() {
+    if heldSuggestion == nil, !journalingSuggestion { holdsSuggestionsAfter = nil }
   }
 
   private func expireUnseen(_ suggestion: Suggestion, now: Date) async {
@@ -709,16 +717,12 @@ public actor MentorLoop {
     status.lastMentor = await store(record)
 
     guard let suggestion = toShow else { return }
-    if holdsSuggestionsAfter == nil,
-      case .hold = scheduler.publishGate(
-        madeAt: suggestion.timestamp,
-        conditions: conditions(now: clock.date),
-        now: clock.date
-      )
-    {
-      holdsSuggestionsAfter = (try? await journal.recentSuggestions(limit: 1).first?.id) ?? 0
-      await publishStatus()
+    journalingSuggestion = true
+    if holdsSuggestionsAfter == nil {
+      let newest = (try? await journal.recentSuggestions(limit: 1).first?.id) ?? 0
+      if holdsSuggestionsAfter == nil { holdsSuggestionsAfter = newest }
     }
+    await publishStatus()
     var stored = suggestion
     do {
       stored = try await journal.record(suggestion)
@@ -736,6 +740,7 @@ public actor MentorLoop {
         detail: "\(stored.category.label): \(stored.title)"
       )
     )
+    journalingSuggestion = false
     await publish(stored, now: clock.date)
   }
 
@@ -758,7 +763,7 @@ public actor MentorLoop {
     case .expired, .withdrawn:
       await expireUnseen(suggestion, now: now)
     }
-    if heldSuggestion == nil { holdsSuggestionsAfter = nil }
+    liftSuggestionFloorIfDecided()
     await publishStatus()
   }
 
