@@ -224,7 +224,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     let expected: JSONValue = [
       "model": "gpt-6-sol",
       "store": false,
-      "max_output_tokens": 11000,
+      "max_output_tokens": 8000,
       "reasoning": ["effort": "medium"],
       "input": [
         [
@@ -273,7 +273,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     }
     #expect(fields["reasoning"] == nil)
     #expect(fields["text"] == nil)
-    #expect(fields["max_output_tokens"] == 16)
+    #expect(fields["max_output_tokens"] == .number(Double(16 + MentorLoop.thinkingAllowance)))
     #expect(
       fields["input"] == [
         [
@@ -536,6 +536,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     var settings = MentorSettings()
     settings.provider = .openCode
     await h.loop.updateSettings(settings)
+    await h.waitUntil { $0.availability == .ready }
     await h.client.enqueue(json: Self.no)
     await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
     let sent = try #require(await h.client.sent.first)
@@ -612,7 +613,8 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
     var settings = MentorSettings()
     settings.provider = .openCode
-    let switching = Task { await loop.updateSettings(settings) }
+    // Returns while OpenCode's key is still being read.
+    await loop.updateSettings(settings)
     await store.readBegun()
     // The loop is waiting on OpenCode's key and takes the next snapshot meanwhile.
     clock.advance(by: .milliseconds(1))
@@ -622,7 +624,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     #expect(await loop.currentStatus().availability == .noAPIKey)
 
     store.release.signal()
-    await switching.value
+    await waitUntil { $0.availability == .ready }
     await client.enqueue(json: Self.no)
     clock.advance(by: .milliseconds(1))
     input.yield(.observation(Fixtures.observation(id: 2, at: clock.date)))
