@@ -224,7 +224,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     let expected: JSONValue = [
       "model": "gpt-6-sol",
       "store": false,
-      "max_output_tokens": 8000,
+      "max_output_tokens": 11000,
       "reasoning": ["effort": "medium"],
       "input": [
         [
@@ -273,6 +273,7 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     }
     #expect(fields["reasoning"] == nil)
     #expect(fields["text"] == nil)
+    #expect(fields["max_output_tokens"] == 16)
     #expect(
       fields["input"] == [
         [
@@ -280,6 +281,29 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
           "content": [["type": "input_text", "text": "Reply with the single word OK."]],
         ]
       ]
+    )
+  }
+
+  @Test func aTriageSizedCallKeepsItsReplyBudgetBesideItsReasoning() throws {
+    let request = MessagesRequest(
+      model: "gpt-6-luna",
+      maxTokens: MentorLoop.triageMaxTokens,
+      system: [SystemBlock(text: "Triage.")],
+      messages: [Message(role: .user, content: [.text("The screen says hi.")])],
+      outputConfig: OutputConfig(effort: .low)
+    )
+    let json = try JSONDecoder().decode(
+      JSONValue.self,
+      from: OpenAIClient.body(for: request, call: call)
+    )
+    guard case .object(let fields) = json else {
+      Issue.record("not an object")
+      return
+    }
+    #expect(fields["reasoning"] == ["effort": "low"])
+    #expect(
+      fields["max_output_tokens"]
+        == .number(Double(MentorLoop.triageMaxTokens + MentorLoop.thinkingAllowance))
     )
   }
 
@@ -517,6 +541,95 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     let sent = try #require(await h.client.sent.first)
     #expect(sent.route == CallRoute(.openCode, key: "zen-key"))
     #expect(sent.request.model == "claude-haiku-4-5")
+  }
+
+  /// A key store that holds each read of one provider's key until the test
+  /// lets it go, as a keychain prompt the captain has not answered yet does.
+  private final class SlowKeyStore: KeyStore, @unchecked Sendable {
+    let keys: InMemoryKeyStore
+    let slow: ModelProvider
+    let reading = DispatchSemaphore(value: 0)
+    let release = DispatchSemaphore(value: 0)
+
+    init(keys: [ModelProvider: String], slow: ModelProvider) {
+      self.keys = InMemoryKeyStore(keys: keys)
+      self.slow = slow
+    }
+
+    func load(for provider: ModelProvider) throws -> String? {
+      if provider == slow {
+        reading.signal()
+        release.wait()
+      }
+      return try keys.load(for: provider)
+    }
+    func save(_ key: String, for provider: ModelProvider) throws {
+      try keys.save(key, for: provider)
+    }
+    func delete(for provider: ModelProvider) throws { try keys.delete(for: provider) }
+
+    /// Returns once a read of the slow provider's key has begun.
+    func readBegun() async {
+      await withCheckedContinuation { continuation in
+        DispatchQueue.global().async {
+          self.reading.wait()
+          continuation.resume()
+        }
+      }
+    }
+  }
+
+  @Test func noCallCarriesTheOldProvidersKeyWhileTheNewOneIsRead() async throws {
+    let clock = AdjustableClock(startingAt: Harness.start)
+    let client = ScriptedClaudeClient(clock: clock)
+    let store = SlowKeyStore(
+      keys: [.anthropic: "sk-ant-test", .openCode: "zen-key"],
+      slow: .openCode
+    )
+    let (stream, input) = AsyncStream<SensingEvent>.makeStream()
+    let loop = MentorLoop(
+      settings: MentorSettings(),
+      journal: try Journal.inMemory(),
+      client: client,
+      keyStore: store,
+      events: stream,
+      consented: true,
+      clock: clock,
+      calendar: MentorLoopTests.calendar
+    )
+    let updates = await loop.events()
+    var events = updates.makeAsyncIterator()
+    func waitUntil(calls: Int = 0, _ condition: (MentorStatus) -> Bool) async {
+      while true {
+        let sentCount = await client.sent.count
+        if condition(await loop.currentStatus()), sentCount >= calls { return }
+        guard await events.next() != nil else { return }
+      }
+    }
+    await loop.start()
+    input.yield(.modeChanged(.watching))
+    await waitUntil { $0.mode == .watching }
+
+    var settings = MentorSettings()
+    settings.provider = .openCode
+    let switching = Task { await loop.updateSettings(settings) }
+    await store.readBegun()
+    // The loop is waiting on OpenCode's key and takes the next snapshot meanwhile.
+    clock.advance(by: .milliseconds(1))
+    input.yield(.observation(Fixtures.observation(id: 1, at: clock.date)))
+    await waitUntil { $0.lastGate?.observationID == 1 && $0.inFlight == nil }
+    #expect(await client.sent.isEmpty)
+    #expect(await loop.currentStatus().availability == .noAPIKey)
+
+    store.release.signal()
+    await switching.value
+    await client.enqueue(json: Self.no)
+    clock.advance(by: .milliseconds(1))
+    input.yield(.observation(Fixtures.observation(id: 2, at: clock.date)))
+    await waitUntil(calls: 1) { $0.lastGate?.observationID == 2 && $0.inFlight == nil }
+    let sent = await client.sent
+    #expect(sent.map(\.route) == [CallRoute(.openCode, key: "zen-key")])
+    await loop.stop()
   }
 
   @Test func aReplyThatBreaksItsSchemaIsAnErrorThatStillCounts() async throws {
