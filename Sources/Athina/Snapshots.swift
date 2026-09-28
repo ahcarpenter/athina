@@ -1,6 +1,7 @@
 import AppKit
 import AthinaCore
 import CoreGraphics
+import CoreServices
 import Foundation
 import ScreenCaptureKit
 import SnapshotDiff
@@ -302,6 +303,14 @@ enum Snapshots {
       shard = parsed
     }
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    // The consent window shows Athina's icon as Finder draws it, masked to
+    // the app icon shape, and icon services masks it only for a bundle
+    // LaunchServices knows; for one it does not, it gives the unmasked
+    // full-bleed artwork. A bundle is registered on its own once Spotlight
+    // sees it, which on a CI runner just booted may be after the render, so
+    // the run registers its own bundle first and every render shows the same
+    // icon.
+    LSRegisterURL(Bundle.main.bundleURL as CFURL, true)
     print(
       capturesWithScreenCaptureKit
         ? "snapshot: capturing each window with ScreenCaptureKit"
