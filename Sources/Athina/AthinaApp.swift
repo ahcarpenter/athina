@@ -280,25 +280,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
-    // A launch that must not run says so and goes, rather than running
-    // on something nobody asked for: a replay given a --settings file
-    // that is not settings, or a live launch that could not move the
-    // files the app kept as Mentor. A replay is started by a script, which
-    // reads the line; a live launch may have come from Finder, where
-    // nobody reads stderr, so it also says so on screen.
+    // A replay that must not run says so and goes, rather than running
+    // on something nobody asked for: a --settings file that is not
+    // settings, or a data directory it could not hold. A replay is
+    // started by a script, which reads the line.
     if let refusal = AppState.shared.startupRefusal {
       FileHandle.standardError.write(Data(LaunchReport.didNotStart(refusal).line.utf8))
       AppState.log.error("did not start: \(refusal, privacy: .public)")
-      if !AppState.shared.clientMode.isOffline {
-        let alert = NSAlert()
-        alert.alertStyle = .critical
-        alert.icon = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath)
-        alert.messageText = "Athina did not start"
-        alert.informativeText = refusal
-        alert.addButton(withTitle: "Quit")
-        AppActivation.request()
-        alert.runModal()
-      }
       exit(2)
     }
     if let directory = Snapshots.requestedDirectory {
