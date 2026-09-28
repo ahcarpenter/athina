@@ -415,6 +415,7 @@ struct JournalSettings: View {
             Button("Clear Journal…", role: .destructive) {
               confirmClear = true
             }
+            .accessibilityIdentifier("journal.clear")
           }
         },
         header: {
