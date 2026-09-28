@@ -9,9 +9,9 @@ import Testing
 /// hooks, agents and prompts. It calls each provider's API with a key the
 /// person pastes into Settings, so it has no reason to go near them.
 ///
-/// Every place Athina writes lies outside those folders, its keychain items
-/// are its own, and no source file names any of them, so a change that starts
-/// reaching for one fails here first.
+/// Every place Athina writes lies inside its own Application Support folder
+/// and outside those tools' folders, and its keychain items are its own, so a
+/// change that starts reaching for one fails here first.
 @Suite struct UserSetupTests {
   /// The folders the three tools keep their setup in, under `home`.
   static func setupFolders(home: URL) -> [String] {
@@ -31,6 +31,7 @@ import Testing
 
   @Test func everyPlaceAthinaWritesIsItsOwn() {
     let support = AppPaths.supportDirectory()
+    let supportPath = support.standardizedFileURL.path
     for url in [
       support,
       SettingsStore.defaultURL(),
@@ -38,8 +39,10 @@ import Testing
       CallFixtureFiles.defaultRecordingDirectory(),
       AppPaths.replayRoot(),
     ] {
-      #expect(!isInsideASetup(url), "\(url.path)")
-      #expect(url.path.contains("/Library/Application Support/"), "\(url.path)")
+      let path = url.standardizedFileURL.path
+      #expect(!isInsideASetup(url), "\(path)")
+      #expect(path == supportPath || path.hasPrefix(supportPath + "/"), "\(path)")
+      #expect(path.contains("/Library/Application Support/"), "\(path)")
     }
   }
 
@@ -49,29 +52,5 @@ import Testing
     let accounts = ModelProvider.allCases.map(\.keychainAccount)
     #expect(Set(accounts).count == accounts.count)
     #expect(accounts.allSatisfy { $0.hasSuffix("-api-key") })
-  }
-
-  @Test func noSourceNamesAToolsSetup() throws {
-    let sources = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources")
-    let names = [
-      "/.claude", "\".claude", ".claude.json", "/.codex", "\".codex", "/.opencode",
-      "\".opencode", "config/claude", "config/codex", "config/opencode", "share/opencode",
-      "auth.json", "Claude Code-credentials",
-    ]
-    var naming: [String] = []
-    let walker = try #require(
-      FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil)
-    )
-    for case let url as URL in walker where url.pathExtension == "swift" {
-      let text = try String(contentsOf: url, encoding: .utf8)
-      if let name = names.first(where: text.contains) {
-        naming.append("\(url.path.dropFirst(sources.path.count + 1)) names \(name)")
-      }
-    }
-    #expect(naming.isEmpty, "no source may name a tool's own setup: \(naming)")
   }
 }

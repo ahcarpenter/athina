@@ -99,8 +99,13 @@ public struct OpenAIClient: ClaudeClient {
       "max_output_tokens": .number(Double(request.maxTokens)),
       "store": false,
     ]
+    // Reasoning counts against max_output_tokens, so it gets room of its own
+    // rather than spending a short reply's budget.
     if let effort = request.outputConfig?.effort {
       body["reasoning"] = ["effort": .string(effort.rawValue)]
+      body["max_output_tokens"] = .number(
+        Double(request.maxTokens + MentorLoop.thinkingAllowance)
+      )
     }
     if let format = request.outputConfig?.format {
       body["text"] = [

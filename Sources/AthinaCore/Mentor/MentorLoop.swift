@@ -84,8 +84,9 @@ public actor MentorLoop {
   /// Set by the app, not read from the sensing stream, so a withdrawal
   /// holds every call at once rather than when the mode change arrives.
   private var consented: Bool
-  /// The key for the provider in force, or nil when none is saved.
-  private var apiKey: String?
+  /// The key last read and the provider it was read for, or nil when none
+  /// is saved.
+  private var loadedKey: CallRoute?
   /// Tiers with a call in progress; a Test Connection can overlap a tier call.
   private var inFlight: Set<ModelTier> = []
   /// A toast the user has talked to is up (`setTalkingBack`).
@@ -260,8 +261,11 @@ public actor MentorLoop {
     settings = validated
     scheduler.settings = validated
     spend.cap = validated.hourlySpendCap
-    // Another provider calls with its own key.
-    if providerChanged { await reloadKey() }
+    // Another provider calls with its own key, and none until it is read.
+    if providerChanged {
+      loadedKey = nil
+      await reloadKey()
+    }
     await publishStatus()
   }
 
@@ -290,12 +294,12 @@ public actor MentorLoop {
 
   /// Whether the loop holds a key to call with: one read from the key store,
   /// or the replay stand-in when calls are replayed.
-  public var hasAPIKey: Bool { apiKey != nil }
+  public var hasAPIKey: Bool { route != nil }
 
   /// How the next call goes: to the provider in force with its key, or nil
-  /// while no key is saved for it.
+  /// while no key is saved for it or its key has not been read yet.
   private var route: CallRoute? {
-    apiKey.map { CallRoute(settings.provider, key: $0) }
+    loadedKey?.provider == settings.provider ? loadedKey : nil
   }
 
   /// Returns the loop's status as it stands now.
@@ -357,7 +361,7 @@ public actor MentorLoop {
       return .failure(.notSent(hold.label))
     }
     await reloadKey()
-    guard let route else { return .failure(.transport("no API key saved")) }
+    guard route != nil else { return .failure(.transport("no API key saved")) }
     let request = MessagesRequest(
       model: settings.triageModelInfo.id,
       maxTokens: 16,
@@ -367,7 +371,6 @@ public actor MentorLoop {
     let call = await perform(
       tier: .test,
       request: request,
-      route: route,
       timeout: MentorLoop.testTimeout
     )
     var record = call.record
@@ -421,7 +424,7 @@ public actor MentorLoop {
     return MentorScheduler.Conditions(
       mode: mode,
       consented: consented,
-      hasAPIKey: apiKey != nil,
+      hasAPIKey: route != nil,
       callInFlight: !inFlight.isEmpty,
       talkingBack: talkingBack,
       spendFraction: spend.fraction(now: now),
@@ -505,7 +508,7 @@ public actor MentorLoop {
   private func runTriage(
     _ observation: ActivityObservation
   ) async -> (TriageVerdict, ContextPlacement)? {
-    guard let route else { return nil }
+    guard route != nil else { return nil }
     let now = clock.date
     let events = (try? await journal.recentEvents(limit: MentorLoop.eventLookback)) ?? []
     let contexts = settings.onlyMentorInsideContexts ? settings.contexts : []
@@ -529,7 +532,6 @@ public actor MentorLoop {
     let call = await perform(
       tier: .triage,
       request: request,
-      route: route,
       timeout: MentorLoop.triageTimeout
     )
     var record = call.record
@@ -566,7 +568,7 @@ public actor MentorLoop {
   /// With a record standing, the window also takes every screen journaled after
   /// the ones its last write read, since the reply rewrites it.
   private func runMentor(_ observation: ActivityObservation, context: ContextPlacement) async {
-    guard let route else { return }
+    guard route != nil else { return }
     let now = clock.date
     let window = await screens(
       since: now.addingTimeInterval(-settings.mentorWindowDuration),
@@ -621,7 +623,6 @@ public actor MentorLoop {
     let call = await perform(
       tier: .mentor,
       request: request,
-      route: route,
       timeout: MentorLoop.timeout(forReplyOf: request.maxTokens)
     )
     let shownAt = clock.date
@@ -824,7 +825,7 @@ public actor MentorLoop {
       followUp.error = hold.label
       return await finish(followUp, about: suggestion)
     }
-    guard let route else {
+    guard route != nil else {
       followUp.error = MentorScheduler.Hold.noAPIKey.label
       return await finish(followUp, about: suggestion)
     }
@@ -854,7 +855,6 @@ public actor MentorLoop {
     let call = await perform(
       tier: .followUp,
       request: request,
-      route: route,
       timeout: MentorLoop.timeout(forReplyOf: request.maxTokens)
     )
     var record = call.record
@@ -1123,7 +1123,7 @@ public actor MentorLoop {
   /// the screens since it was last written: every one journaled after the
   /// ones its last write read, or those since `since` before it has read any.
   private func runRefresh(since: Date, now: Date) async {
-    guard let route else { return }
+    guard route != nil else { return }
     let cursor = understanding?.coveredThroughObservationID
     let window = await screens(since: cursor == nil ? since : nil, after: cursor, now: now)
     let events = (try? await journal.recentEvents(limit: MentorLoop.eventLookback)) ?? []
@@ -1152,7 +1152,6 @@ public actor MentorLoop {
     let call = await perform(
       tier: .understanding,
       request: request,
-      route: route,
       timeout: MentorLoop.timeout(forReplyOf: request.maxTokens)
     )
     var record = call.record
@@ -1250,13 +1249,14 @@ public actor MentorLoop {
   /// Marks the tier in flight, times the call, and prices its usage; the caller
   /// sets the outcome. Nothing is sent without consent
   /// (`MentorScheduler.callGate`), whichever path the call came by and
-  /// whatever its gate saw before an await.
+  /// whatever its gate saw before an await, and nothing with a key other
+  /// than the one read for the provider the request was built for.
   private func perform(
     tier: ModelTier,
     request: MessagesRequest,
-    route: CallRoute,
     timeout: TimeInterval
   ) async -> CallResult {
+    let provider = settings.provider
     inFlight.insert(tier)
     await publishStatus()
     let started = clock.date
@@ -1264,7 +1264,7 @@ public actor MentorLoop {
     var result: Result<MessagesResponse, ClaudeClientError>
     if let hold = MentorScheduler.callGate(consented: consented) {
       result = .failure(.notSent(hold.label))
-    } else {
+    } else if let route, route.provider == provider {
       do {
         result = .success(
           try await client.send(request, call: identity, route: route, timeout: timeout)
@@ -1274,10 +1274,12 @@ public actor MentorLoop {
       } catch {
         result = .failure(.transport(error.localizedDescription))
       }
+    } else {
+      result = .failure(.notSent(MentorScheduler.Hold.noAPIKey.label))
     }
     // What the provider billed, even for a reply that fails the check below.
     let usage = (try? result.get().usage) ?? Usage()
-    if route.provider != .anthropic, case .success(let response) = result,
+    if provider != .anthropic, case .success(let response) = result,
       let problem = MentorLoop.schemaProblem(in: response, for: request)
     {
       result = .failure(.badResponse("the reply does not match its schema: \(problem)"))
@@ -1302,12 +1304,12 @@ public actor MentorLoop {
       usage: usage,
       cost: replayed
         ? 0
-        : (settings.prices.cost(of: usage, model: request.model, provider: route.provider) ?? 0),
+        : (settings.prices.cost(of: usage, model: request.model, provider: provider) ?? 0),
       latency: latency,
       outcome: .error,
       detail: nil,
       replayed: replayed,
-      provider: route.provider
+      provider: provider
     )
     return CallResult(result: result, record: record)
   }
@@ -1379,7 +1381,7 @@ public actor MentorLoop {
   private func availability(now: Date) -> MentorStatus.Availability {
     if !consented { return .noConsent }
     if !settings.enabled { return .disabled }
-    if apiKey == nil { return .noAPIKey }
+    if route == nil { return .noAPIKey }
     if spend.isCapped(now: now) { return .capReached(until: SpendMeter.nextHourStart(after: now)) }
     return .ready
   }
@@ -1407,17 +1409,24 @@ public actor MentorLoop {
     await broadcaster.send(.status(status))
   }
 
+  /// Keeps the key only while the provider it was read for is still in
+  /// force, so a read that finishes after a switch never pairs one
+  /// provider's key with another.
   private func reloadKey() async {
+    let provider = settings.provider
     guard !client.isReplay else {
-      apiKey = MentorLoop.replayCredential
+      loadedKey = CallRoute(provider, key: MentorLoop.replayCredential)
       return
     }
+    let key: String?
     do {
-      apiKey = try await keyStore.loadInBackground(for: settings.provider)
+      key = try await keyStore.loadInBackground(for: provider)
     } catch {
-      apiKey = nil
+      key = nil
       MentorLoop.log.error("api key unreadable: \(String(describing: error), privacy: .public)")
     }
+    guard settings.provider == provider else { return }
+    loadedKey = key.map { CallRoute(provider, key: $0) }
   }
 
   /// Restores this hour's spend and the last call of each tier after a relaunch.
