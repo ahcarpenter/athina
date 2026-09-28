@@ -87,6 +87,8 @@ final class AppState {
       if settings.mentor.provider != oldValue.mentor.provider {
         // Each provider has its own key, and sends to its own company, so
         // one never allowed asks first.
+        apiKeyHint = nil
+        apiKeyError = nil
         reloadKeyHint()
         if !settings.hasConsent, !isSample { perform(.openConsent) }
       }
