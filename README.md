@@ -110,9 +110,9 @@ what is kept.
 
 ## Develop
 
-Athina builds with SwiftPM, and the app has one third-party dependency. Plain
-`make` lists every command, `make run` starts a replay that needs no key and
-spends nothing, and `make check` is what a change passes before it is pushed.
+Athina builds with SwiftPM. Plain `make` lists every command, `make run`
+starts a replay that needs no key and spends nothing, and `make check` is what
+a change passes before it is pushed.
 [CONTRIBUTING.md](CONTRIBUTING.md) covers setup, the daily loop, the rules and
 how a change reaches `main`; `docs/` holds the reference:
 
