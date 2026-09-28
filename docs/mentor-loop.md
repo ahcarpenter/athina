@@ -262,7 +262,10 @@ held suggestion is shown normally if it is at most 30 s old (the same staleness
 bound as a queued observation); otherwise, and
 whenever Athina is paused while one is held, it is journaled with the feedback
 "Expired, never shown" and never put on screen, since the screen it describes
-is gone. Such a suggestion still appears in the history window but is skipped
+is gone. While it is held, a suggestion is not listed in the history window
+nor brought back by Show Last Suggestion or a key press, from before its row
+is journaled until it is shown or expires (`MentorStatus.shown`). One that
+expired unseen then appears in the history window but is skipped
 by Show Last Suggestion and by a key press with no toast up, which bring back
 the most recent suggestion that was actually shown.
 
