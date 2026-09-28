@@ -331,7 +331,10 @@ struct InterventionLoopTests {
     let a = try await journaledSuggestion(h)
     await h.loop.setTalkingBack(true)
 
-    let view = await ListedSuggestions(status: h.loop.currentStatus(), floor: h.loop.suggestionFloor)
+    let view = await ListedSuggestions(
+      status: h.loop.currentStatus(),
+      floor: h.loop.suggestionFloor
+    )
     let events = await h.loop.events()
     let journal = h.journal
     let following = [
@@ -373,7 +376,10 @@ struct InterventionLoopTests {
     let h = try await MentorLoopTests.Harness()
     let a = try await journaledSuggestion(h)
 
-    let view = await ListedSuggestions(status: h.loop.currentStatus(), floor: h.loop.suggestionFloor)
+    let view = await ListedSuggestions(
+      status: h.loop.currentStatus(),
+      floor: h.loop.suggestionFloor
+    )
     let events = await h.loop.events()
     let journal = h.journal
     let loop = h.loop
