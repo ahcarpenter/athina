@@ -112,29 +112,31 @@ order it goes in: apply, then run the job again, then merge.
 **The merge queue.** The `main` ruleset's `merge_queue` rule makes every pull request land through
 GitHub's merge queue, so a merge to main never knocks the other open pull
 requests out of date. A pull request enters it once its five checks
-pass at its head (step 5 above); the queue then builds a group,
-a temporary `gh-readonly-queue/main/...` branch holding main and every pull
-request queued ahead of it plus this one, and runs both workflows on it as a
+pass at its head (step 5 above); the queue then tests it on top of main plus
+every pull request queued ahead of it, on a temporary
+`gh-readonly-queue/main/...` branch, and runs both workflows there as a
 `merge_group` event. There is no draft there, so `ui-snapshots` always runs in
 full, and no pull request, so no drift comment is posted and no image is
 approved from it: approval stays with the ready pull request's own runs. Each
-group's run keeps its own concurrency group, so a push to a pull request never
+queue run keeps its own concurrency group, so a push to a pull request never
 cancels a queued run.
 
 The rule's settings: squash merges, so main keeps one commit per pull request
-titled with its number; groups of one to five pull requests, waiting at most
-five minutes for more once the first is queued, so a busy moment still lands
-up to five in one run; one group building at a time; and all green (`ALLGREEN`), so every pull request in a group must pass
-its own checks. A required check that has not reported within 60 minutes
-counts as failed. When a group fails, the queue removes only the pull request
-that broke it and rebuilds the groups behind it without it; the others keep
-their place. A removed pull request needs a fix pushed and step 5 again.
+titled with its number; one run at a time (`max_entries_to_build` 1); and all
+green (`ALLGREEN`), so each queued pull request is tested in its own run and
+lands in turn once that run passes. A required check that has not reported
+within 60 minutes counts as failed. A failure removes only that pull request
+from the queue; the ones behind it are tested again without it and keep their
+place. A removed pull request needs a fix pushed and step 5 again.
 
-The queue builds one group at a time because each takes eight macOS jobs
-(four fast-lane jobs and four `ui-snapshots` shards), the account runs five at
-once, and pull requests' own runs want the same runners: a second group
-building alongside would mostly wait for them, and a check still queued after
-60 minutes fails its group like any other failure.
+The queue runs one at a time because each run takes eight macOS jobs (four
+fast-lane jobs and four `ui-snapshots` shards), the account runs five at once,
+and pull requests' own runs want the same runners: a second run alongside
+would mostly wait for them, and a check still queued after 60 minutes fails
+like any other failure. Testing each pull request in its own run also keeps
+attribution precise, so a flaky screenshot job ejects only the pull request it
+ran for. Athina lands a handful of pull requests a day, so a run of roughly ten
+minutes each is fine.
 
 **The pull request title.** `pr-title` (`.github/workflows/pr-title.yml`)
 fails unless a pull request's title is Conventional Commits, `type(scope):
