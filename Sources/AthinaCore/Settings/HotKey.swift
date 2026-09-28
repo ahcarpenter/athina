@@ -1,3 +1,4 @@
+// Scratch proof, do not merge.
 import AppKit
 import KeyboardShortcuts
 
