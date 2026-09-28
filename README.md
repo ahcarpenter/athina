@@ -22,10 +22,10 @@ Athina sits in your menu bar and notices what you are working on: the app in
 front, its window, and the text on your screen, read on your Mac. When it sees
 a faster way to do what you are doing, a risk you may have missed, or a step
 that will not get you where you are going, it tells you in a small note under
-the menu bar and can outline the spot on screen it means. It asks Claude with
-your own Anthropic API key, so you pay for those calls, capped at $1 an hour
-by default (see [What it costs](#setup-the-anthropic-api-key)), and nothing
-else leaves your Mac.
+the menu bar and can outline the spot on screen it means. It asks a model
+with your own API key for Anthropic, OpenAI or OpenCode, so you pay for those
+calls, capped at $1 an hour by default (see [What it costs](#setup-an-api-key)),
+and nothing else leaves your Mac.
 
 How it works, and the words the rest of the docs use for it, is in
 [the mentor loop](docs/mentor-loop.md).
@@ -35,7 +35,8 @@ How it works, and the words the rest of the docs use for it, is in
 - Nothing is captured or sent until you choose Allow in the consent window
   that opens first, and Settings > Privacy withdraws it at once.
 - The journal, settings and audio stay on this Mac; the only network peer is
-  `api.anthropic.com`, and only the mentor loop reaches it.
+  the host of the provider chosen in Settings > Models (`api.anthropic.com`,
+  `api.openai.com` or `opencode.ai`), and only the mentor loop reaches it.
 - A model call carries text read from the screen (the app, the window title,
   the focused element, the recognized text), a summary of recent events and
   the note the model keeps of what you appear to be working toward. The mentor tier
@@ -79,20 +80,26 @@ repository, so it needs no API key and spends nothing. It takes Xcode 26 or
 later, your Allow in the consent window and the two permissions below;
 [CONTRIBUTING.md](CONTRIBUTING.md) has the setup.
 
-## Setup: the Anthropic API key
+## Setup: an API key
 
-The mentor loop needs an Anthropic API key. Open Settings > Models (the menu's
-Add API Key item goes there), paste the key, press Save, then Test Connection:
-it sends one tiny request on the triage model and reports the answering model
-or the API's own error message. The key
-goes into your login keychain (`com.ahcarpenter.athina` /
-`anthropic-api-key`) and nowhere else; the app only ever shows its last four
-characters. Without a key the loop stays idle and the menu says so. Remove
+The mentor loop needs an API key for the provider chosen at the top of
+Settings > Models: Anthropic, the default; OpenAI, for the GPT models Codex
+uses; or OpenCode, through its Zen gateway, for its Claude and GPT models
+([Providers](docs/mentor-loop.md#providers)). Choosing a provider other than
+Anthropic asks for your Allow again, since what is sent goes to another company.
+Open Settings > Models (the menu's Add API Key item goes there), paste the key,
+press Save, then Test Connection: it sends one tiny request on the triage model
+and reports the answering model or the API's own error message. Each provider's
+key goes into your login keychain (`com.ahcarpenter.athina` /
+`anthropic-api-key`, `openai-api-key` or `opencode-api-key`) and nowhere else;
+the app only ever shows its last four characters, and never reads or changes
+another tool's setup, such as Claude Code's, Codex's or OpenCode's. Without a
+key for the chosen provider the loop stays idle and the menu says so. Remove
 deletes the keychain item. A replay needs no key, and the app never reads the
 keychain while replaying.
 
-**What it costs.** Every call is billed to your Anthropic account at the
-prices in Settings > Models. Settings > Models > Spend at most caps each clock
+**What it costs.** Every call is billed to your own account with the chosen
+provider at the prices in Settings > Models. Settings > Models > Spend at most caps each clock
 hour, $1 by default: calls slow down as the hour's spend nears the cap and stop
 at it until the next hour begins ([spend control](docs/mentor-loop.md#spend-control)).
 The menu shows the spend so far this hour against the cap. For a receipt,
@@ -108,7 +115,7 @@ committed as the [replay fixtures](Tests/AthinaCoreTests/Fixtures/Replay/README.
 | Test Connection | Claude Haiku 4.5 | 14 / 4 | under $0.0001 |
 | **Session total** | | | **$0.0365** |
 
-Out of the box the suggestion and the notes rewrite run on Claude Opus 5, at
+Out of the box, with Anthropic, the suggestion and the notes rewrite run on Claude Opus 5, at
 2.5 times Sonnet 5's price per token. A rewrite on Opus 5 was measured at
 $0.09, so an hour of reading with no suggestion in it costs about $0.38 in
 rewrites (see [What it costs](docs/mentor-loop.md#standing-understanding)).
@@ -118,7 +125,8 @@ it.
 ## Permissions
 
 A first launch asks before anything else whether Athina may watch the screen
-and send what it reads to Anthropic; nothing is sensed or sent until you choose
+and send what it reads to the chosen provider, Anthropic by default; nothing is
+sensed or sent until you choose
 Allow ([Consent](docs/privacy.md#consent)). Athina then needs two permissions
 and asks for neither until you press its button in the permissions window; the
 other two are optional and serve only talking back
