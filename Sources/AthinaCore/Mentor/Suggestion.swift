@@ -523,6 +523,9 @@ public struct MentorStatus: Equatable, Sendable {
   /// The follow-up question waiting for the call in flight, or nil when none
   /// waits.
   public var pendingFollowUp: PendingFollowUp?
+  /// The journal id of the suggestion held while a talked-to toast is up
+  /// (`MentorScheduler.publishGate`), or nil when none is.
+  public var heldSuggestionID: Int64?
 
   /// Creates a status, by default the one before the loop has started: no API
   /// key, sensing stopped, and nothing recorded.
@@ -545,6 +548,7 @@ public struct MentorStatus: Equatable, Sendable {
     nextMentorAt: Date? = nil,
     inFlight: ModelTier? = nil,
     pendingFollowUp: PendingFollowUp? = nil,
+    heldSuggestionID: Int64? = nil,
     mode: SensingMode = .stopped
   ) {
     self.availability = availability
@@ -566,6 +570,14 @@ public struct MentorStatus: Equatable, Sendable {
     self.nextMentorAt = nextMentorAt
     self.inFlight = inFlight
     self.pendingFollowUp = pendingFollowUp
+    self.heldSuggestionID = heldSuggestionID
+  }
+
+  /// The journaled suggestions the person may see: all but the one held,
+  /// which is not theirs until it is shown or expires unseen.
+  public func shown(_ journaled: [Suggestion]) -> [Suggestion] {
+    guard let heldSuggestionID else { return journaled }
+    return journaled.filter { $0.id != heldSuggestionID }
   }
 
   /// Whether the cadence is stretched enough to call it slowed.

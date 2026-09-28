@@ -114,12 +114,15 @@ final class AppState {
 
   /// Newest first.
   var callLog: [ModelCallRecord] = []
-  /// Newest first.
-  var suggestionHistory: [Suggestion] = []
+  /// Newest first, the one held for a talked-to toast included.
+  var journaledSuggestions: [Suggestion] = []
   /// Newest first, across every suggestion.
   var followUps: [FollowUp] = []
   /// The suggestion currently shown as a toast, if any.
   var activeSuggestion: Suggestion?
+  /// The suggestions the History window lists, newest first: the journaled
+  /// ones but the one the loop holds while a talked-to toast is up.
+  var suggestionHistory: [Suggestion] { mentorStatus.shown(journaledSuggestions) }
   /// Last four characters of the saved key, or nil when there is none.
   private(set) var apiKeyHint: String?
   private(set) var apiKeyError: String?
@@ -499,7 +502,7 @@ final class AppState {
       Task { [weak self] in
         await self?.follow(
           { journal.liveSuggestions(limit: AppState.historyLimit) },
-          into: \.suggestionHistory
+          into: \.journaledSuggestions
         )
       },
       Task { [weak self] in

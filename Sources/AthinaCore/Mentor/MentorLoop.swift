@@ -226,6 +226,7 @@ public actor MentorLoop {
     guard let held = heldSuggestion else { return }
     heldSuggestion = nil
     await expireUnseen(held, now: now ?? clock.date)
+    await publishStatus()
   }
 
   private func expireUnseen(_ suggestion: Suggestion, now: Date) async {
@@ -743,6 +744,7 @@ public actor MentorLoop {
     case .expired, .withdrawn:
       await expireUnseen(suggestion, now: now)
     }
+    await publishStatus()
   }
 
   /// The spot the model pointed at, kept only when it saw the image and the
@@ -1365,6 +1367,7 @@ public actor MentorLoop {
       multiplier: multiplier
     )
     status.inFlight = ModelTier.allCases.first { inFlight.contains($0) }
+    status.heldSuggestionID = heldSuggestion?.id
     guard status != lastPublishedStatus else { return }
     lastPublishedStatus = status
     await broadcaster.send(.status(status))

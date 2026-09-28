@@ -294,6 +294,35 @@ struct InterventionLoopTests {
     #expect(try await h.journal.suggestion(id: s2.id)?.feedback == nil)
   }
 
+  /// A suggestion held while the person talks to another toast is not theirs
+  /// yet: the suggestions they may see, which History and Show Last
+  /// Suggestion list, leave it out until it is shown.
+  @Test func aHeldSuggestionIsListedOnlyOnceItIsShown() async throws {
+    let h = try await MentorLoopTests.Harness()
+    let a = try await journaledSuggestion(h)
+    await h.loop.setTalkingBack(true)
+
+    await h.client.enqueue(json: Self.yes)
+    await h.client.enqueue(json: Self.suggestion(region: "null"))
+    await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
+    let b = try #require(try await h.journal.recentSuggestions(limit: 1).first)
+    #expect(b.id != a.id)
+    await h.waitUntil { $0.heldSuggestionID == b.id }
+
+    let whileHeld = await h.loop.currentStatus().shown(
+      try await h.journal.recentSuggestions(limit: 10)
+    )
+    #expect(whileHeld.map(\.id) == [a.id])
+    #expect(whileHeld.first { $0.feedback != .expiredUnseen }?.id == a.id)
+
+    await h.loop.setTalkingBack(false)
+    await h.waitUntil { $0.heldSuggestionID == nil }
+    let released = await h.loop.currentStatus().shown(
+      try await h.journal.recentSuggestions(limit: 10)
+    )
+    #expect(released.map(\.id) == [b.id, a.id])
+  }
+
   @Test func aHeldSuggestionThatOutlivedTheExchangeExpiresUnseen() async throws {
     let h = try await MentorLoopTests.Harness()
     await h.loop.setTalkingBack(true)

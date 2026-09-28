@@ -897,7 +897,7 @@ extension AppState {
       suggestions[index].region = region
       suggestions[index].calloutShown = region != nil
     }
-    state.suggestionHistory = suggestions
+    state.journaledSuggestions = suggestions
     state.activeSuggestion = suggestions.first
     state.followUps =
       SampleSuggestions.followUps(now: now, suggestionID: 3)
@@ -1032,7 +1032,7 @@ extension AppState {
     state.resources = live.resources
     state.journalStats = live.journalStats
     state.timeline = live.timeline
-    state.suggestionHistory = live.suggestionHistory
+    state.journaledSuggestions = live.journaledSuggestions
     state.activeSuggestion = live.activeSuggestion
     state.replaySummary = ReplaySummary(
       directory: directory,
