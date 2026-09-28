@@ -31,7 +31,7 @@ It speaks up unprompted. Athina watches the user's real screen live and offers g
 
 - Lives in the macOS menu bar all day, beside whatever the user is working in. Notes appear under the menu bar, and callouts outline a spot on the real screen.
 - Reads the front app, its window, the focused element and the text on screen through Screen Recording and Accessibility, which the user grants in System Settings. Microphone and Speech Recognition are optional, for talking back.
-- Model calls use the user's own API key (Anthropic today, with OpenAI and OpenCode being added), capped at $1 an hour by default.
+- Model calls use the user's own API key for Anthropic, OpenAI or OpenCode, chosen in Settings > Models, capped at $1 an hour by default.
 - Installed as a direct download from GitHub Releases; there is no App Store edition.
 
 ## Capabilities and Constraints
