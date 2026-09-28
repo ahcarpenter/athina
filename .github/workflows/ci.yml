@@ -5,7 +5,10 @@ name: CI
 # the fast UI check, ui-snapshots-smoke. The slow, full-fidelity ui-snapshots
 # check lives in merge-checks.yml, which runs on push to main and for a pull
 # request only once it is ready for review; the main ruleset requires all five
-# at a pull request's head before it merges (docs/ci.md).
+# at a pull request's head before it merges (docs/ci.md). A pull request that
+# touches only documentation runs lint alone: the changes job decides, and
+# every other job here is skipped, which a required check counts as passed
+# (docs/ci.md "Docs-only pull requests").
 on:
   push:
     branches: [main]
@@ -19,9 +22,35 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    # Whether this pull request touches only documentation nothing builds,
+    # tests or runs (scripts/docs-only.sh), which build-and-test, e2e-api and
+    # ui-snapshots-smoke read to skip themselves. Only a pull request is ever
+    # docs-only: a push to main, and any other event, runs everything. The
+    # checkout is the pull request merged into its base, so its first parent is
+    # the base and the diff between them is what the merge would change. Should
+    # this job fail, the others see no answer and run.
+    runs-on: ubuntu-latest
+    outputs:
+      docs-only: ${{ steps.classify.outputs.docs-only || 'false' }}
+    steps:
+      - uses: actions/checkout@v7
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 2
+      - name: Classify the change
+        id: classify
+        if: github.event_name == 'pull_request'
+        run: |
+          docs_only="$(scripts/docs-only.sh HEAD^1 HEAD)"
+          echo "Docs-only: $docs_only"
+          echo "docs-only=$docs_only" >> "$GITHUB_OUTPUT"
+
   build-and-test:
     # The package targets macOS 26, so it needs the Xcode 26 SDK that the
     # macos-26 image ships. Older images cannot build it.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs-only != 'true' }}
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
@@ -44,8 +73,10 @@ jobs:
   lint:
     # Google's Swift style (docs/code-style.md): swift-format from the Xcode
     # that .xcode-version pins checks every Swift file against the committed
-    # .swift-format and fails on any finding. Then the drift check: the rules
-    # GitHub enforces on main against the committed ruleset.
+    # .swift-format and fails on any finding. Then every relative link and
+    # anchor in the Markdown, and the drift check: the rules GitHub enforces on
+    # main against the committed ruleset. Never skipped, so a docs-only pull
+    # request gets its links checked.
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
@@ -53,6 +84,12 @@ jobs:
       - name: Lint
         timeout-minutes: 10
         run: make lint
+      - name: Every relative link and anchor in the Markdown resolves
+        # Offline: a link with a scheme is left alone (scripts/check-links.swift).
+        # It runs after a lint failure too, so both are reported at once.
+        if: ${{ !cancelled() }}
+        timeout-minutes: 5
+        run: make links
       - name: The checks GitHub requires on main match .github/rulesets/main.json
         # GitHub never reads the file, which is applied by hand
         # (docs/ci.md), so this reads the live rules and fails
@@ -74,6 +111,8 @@ jobs:
     # LaunchServices (--launch open): exec'd from this job's shell, which the
     # runner image grants Accessibility, it would inherit the grant, and the
     # run could never catch a change that made the API tier need one.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs-only != 'true' }}
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
@@ -166,6 +205,8 @@ jobs:
     # test"). One runner: most of the job is fetching and compiling, which the
     # build cache cuts to what changed, and drawing all 76 images takes about a
     # minute, where four runners each compiled it again.
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs-only != 'true' }}
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7

@@ -5,8 +5,9 @@ the macOS 26 SDK this package targets: `build-and-test` runs `make test`: `swift
 `scripts/check-no-control-api.sh`, which must find no control API in a build
 without the `ControlAPI` trait, for which it takes the debug `Athina` the
 tests' build already made rather than compiling the package again; `lint` runs `make lint` (see [Code style](code-style.md)) and fails on any
-finding, then checks the rules GitHub enforces on main against the committed
-ruleset (see below); `e2e-api` builds the development bundle with the bundle script,
+finding, then `make links`, which fails on a relative link or anchor in the
+Markdown that does not resolve, then checks the rules GitHub enforces on main
+against the committed ruleset (see below); `e2e-api` builds the development bundle with the bundle script,
 checks that it carries the control API, runs every API-tier scenario of the
 end-to-end harness and compares their checkpoints with approved baselines (see
 [Checkpoints](#checkpoints));
@@ -72,7 +73,10 @@ as passed for a required one, so the skipped job takes another name: GitHub
 names a skipped job after its unevaluated `name:` expression, which is not
 `ui-snapshots`, and the expression's own answer for a skip is not either. And
 a `workflow_dispatch` run of the same job does not count: its checks are on
-the commit, but a pull request's required checks ignore them.
+the commit, but a pull request's required checks ignore them. A pull request
+that touches only documentation runs `lint` alone and skips the other four on
+purpose, with the names they are required under (see [Docs-only pull
+requests](#docs-only-pull-requests)).
 
 The ruleset is kept in `.github/rulesets/main.json`; after a change to it,
 apply it with
@@ -175,6 +179,46 @@ the checkpoint gate (`scripts/snapshots.sh checkpoints`) or `make approve`
 (or any other approve command), which only CI proves, and compares the UI smoke set
 with main's on the Mac itself (see [UI snapshot smoke test](#ui-snapshot-smoke-test));
 `test.instructions` in `.no-mistakes.yaml` carries that rule to its test step.
+
+## Docs-only pull requests
+
+A pull request that changes only documentation cannot change a test result
+or a pixel, so it runs `lint`, whose `make links` step checks its links, and
+`pr-title`, and nothing that builds: `build-and-test`, `e2e-api`,
+`ui-snapshots-smoke` and the four `ui-snapshots` shards are skipped, and the
+`ui-snapshots` roll-up passes without them. It gets every required check in a
+few minutes, as `lint` takes.
+
+Documentation is a Markdown file at the top of the repository or anything
+under `docs/`, except what a test, a script or a build step reads, which is
+code: `README.md`, whose icon `MarkAssetTests` checks against
+`Resources/Mark`, and `docs/release-notes/`, which `scripts/release.sh` puts in
+a release's notes. A Markdown file anywhere else, beside the sources, tests,
+scripts or workflows, is code as well. A pull request with any code in it runs
+everything; nothing is skipped part of the way. `scripts/docs-only.sh` holds
+these rules and `DocsOnlyTests` checks them, so a new doc that something
+reads goes into its `case` in the same change.
+
+A first job in each workflow, `changes`, asks `scripts/docs-only.sh` about
+the diff between the pull request's merge commit and its base, its first
+parent, and the jobs above read its answer in their `if`. The skip is a job's,
+never the workflow's: `paths-ignore` on a workflow would leave the required
+checks never reported, so the pull request would wait for them for ever. A
+skipped job still reports a check run under its own name, and a skipped
+required check counts as passed; the `ui-snapshots` roll-up, which fails on
+skipped shards otherwise, passes when `changes` says docs-only. When `changes`
+itself fails, the jobs get no answer and run, and only a `pull_request` event
+is ever docs-only: pushes to main, the nightly run, releases and a merge
+queue's `merge_group` run everything. A draft is still a draft: its
+`ui-snapshots` waits for ready for review under its other name, as above.
+
+`make links` (`scripts/check-links.swift`), in `lint` on every pull request
+and push, reads every tracked Markdown file, not only the changed ones, so a
+renamed heading or a moved doc fails wherever it was linked from. Each
+relative link must name a file or folder in the checkout, and each `#anchor` a
+heading of the file it points into, as GitHub slugs it, or an `id` or `name`
+attribute there. A link with a scheme, such as `https:`, is not followed, so
+it needs no network and adds nothing that can flake. `make check` runs it too.
 
 ## UI snapshot baselines
 
