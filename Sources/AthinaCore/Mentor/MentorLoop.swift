@@ -89,6 +89,9 @@ public actor MentorLoop {
   private var talkingBack = false
   /// A suggestion made while that toast was up, waiting for it to close.
   private var heldSuggestion: Suggestion?
+  /// `MentorStatus.holdsSuggestionsAfter`, set before a suggestion that will
+  /// be held is journaled.
+  private var holdsSuggestionsAfter: Int64?
   /// The one question waiting for the call in flight to return; a newer one takes its place.
   private struct PendingQuestion {
     var record: MentorStatus.PendingFollowUp
@@ -225,6 +228,7 @@ public actor MentorLoop {
   public func expireHeldSuggestion(now: Date? = nil) async {
     guard let held = heldSuggestion else { return }
     heldSuggestion = nil
+    holdsSuggestionsAfter = nil
     await expireUnseen(held, now: now ?? clock.date)
     await publishStatus()
   }
@@ -705,6 +709,16 @@ public actor MentorLoop {
     status.lastMentor = await store(record)
 
     guard let suggestion = toShow else { return }
+    if holdsSuggestionsAfter == nil,
+      case .hold = scheduler.publishGate(
+        madeAt: suggestion.timestamp,
+        conditions: conditions(now: clock.date),
+        now: clock.date
+      )
+    {
+      holdsSuggestionsAfter = (try? await journal.recentSuggestions(limit: 1).first?.id) ?? 0
+      await publishStatus()
+    }
     var stored = suggestion
     do {
       stored = try await journal.record(suggestion)
@@ -744,6 +758,7 @@ public actor MentorLoop {
     case .expired, .withdrawn:
       await expireUnseen(suggestion, now: now)
     }
+    if heldSuggestion == nil { holdsSuggestionsAfter = nil }
     await publishStatus()
   }
 
@@ -1367,7 +1382,7 @@ public actor MentorLoop {
       multiplier: multiplier
     )
     status.inFlight = ModelTier.allCases.first { inFlight.contains($0) }
-    status.heldSuggestionID = heldSuggestion?.id
+    status.holdsSuggestionsAfter = holdsSuggestionsAfter
     guard status != lastPublishedStatus else { return }
     lastPublishedStatus = status
     await broadcaster.send(.status(status))
