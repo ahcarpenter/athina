@@ -119,17 +119,18 @@ cancels a queued run.
 
 The rule's settings: squash merges, so main keeps one commit per pull request
 titled with its number; groups of one to five pull requests, waiting at most
-five minutes for more once the first is queued; up to five groups building at
-once; and all green (`ALLGREEN`), so every pull request in a group must pass
+five minutes for more once the first is queued, so a busy moment still lands
+up to five in one run; one group building at a time; and all green (`ALLGREEN`), so every pull request in a group must pass
 its own checks. A required check that has not reported within 60 minutes
 counts as failed. When a group fails, the queue removes only the pull request
 that broke it and rebuilds the groups behind it without it; the others keep
 their place. A removed pull request needs a fix pushed and step 5 again.
 
-Each group takes eight macOS jobs (four fast-lane jobs and four
-`ui-snapshots` shards) and the account runs five at once, so a full queue
-waits on runners; a check still queued behind them after 60 minutes fails its
-group like any other failure.
+The queue builds one group at a time because each takes eight macOS jobs
+(four fast-lane jobs and four `ui-snapshots` shards), the account runs five at
+once, and pull requests' own runs want the same runners: a second group
+building alongside would mostly wait for them, and a check still queued after
+60 minutes fails its group like any other failure.
 
 **The pull request title.** `pr-title` (`.github/workflows/pr-title.yml`)
 fails unless a pull request's title is Conventional Commits, `type(scope):
