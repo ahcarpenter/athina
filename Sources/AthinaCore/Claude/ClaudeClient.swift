@@ -467,7 +467,8 @@ public struct CallIdentity: Codable, Hashable, Sendable {
 
 /// Sends one Messages API request.
 ///
-/// The API key is passed per call and never stored.
+/// The route says which provider answers it, with the person's key for that
+/// provider, passed per call and never stored.
 public protocol ClaudeClient: Sendable {
   /// True when calls are answered from recordings: nothing reaches the
   /// network, nothing is billed, and no key is needed.
@@ -476,7 +477,7 @@ public protocol ClaudeClient: Sendable {
   func send(
     _ request: MessagesRequest,
     call: CallIdentity,
-    apiKey: String,
+    route: CallRoute,
     timeout: TimeInterval
   ) async throws -> MessagesResponse
 }
@@ -488,17 +489,23 @@ extension ClaudeClient {
 
 /// The Anthropic Messages API over URLSession.
 ///
-/// The only host Athina ever talks to.
+/// Anthropic's own endpoint by default; OpenCode's Zen gateway serves its Claude models
+/// behind the same request shape at its own (`OpenCodeClient`).
 public struct AnthropicClient: ClaudeClient {
-  /// The Messages API URL, the only one Athina sends to.
+  /// Anthropic's Messages API URL.
   public static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
   /// The `anthropic-version` header every request carries.
   public static let apiVersion = "2023-06-01"
 
   private let session: URLSession
+  private let endpoint: URL
 
-  /// Creates a client that sends over `session`.
-  public init(session: URLSession = AnthropicClient.makeSession()) {
+  /// Creates a client that posts to `endpoint` over `session`.
+  public init(
+    endpoint: URL = AnthropicClient.endpoint,
+    session: URLSession = AnthropicClient.makeSession()
+  ) {
+    self.endpoint = endpoint
     self.session = session
   }
 
@@ -525,7 +532,7 @@ public struct AnthropicClient: ClaudeClient {
     return encoder
   }()
 
-  /// Posts `request` with `apiKey` and returns the decoded response.
+  /// Posts `request` with the route's key and returns the decoded response.
   ///
   /// `call` is not sent; only recording and replay use it.
   ///
@@ -535,15 +542,15 @@ public struct AnthropicClient: ClaudeClient {
   public func send(
     _ request: MessagesRequest,
     call: CallIdentity,
-    apiKey: String,
+    route: CallRoute,
     timeout: TimeInterval
   ) async throws -> MessagesResponse {
-    var urlRequest = URLRequest(url: AnthropicClient.endpoint)
+    var urlRequest = URLRequest(url: endpoint)
     urlRequest.httpMethod = "POST"
     urlRequest.timeoutInterval = timeout
     urlRequest.setValue("application/json", forHTTPHeaderField: "content-type")
     urlRequest.setValue(AnthropicClient.apiVersion, forHTTPHeaderField: "anthropic-version")
-    urlRequest.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+    urlRequest.setValue(route.key, forHTTPHeaderField: "x-api-key")
     urlRequest.httpBody = try AnthropicClient.encoder.encode(request)
 
     let data: Data
@@ -584,5 +591,43 @@ public struct AnthropicClient: ClaudeClient {
     } catch {
       throw ClaudeClientError.badResponse(String(describing: error))
     }
+  }
+}
+
+/// The live client: each call goes to the API of the provider its route
+/// names.
+///
+/// The provider is chosen in Settings and can change while the app runs, so
+/// it travels with each call rather than being fixed here.
+public struct LiveModelClient: ClaudeClient {
+  private let anthropic: any ClaudeClient
+  private let openAI: any ClaudeClient
+  private let openCode: any ClaudeClient
+
+  /// Creates a client that routes to these three.
+  public init(
+    anthropic: any ClaudeClient = AnthropicClient(),
+    openAI: any ClaudeClient = OpenAIClient(),
+    openCode: any ClaudeClient = OpenCodeClient()
+  ) {
+    self.anthropic = anthropic
+    self.openAI = openAI
+    self.openCode = openCode
+  }
+
+  /// Sends the call through the client for its route's provider.
+  public func send(
+    _ request: MessagesRequest,
+    call: CallIdentity,
+    route: CallRoute,
+    timeout: TimeInterval
+  ) async throws -> MessagesResponse {
+    let client: any ClaudeClient =
+      switch route.provider {
+      case .anthropic: anthropic
+      case .openAI: openAI
+      case .openCode: openCode
+      }
+    return try await client.send(request, call: call, route: route, timeout: timeout)
   }
 }

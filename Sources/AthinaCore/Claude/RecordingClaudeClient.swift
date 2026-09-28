@@ -53,7 +53,7 @@ public actor RecordingClaudeClient: ClaudeClient {
   public func send(
     _ request: MessagesRequest,
     call: CallIdentity,
-    apiKey: String,
+    route: CallRoute,
     timeout: TimeInterval
   ) async throws -> MessagesResponse {
     let started = CallFixtureFiles.recordingStamp(at: clock.date, after: lastStamp)
@@ -65,7 +65,7 @@ public actor RecordingClaudeClient: ClaudeClient {
     let elapsed = await clock.measure {
       do {
         result = .success(
-          try await inner.send(request, call: call, apiKey: apiKey, timeout: timeout)
+          try await inner.send(request, call: call, route: route, timeout: timeout)
         )
       } catch let error as ClaudeClientError {
         thrown = error
@@ -82,10 +82,10 @@ public actor RecordingClaudeClient: ClaudeClient {
       request: request,
       result: result,
       latency: elapsed.timeInterval,
-      cost: prices.cost(of: usage, model: request.model) ?? 0
+      cost: prices.cost(of: usage, model: request.model, provider: route.provider) ?? 0
     )
     do {
-      let url = try CallFixtureFiles.write(fixture, to: directory, redacting: apiKey)
+      let url = try CallFixtureFiles.write(fixture, to: directory, redacting: route.key)
       written.append(url)
       RecordingClaudeClient.log.notice(
         "recorded \(call.kind, privacy: .public) call to \(url.lastPathComponent, privacy: .public)"
@@ -118,7 +118,7 @@ public struct RefusingClaudeClient: ClaudeClient {
   public func send(
     _ request: MessagesRequest,
     call: CallIdentity,
-    apiKey: String,
+    route: CallRoute,
     timeout: TimeInterval
   ) async throws -> MessagesResponse {
     throw ClaudeClientError.notSent(reason)

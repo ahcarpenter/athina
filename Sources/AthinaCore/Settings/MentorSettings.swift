@@ -5,6 +5,19 @@ import Foundation
 /// Persisted inside `settings.json` under the `mentor` key; missing fields take
 /// their defaults (`SettingsSection`).
 public struct MentorSettings: SettingsSection, Equatable, Sendable {
+  // MARK: Provider
+
+  /// Whose API answers model calls, with the person's own key for it:
+  /// Anthropic unless the person picks another in Settings > Models.
+  ///
+  /// Each provider sends to a different company, so each needs its own Allow
+  /// in the consent window (`SensingSettings.hasConsent`).
+  public var provider: ModelProvider = .anthropic
+  /// The models and efforts OpenAI answers with.
+  public var openAIModels = TierModels.openAIDefaults
+  /// The models and efforts OpenCode answers with.
+  public var openCodeModels = TierModels.openCodeDefaults
+
   // MARK: Models
 
   /// Master switch.
@@ -12,8 +25,9 @@ public struct MentorSettings: SettingsSection, Equatable, Sendable {
   /// Off means no model call of any kind, but for a Test Connection the user
   /// asks for.
   public var enabled = true
-  /// The id of the model that makes the triage call, one of
-  /// `ModelCatalog.triageChoices`.
+  /// The id of the Anthropic model that makes the triage call, one of
+  /// `ModelCatalog.triageChoices`; each other provider keeps its own
+  /// (`TierModels`).
   public var triageModel = ModelCatalog.haiku45.id
   /// The id of the model that makes mentor and follow-up calls, one of
   /// `ModelCatalog.mentorChoices`.
@@ -100,7 +114,7 @@ public struct MentorSettings: SettingsSection, Equatable, Sendable {
 
   // MARK: Spend
 
-  /// Dollars per clock hour.
+  /// Dollars per clock hour, across every provider.
   ///
   /// Cadence slows as spend approaches it; calls stop at it, but for a Test
   /// Connection the user asks for.
@@ -153,6 +167,8 @@ public struct MentorSettings: SettingsSection, Equatable, Sendable {
     s.notNowSnooze = s.notNowSnooze.clamped(to: 60...(7 * 86400))
     if let key = s.pushToTalkHotKey, !key.isUsable { s.pushToTalkHotKey = nil }
     s.hourlySpendCap = s.hourlySpendCap.clamped(to: 0.05...1000)
+    s.openAIModels = s.openAIModels.validated(for: .openAI)
+    s.openCodeModels = s.openCodeModels.validated(for: .openCode)
     s.prices = s.prices.validated()
     var seen = Set<String>()
     s.neverRules = s.neverRules.reversed().filter { seen.insert($0.id).inserted }.reversed()
@@ -161,20 +177,60 @@ public struct MentorSettings: SettingsSection, Equatable, Sendable {
 
   // MARK: Convenience
 
-  /// The catalog entry for `triageModel`, or Haiku 4.5 when the id is not
-  /// in the catalog.
-  public var triageModelInfo: ClaudeModel {
-    ModelCatalog.model(id: triageModel) ?? ModelCatalog.haiku45
+  /// The provider in force's models and efforts: Anthropic's in the fields
+  /// above, every other provider's in its own `TierModels`.
+  public var tierModels: TierModels {
+    get {
+      switch provider {
+      case .anthropic:
+        TierModels(
+          triage: triageModel,
+          mentor: mentorModel,
+          understanding: understandingModel,
+          triageEffort: triageEffort,
+          mentorEffort: mentorEffort,
+          understandingEffort: understandingEffort
+        )
+      case .openAI: openAIModels
+      case .openCode: openCodeModels
+      }
+    }
+    set {
+      switch provider {
+      case .anthropic:
+        triageModel = newValue.triage
+        mentorModel = newValue.mentor
+        understandingModel = newValue.understanding
+        triageEffort = newValue.triageEffort
+        mentorEffort = newValue.mentorEffort
+        understandingEffort = newValue.understandingEffort
+      case .openAI: openAIModels = newValue
+      case .openCode: openCodeModels = newValue
+      }
+    }
   }
-  /// The catalog entry for `mentorModel`, or Opus 5 when the id is not in
-  /// the catalog.
-  public var mentorModelInfo: ClaudeModel {
-    ModelCatalog.model(id: mentorModel) ?? ModelCatalog.opus5
-  }
-  /// The catalog entry for `understandingModel`, or Opus 5 when the id is
-  /// not in the catalog.
-  public var understandingModelInfo: ClaudeModel {
-    ModelCatalog.model(id: understandingModel) ?? ModelCatalog.opus5
+
+  /// The catalog entry for the provider in force's triage model.
+  public var triageModelInfo: ClaudeModel { model(for: .triage) }
+  /// The catalog entry for the provider in force's mentor model, which also
+  /// answers follow-ups.
+  public var mentorModelInfo: ClaudeModel { model(for: .mentor) }
+  /// The catalog entry for the provider in force's understanding model.
+  public var understandingModelInfo: ClaudeModel { model(for: .understanding) }
+
+  /// The catalog entry for the model that makes the calls of `tier` at the
+  /// provider in force, or the provider's default when its id is not in the
+  /// catalog.
+  public func model(for tier: ModelTier) -> ClaudeModel {
+    let models = tierModels
+    let id =
+      switch tier {
+      case .triage, .test: models.triage
+      case .mentor, .followUp: models.mentor
+      case .understanding: models.understanding
+      }
+    return ModelCatalog.model(id: id, provider: provider)
+      ?? ModelCatalog.choices(for: tier, provider: provider)[0]
   }
 
   /// Settable range for the refresh interval.
@@ -191,11 +247,13 @@ public struct MentorSettings: SettingsSection, Equatable, Sendable {
 
   /// The effort to send for a tier: nil when its model rejects the parameter.
   public func effort(for tier: ModelTier) -> Effort? {
+    let models = tierModels
     switch tier {
-    case .triage: triageModelInfo.supportsEffort ? triageEffort : nil
-    case .mentor, .followUp: mentorModelInfo.supportsEffort ? mentorEffort : nil
-    case .understanding: understandingModelInfo.supportsEffort ? understandingEffort : nil
-    case .test: nil
+    case .triage: return triageModelInfo.supportsEffort ? models.triageEffort : nil
+    case .mentor, .followUp: return mentorModelInfo.supportsEffort ? models.mentorEffort : nil
+    case .understanding:
+      return understandingModelInfo.supportsEffort ? models.understandingEffort : nil
+    case .test: return nil
     }
   }
 
@@ -239,4 +297,69 @@ private enum ModelSettingsDefaults {
   static let triageModel = MentorSettings().triageModel
   static let mentorModel = MentorSettings().mentorModel
   static let understandingModel = MentorSettings().understandingModel
+}
+
+/// One provider's model and effort for each tier.
+///
+/// Anthropic's live in `MentorSettings`' own fields, where every earlier build
+/// reads them; each other provider keeps one of these.
+public struct TierModels: Codable, Equatable, Sendable {
+  /// The id of the model that makes the triage call.
+  public var triage: String
+  /// The id of the model that makes mentor and follow-up calls.
+  public var mentor: String
+  /// The id of the model that makes the understanding's refresh calls.
+  public var understanding: String
+  /// The reasoning depth sent with triage calls.
+  public var triageEffort: Effort
+  /// The reasoning depth sent with mentor and follow-up calls.
+  public var mentorEffort: Effort
+  /// The reasoning depth sent with refresh calls.
+  public var understandingEffort: Effort
+
+  /// Creates a set of tier models.
+  public init(
+    triage: String,
+    mentor: String,
+    understanding: String,
+    triageEffort: Effort = .low,
+    mentorEffort: Effort = .medium,
+    understandingEffort: Effort = .low
+  ) {
+    self.triage = triage
+    self.mentor = mentor
+    self.understanding = understanding
+    self.triageEffort = triageEffort
+    self.mentorEffort = mentorEffort
+    self.understandingEffort = understandingEffort
+  }
+
+  /// OpenAI's: GPT-6 Luna triages, GPT-6 Sol mentors and refreshes.
+  public static let openAIDefaults = TierModels(
+    triage: ModelCatalog.gpt6Luna.id,
+    mentor: ModelCatalog.gpt6Sol.id,
+    understanding: ModelCatalog.gpt6Sol.id
+  )
+  /// OpenCode's: the same Claude models as Anthropic's defaults.
+  public static let openCodeDefaults = TierModels(
+    triage: "claude-haiku-4-5",
+    mentor: "claude-opus-5",
+    understanding: "claude-opus-5"
+  )
+
+  /// Each id that `provider` does not offer for its tier replaced with the
+  /// provider's default.
+  public func validated(for provider: ModelProvider) -> TierModels {
+    let defaults = provider == .openCode ? TierModels.openCodeDefaults : .openAIDefaults
+    var models = self
+    func offered(_ id: String, _ tier: ModelTier) -> Bool {
+      ModelCatalog.choices(for: tier, provider: provider).contains { $0.id == id }
+    }
+    if !offered(models.triage, .triage) { models.triage = defaults.triage }
+    if !offered(models.mentor, .mentor) { models.mentor = defaults.mentor }
+    if !offered(models.understanding, .understanding) {
+      models.understanding = defaults.understanding
+    }
+    return models
+  }
 }

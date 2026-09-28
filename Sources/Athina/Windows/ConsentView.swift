@@ -9,9 +9,17 @@ import SwiftUI
 /// the menu bar shows that Athina is watching, then asks. Nothing is sensed
 /// or sent before Allow; Not Now leaves Athina doing nothing, with Allow
 /// Watching in its menu and Settings > Privacy as the way back.
+///
+/// It asks about the provider chosen in Settings > Models, naming the company
+/// that receives what is sent and the terms it is handled under, so choosing
+/// another provider opens it again (`SensingSettings.hasConsent`).
 struct ConsentView: View {
   @Environment(AppState.self) private var state
   @Environment(\.dismiss) private var dismiss
+
+  private var disclosure: ConsentDisclosure {
+    ConsentDisclosure(for: state.settings.mentor.provider)
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -23,14 +31,13 @@ struct ConsentView: View {
           .frame(width: 64, height: 64)
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 4) {
-          Text("Athina reads your screen and asks Claude about it")
+          Text(disclosure.title)
             .font(.title2.weight(.semibold))
+            .fixedSize(horizontal: false, vertical: true)
             .accessibilityAddTraits(.isHeader)
-          Text(
-            "To mentor you, Athina watches what you do on this Mac and sends some of what it sees to Anthropic, the company that makes Claude. Nothing is captured or sent until you choose Allow."
-          )
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
+          Text(disclosure.summary)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
       }
 
@@ -55,17 +62,15 @@ struct ConsentView: View {
             text:
               "Questions you ask about a suggestion. Spoken ones are turned into text on this Mac; the audio is never sent or kept."
           )
-          Text(
-            "It goes only to api.anthropic.com, with the API key you add in Models settings, and only while the mentor is on. Anthropic handles it under the terms of your API account. No keystrokes are sent, and nothing from password fields or from excluded apps such as password managers."
-          )
-          .font(.callout)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
+          Text(disclosure.destination)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
         .padding(6)
         .frame(maxWidth: .infinity, alignment: .leading)
       } label: {
-        Text("What is sent to Anthropic")
+        Text(disclosure.sentHeading)
           .accessibilityAddTraits(.isHeader)
       }
 

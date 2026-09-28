@@ -3,10 +3,14 @@
 - **Nothing is sensed or sent before Allow** in the consent window, and
   withdrawing in Settings > Privacy stops both at once (see Consent below).
 - Sensing stays on this Mac: the journal, thumbnails, and settings never leave
-  it. The only network peer is `api.anthropic.com`, reached only by the mentor
-  loop, only when an API key is saved, and only while the loop is enabled or
-  when the user asks for a Test Connection. No other part
-  of the app has network code.
+  it. The only network peer is the host of the model provider chosen in
+  Settings > Models: `api.anthropic.com` for Anthropic (the default),
+  `api.openai.com` for OpenAI, or `opencode.ai` for OpenCode, whose Zen gateway passes
+  each call to Anthropic or OpenAI, whichever makes the model chosen there.
+  One provider is reached at a time, only by the mentor loop, only when a key
+  for it is saved, and only while the loop is enabled or when the user asks
+  for a Test Connection. Calls to OpenAI ask it not to store the replies
+  (`store: false`). No other part of the app has network code.
 - **Audio and transcripts stay on this Mac.** The microphone is open only
   while the talk-back key is held, and only the system's on-device recognizer
   ever hears it; audio is never stored. The one exception is deliberate: a transcript you spoke while holding
@@ -50,9 +54,12 @@
   Both prompts that write it, the mentor prompt and the refresh prompt, tell
   the model to leave out anything private, financial, medical, or personal,
   and anything about other people on screen.
-- The API key lives in the login keychain, is passed per request, and is never
-  written to the journal, the logs, or the debug panel, which show at most its
-  last four characters.
+- Each provider's API key lives in the login keychain, in an item of its own
+  under Athina's service (`AppPaths.keychainService`), is passed per request,
+  and is never written to the journal, the logs, or the debug panel, which
+  show at most its last four characters. Athina never reads, writes, or looks
+  for anything in another tool's setup, such as Claude Code's, Codex's, or
+  OpenCode's settings and credentials.
 - With **only mentor inside these contexts** on, the declared context names and
   descriptions are part of the triage system prompt, so they do leave the
   machine with every triage call. When triage places a moment inside one of
@@ -73,9 +80,9 @@
   `--record`: each call's whole request, screen text and screenshot included,
   and its answer are written to a file on this Mac
   (`~/Library/Application Support/athina/recordings` unless another directory is
-  given, mode 0700, files 0600). The API key is never written, and any
-  Anthropic key visible in the screen text is redacted, though not inside the
-  screenshot. Deleting that directory deletes them; Clear Journal does not. A
+  given, mode 0700, files 0600). The key the call went with is never written,
+  and any Anthropic key visible in the screen text is redacted, though not
+  inside the screenshot. Deleting that directory deletes them; Clear Journal does not. A
   replay (`--replay`) sends nothing anywhere, keeps its own journal and
   settings, and starts from the live settings (or a `--settings` file it never
   writes), so excluded apps stay excluded while replaying.
@@ -117,15 +124,24 @@ window, "Athina and Your Privacy", is the first thing a launch shows while
 there is no Allow on record: a first launch, an install from before the window
 existed, and a launch after Not Now or a withdrawal. It comes before the
 Permissions window, which opens only after Allow and only when a permission is
-missing, so no permission is asked about first. It names Anthropic as who
-receives what is sent, lists what leaves the Mac (see above), says what the
-journal keeps and for how long from the settings in force, and shows the menu
-bar owl with its eyes open, the sign that Athina is watching, and lidded, the
-sign that it is not. Allow and Not Now are its only answers; closing it
-answers nothing.
+missing, so no permission is asked about first. It names the company that
+receives what is sent, for the provider chosen in Settings > Models
+(`ConsentDisclosure`): Anthropic, under the person's Anthropic API account;
+OpenAI, under their OpenAI API account; or OpenCode, run by Anomaly,
+which passes each call to Anthropic or OpenAI, and that company keeps it for
+30 days under its own data policy. It lists what leaves the Mac (see above),
+says what the journal keeps and for how long from the settings in force, and
+shows the menu bar owl with its eyes open, the sign that Athina is watching,
+and lidded, the sign that it is not. Allow and Not Now are its only answers;
+closing it answers nothing.
 
-The answer is kept in `settings.json` under `consent` (`Consent`): Allow or
-Not Now, when, and the version of the disclosure it answered. An Allow counts
+Each provider needs its own Allow, since each sends to a different company:
+choosing one in Settings > Models that has none holds every call and opens
+the window again, and switching back to one already allowed needs no new
+answer. The answer for Anthropic is kept in `settings.json` under `consent`,
+where every earlier build reads it, and every other provider's under
+`providerConsents` (`Consent`): Allow or Not Now, when, and the version of the
+disclosure it answered. An Allow counts
 only for `Consent.disclosureVersion` or later, so a change to what is sent
 that the person would want to hear about bumps the version and the window
 asks again. A settings file that cannot be read loads as the defaults, which
@@ -141,8 +157,9 @@ Connection included. The owl shows its lidded, paused eyes, the menu reads
 "Not watching until you allow it" with Allow Watching… as its command, and
 talking back says it is not listening.
 
-Settings > Privacy shows the answer and when it was given. Withdraw Consent
-stops capturing and calling at once: the pipeline stops tracking focus and
+Settings > Privacy shows the answer for the provider in force and when it was
+given. Withdraw Consent withdraws it for every provider, so no later switch
+resumes under an earlier Allow, and stops capturing and calling at once: the pipeline stops tracking focus and
 drops a capture in flight before it is journaled, the loop drops a waiting
 question and takes down the toast and callout, and a call already on the
 network finishes but its suggestion is never shown. What the journal already

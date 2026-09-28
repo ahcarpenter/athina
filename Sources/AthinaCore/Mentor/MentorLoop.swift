@@ -4,8 +4,10 @@ import OSLog
 /// Subscribes to the sensing stream, runs the three Claude tiers behind
 /// `MentorScheduler`'s gates, accounts spend, and publishes suggestions.
 ///
-/// Everything that reaches the network passes through `perform`, which is the
-/// only place the API key is read. Prompt text is never journaled or logged.
+/// Everything that reaches the network passes through `perform`, to the
+/// provider in force with its key, which is read here and nowhere else. A
+/// reply from OpenAI or OpenCode is checked against its call's schema
+/// before anything reads it. Prompt text is never journaled or logged.
 ///
 /// With a replay client (`ClaudeClient.isReplay`) no key is read at all, every
 /// call is journaled as a replay with zero cost, and none of them counts
@@ -82,6 +84,7 @@ public actor MentorLoop {
   /// Set by the app, not read from the sensing stream, so a withdrawal
   /// holds every call at once rather than when the mode change arrives.
   private var consented: Bool
+  /// The key for the provider in force, or nil when none is saved.
   private var apiKey: String?
   /// Tiers with a call in progress; a Test Connection can overlap a tier call.
   private var inFlight: Set<ModelTier> = []
@@ -145,7 +148,8 @@ public actor MentorLoop {
   ///   - settings: The mentor settings, validated before use.
   ///   - journal: Where every call, suggestion, and understanding is kept.
   ///   - client: The seam every model call goes through: live or replay.
-  ///   - keyStore: Where the API key is read from; never read in a replay.
+  ///   - keyStore: Where each provider's API key is read from; never read in
+  ///     a replay.
   ///   - events: The sensing stream.
   ///   - consented: Whether the person has allowed Athina to watch and
   ///     send (`Consent`); until then every call is held.
@@ -270,9 +274,12 @@ public actor MentorLoop {
     {
       status.lastContext = nil
     }
+    let providerChanged = validated.provider != settings.provider
     settings = validated
     scheduler.settings = validated
     spend.cap = validated.hourlySpendCap
+    // Another provider calls with its own key.
+    if providerChanged { await reloadKey() }
     await publishStatus()
   }
 
@@ -302,6 +309,12 @@ public actor MentorLoop {
   /// Whether the loop holds a key to call with: one read from the key store,
   /// or the replay stand-in when calls are replayed.
   public var hasAPIKey: Bool { apiKey != nil }
+
+  /// How the next call goes: to the provider in force with its key, or nil
+  /// while no key is saved for it.
+  private var route: CallRoute? {
+    apiKey.map { CallRoute(settings.provider, key: $0) }
+  }
 
   /// Returns the loop's status as it stands now.
   public func currentStatus() -> MentorStatus { status }
@@ -362,9 +375,9 @@ public actor MentorLoop {
       return .failure(.notSent(hold.label))
     }
     await reloadKey()
-    guard let apiKey else { return .failure(.transport("no API key saved")) }
+    guard let route else { return .failure(.transport("no API key saved")) }
     let request = MessagesRequest(
-      model: settings.triageModel,
+      model: settings.triageModelInfo.id,
       maxTokens: 16,
       system: [],
       messages: [Message(role: .user, content: [.text("Reply with the single word OK.")])]
@@ -372,7 +385,7 @@ public actor MentorLoop {
     let call = await perform(
       tier: .test,
       request: request,
-      apiKey: apiKey,
+      route: route,
       timeout: MentorLoop.testTimeout
     )
     var record = call.record
@@ -510,7 +523,7 @@ public actor MentorLoop {
   private func runTriage(
     _ observation: ActivityObservation
   ) async -> (TriageVerdict, ContextPlacement)? {
-    guard let apiKey else { return nil }
+    guard let route else { return nil }
     let now = clock.date
     let events = (try? await journal.recentEvents(limit: MentorLoop.eventLookback)) ?? []
     let contexts = settings.onlyMentorInsideContexts ? settings.contexts : []
@@ -534,7 +547,7 @@ public actor MentorLoop {
     let call = await perform(
       tier: .triage,
       request: request,
-      apiKey: apiKey,
+      route: route,
       timeout: MentorLoop.triageTimeout
     )
     var record = call.record
@@ -571,7 +584,7 @@ public actor MentorLoop {
   /// With a record standing, the window also takes every screen journaled after
   /// the ones its last write read, since the reply rewrites it.
   private func runMentor(_ observation: ActivityObservation, context: ContextPlacement) async {
-    guard let apiKey else { return }
+    guard let route else { return }
     let now = clock.date
     let window = await screens(
       since: now.addingTimeInterval(-settings.mentorWindowDuration),
@@ -626,7 +639,7 @@ public actor MentorLoop {
     let call = await perform(
       tier: .mentor,
       request: request,
-      apiKey: apiKey,
+      route: route,
       timeout: MentorLoop.timeout(forReplyOf: request.maxTokens)
     )
     let shownAt = clock.date
@@ -812,7 +825,7 @@ public actor MentorLoop {
       suggestionID: suggestion.id,
       timestamp: now,
       question: question,
-      model: settings.mentorModel,
+      model: settings.mentorModelInfo.id,
       promptVersion: MentorPrompts.version
     )
     var asking = now
@@ -838,7 +851,7 @@ public actor MentorLoop {
       followUp.error = hold.label
       return await finish(followUp, about: suggestion)
     }
-    guard let apiKey else {
+    guard let route else {
       followUp.error = MentorScheduler.Hold.noAPIKey.label
       return await finish(followUp, about: suggestion)
     }
@@ -868,7 +881,7 @@ public actor MentorLoop {
     let call = await perform(
       tier: .followUp,
       request: request,
-      apiKey: apiKey,
+      route: route,
       timeout: MentorLoop.timeout(forReplyOf: request.maxTokens)
     )
     var record = call.record
@@ -1137,7 +1150,7 @@ public actor MentorLoop {
   /// the screens since it was last written: every one journaled after the
   /// ones its last write read, or those since `since` before it has read any.
   private func runRefresh(since: Date, now: Date) async {
-    guard let apiKey else { return }
+    guard let route else { return }
     let cursor = understanding?.coveredThroughObservationID
     let window = await screens(since: cursor == nil ? since : nil, after: cursor, now: now)
     let events = (try? await journal.recentEvents(limit: MentorLoop.eventLookback)) ?? []
@@ -1166,7 +1179,7 @@ public actor MentorLoop {
     let call = await perform(
       tier: .understanding,
       request: request,
-      apiKey: apiKey,
+      route: route,
       timeout: MentorLoop.timeout(forReplyOf: request.maxTokens)
     )
     var record = call.record
@@ -1268,26 +1281,33 @@ public actor MentorLoop {
   private func perform(
     tier: ModelTier,
     request: MessagesRequest,
-    apiKey: String,
+    route: CallRoute,
     timeout: TimeInterval
   ) async -> CallResult {
     inFlight.insert(tier)
     await publishStatus()
     let started = clock.date
     let identity = CallIdentity(kind: tier.rawValue, promptVersion: MentorPrompts.version)
-    let result: Result<MessagesResponse, ClaudeClientError>
+    var result: Result<MessagesResponse, ClaudeClientError>
     if let hold = MentorScheduler.callGate(consented: consented) {
       result = .failure(.notSent(hold.label))
     } else {
       do {
         result = .success(
-          try await client.send(request, call: identity, apiKey: apiKey, timeout: timeout)
+          try await client.send(request, call: identity, route: route, timeout: timeout)
         )
       } catch let error as ClaudeClientError {
         result = .failure(error)
       } catch {
         result = .failure(.transport(error.localizedDescription))
       }
+    }
+    // What the provider billed, even for a reply that fails the check below.
+    let usage = (try? result.get().usage) ?? Usage()
+    if route.provider != .anthropic, case .success(let response) = result,
+      let problem = MentorLoop.schemaProblem(in: response, for: request)
+    {
+      result = .failure(.badResponse("the reply does not match its schema: \(problem)"))
     }
     let latency = clock.date.timeIntervalSince(started)
     inFlight.remove(tier)
@@ -1296,7 +1316,6 @@ public actor MentorLoop {
       status.pendingFollowUp = nil
       pending.continuation.resume(returning: true)
     }
-    let usage = (try? result.get().usage) ?? Usage()
     let replayed = client.isReplay
     let record = ModelCallRecord(
       timestamp: started,
@@ -1308,11 +1327,14 @@ public actor MentorLoop {
       promptCharacters: request.promptCharacterCount,
       imageBytes: request.imageByteCount,
       usage: usage,
-      cost: replayed ? 0 : (settings.prices.cost(of: usage, model: request.model) ?? 0),
+      cost: replayed
+        ? 0
+        : (settings.prices.cost(of: usage, model: request.model, provider: route.provider) ?? 0),
       latency: latency,
       outcome: .error,
       detail: nil,
-      replayed: replayed
+      replayed: replayed,
+      provider: route.provider
     )
     return CallResult(result: result, record: record)
   }
@@ -1356,6 +1378,21 @@ public actor MentorLoop {
     status.pendingFollowUp = nil
     pending.continuation.resume(returning: false)
     return true
+  }
+
+  /// Why a finished reply does not match the schema its call sent, or nil
+  /// when it does, when the call sent none, or when the reply is a refusal or
+  /// was cut off, which the caller reports as such.
+  ///
+  /// Asked of the providers Athina maps its calls onto. Anthropic's replies
+  /// are read as they always were: the loop keeps what it can use of a
+  /// partial one, such as a suggestion beside a malformed understanding.
+  static func schemaProblem(in response: MessagesResponse, for request: MessagesRequest) -> String?
+  {
+    guard let schema = request.outputConfig?.format?.schema,
+      !response.isRefusal, !response.isTruncated
+    else { return nil }
+    return JSONSchemaCheck.problem(withReply: response.text, against: schema)
   }
 
   static func decode<T: Decodable>(_ type: T.Type, from response: MessagesResponse) -> T? {
@@ -1404,7 +1441,7 @@ public actor MentorLoop {
       return
     }
     do {
-      apiKey = try await keyStore.loadInBackground()
+      apiKey = try await keyStore.loadInBackground(for: settings.provider)
     } catch {
       apiKey = nil
       MentorLoop.log.error("api key unreadable: \(String(describing: error), privacy: .public)")

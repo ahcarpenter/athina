@@ -87,15 +87,44 @@ public struct SensingSettings: SettingsSection, Equatable, Sendable {
   /// Whether the person cleared the pause shortcut, which earlier builds do
   /// not read.
   private var pauseHotKeyCleared = false
-  /// The answer to the consent window, or nil when it was never given.
+  /// The answer to the consent window for Anthropic, or nil when it was
+  /// never given.
   ///
   /// Nil on every install until the person answers, including one from before
-  /// the window existed, so nothing is sensed or sent before Allow.
+  /// the window existed, so nothing is sensed or sent before Allow. Every
+  /// earlier build reads this key, and knows only Anthropic, so another
+  /// provider's answer is never kept here.
   public var consent: Consent?
+  /// The answers for every other provider, keyed by `ModelProvider.rawValue`.
+  ///
+  /// Each provider sends to a different company, so each needs its own Allow.
+  public var providerConsents: [String: Consent] = [:]
 
-  /// Whether the person has allowed Athina to watch and send
-  /// (`Consent.grants`).
-  public var hasConsent: Bool { Consent.grants(consent) }
+  /// The answer given for `provider`, or nil when none was.
+  public func consent(for provider: ModelProvider) -> Consent? {
+    provider == .anthropic ? consent : providerConsents[provider.rawValue]
+  }
+
+  /// Records `answer` as the answer for `provider`.
+  public mutating func setConsent(_ answer: Consent, for provider: ModelProvider) {
+    if provider == .anthropic {
+      consent = answer
+    } else {
+      providerConsents[provider.rawValue] = answer
+    }
+  }
+
+  /// Records a withdrawal for every provider, so switching providers never
+  /// resumes under an Allow given before it.
+  public mutating func withdrawConsent(at date: Date) {
+    for provider in ModelProvider.allCases {
+      setConsent(Consent(answer: .declined, at: date), for: provider)
+    }
+  }
+
+  /// Whether the person has allowed Athina to watch and send to the provider
+  /// in force (`Consent.grants`).
+  public var hasConsent: Bool { Consent.grants(consent(for: mentor.provider)) }
 
   // MARK: Mentor loop
 

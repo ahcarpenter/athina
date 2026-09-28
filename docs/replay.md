@@ -1,6 +1,7 @@
 # Iterating without the network
 
-Working on Athina needs no live call to Anthropic to build, test, or verify.
+Working on Athina needs no live call to Anthropic, OpenAI or OpenCode to
+build, test, or verify.
 The app, its tests, and every verification run use **replay**: each model call
 is answered from a recorded fixture, with no network, no API key, and no spend.
 Replay is the default way to exercise the app, including the end-to-end checks
