@@ -295,26 +295,23 @@ struct InterventionLoopTests {
   }
 
   /// What the app lists, as it does: the journal's live suggestions less the
-  /// ones the loop's latest status holds, each value it would show kept.
+  /// ones the loop's floor or latest status holds, each value it would show kept.
   @MainActor private final class ListedSuggestions {
     var status: MentorStatus
+    let floor: SuggestionFloor
     var journaled: [Suggestion] = []
-    /// The suggestions the loop has sent to be shown so far.
-    var sent: Set<Int64> = []
     private(set) var listed: [[Int64]] = []
-    /// `sent` as each value in `listed` was made.
-    private(set) var sentWhenListed: [Set<Int64>] = []
     let changes: AsyncStream<Void>
     private let changed: AsyncStream<Void>.Continuation
 
-    init(status: MentorStatus) {
+    init(status: MentorStatus, floor: SuggestionFloor) {
       self.status = status
+      self.floor = floor
       (changes, changed) = AsyncStream.makeStream(of: Void.self)
     }
 
     func list() {
-      listed.append(status.shown(journaled).map(\.id))
-      sentWhenListed.append(sent)
+      listed.append(status.shown(journaled, floor: floor).map(\.id))
       changed.yield()
     }
 
@@ -334,7 +331,7 @@ struct InterventionLoopTests {
     let a = try await journaledSuggestion(h)
     await h.loop.setTalkingBack(true)
 
-    let view = await ListedSuggestions(status: h.loop.currentStatus())
+    let view = await ListedSuggestions(status: h.loop.currentStatus(), floor: h.loop.suggestionFloor)
     let events = await h.loop.events()
     let journal = h.journal
     let following = [
@@ -376,7 +373,7 @@ struct InterventionLoopTests {
     let h = try await MentorLoopTests.Harness()
     let a = try await journaledSuggestion(h)
 
-    let view = await ListedSuggestions(status: h.loop.currentStatus())
+    let view = await ListedSuggestions(status: h.loop.currentStatus(), floor: h.loop.suggestionFloor)
     let events = await h.loop.events()
     let journal = h.journal
     let loop = h.loop
@@ -384,18 +381,12 @@ struct InterventionLoopTests {
       Task { @MainActor in
         var talking = false
         for await event in events {
-          switch event {
-          case .suggestion(let shown):
-            view.sent.insert(shown.id)
-          case .status(let status):
-            view.status = status
-            view.list()
-            if !talking, status.holdsSuggestionsAfter != nil {
-              talking = true
-              await loop.setTalkingBack(true)
-            }
-          default:
-            continue
+          guard case .status(let status) = event else { continue }
+          view.status = status
+          view.list()
+          if !talking, status.holdsSuggestionsAfter != nil {
+            talking = true
+            await loop.setTalkingBack(true)
           }
         }
       },
@@ -415,13 +406,15 @@ struct InterventionLoopTests {
     let b = try #require(try await h.journal.recentSuggestions(limit: 1).first)
     #expect(b.id != a.id)
     await view.wait { view.journaled.contains { $0.id == b.id } }
+    // Whether talking back caught B depends on where the loop was; when it
+    // did, B stays held from before its row was journaled until released.
+    let whileUndecided = view.listed
+    let held = h.loop.suggestionFloor.value != nil
 
     await h.loop.setTalkingBack(false)
     await view.wait { view.listed.last == [b.id, a.id] }
 
-    for (ids, sent) in zip(view.listed, view.sentWhenListed) where ids.contains(b.id) {
-      #expect(sent.contains(b.id))
-    }
+    if held { #expect(whileUndecided.allSatisfy { !$0.contains(b.id) }) }
   }
 
   @Test func aHeldSuggestionThatOutlivedTheExchangeExpiresUnseen() async throws {

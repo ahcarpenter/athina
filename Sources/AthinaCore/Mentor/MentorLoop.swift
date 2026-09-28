@@ -91,7 +91,12 @@ public actor MentorLoop {
   private var heldSuggestion: Suggestion?
   /// `MentorStatus.holdsSuggestionsAfter`, set before a new suggestion is
   /// journaled and kept until it and any held one are decided.
-  private var holdsSuggestionsAfter: Int64?
+  private var holdsSuggestionsAfter: Int64? {
+    didSet { suggestionFloor.set(holdsSuggestionsAfter) }
+  }
+  /// `holdsSuggestionsAfter` as it is now, readable without waiting for the
+  /// status that carries it, which can reach a list after the held row does.
+  public nonisolated let suggestionFloor = SuggestionFloor()
   /// A new suggestion is being journaled and not yet decided by `publish`.
   private var journalingSuggestion = false
   /// The one question waiting for the call in flight to return; a newer one takes its place.

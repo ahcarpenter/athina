@@ -122,7 +122,9 @@ final class AppState {
   var activeSuggestion: Suggestion?
   /// The suggestions the History window lists, newest first: the journaled
   /// ones but the one the loop holds while a talked-to toast is up.
-  var suggestionHistory: [Suggestion] { mentorStatus.shown(journaledSuggestions) }
+  var suggestionHistory: [Suggestion] {
+    mentorStatus.shown(journaledSuggestions, floor: mentor?.suggestionFloor)
+  }
   /// Last four characters of the saved key, or nil when there is none.
   private(set) var apiKeyHint: String?
   private(set) var apiKeyError: String?

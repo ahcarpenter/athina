@@ -578,9 +578,16 @@ public struct MentorStatus: Equatable, Sendable {
 
   /// The journaled suggestions the person may see: all but the one held,
   /// which is not theirs until it is shown or expires unseen.
-  public func shown(_ journaled: [Suggestion]) -> [Suggestion] {
-    guard let holdsSuggestionsAfter else { return journaled }
-    return journaled.filter { $0.id <= holdsSuggestionsAfter || $0.feedback != nil }
+  ///
+  /// `floor` is the loop's `MentorLoop.suggestionFloor`: the status and the
+  /// journal's live list arrive on separate streams in no set order, so the
+  /// floor the loop set before journaling a row hides it even when the row
+  /// arrives first.
+  public func shown(_ journaled: [Suggestion], floor: SuggestionFloor?) -> [Suggestion] {
+    guard let after = [holdsSuggestionsAfter, floor?.value].compactMap({ $0 }).min() else {
+      return journaled
+    }
+    return journaled.filter { $0.id <= after || $0.feedback != nil }
   }
 
   /// Whether the cadence is stretched enough to call it slowed.
