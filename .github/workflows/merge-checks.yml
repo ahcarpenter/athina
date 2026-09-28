@@ -4,8 +4,10 @@ name: Merge checks
 # push to a pull request, and split across four runners. It runs on every push
 # to main and on a pull request that is ready for review: marking a draft ready
 # runs it, and so does every push while it is ready, while a draft gets only
-# ci.yml's fast lane. The main ruleset requires ui-snapshots at the pull
-# request's head (.github/rulesets/main.json, docs/ci.md).
+# ci.yml's fast lane. It also runs, in full, on every group the merge queue
+# builds, where there is no draft and no pull request to comment on. The main
+# ruleset requires ui-snapshots at the pull request's head and on the queue's
+# group (.github/rulesets/main.json, docs/ci.md).
 #
 # A job that an `if` skips still reports a check run, and a skipped check
 # counts as passed for a required one, so a skipped ui-snapshots takes another
@@ -17,11 +19,13 @@ on:
     branches: [main]
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
 
 # A new push to a pull request, or marking it ready, cancels that pull
-# request's run still going; every push to main keeps its own run.
+# request's run still going; every push to main and every merge queue group
+# keeps its own run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -31,7 +35,9 @@ jobs:
     # renders in Tests/Snapshots were made on this image with the Xcode that
     # .xcode-version pins, so a change to either is a deliberate baseline
     # refresh (docs/ci.md "UI snapshot baselines"). This condition, the one on
-    # ui-snapshots and the one in its name are the same and change together.
+    # ui-snapshots and the one in its name are the same and change together;
+    # only a draft pull request skips, so a push to main and a merge queue
+    # group always run the full gate.
     name: ui-snapshots shard ${{ matrix.shard }}
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     strategy:
@@ -104,8 +110,9 @@ jobs:
     # public address, and an artifact needs a login to fetch, so the images are
     # pushed to refs/ui-snapshots-drift/pr-<number>, a ref outside refs/heads
     # that a clone never fetches, replaced on each run and read through
-    # raw.githubusercontent.com at its commit. Not a required check, and a
-    # pull request from a fork, whose token cannot write, gets no comment.
+    # raw.githubusercontent.com at its commit. Not a required check; a pull
+    # request from a fork, whose token cannot write, gets no comment, and nor
+    # does a merge queue group, which has no pull request of its own.
     name: ui-snapshots drift comment
     needs: ui-snapshots-shard
     if: >-

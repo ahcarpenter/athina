@@ -13,7 +13,7 @@
 <h3 align="center"><strong>A live mentor for your Mac.</strong> It watches how you work and shows you a better way when there is one.</h3>
 
 **Status:** early. Athina runs on macOS 26 or later, and feedback is wanted:
-[issues](https://github.com/ahcarpenter/athina/issues) are welcome. It is
+[issues](https://github.com/getathina/athina/issues) are welcome. It is
 open source under the [MIT License](LICENSE).
 
 ## Overview
@@ -58,7 +58,7 @@ what is kept.
 ## Install
 
 A release is a download from the repository's
-[GitHub Releases](https://github.com/ahcarpenter/athina/releases): open
+[GitHub Releases](https://github.com/getathina/athina/releases): open
 `Athina-<version>.dmg` and drag Athina onto Applications, or unzip
 `Athina-<version>.zip` into Applications. Releases are not notarized yet, so
 macOS refuses the first launch: choose Done, then Open Anyway next to Athina in

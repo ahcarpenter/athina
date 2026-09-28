@@ -1,21 +1,26 @@
 name: CI
 
-# Runs on every push to a pull request and to main: build-and-test, lint,
+# Runs on every push to a pull request and to main, and on every group the
+# merge queue builds: build-and-test, lint,
 # the API tier of the end-to-end harness with its checkpoints, e2e-api, and
 # the fast UI check, ui-snapshots-smoke. The slow, full-fidelity ui-snapshots
 # check lives in merge-checks.yml, which runs on push to main and for a pull
 # request only once it is ready for review; the main ruleset requires all five
-# at a pull request's head before it merges (docs/ci.md).
+# at a pull request's head before it merges, and again on the merge queue's
+# group before it lands on main (docs/ci.md "The merge queue").
 on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
 
 # A new push to a pull request cancels that pull request's run still going, so
 # a superseded commit stops holding macOS runners, of which the account runs
-# five at once. Every push to main keeps its own run (the run id is its group).
+# five at once. Every push to main and every merge queue group keeps its own
+# run (the run id is its group), so a push to a pull request never cancels a
+# queued group's run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
