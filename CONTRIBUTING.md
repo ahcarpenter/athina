@@ -163,8 +163,9 @@ itself and says which on the line it writes as it starts.
 5. **The merge queue** lands it: once the pull request is green,
    `gh pr merge --auto --squash <number>`, or the Merge when ready button,
    queues it. The queue runs all five checks again on it merged with main and
-   everything queued ahead of it, then squashes it onto main. A group that
-   fails removes only the pull request that broke it; the others stay queued.
+   everything queued ahead of it, one run at a time, then squashes it onto
+   main in turn. A failure removes only that pull request; the others stay
+   queued.
 
 [Continuous integration](docs/ci.md) has the detail, and
 [Testing](docs/testing.md) says what each layer proves.
