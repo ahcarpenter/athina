@@ -50,15 +50,10 @@ public struct KeychainKeyStore: KeyStore {
   /// The service Athina's key is saved under: the running app's bundle
   /// identifier.
   public static let service = AppPaths.keychainService
-  /// The service the item was saved under while the app was called Mentor.
-  /// `KeyMigration` copies that item to the one above on the first launch.
-  public static let legacyService = AppPaths.legacyBundleIdentifier
   /// The account name of the key's item, the same under every service.
   public static let account = "anthropic-api-key"
 
   /// Which item this store reads and writes.
-  ///
-  /// Only `KeyMigration` names anything but the default.
   public let service: String
 
   /// Creates a store for the item under `service`.
@@ -127,92 +122,6 @@ public struct KeychainKeyStore: KeyStore {
     let status = SecItemDelete(baseQuery as CFDictionary)
     guard status == errSecSuccess || status == errSecItemNotFound else {
       throw KeyStoreError(status: status, operation: "delete")
-    }
-  }
-}
-
-/// Carries the Anthropic API key from the keychain item the app saved while
-/// it was called Mentor to the one Athina saves.
-///
-/// Shaped like the move of the owner's files (`DataMigration`): the key is
-/// copied to the new item, read back from there, and only then is the copy
-/// called done. The old item is left exactly as it was, so a key is never
-/// lost to a half-finished copy; an item under the new service is never
-/// overwritten, since only the owner can say which key is the one to use.
-///
-/// The key itself never leaves this type: no outcome, error, or log line
-/// carries it.
-public enum KeyMigration {
-  /// Remembers that the copy has been made, so a key the owner has since
-  /// deleted in Settings is never brought back from the item left behind.
-  public static let doneKey = "apiKeyCopiedFromMentor"
-
-  /// What one run of the copy did.
-  public enum Outcome: Equatable, Sendable {
-    /// No key was saved under the old name.
-    case nothingToMove
-    /// Nothing to do: a key is already saved under the new name, or this
-    /// copy has already been made once. Neither is overwritten.
-    case alreadyThere
-    /// The key was copied and reads back from the new item.
-    case copied
-    /// The copy could not be finished. The old item is untouched.
-    case failed(String)
-
-    /// A sentence for the log, or nil when there was nothing to do.
-    public var note: String? {
-      switch self {
-      case .nothingToMove, .alreadyThere: nil
-      case .copied:
-        """
-        Copied the API key saved under \(KeychainKeyStore.legacyService) to \
-        \(KeychainKeyStore.service); the old item is untouched.
-        """
-      case .failed(let reason): reason
-      }
-    }
-  }
-
-  /// Copies the key, once.
-  ///
-  /// Safe to call on every launch, and does nothing at all when there is
-  /// nothing to copy.
-  ///
-  /// Reads the keychain, which on the first launch of a newly signed build
-  /// can put up the system's access prompt, so this belongs off the main
-  /// thread like every other key read.
-  public static func run(
-    from old: any KeyStore = KeychainKeyStore(service: KeychainKeyStore.legacyService),
-    to new: any KeyStore = KeychainKeyStore(),
-    recordingIn defaults: UserDefaults = .standard
-  ) -> Outcome {
-    guard !defaults.bool(forKey: doneKey) else { return .alreadyThere }
-    do {
-      guard try new.load() == nil else {
-        defaults.set(true, forKey: doneKey)
-        return .alreadyThere
-      }
-      guard let key = try old.load() else { return .nothingToMove }
-      try new.save(key)
-      guard try new.load() == key else {
-        return .failed(
-          """
-          The API key did not read back from \(KeychainKeyStore.service). The key saved \
-          under \(KeychainKeyStore.legacyService) is untouched; paste it into Settings > \
-          Models.
-          """
-        )
-      }
-      defaults.set(true, forKey: doneKey)
-      return .copied
-    } catch {
-      return .failed(
-        """
-        Could not copy the API key from \(KeychainKeyStore.legacyService) to \
-        \(KeychainKeyStore.service): \(DataMigration.sentence(String(describing: error))) \
-        The old item is untouched.
-        """
-      )
     }
   }
 }

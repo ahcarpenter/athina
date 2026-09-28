@@ -148,26 +148,11 @@ final class AppState {
   /// Keeps a replay's data directory its own while the app runs.
   private let dataDirectoryLock: DataDirectoryLock?
   /// Why this launch must not start: a replay was given a `--settings` file
-  /// that is not settings or could not hold its data directory, or the files
-  /// the app kept as Mentor could not be moved
-  /// (`DataMigration.Outcome.stopsLaunch`).
+  /// that is not settings or could not hold its data directory.
   ///
   /// The app says so and exits rather than running on settings nobody asked
-  /// for, or on an empty journal in place of the owner's.
+  /// for.
   let startupRefusal: String?
-  /// What this launch found and did about the files the app kept when it was
-  /// called Mentor (`DataMigration`).
-  ///
-  /// Shown in Settings and the debug panel, because a move that was refused is
-  /// the owner's to settle; one that could not be finished stops the launch
-  /// (`startupRefusal`).
-  let dataMigration: DataMigration.Outcome
-  /// Whether this launch copies the API key saved under the old name
-  /// (`KeyMigration`).
-  ///
-  /// Only a launch that reads the keychain at all does: never a replay, and
-  /// never a snapshot render.
-  private let copyKeyFromMentor: Bool
 
   // MARK: Model client mode
 
@@ -260,19 +245,6 @@ final class AppState {
     // no microphone; the control API stands in for both.
     toast = ToastController(clock: clock, watchesOtherApps: !controlMode.isHermetic)
     listener = SpeechListener(clock: clock, hears: controlMode.isHermetic ? .script : .microphone)
-    // Before anything reads the live files: the journal, settings,
-    // recordings and understanding the app kept while it was called
-    // Mentor move to the folder it keeps them in now. A replay's files
-    // are its own and never the live ones, and a snapshot render reads
-    // neither, so neither moves anything.
-    let movesFromMentor = !(clientMode.isOffline || Snapshots.isActive)
-    let dataMigration: DataMigration.Outcome =
-      movesFromMentor ? DataMigration.run() : .nothingToMove
-    self.dataMigration = dataMigration
-    // The preferences follow the files, so a launch that stops here
-    // leaves both for the next one.
-    let copiesFromMentor = movesFromMentor && !dataMigration.stopsLaunch
-    if copiesFromMentor { PreferencesMigration.run() }
     var files = LaunchFiles(arguments: CommandLine.arguments, clientMode: clientMode)
     // The settings first, so that a --settings file that is there but is
     // not settings is one of the reasons `claim` refuses the launch.
@@ -280,7 +252,7 @@ final class AppState {
     switch files.claim(clientMode: clientMode) {
     case .notNeeded:
       dataDirectoryLock = nil
-      startupRefusal = dataMigration.stopsLaunch ? dataMigration.note : nil
+      startupRefusal = nil
     case .held(let lock):
       dataDirectoryLock = lock
       startupRefusal = nil
@@ -295,7 +267,6 @@ final class AppState {
     // Neither a replay nor a snapshot render needs a key, so neither reads
     // the keychain, and its per-build access prompt never blocks them.
     keyStore = clientMode.isOffline || Snapshots.isActive ? InMemoryKeyStore() : KeychainKeyStore()
-    copyKeyFromMentor = copiesFromMentor
     isSample = false
     settings = launchSettings
     // A hermetic run asks macOS about no permission, since even asking
@@ -339,7 +310,6 @@ final class AppState {
       clientMode: clientMode,
       launchName: "launch-4242-5a1e0c9d"
     )
-    dataMigration = .nothingToMove
     dataDirectoryLock = nil
     startupRefusal = nil
     journalURL = Journal.defaultURL(in: launchFiles.dataDirectory)
@@ -347,7 +317,6 @@ final class AppState {
     keyStore =
       clientMode.isOffline
       ? InMemoryKeyStore() : InMemoryKeyStore(key: "sk-ant-sample-key-0000-7Q2x")
-    copyKeyFromMentor = false
     isSample = true
     self.settings = settings
     permissions = PermissionStatus(screenRecording: true, accessibility: true)
@@ -369,16 +338,6 @@ final class AppState {
     hotKeys.onRelease = { [weak self] slot in self?.hotKeyReleased(slot) }
     registerPauseHotKey()
     registerPushToTalkHotKey()
-
-    // What became of the files the app kept under its old name, before
-    // the journal below opens in the folder they moved to.
-    if let note = dataMigration.note {
-      if dataMigration.needsAttention {
-        AppState.log.error("data from Mentor: \(note, privacy: .public)")
-      } else {
-        AppState.log.notice("data from Mentor: \(note, privacy: .public)")
-      }
-    }
 
     let journal: Journal
     do {
@@ -890,22 +849,7 @@ final class AppState {
   /// can block on its own prompt, and the rest of the app must not wait.
   private func reloadKeyHint() {
     let keyStore = keyStore
-    let copyKeyFromMentor = copyKeyFromMentor
     Task { [weak self] in
-      // The key saved while the app was called Mentor is copied to the
-      // item Athina saves, here rather than at launch, because a
-      // keychain read can wait on the system's access prompt for as
-      // long as the owner takes to answer it.
-      if copyKeyFromMentor {
-        let outcome = await Task.detached(priority: .userInitiated) { KeyMigration.run() }.value
-        if let note = outcome.note {
-          AppState.log.notice("key from Mentor: \(note, privacy: .public)")
-        }
-        // The loop reads the key once as it attaches, which can be
-        // before the owner has answered the keychain prompt this
-        // copy waited on. A loop attached later reads the copy itself.
-        if outcome == .copied { await self?.mentor?.apiKeyChanged() }
-      }
       let outcome: Result<String?, Error>
       do {
         outcome = .success(try await keyStore.loadInBackground().map(APIKey.lastFour))

@@ -80,7 +80,7 @@
     }
 
     /// The owner's real data, which every run is kept away from: where the app keeps it now,
-    /// and where it kept it as Mentor (docs/coming-from-mentor.md).
+    /// and the folder it kept while it was called Mentor, which stays on the owner's Mac.
     static let liveData = [
       FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Application Support/athina"),

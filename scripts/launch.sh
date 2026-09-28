@@ -70,16 +70,13 @@ expand_tilde() {
 }
 
 # The hourly spend cap the live app stops calling at, in dollars: Settings >
-# Models, `mentor.hourlySpendCap` in the live settings.json, which a first
-# launch copies from Mentor's when Athina has none yet (docs/coming-from-mentor.md),
-# clamped as `MentorSettings.validated()` clamps it, and its default when unset.
+# Models, `mentor.hourlySpendCap` in the live settings.json, clamped as
+# `MentorSettings.validated()` clamps it, and its default when unset.
 spend_cap() {
-	local support="$HOME/Library/Application Support" file cap=""
-	for file in "$support/athina/settings.json" "$support/mentor/settings.json"; do
-		[ -f "$file" ] || continue
+	local file="$HOME/Library/Application Support/athina/settings.json" cap=""
+	if [ -f "$file" ]; then
 		cap="$(plutil -extract mentor.hourlySpendCap raw -o - "$file" 2>/dev/null || true)"
-		break
-	done
+	fi
 	awk -v cap="${cap:-1}" 'BEGIN {
 		if (cap < 0.05) cap = 0.05
 		if (cap > 1000) cap = 1000

@@ -36,7 +36,8 @@ API_SCENARIO_DIR="$ROOT/Tests/E2EAPITests/Scenarios"
 API_BUILD="$ROOT/.build/e2e-api"
 
 # The owner's real data, which every run is sandboxed away from: where the app
-# keeps it now, and where it kept it as Mentor (docs/coming-from-mentor.md).
+# keeps it now, and the folder it kept while it was called Mentor, which stays
+# on the owner's Mac.
 LIVE_SUPPORT="$HOME/Library/Application Support/athina"
 LEGACY_SUPPORT="$HOME/Library/Application Support/mentor"
 PREFS_DOMAIN="com.ahcarpenter.athina"
