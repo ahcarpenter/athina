@@ -496,15 +496,21 @@ final class AppState {
     liveListTasks = [
       Task { [weak self] in
         await self?.follow(
-          journal.liveSuggestions(limit: AppState.historyLimit),
+          { journal.liveSuggestions(limit: AppState.historyLimit) },
           into: \.suggestionHistory
         )
       },
       Task { [weak self] in
-        await self?.follow(journal.liveFollowUps(limit: AppState.followUpLimit), into: \.followUps)
+        await self?.follow(
+          { journal.liveFollowUps(limit: AppState.followUpLimit) },
+          into: \.followUps
+        )
       },
       Task { [weak self] in
-        await self?.follow(journal.liveModelCalls(limit: AppState.callLogLimit), into: \.callLog)
+        await self?.follow(
+          { journal.liveModelCalls(limit: AppState.callLogLimit) },
+          into: \.callLog
+        )
       },
     ]
   }
@@ -520,24 +526,33 @@ final class AppState {
   /// panel opens. Nothing happens before the journal is open.
   func followTimeline() async {
     guard let journal else { return }
-    await follow(journal.liveEntries(limit: AppState.timelineLimit), into: \.timeline)
+    await follow({ journal.liveEntries(limit: AppState.timelineLimit) }, into: \.timeline)
   }
 
-  /// Sets `list` to each value `rows` delivers, when it differs, until the
-  /// sequence ends or fails.
+  /// How long a list waits after a failed fetch before it follows the
+  /// journal again.
+  private static let liveListBackOff: Duration = .seconds(5)
+
+  /// Sets `list` to each value the query from `rows` delivers, when it
+  /// differs, until the calling task is cancelled, following a fresh query
+  /// after a failure.
   private func follow<Rows: AsyncSequence>(
-    _ rows: Rows,
+    _ rows: () -> Rows,
     into list: ReferenceWritableKeyPath<AppState, Rows.Element>
   ) async where Rows.Element: Equatable {
-    do {
-      for try await value in rows where value != self[keyPath: list] {
-        self[keyPath: list] = value
+    await followLiveList(
+      rows,
+      clock: clock,
+      backOff: AppState.liveListBackOff,
+      restarting: { error in
+        AppState.log.error(
+          "a list failed to follow the journal and restarts: \(String(describing: error), privacy: .public)"
+        )
+      },
+      deliver: { value in
+        if value != self[keyPath: list] { self[keyPath: list] = value }
       }
-    } catch {
-      AppState.log.error(
-        "a list stopped following the journal: \(String(describing: error), privacy: .public)"
-      )
-    }
+    )
   }
 
   func stop() async {
