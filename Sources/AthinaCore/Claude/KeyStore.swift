@@ -26,9 +26,7 @@ extension KeyStore {
   /// The keychain can block on its own prompt for as long as the user takes to
   /// answer it, and neither the main thread nor an actor's executor should wait
   /// on that.
-  public func loadInBackground(
-    for provider: ModelProvider = .anthropic
-  ) async throws -> String? {
+  public func loadInBackground(for provider: ModelProvider) async throws -> String? {
     try await withCheckedThrowingContinuation { continuation in
       DispatchQueue.global(qos: .userInitiated).async {
         continuation.resume(with: Result { try load(for: provider) })

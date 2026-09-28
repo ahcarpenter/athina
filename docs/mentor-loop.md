@@ -123,10 +123,9 @@ cache writes to cache writes. `OpenCodeClient` sends Zen's Claude models to
 its Messages endpoint and its GPT models to its Responses endpoint, with the
 same two shapes. No prompt or schema changes with the provider, so the
 prompt version and the committed fixtures stay as they are, and a replay
-answers whatever provider is chosen. A reply from OpenAI or OpenCode is
-checked against its call's schema before the loop reads it
-(`JSONSchemaCheck`); one that does not match is an error that still counts
-toward the hour's spend. Anthropic's replies are read as they always were.
+answers whatever provider is chosen. Every provider's reply is read the same
+way: the loop keeps what it can use of it, such as a suggestion beside a
+malformed understanding.
 
 ## Callouts
 

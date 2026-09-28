@@ -703,7 +703,7 @@ private struct AddExcludedAppPopover: View {
 
 /// The unit a number row counts in, written out for the row and for VoiceOver.
 enum SettingsUnit {
-  case seconds, pixels, bits, tokens, megabytes, calls
+  case seconds, pixels, bits, tokens, megabytes
 
   func label(for value: Double) -> String {
     let one = value == 1
@@ -713,7 +713,6 @@ enum SettingsUnit {
     case .bits: return one ? "bit" : "bits"
     case .tokens: return one ? "token" : "tokens"
     case .megabytes: return "MB"
-    case .calls: return one ? "call" : "calls"
     }
   }
 }

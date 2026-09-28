@@ -5,9 +5,8 @@ import OSLog
 /// `MentorScheduler`'s gates, accounts spend, and publishes suggestions.
 ///
 /// Everything that reaches the network passes through `perform`, to the
-/// provider in force with its key, which is read here and nowhere else. A
-/// reply from OpenAI or OpenCode is checked against its call's schema
-/// before anything reads it. Prompt text is never journaled or logged.
+/// provider in force with its key, which is read here and nowhere else.
+/// Prompt text is never journaled or logged.
 ///
 /// With a replay client (`ClaudeClient.isReplay`) no key is read at all, every
 /// call is journaled as a replay with zero cost, and none of them counts
@@ -1292,7 +1291,7 @@ public actor MentorLoop {
     await publishStatus()
     let started = clock.date
     let identity = CallIdentity(kind: tier.rawValue, promptVersion: MentorPrompts.version)
-    var result: Result<MessagesResponse, ClaudeClientError>
+    let result: Result<MessagesResponse, ClaudeClientError>
     if let hold = MentorScheduler.callGate(consented: consented) {
       result = .failure(.notSent(hold.label))
     } else if let route, route.provider == provider {
@@ -1308,13 +1307,7 @@ public actor MentorLoop {
     } else {
       result = .failure(.notSent(MentorScheduler.Hold.noAPIKey.label))
     }
-    // What the provider billed, even for a reply that fails the check below.
     let usage = (try? result.get().usage) ?? Usage()
-    if provider != .anthropic, case .success(let response) = result,
-      let problem = MentorLoop.schemaProblem(in: response, for: request)
-    {
-      result = .failure(.badResponse("the reply does not match its schema: \(problem)"))
-    }
     let latency = clock.date.timeIntervalSince(started)
     inFlight.remove(tier)
     if inFlight.isEmpty, let pending = pendingQuestion {
@@ -1384,21 +1377,6 @@ public actor MentorLoop {
     status.pendingFollowUp = nil
     pending.continuation.resume(returning: false)
     return true
-  }
-
-  /// Why a finished reply does not match the schema its call sent, or nil
-  /// when it does, when the call sent none, or when the reply is a refusal or
-  /// was cut off, which the caller reports as such.
-  ///
-  /// Asked of the providers Athina maps its calls onto. Anthropic's replies
-  /// are read as they always were: the loop keeps what it can use of a
-  /// partial one, such as a suggestion beside a malformed understanding.
-  static func schemaProblem(in response: MessagesResponse, for request: MessagesRequest) -> String?
-  {
-    guard let schema = request.outputConfig?.format?.schema,
-      !response.isRefusal, !response.isTruncated
-    else { return nil }
-    return JSONSchemaCheck.problem(withReply: response.text, against: schema)
   }
 
   static func decode<T: Decodable>(_ type: T.Type, from response: MessagesResponse) -> T? {

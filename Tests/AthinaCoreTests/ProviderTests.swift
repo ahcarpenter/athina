@@ -68,9 +68,9 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
 /// OpenAI and OpenCode answer beside Anthropic.
 ///
-/// Each provider has its own key and its own Allow, each call is mapped onto the provider's own request
-/// shape with its words unchanged, every reply is checked against its schema,
-/// and spend is priced per provider. Nothing here reaches the network.
+/// Each provider has its own key and its own Allow, each call is mapped onto
+/// the provider's own request shape with its words unchanged, and spend is
+/// priced per provider. Nothing here reaches the network.
 @Suite(.serialized, .timeLimit(.minutes(1))) struct ProviderTests {
   private typealias Harness = MentorLoopTests.Harness
   private static let no = #"{"worth_a_look": false, "reason": "Reading docs"}"#
@@ -471,39 +471,6 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     )
   }
 
-  // MARK: Schema check
-
-  @Test func aReplyIsCheckedAgainstItsSchema() {
-    let schema = MentorPrompts.mentorSchema
-    let empty =
-      #"{"reason": "fine", "suggestion": null, "updated_understanding": {"goals": [], "timeline": [], "mentor_history": [], "open_concerns": []}}"#
-    #expect(JSONSchemaCheck.problem(withReply: empty, against: schema) == nil)
-    let extra = empty.replacingOccurrences(
-      of: #""reason": "fine","#,
-      with: #""reason": "fine", "mood": 1,"#
-    )
-    #expect(JSONSchemaCheck.problem(withReply: extra, against: schema) == "$: unexpected mood")
-    let missing = #"{"reason": "fine", "suggestion": null}"#
-    #expect(
-      JSONSchemaCheck.problem(withReply: missing, against: schema)
-        == "$: missing updated_understanding"
-    )
-    let badCategory = empty.replacingOccurrences(
-      of: #""suggestion": null"#,
-      with:
-        #""suggestion": {"title": "t", "body": "b", "explanation": "e", "category": "gossip", "confidence": 0.9, "judged_goal": null, "region": null}"#
-    )
-    #expect(
-      JSONSchemaCheck.problem(withReply: badCategory, against: schema)
-        == "$.suggestion: matches none of the allowed shapes"
-    )
-    #expect(JSONSchemaCheck.problem(withReply: "not json", against: schema) == "$: not JSON")
-    #expect(
-      JSONSchemaCheck.problem(withReply: #"{"answer": 3}"#, against: MentorPrompts.followUpSchema)
-        == "$.answer: expected string"
-    )
-  }
-
   // MARK: The loop on another provider
 
   @Test func theLoopCallsTheProviderInForceWithItsKeyAndPricesIt() async throws {
@@ -632,34 +599,5 @@ final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     let sent = await client.sent
     #expect(sent.map(\.route) == [CallRoute(.openCode, key: "zen-key")])
     await loop.stop()
-  }
-
-  @Test func aReplyThatBreaksItsSchemaIsAnErrorThatStillCounts() async throws {
-    var settings = MentorSettings()
-    settings.provider = .openAI
-    let h = try await Harness(settings: settings, key: nil)
-    try h.keyStore.save("sk-openai", for: .openAI)
-    await h.loop.apiKeyChanged()
-    await h.client.enqueue(
-      json: #"{"worth_a_look": "yes", "reason": "x"}"#,
-      model: "gpt-6-luna",
-      usage: Usage(inputTokens: 10_000_000, outputTokens: 0)
-    )
-    await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
-    let status = await h.loop.currentStatus()
-    #expect(status.lastTriage?.outcome == .error)
-    #expect(status.lastTriage?.detail?.contains("does not match its schema") == true)
-    // What the provider billed still counts toward the hour: ten million
-    // input tokens at GPT-6 Luna's $0.10.
-    #expect(abs((status.lastTriage?.cost ?? 0) - 1.0) < 1e-9)
-    #expect(status.spendThisHour > 0.99)
-  }
-
-  @Test func anthropicRepliesAreReadAsTheyAlwaysWere() async throws {
-    let h = try await Harness()
-    // A triage reply with a field the schema does not name still parses.
-    await h.client.enqueue(json: #"{"worth_a_look": false, "reason": "x", "extra": 1}"#)
-    await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 1)
-    #expect(await h.loop.currentStatus().lastTriage?.outcome == .quiet)
   }
 }
