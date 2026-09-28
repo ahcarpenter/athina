@@ -122,9 +122,10 @@ queue run keeps its own concurrency group, so a push to a pull request never
 cancels a queued run.
 
 The rule's settings: squash merges, so main keeps one commit per pull request
-titled with its number; one run at a time (`max_entries_to_build` 1); and all
-green (`ALLGREEN`), so each queued pull request is tested in its own run and
-lands in turn once that run passes. A required check that has not reported
+titled with its number; one pull request per run and one run at a time
+(`max_entries_to_merge` and `max_entries_to_build` both 1); and all green
+(`ALLGREEN`), so each queued pull request is tested in its own run and lands in
+turn once that run passes. A required check that has not reported
 within 60 minutes counts as failed. A failure removes only that pull request
 from the queue; the ones behind it are tested again without it and keep their
 place. A removed pull request needs a fix pushed and step 5 again.
