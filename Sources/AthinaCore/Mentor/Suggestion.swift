@@ -105,6 +105,17 @@ public enum SuggestionFeedback: String, Codable, CaseIterable, Sendable {
     case .tellMeMore, .notNow, .never: false
     }
   }
+
+  /// Whether this feedback takes the place of `existing`, what the suggestion
+  /// already holds.
+  ///
+  /// A non-answer never replaces anything, so closing a re-shown toast just
+  /// closes it, and Tell me more is recorded once, so re-expanding a folded
+  /// toast is only a view change. Any other answer replaces what was there.
+  public func replaces(_ existing: SuggestionFeedback?) -> Bool {
+    guard let existing else { return true }
+    return !isNonAnswer && !(self == .tellMeMore && existing == .tellMeMore)
+  }
 }
 
 /// A suggestion the mentor tier produced, as stored in the journal.
@@ -512,6 +523,12 @@ public struct MentorStatus: Equatable, Sendable {
   /// The follow-up question waiting for the call in flight, or nil when none
   /// waits.
   public var pendingFollowUp: PendingFollowUp?
+  /// While a new suggestion is being journaled and decided, or one is held
+  /// for a talked-to toast (`MentorScheduler.publishGate`), the newest
+  /// suggestion id journaled before it; nil when none is.
+  ///
+  /// A later suggestion with no feedback is not listed yet.
+  public var holdsSuggestionsAfter: Int64?
 
   /// Creates a status, by default the one before the loop has started: no API
   /// key, sensing stopped, and nothing recorded.
@@ -534,6 +551,7 @@ public struct MentorStatus: Equatable, Sendable {
     nextMentorAt: Date? = nil,
     inFlight: ModelTier? = nil,
     pendingFollowUp: PendingFollowUp? = nil,
+    holdsSuggestionsAfter: Int64? = nil,
     mode: SensingMode = .stopped
   ) {
     self.availability = availability
@@ -555,6 +573,21 @@ public struct MentorStatus: Equatable, Sendable {
     self.nextMentorAt = nextMentorAt
     self.inFlight = inFlight
     self.pendingFollowUp = pendingFollowUp
+    self.holdsSuggestionsAfter = holdsSuggestionsAfter
+  }
+
+  /// The journaled suggestions the person may see: all but the one held,
+  /// which is not theirs until it is shown or expires unseen.
+  ///
+  /// `floor` is the loop's `MentorLoop.suggestionFloor`: the status and the
+  /// journal's live list arrive on separate streams in no set order, so the
+  /// floor the loop set before journaling a row hides it even when the row
+  /// arrives first.
+  public func shown(_ journaled: [Suggestion], floor: SuggestionFloor?) -> [Suggestion] {
+    guard let after = [holdsSuggestionsAfter, floor?.value].compactMap({ $0 }).min() else {
+      return journaled
+    }
+    return journaled.filter { $0.id <= after || $0.feedback != nil }
   }
 
   /// Whether the cadence is stretched enough to call it slowed.

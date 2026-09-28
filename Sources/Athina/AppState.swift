@@ -96,7 +96,9 @@ final class AppState {
   /// Clear Journal took the latest frame away and no capture has replaced it yet.
   var latestFrameCleared = false
   var cadence = CadenceStatus()
-  var timeline = JournalTimeline(limit: AppState.timelineLimit)
+  /// The debug panel's timeline: the journal's newest rows of both kinds, newest
+  /// first, kept live while the panel is open (`followTimeline`).
+  var timeline: [JournalEntry] = []
   var resources: ProcessResourceUsage?
   var journalStats: JournalStats?
   private(set) var journalError: String?
@@ -106,14 +108,23 @@ final class AppState {
   // MARK: Mentor loop state
 
   var mentorStatus = MentorStatus()
+  // The lists below are what the journal holds, kept live from launch
+  // (`followLiveLists`), so a row is listed once it is journaled and never
+  // written here by hand.
+
   /// Newest first.
   var callLog: [ModelCallRecord] = []
-  /// Newest first.
-  var suggestionHistory: [Suggestion] = []
+  /// Newest first, the one held for a talked-to toast included.
+  var journaledSuggestions: [Suggestion] = []
   /// Newest first, across every suggestion.
   var followUps: [FollowUp] = []
   /// The suggestion currently shown as a toast, if any.
   var activeSuggestion: Suggestion?
+  /// The suggestions the History window lists, newest first: the journaled
+  /// ones but the one the loop holds while a talked-to toast is up.
+  var suggestionHistory: [Suggestion] {
+    mentorStatus.shown(journaledSuggestions, floor: mentor?.suggestionFloor)
+  }
   /// Last four characters of the saved key, or nil when there is none.
   private(set) var apiKeyHint: String?
   private(set) var apiKeyError: String?
@@ -206,6 +217,7 @@ final class AppState {
   private var mentor: MentorLoop?
   private var eventTask: Task<Void, Never>?
   private var mentorTask: Task<Void, Never>?
+  private var liveListTasks: [Task<Void, Never>] = []
   private var resourceTask: Task<Void, Never>?
   private var saveTask: Task<Void, Never>?
   private var toastTask: Task<Void, Never>?
@@ -378,6 +390,9 @@ final class AppState {
     }
     AppState.log.notice("journal open at \(self.journalURL.path, privacy: .public)")
     self.journal = journal
+    // Live before anything this launch journals, though a live list misses no
+    // row whenever it starts.
+    followLiveLists(in: journal)
     let clock = clock
     let tracker = FocusTracker(clock: clock)
     self.tracker = tracker
@@ -434,13 +449,10 @@ final class AppState {
         consented: consented,
         clock: clock
       )
-      // The timeline is read before anything this launch journals, which
-      // arrives on the streams instead, so no entry is listed twice.
-      await self?.loadInitialTimeline(from: journal)
       // Sensing starts before the loop attaches: the loop's first key
       // read can wait on the keychain prompt, and its stream buffers.
       await pipeline.start()
-      await self?.attach(mentor: mentor, journal: journal)
+      await self?.attach(mentor: mentor)
       await self?.refreshJournalStats()
       for await event in stream {
         guard let self else { return }
@@ -467,7 +479,7 @@ final class AppState {
     AppState.log.notice("clock: \(self.clockLog, privacy: .public)")
   }
 
-  private func attach(mentor: MentorLoop, journal: Journal) async {
+  private func attach(mentor: MentorLoop) async {
     self.mentor = mentor
     // An answer given while the loop was being made reached no loop.
     await mentor.setConsented(settings.hasConsent)
@@ -479,9 +491,75 @@ final class AppState {
         self.handle(event)
       }
     }
-    callLog = (try? await journal.recentModelCalls(limit: AppState.callLogLimit)) ?? []
-    suggestionHistory = (try? await journal.recentSuggestions(limit: AppState.historyLimit)) ?? []
-    followUps = (try? await journal.recentFollowUps(limit: AppState.followUpLimit)) ?? []
+  }
+
+  /// Keeps the History window's suggestions and their follow-ups and the call
+  /// log to what the journal holds, until `stop()`.
+  ///
+  /// Each is a live query: it lists what is journaled when it starts and every
+  /// row written after, so none is missed however soon after launch it came,
+  /// and a row is listed once however many ways the app hears of it.
+  private func followLiveLists(in journal: Journal) {
+    liveListTasks = [
+      Task { [weak self] in
+        await self?.follow(
+          { journal.liveSuggestions(limit: AppState.historyLimit) },
+          into: \.journaledSuggestions
+        )
+      },
+      Task { [weak self] in
+        await self?.follow(
+          { journal.liveFollowUps(limit: AppState.followUpLimit) },
+          into: \.followUps
+        )
+      },
+      Task { [weak self] in
+        await self?.follow(
+          { journal.liveModelCalls(limit: AppState.callLogLimit) },
+          into: \.callLog
+        )
+      },
+    ]
+  }
+
+  /// Whether the journal is open, for a view that follows it once it is.
+  var isJournalOpen: Bool { journal != nil }
+
+  /// Keeps `timeline` to what the journal holds while the calling task runs:
+  /// the debug panel's, the one place it is shown.
+  ///
+  /// Its query reads the text of every observation it lists, so it runs
+  /// only while someone is looking, and lists every row from the moment the
+  /// panel opens. Nothing happens before the journal is open.
+  func followTimeline() async {
+    guard let journal else { return }
+    await follow({ journal.liveEntries(limit: AppState.timelineLimit) }, into: \.timeline)
+  }
+
+  /// How long a list waits after a failed fetch before it follows the
+  /// journal again.
+  private static let liveListBackOff: Duration = .seconds(5)
+
+  /// Sets `list` to each value the query from `rows` delivers, when it
+  /// differs, until the calling task is cancelled, following a fresh query
+  /// after a failure.
+  private func follow<Rows: AsyncSequence>(
+    _ rows: () -> Rows,
+    into list: ReferenceWritableKeyPath<AppState, Rows.Element>
+  ) async where Rows.Element: Equatable {
+    await followLiveList(
+      rows,
+      clock: clock,
+      backOff: AppState.liveListBackOff,
+      restarting: { error in
+        AppState.log.error(
+          "a list failed to follow the journal and restarts: \(String(describing: error), privacy: .public)"
+        )
+      },
+      deliver: { value in
+        if value != self[keyPath: list] { self[keyPath: list] = value }
+      }
+    )
   }
 
   func stop() async {
@@ -501,6 +579,7 @@ final class AppState {
     mentorTask?.cancel()
     await pipeline?.stop()
     eventTask?.cancel()
+    for task in liveListTasks { task.cancel() }
     hotKeys.unregisterAll()
     isRunning = false
   }
@@ -730,20 +809,14 @@ final class AppState {
   func clearJournal() async {
     do {
       await mentor?.resetUnderstanding()
+      // The live lists empty themselves as the journal does.
       try await pipeline?.clearJournal()
       await mentor?.journalCleared()
-      timeline.removeAll()
       latestObservation = nil
       latestImage = nil
       latestFrameCleared = true
-      callLog.removeAll()
-      suggestionHistory.removeAll()
-      followUps.removeAll()
       if !callouts.isVisible { lastCallout = nil }
       lastTranscript = nil
-      if let journal {
-        await loadInitialTimeline(from: journal)
-      }
       await refreshJournalStats()
     } catch {
       journalError = "Could not clear the journal: \(error)"
@@ -857,25 +930,23 @@ final class AppState {
   ///
   /// A non-answer (expiry or closing the toast) is recorded once and never
   /// overwrites anything: closing a re-shown toast just closes it. Tell me more
-  /// is recorded once too; re-expanding a folded toast is only a view change.
+  /// is recorded once too; re-expanding a folded toast is only a view change
+  /// (`SuggestionFeedback.replaces(_:)`, which the journal holds to as well).
   /// Returns the task that journals the feedback, or nil when nothing was
   /// recorded.
   @discardableResult
   func respond(to suggestionID: Int64, with feedback: SuggestionFeedback) -> Task<Void, Never>? {
-    let existing = suggestionHistory.first { $0.id == suggestionID }?.feedback
+    let listed = suggestionHistory.first { $0.id == suggestionID }
+    // The toast's own copy for one the live list has not had back from the
+    // journal yet.
+    let suggestion = listed ?? activeSuggestion.flatMap { $0.id == suggestionID ? $0 : nil }
     if activeSuggestion?.id == suggestionID {
       cancelToastExpiry()
       if feedback != .tellMeMore {
         takeDown()
       }
     }
-    if feedback.isNonAnswer, existing != nil { return nil }
-    if feedback == .tellMeMore, existing == .tellMeMore { return nil }
-    if let index = suggestionHistory.firstIndex(where: { $0.id == suggestionID }) {
-      suggestionHistory[index].feedback = feedback
-      suggestionHistory[index].feedbackAt = clock.date
-    }
-    let suggestion = suggestionHistory.first { $0.id == suggestionID }
+    guard feedback.replaces(listed?.feedback) else { return nil }
     switch feedback {
     case .notNow:
       if let suggestion {
@@ -938,14 +1009,6 @@ final class AppState {
   func showLastSuggestion() {
     guard let latest = lastShownSuggestion else { return }
     show(latest, autoExpires: false)
-  }
-
-  private func present(_ suggestion: Suggestion) {
-    suggestionHistory.insert(suggestion, at: 0)
-    if suggestionHistory.count > AppState.historyLimit {
-      suggestionHistory.removeLast(suggestionHistory.count - AppState.historyLimit)
-    }
-    show(suggestion, autoExpires: true)
   }
 
   private func show(_ suggestion: Suggestion, autoExpires: Bool) {
@@ -1260,13 +1323,11 @@ final class AppState {
     )
   }
 
-  /// Persists that the callout was drawn and mirrors it into the history.
+  /// Persists that the callout was drawn, which the history's live list
+  /// picks up, and marks the toast's copy.
   private func noteCalloutShown(suggestionID: Int64) async {
     guard let mentor else { return }
     guard let updated = await mentor.noteCalloutShown(suggestionID: suggestionID) else { return }
-    if let index = suggestionHistory.firstIndex(where: { $0.id == suggestionID }) {
-      suggestionHistory[index].calloutShown = updated.calloutShown
-    }
     if activeSuggestion?.id == suggestionID {
       activeSuggestion?.calloutShown = updated.calloutShown
     }
@@ -1274,9 +1335,12 @@ final class AppState {
 
   // MARK: Talking back
 
-  /// The exchange about one suggestion, oldest first.
-  func exchange(for suggestionID: Int64) -> [FollowUp] {
-    followUps.filter { $0.suggestionID == suggestionID }.sorted {
+  /// The exchange about one suggestion, oldest first, with `latest` in it
+  /// when the live list has not had it back from the journal yet.
+  func exchange(for suggestionID: Int64, including latest: FollowUp? = nil) -> [FollowUp] {
+    var exchange = followUps.filter { $0.suggestionID == suggestionID && $0.id != latest?.id }
+    if let latest, latest.suggestionID == suggestionID { exchange.append(latest) }
+    return exchange.sorted {
       $0.timestamp != $1.timestamp ? $0.timestamp < $1.timestamp : $0.id < $1.id
     }
   }
@@ -1605,23 +1669,11 @@ final class AppState {
       guard let followUp = await mentor.askFollowUp(about: suggestion, question: question) else {
         return
       }
-      upsert(followUp)
       guard activeSuggestion?.id == suggestion.id,
         talkBack == .thinking(question: question) || talkBack == .waiting(question: question)
       else { return }
       setTalkBack(.idle)
-      toast.setExchange(exchange(for: suggestion.id))
-    }
-  }
-
-  private func upsert(_ followUp: FollowUp) {
-    if let index = followUps.firstIndex(where: { $0.id == followUp.id }) {
-      followUps[index] = followUp
-    } else {
-      followUps.insert(followUp, at: 0)
-      if followUps.count > AppState.followUpLimit {
-        followUps.removeLast(followUps.count - AppState.followUpLimit)
-      }
+      toast.setExchange(exchange(for: suggestion.id, including: followUp))
     }
   }
 
@@ -1892,9 +1944,6 @@ final class AppState {
       latestObservation = observation
       latestImage = observation.frame.jpeg.flatMap(NSImage.init(data:))
       latestFrameCleared = false
-      var slim = observation
-      slim.frame.jpeg = nil
-      timeline.insert(.observation(slim))
       lastNearDuplicateAt = nil
       checkCalloutContent(against: observation)
     case .focusChanged(let context):
@@ -1906,8 +1955,9 @@ final class AppState {
         cancelTalkBack()
       }
       refreshPermissions()
-    case .event(let journalEvent):
-      timeline.insert(.event(journalEvent))
+    case .event:
+      // The timeline's live list has it from the journal.
+      break
     case .cadence(let status):
       noteCadence(status)
       if status != cadence { cadence = status }
@@ -1921,36 +1971,16 @@ final class AppState {
       if status != mentorStatus { mentorStatus = status }
       syncTalkBack(with: status)
     case .suggestion(let suggestion):
-      present(suggestion)
-    case .feedback(let suggestion):
-      if let index = suggestionHistory.firstIndex(where: { $0.id == suggestion.id }) {
-        suggestionHistory[index] = suggestion
-      } else {
-        let index =
-          suggestionHistory.firstIndex { $0.timestamp < suggestion.timestamp }
-          ?? suggestionHistory.endIndex
-        suggestionHistory.insert(suggestion, at: index)
-      }
+      show(suggestion, autoExpires: true)
     case .followUp(let followUp):
-      upsert(followUp)
       if activeSuggestion?.id == followUp.suggestionID {
-        toast.setExchange(exchange(for: followUp.suggestionID))
+        toast.setExchange(exchange(for: followUp.suggestionID, including: followUp))
       }
-    case .call(let record):
-      callLog.insert(record, at: 0)
-      if callLog.count > AppState.callLogLimit {
-        callLog.removeLast(callLog.count - AppState.callLogLimit)
-      }
-    case .event(let journalEvent):
-      timeline.insert(.event(journalEvent))
+    case .feedback, .call, .event:
+      // The live lists have these from the journal.
+      break
     }
     if case .on = controlMode { controlEvents.append(event) }
-  }
-
-  private func loadInitialTimeline(from journal: Journal) async {
-    if let entries = try? await journal.recentEntries(limit: AppState.timelineLimit) {
-      timeline.merge(entries)
-    }
   }
 
   private func scheduleSettingsSave() {

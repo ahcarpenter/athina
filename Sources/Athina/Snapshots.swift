@@ -773,10 +773,12 @@ extension AppState {
       oldest: now.addingTimeInterval(-3 * 86400),
       newest: now
     )
-    var slim = observation
-    slim.frame.jpeg = nil
+    // The timeline lists each observation as its summary.
+    let summary = { (observation: ActivityObservation) in
+      JournalEntry.observation(ObservationSummary(observation))
+    }
     var timeline: [JournalEntry] = [
-      .observation(slim),
+      summary(observation),
       .event(
         JournalEvent(
           id: 12,
@@ -787,7 +789,7 @@ extension AppState {
           detail: "SensingPipeline.swift - mentor"
         )
       ),
-      .observation(
+      summary(
         ActivityObservation(
           id: 127,
           timestamp: now.addingTimeInterval(-14),
@@ -807,7 +809,7 @@ extension AppState {
           detail: "from Safari"
         )
       ),
-      .observation(
+      summary(
         ActivityObservation(
           id: 126,
           timestamp: now.addingTimeInterval(-31),
@@ -855,7 +857,7 @@ extension AppState {
     ]
     for i in 0..<12 {
       timeline.append(
-        .observation(
+        summary(
           ActivityObservation(
             id: Int64(110 - i),
             timestamp: now.addingTimeInterval(-7300 - Double(i) * 47),
@@ -885,7 +887,7 @@ extension AppState {
         )
       )
     )
-    state.timeline = JournalTimeline(limit: AppState.timelineLimit, entries: timeline)
+    state.timeline = timeline.sorted(by: JournalEntry.newerFirst)
 
     var suggestions = SampleSuggestions.make(now: now)
     // The suggestion about the capture path points at the capture line of the sample frame.
@@ -895,7 +897,7 @@ extension AppState {
       suggestions[index].region = region
       suggestions[index].calloutShown = region != nil
     }
-    state.suggestionHistory = suggestions
+    state.journaledSuggestions = suggestions
     state.activeSuggestion = suggestions.first
     state.followUps =
       SampleSuggestions.followUps(now: now, suggestionID: 3)
@@ -1030,7 +1032,7 @@ extension AppState {
     state.resources = live.resources
     state.journalStats = live.journalStats
     state.timeline = live.timeline
-    state.suggestionHistory = live.suggestionHistory
+    state.journaledSuggestions = live.journaledSuggestions
     state.activeSuggestion = live.activeSuggestion
     state.replaySummary = ReplaySummary(
       directory: directory,

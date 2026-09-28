@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+internal import GRDB
 
 /// A summary of what the journal holds: its counts, size on disk, and the time
 /// span it covers.
@@ -42,12 +43,17 @@ public struct JournalStats: Equatable, Sendable {
 ///
 /// Thumbnails live in their own table so text retention can outlast them and
 /// so timeline queries never load image bytes they do not need.
+///
+/// The database is reached through GRDB. A journal file is a pool of
+/// connections in write-ahead-log mode: one writer, which every write goes
+/// through, and readers beside it, so the live lists (`liveSuggestions(limit:)`
+/// and the rest) fetch again after a write without holding the next one up.
 public actor Journal {
   /// The journal's SQLite file.
   public nonisolated let url: URL
-  private let db: SQLiteConnection
+  /// A `DatabasePool` for a journal file, a `DatabaseQueue` for one in memory.
+  private let db: any DatabaseWriter
   private let encoder = JSONEncoder()
-  private let decoder = JSONDecoder()
 
   /// `~/Library/Application Support/athina/journal.sqlite`, or the same file
   /// in another data directory (see `LaunchFiles`).
@@ -63,14 +69,14 @@ public actor Journal {
       attributes: [.posixPermissions: 0o700]
     )
     self.url = url
-    db = try SQLiteConnection(path: url.path)
-    try Journal.migrate(db)
+    db = try DatabasePool(path: url.path, configuration: Journal.configuration)
+    try db.write(Journal.migrate)
   }
 
   private init(memoryOnly: Void) throws {
     url = URL(string: "sqlite:memory")!
-    db = try SQLiteConnection(path: ":memory:")
-    try Journal.migrate(db)
+    db = try DatabaseQueue(configuration: Journal.configuration)
+    try db.write(Journal.migrate)
   }
 
   /// A private in-memory journal, for tests.
@@ -78,122 +84,134 @@ public actor Journal {
     try Journal(memoryOnly: ())
   }
 
-  private static func migrate(_ db: SQLiteConnection) throws {
-    // auto_vacuum must be set before any table exists to take effect on a new file.
-    try db.execute("PRAGMA auto_vacuum = INCREMENTAL")
-    try db.execute("PRAGMA journal_mode = WAL")
-    try db.execute("PRAGMA synchronous = NORMAL")
-    try db.execute("PRAGMA foreign_keys = ON")
+  /// How every connection is opened.
+  ///
+  /// GRDB turns on foreign keys, and for a file it turns on write-ahead
+  /// logging with `synchronous = NORMAL` once the writer is open.
+  private static var configuration: Configuration {
+    var configuration = Configuration()
+    configuration.busyMode = .timeout(2)
+    configuration.prepareDatabase { db in
+      // auto_vacuum must be set before any table exists to take effect on a
+      // new file, which is before GRDB's switch to write-ahead logging, since
+      // that writes one. Readers write nothing.
+      guard !db.configuration.readonly else { return }
+      try db.execute(sql: "PRAGMA auto_vacuum = INCREMENTAL")
+    }
+    return configuration
+  }
+
+  private static func migrate(_ db: Database) throws {
     try db.execute(
-      """
-      CREATE TABLE IF NOT EXISTS observations (
-          id INTEGER PRIMARY KEY,
-          timestamp REAL NOT NULL,
-          bundle_id TEXT,
-          app_name TEXT NOT NULL,
-          window_title TEXT,
-          ax_summary TEXT NOT NULL,
-          focus_json TEXT NOT NULL,
-          ocr_text TEXT NOT NULL,
-          text_blocks_json TEXT NOT NULL,
-          frame_hash TEXT NOT NULL,
-          frame_width INTEGER NOT NULL,
-          frame_height INTEGER NOT NULL,
-          display_id INTEGER NOT NULL,
-          screen_x REAL NOT NULL,
-          screen_y REAL NOT NULL,
-          screen_w REAL NOT NULL,
-          screen_h REAL NOT NULL,
-          reason TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS observations_timestamp ON observations(timestamp);
-      CREATE TABLE IF NOT EXISTS thumbnails (
-          observation_id INTEGER PRIMARY KEY REFERENCES observations(id) ON DELETE CASCADE,
-          timestamp REAL NOT NULL,
-          jpeg BLOB NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS thumbnails_timestamp ON thumbnails(timestamp);
-      CREATE TABLE IF NOT EXISTS events (
-          id INTEGER PRIMARY KEY,
-          timestamp REAL NOT NULL,
-          kind TEXT NOT NULL,
-          bundle_id TEXT,
-          app_name TEXT,
-          detail TEXT
-      );
-      CREATE INDEX IF NOT EXISTS events_timestamp ON events(timestamp);
-      CREATE TABLE IF NOT EXISTS suggestions (
-          id INTEGER PRIMARY KEY,
-          timestamp REAL NOT NULL,
-          bundle_id TEXT,
-          app_name TEXT NOT NULL,
-          window_title TEXT,
-          category TEXT NOT NULL,
-          title TEXT NOT NULL,
-          body TEXT NOT NULL,
-          explanation TEXT NOT NULL,
-          confidence REAL NOT NULL,
-          judged_goal TEXT,
-          observation_id INTEGER,
-          model TEXT NOT NULL,
-          prompt_version INTEGER NOT NULL,
-          feedback TEXT,
-          feedback_at REAL,
-          region_json TEXT,
-          callout_shown INTEGER NOT NULL DEFAULT 0
-      );
-      CREATE INDEX IF NOT EXISTS suggestions_timestamp ON suggestions(timestamp);
-      CREATE TABLE IF NOT EXISTS follow_ups (
-          id INTEGER PRIMARY KEY,
-          suggestion_id INTEGER NOT NULL,
-          timestamp REAL NOT NULL,
-          question TEXT NOT NULL,
-          answer TEXT,
-          error TEXT,
-          model TEXT NOT NULL,
-          prompt_version INTEGER NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS follow_ups_timestamp ON follow_ups(timestamp);
-      CREATE INDEX IF NOT EXISTS follow_ups_suggestion ON follow_ups(suggestion_id);
-      CREATE TABLE IF NOT EXISTS understanding (
-          id INTEGER PRIMARY KEY,
-          updated_at REAL NOT NULL,
-          started_at REAL NOT NULL,
-          revision INTEGER NOT NULL,
-          prompt_version INTEGER NOT NULL,
-          model TEXT NOT NULL,
-          source TEXT NOT NULL,
-          cost REAL NOT NULL,
-          cumulative_cost REAL NOT NULL,
-          content_json TEXT NOT NULL,
-          covered_through_observation_id INTEGER
-      );
-      CREATE INDEX IF NOT EXISTS understanding_updated_at ON understanding(updated_at);
-      CREATE TABLE IF NOT EXISTS refresh_period (
-          id INTEGER PRIMARY KEY CHECK (id = 1),
-          started_at REAL NOT NULL,
-          active_use REAL NOT NULL,
-          counted_at REAL NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS model_calls (
-          id INTEGER PRIMARY KEY,
-          timestamp REAL NOT NULL,
-          tier TEXT NOT NULL,
-          model TEXT NOT NULL,
-          prompt_version INTEGER NOT NULL,
-          prompt_chars INTEGER NOT NULL,
-          image_bytes INTEGER NOT NULL,
-          input_tokens INTEGER NOT NULL,
-          output_tokens INTEGER NOT NULL,
-          cache_write_tokens INTEGER NOT NULL,
-          cache_read_tokens INTEGER NOT NULL,
-          cost REAL NOT NULL,
-          latency REAL NOT NULL,
-          outcome TEXT NOT NULL,
-          detail TEXT
-      );
-      CREATE INDEX IF NOT EXISTS model_calls_timestamp ON model_calls(timestamp);
-      """
+      sql: """
+        CREATE TABLE IF NOT EXISTS observations (
+            id INTEGER PRIMARY KEY,
+            timestamp REAL NOT NULL,
+            bundle_id TEXT,
+            app_name TEXT NOT NULL,
+            window_title TEXT,
+            ax_summary TEXT NOT NULL,
+            focus_json TEXT NOT NULL,
+            ocr_text TEXT NOT NULL,
+            text_blocks_json TEXT NOT NULL,
+            frame_hash TEXT NOT NULL,
+            frame_width INTEGER NOT NULL,
+            frame_height INTEGER NOT NULL,
+            display_id INTEGER NOT NULL,
+            screen_x REAL NOT NULL,
+            screen_y REAL NOT NULL,
+            screen_w REAL NOT NULL,
+            screen_h REAL NOT NULL,
+            reason TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS observations_timestamp ON observations(timestamp);
+        CREATE TABLE IF NOT EXISTS thumbnails (
+            observation_id INTEGER PRIMARY KEY REFERENCES observations(id) ON DELETE CASCADE,
+            timestamp REAL NOT NULL,
+            jpeg BLOB NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS thumbnails_timestamp ON thumbnails(timestamp);
+        CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY,
+            timestamp REAL NOT NULL,
+            kind TEXT NOT NULL,
+            bundle_id TEXT,
+            app_name TEXT,
+            detail TEXT
+        );
+        CREATE INDEX IF NOT EXISTS events_timestamp ON events(timestamp);
+        CREATE TABLE IF NOT EXISTS suggestions (
+            id INTEGER PRIMARY KEY,
+            timestamp REAL NOT NULL,
+            bundle_id TEXT,
+            app_name TEXT NOT NULL,
+            window_title TEXT,
+            category TEXT NOT NULL,
+            title TEXT NOT NULL,
+            body TEXT NOT NULL,
+            explanation TEXT NOT NULL,
+            confidence REAL NOT NULL,
+            judged_goal TEXT,
+            observation_id INTEGER,
+            model TEXT NOT NULL,
+            prompt_version INTEGER NOT NULL,
+            feedback TEXT,
+            feedback_at REAL,
+            region_json TEXT,
+            callout_shown INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS suggestions_timestamp ON suggestions(timestamp);
+        CREATE TABLE IF NOT EXISTS follow_ups (
+            id INTEGER PRIMARY KEY,
+            suggestion_id INTEGER NOT NULL,
+            timestamp REAL NOT NULL,
+            question TEXT NOT NULL,
+            answer TEXT,
+            error TEXT,
+            model TEXT NOT NULL,
+            prompt_version INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS follow_ups_timestamp ON follow_ups(timestamp);
+        CREATE INDEX IF NOT EXISTS follow_ups_suggestion ON follow_ups(suggestion_id);
+        CREATE TABLE IF NOT EXISTS understanding (
+            id INTEGER PRIMARY KEY,
+            updated_at REAL NOT NULL,
+            started_at REAL NOT NULL,
+            revision INTEGER NOT NULL,
+            prompt_version INTEGER NOT NULL,
+            model TEXT NOT NULL,
+            source TEXT NOT NULL,
+            cost REAL NOT NULL,
+            cumulative_cost REAL NOT NULL,
+            content_json TEXT NOT NULL,
+            covered_through_observation_id INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS understanding_updated_at ON understanding(updated_at);
+        CREATE TABLE IF NOT EXISTS refresh_period (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            started_at REAL NOT NULL,
+            active_use REAL NOT NULL,
+            counted_at REAL NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS model_calls (
+            id INTEGER PRIMARY KEY,
+            timestamp REAL NOT NULL,
+            tier TEXT NOT NULL,
+            model TEXT NOT NULL,
+            prompt_version INTEGER NOT NULL,
+            prompt_chars INTEGER NOT NULL,
+            image_bytes INTEGER NOT NULL,
+            input_tokens INTEGER NOT NULL,
+            output_tokens INTEGER NOT NULL,
+            cache_write_tokens INTEGER NOT NULL,
+            cache_read_tokens INTEGER NOT NULL,
+            cost REAL NOT NULL,
+            latency REAL NOT NULL,
+            outcome TEXT NOT NULL,
+            detail TEXT
+        );
+        CREATE INDEX IF NOT EXISTS model_calls_timestamp ON model_calls(timestamp);
+        """
     )
     // Columns added or dropped after a table shipped: CREATE TABLE IF NOT
     // EXISTS leaves an existing journal's table alone, so change them here.
@@ -209,8 +227,8 @@ public actor Journal {
     try dropColumn(named: "schema_version", from: "understanding", db)
   }
 
-  private static func columns(of table: String, _ db: SQLiteConnection) throws -> [String?] {
-    try db.query("PRAGMA table_info(\(table))") { $0.text(1) }
+  private static func columns(of table: String, _ db: Database) throws -> [String] {
+    try String.fetchAll(db, sql: "SELECT name FROM pragma_table_info(?)", arguments: [table])
   }
 
   /// Adds a column to an existing table, once.
@@ -220,10 +238,10 @@ public actor Journal {
     _ definition: String,
     named name: String,
     to table: String,
-    _ db: SQLiteConnection
+    _ db: Database
   ) throws {
     guard !(try columns(of: table, db)).contains(name) else { return }
-    try db.execute("ALTER TABLE \(table) ADD COLUMN \(definition)")
+    try db.execute(sql: "ALTER TABLE \(table) ADD COLUMN \(definition)")
   }
 
   /// Drops a column from an existing table, once.
@@ -232,10 +250,10 @@ public actor Journal {
   private static func dropColumn(
     named name: String,
     from table: String,
-    _ db: SQLiteConnection
+    _ db: Database
   ) throws {
     guard (try columns(of: table, db)).contains(name) else { return }
-    try db.execute("ALTER TABLE \(table) DROP COLUMN \(name)")
+    try db.execute(sql: "ALTER TABLE \(table) DROP COLUMN \(name)")
   }
 
   // MARK: Writes
@@ -248,50 +266,46 @@ public actor Journal {
     let focusJSON = String(decoding: try encoder.encode(observation.focus), as: UTF8.self)
     let blocksJSON = String(decoding: try encoder.encode(observation.textBlocks), as: UTF8.self)
     let f = observation.frame
-    try db.execute("BEGIN")
-    do {
-      try db.run(
-        """
-        INSERT INTO observations (timestamp, bundle_id, app_name, window_title, ax_summary,
-            focus_json, ocr_text, text_blocks_json, frame_hash, frame_width, frame_height,
-            display_id, screen_x, screen_y, screen_w, screen_h, reason)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        [
-          .double(observation.timestamp.timeIntervalSince1970),
-          observation.focus.bundleID.map(Value.text) ?? .null,
-          .text(observation.focus.appName),
-          observation.focus.windowTitle.map(Value.text) ?? .null,
-          .text(observation.focus.summary),
-          .text(focusJSON),
-          .text(observation.ocrText),
-          .text(blocksJSON),
-          .text(f.hash.hexString),
-          .int(Int64(f.width)),
-          .int(Int64(f.height)),
-          .int(Int64(f.displayID)),
-          .double(f.screenRect.origin.x),
-          .double(f.screenRect.origin.y),
-          .double(f.screenRect.width),
-          .double(f.screenRect.height),
-          .text(observation.reason.rawValue),
+    let id = try db.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO observations (timestamp, bundle_id, app_name, window_title, ax_summary,
+              focus_json, ocr_text, text_blocks_json, frame_hash, frame_width, frame_height,
+              display_id, screen_x, screen_y, screen_w, screen_h, reason)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          observation.timestamp.timeIntervalSince1970,
+          observation.focus.bundleID,
+          observation.focus.appName,
+          observation.focus.windowTitle,
+          observation.focus.summary,
+          focusJSON,
+          observation.ocrText,
+          blocksJSON,
+          f.hash.hexString,
+          f.width,
+          f.height,
+          Int64(f.displayID),
+          Double(f.screenRect.origin.x),
+          Double(f.screenRect.origin.y),
+          Double(f.screenRect.width),
+          Double(f.screenRect.height),
+          observation.reason.rawValue,
         ]
       )
-      let id = db.lastInsertRowID
+      let id = db.lastInsertedRowID
       if let jpeg = f.jpeg {
-        try db.run(
-          "INSERT INTO thumbnails (observation_id, timestamp, jpeg) VALUES (?, ?, ?)",
-          [.int(id), .double(observation.timestamp.timeIntervalSince1970), .blob(jpeg)]
+        try db.execute(
+          sql: "INSERT INTO thumbnails (observation_id, timestamp, jpeg) VALUES (?, ?, ?)",
+          arguments: [id, observation.timestamp.timeIntervalSince1970, jpeg]
         )
       }
-      try db.execute("COMMIT")
-      var stored = observation
-      stored.id = id
-      return stored
-    } catch {
-      try? db.execute("ROLLBACK")
-      throw error
+      return id
     }
+    var stored = observation
+    stored.id = id
+    return stored
   }
 
   /// Stores an event.
@@ -299,19 +313,24 @@ public actor Journal {
   /// Returns it with its new id.
   @discardableResult
   public func record(_ event: JournalEvent) throws -> JournalEvent {
-    try db.run(
-      "INSERT INTO events (timestamp, kind, bundle_id, app_name, detail) VALUES (?, ?, ?, ?, ?)",
-      [
-        .double(event.timestamp.timeIntervalSince1970),
-        .text(event.kind.rawValue),
-        event.bundleID.map(Value.text) ?? .null,
-        event.appName.map(Value.text) ?? .null,
-        event.detail.map(Value.text) ?? .null,
+    var stored = event
+    stored.id = try db.write { db in try Journal.insert(event, db) }
+    return stored
+  }
+
+  private static func insert(_ event: JournalEvent, _ db: Database) throws -> Int64 {
+    try db.execute(
+      sql:
+        "INSERT INTO events (timestamp, kind, bundle_id, app_name, detail) VALUES (?, ?, ?, ?, ?)",
+      arguments: [
+        event.timestamp.timeIntervalSince1970,
+        event.kind.rawValue,
+        event.bundleID,
+        event.appName,
+        event.detail,
       ]
     )
-    var stored = event
-    stored.id = db.lastInsertRowID
-    return stored
+    return db.lastInsertedRowID
   }
 
   /// Stores a suggestion the mentor made, before `publishGate` decides
@@ -323,35 +342,37 @@ public actor Journal {
     let regionJSON = try suggestion.region.map {
       String(decoding: try encoder.encode($0), as: UTF8.self)
     }
-    try db.run(
-      """
-      INSERT INTO suggestions (timestamp, bundle_id, app_name, window_title, category, title,
-          body, explanation, confidence, judged_goal, observation_id, model, prompt_version,
-          feedback, feedback_at, region_json, callout_shown)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
-      [
-        .double(suggestion.timestamp.timeIntervalSince1970),
-        suggestion.bundleID.map(Value.text) ?? .null,
-        .text(suggestion.appName),
-        suggestion.windowTitle.map(Value.text) ?? .null,
-        .text(suggestion.category.rawValue),
-        .text(suggestion.title),
-        .text(suggestion.body),
-        .text(suggestion.explanation),
-        .double(suggestion.confidence),
-        suggestion.judgedGoal.map(Value.text) ?? .null,
-        suggestion.observationID.map(Value.int) ?? .null,
-        .text(suggestion.model),
-        .int(Int64(suggestion.promptVersion)),
-        suggestion.feedback.map { Value.text($0.rawValue) } ?? .null,
-        suggestion.feedbackAt.map { Value.double($0.timeIntervalSince1970) } ?? .null,
-        regionJSON.map(Value.text) ?? .null,
-        .int(suggestion.calloutShown ? 1 : 0),
-      ]
-    )
     var stored = suggestion
-    stored.id = db.lastInsertRowID
+    stored.id = try db.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO suggestions (timestamp, bundle_id, app_name, window_title, category, title,
+              body, explanation, confidence, judged_goal, observation_id, model, prompt_version,
+              feedback, feedback_at, region_json, callout_shown)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          suggestion.timestamp.timeIntervalSince1970,
+          suggestion.bundleID,
+          suggestion.appName,
+          suggestion.windowTitle,
+          suggestion.category.rawValue,
+          suggestion.title,
+          suggestion.body,
+          suggestion.explanation,
+          suggestion.confidence,
+          suggestion.judgedGoal,
+          suggestion.observationID,
+          suggestion.model,
+          suggestion.promptVersion,
+          suggestion.feedback?.rawValue,
+          suggestion.feedbackAt?.timeIntervalSince1970,
+          regionJSON,
+          suggestion.calloutShown,
+        ]
+      )
+      return db.lastInsertedRowID
+    }
     return stored
   }
 
@@ -360,24 +381,26 @@ public actor Journal {
   /// Returns it with its new id.
   @discardableResult
   public func record(_ followUp: FollowUp) throws -> FollowUp {
-    try db.run(
-      """
-      INSERT INTO follow_ups (suggestion_id, timestamp, question, answer, error, model,
-          prompt_version)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      """,
-      [
-        .int(followUp.suggestionID),
-        .double(followUp.timestamp.timeIntervalSince1970),
-        .text(followUp.question),
-        followUp.answer.map(Value.text) ?? .null,
-        followUp.error.map(Value.text) ?? .null,
-        .text(followUp.model),
-        .int(Int64(followUp.promptVersion)),
-      ]
-    )
     var stored = followUp
-    stored.id = db.lastInsertRowID
+    stored.id = try db.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO follow_ups (suggestion_id, timestamp, question, answer, error, model,
+              prompt_version)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          followUp.suggestionID,
+          followUp.timestamp.timeIntervalSince1970,
+          followUp.question,
+          followUp.answer,
+          followUp.error,
+          followUp.model,
+          followUp.promptVersion,
+        ]
+      )
+      return db.lastInsertedRowID
+    }
     return stored
   }
 
@@ -386,33 +409,35 @@ public actor Journal {
   /// Returns it with its new id.
   @discardableResult
   public func record(_ call: ModelCallRecord) throws -> ModelCallRecord {
-    try db.run(
-      """
-      INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars,
-          image_bytes, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens, cost,
-          latency, outcome, detail, replayed)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
-      [
-        .double(call.timestamp.timeIntervalSince1970),
-        .text(call.tier.rawValue),
-        .text(call.model),
-        .int(Int64(call.promptVersion)),
-        .int(Int64(call.promptCharacters)),
-        .int(Int64(call.imageBytes)),
-        .int(Int64(call.usage.inputTokens)),
-        .int(Int64(call.usage.outputTokens)),
-        .int(Int64(call.usage.cacheCreationInputTokens)),
-        .int(Int64(call.usage.cacheReadInputTokens)),
-        .double(call.cost),
-        .double(call.latency),
-        .text(call.outcome.rawValue),
-        call.detail.map(Value.text) ?? .null,
-        .int(call.replayed ? 1 : 0),
-      ]
-    )
     var stored = call
-    stored.id = db.lastInsertRowID
+    stored.id = try db.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars,
+              image_bytes, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
+              cost, latency, outcome, detail, replayed)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          call.timestamp.timeIntervalSince1970,
+          call.tier.rawValue,
+          call.model,
+          call.promptVersion,
+          call.promptCharacters,
+          call.imageBytes,
+          call.usage.inputTokens,
+          call.usage.outputTokens,
+          call.usage.cacheCreationInputTokens,
+          call.usage.cacheReadInputTokens,
+          call.cost,
+          call.latency,
+          call.outcome.rawValue,
+          call.detail,
+          call.replayed,
+        ]
+      )
+      return db.lastInsertedRowID
+    }
     return stored
   }
 
@@ -423,114 +448,206 @@ public actor Journal {
   @discardableResult
   public func record(_ record: UnderstandingRecord) throws -> UnderstandingRecord {
     let contentJSON = String(decoding: try encoder.encode(record.content), as: UTF8.self)
-    try db.run(
-      """
-      INSERT INTO understanding (updated_at, started_at, revision, prompt_version,
-          model, source, cost, cumulative_cost, content_json, covered_through_observation_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      """,
-      [
-        .double(record.updatedAt.timeIntervalSince1970),
-        .double(record.startedAt.timeIntervalSince1970),
-        .int(Int64(record.revision)),
-        .int(Int64(record.promptVersion)),
-        .text(record.model),
-        .text(record.source.rawValue),
-        .double(record.cost),
-        .double(record.cumulativeCost),
-        .text(contentJSON),
-        record.coveredThroughObservationID.map(Value.int) ?? .null,
-      ]
-    )
     var stored = record
-    stored.id = db.lastInsertRowID
+    stored.id = try db.write { db in
+      try db.execute(
+        sql: """
+          INSERT INTO understanding (updated_at, started_at, revision, prompt_version,
+              model, source, cost, cumulative_cost, content_json, covered_through_observation_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          """,
+        arguments: [
+          record.updatedAt.timeIntervalSince1970,
+          record.startedAt.timeIntervalSince1970,
+          record.revision,
+          record.promptVersion,
+          record.model,
+          record.source.rawValue,
+          record.cost,
+          record.cumulativeCost,
+          contentJSON,
+          record.coveredThroughObservationID,
+        ]
+      )
+      return db.lastInsertedRowID
+    }
     return stored
   }
 
   // MARK: Suggestions and model calls
 
-  /// Records what the user did with a suggestion.
+  /// Records what the user did with a suggestion, unless what it already
+  /// holds stands (`SuggestionFeedback.replaces(_:)`): a non-answer never
+  /// replaces anything, and Tell me more is recorded once.
   ///
-  /// Nil when the id is unknown.
+  /// The check and the write are one transaction, so feedback sent twice at
+  /// once, from the toast and the History window, still keeps to the rule.
+  /// Nil when the id is unknown or the feedback already there stands.
   public func updateFeedback(
     suggestionID: Int64,
     feedback: SuggestionFeedback,
     at time: Date
   ) throws -> Suggestion? {
-    try db.run(
-      "UPDATE suggestions SET feedback = ?, feedback_at = ? WHERE id = ?",
-      [.text(feedback.rawValue), .double(time.timeIntervalSince1970), .int(suggestionID)]
-    )
-    return try suggestion(id: suggestionID)
+    try db.write { db in
+      guard let current = try Journal.suggestion(id: suggestionID, db),
+        feedback.replaces(current.feedback)
+      else { return nil }
+      try db.execute(
+        sql: "UPDATE suggestions SET feedback = ?, feedback_at = ? WHERE id = ?",
+        arguments: [feedback.rawValue, time.timeIntervalSince1970, suggestionID]
+      )
+      return try Journal.suggestion(id: suggestionID, db)
+    }
   }
 
   /// Records that a callout was drawn for the suggestion.
   ///
   /// The flag only ever turns on. Nil when the id is unknown.
   public func noteCalloutShown(suggestionID: Int64) throws -> Suggestion? {
-    try db.run("UPDATE suggestions SET callout_shown = 1 WHERE id = ?", [.int(suggestionID)])
-    return try suggestion(id: suggestionID)
+    try db.write { db in
+      try db.execute(
+        sql: "UPDATE suggestions SET callout_shown = 1 WHERE id = ?",
+        arguments: [suggestionID]
+      )
+      return try Journal.suggestion(id: suggestionID, db)
+    }
   }
 
   // MARK: Follow-ups
 
   /// The exchange about one suggestion, oldest first.
   public func followUps(suggestionID: Int64) throws -> [FollowUp] {
-    try db.query(
-      """
-      SELECT \(Journal.followUpColumns) FROM follow_ups WHERE suggestion_id = ? ORDER BY \
-      timestamp ASC, id ASC
-      """,
-      [.int(suggestionID)]
-    ) { Journal.makeFollowUp(from: $0) }
+    try db.read { db in
+      try Journal.rows(
+        db,
+        """
+        SELECT \(Journal.followUpColumns) FROM follow_ups WHERE suggestion_id = ? ORDER BY \
+        timestamp ASC, id ASC
+        """,
+        [suggestionID],
+        Journal.makeFollowUp
+      )
+    }
   }
 
   /// Newest first, across every suggestion.
   public func recentFollowUps(limit: Int) throws -> [FollowUp] {
-    try db.query(
-      "SELECT \(Journal.followUpColumns) FROM follow_ups ORDER BY timestamp DESC, id DESC LIMIT ?",
-      [.int(Int64(limit))]
-    ) { Journal.makeFollowUp(from: $0) }
+    try db.read { db in try Journal.recentFollowUps(limit: limit, db) }
+  }
+
+  private static func recentFollowUps(limit: Int, _ db: Database) throws -> [FollowUp] {
+    try rows(
+      db,
+      "SELECT \(followUpColumns) FROM follow_ups ORDER BY timestamp DESC, id DESC LIMIT ?",
+      [limit],
+      makeFollowUp
+    )
   }
 
   /// Returns the suggestion with this id, or nil if there is none.
   public func suggestion(id: Int64) throws -> Suggestion? {
-    try db.query("SELECT \(Journal.suggestionColumns) FROM suggestions WHERE id = ?", [.int(id)]) {
-      Journal.makeSuggestion(from: $0)
-    }.first
+    try db.read { db in try Journal.suggestion(id: id, db) }
+  }
+
+  private static func suggestion(id: Int64, _ db: Database) throws -> Suggestion? {
+    try rows(db, "SELECT \(suggestionColumns) FROM suggestions WHERE id = ?", [id], makeSuggestion)
+      .first
   }
 
   /// Newest first.
   public func recentSuggestions(limit: Int) throws -> [Suggestion] {
-    try db.query(
-      """
-      SELECT \(Journal.suggestionColumns) FROM suggestions ORDER BY timestamp DESC, id DESC \
-      LIMIT ?
-      """,
-      [.int(Int64(limit))]
-    ) { Journal.makeSuggestion(from: $0) }
+    try db.read { db in try Journal.recentSuggestions(limit: limit, db) }
+  }
+
+  private static func recentSuggestions(limit: Int, _ db: Database) throws -> [Suggestion] {
+    try rows(
+      db,
+      "SELECT \(suggestionColumns) FROM suggestions ORDER BY timestamp DESC, id DESC LIMIT ?",
+      [limit],
+      makeSuggestion
+    )
   }
 
   /// Newest first.
   public func recentModelCalls(limit: Int) throws -> [ModelCallRecord] {
-    try db.query(
-      """
-      SELECT \(Journal.modelCallColumns) FROM model_calls ORDER BY timestamp DESC, id DESC \
-      LIMIT ?
-      """,
-      [.int(Int64(limit))]
-    ) { Journal.makeModelCall(from: $0) }
+    try db.read { db in try Journal.recentModelCalls(limit: limit, db) }
+  }
+
+  private static func recentModelCalls(limit: Int, _ db: Database) throws -> [ModelCallRecord] {
+    try rows(
+      db,
+      "SELECT \(modelCallColumns) FROM model_calls ORDER BY timestamp DESC, id DESC LIMIT ?",
+      [limit],
+      makeModelCall
+    )
   }
 
   /// Calls at or after `since`, oldest first, for seeding the hour's spend.
   public func modelCalls(since: Date) throws -> [ModelCallRecord] {
-    try db.query(
-      """
-      SELECT \(Journal.modelCallColumns) FROM model_calls WHERE timestamp >= ? ORDER BY \
-      timestamp ASC, id ASC
-      """,
-      [.double(since.timeIntervalSince1970)]
-    ) { Journal.makeModelCall(from: $0) }
+    try db.read { db in
+      try Journal.rows(
+        db,
+        """
+        SELECT \(Journal.modelCallColumns) FROM model_calls WHERE timestamp >= ? ORDER BY \
+        timestamp ASC, id ASC
+        """,
+        [since.timeIntervalSince1970],
+        Journal.makeModelCall
+      )
+    }
+  }
+
+  // MARK: Live lists
+
+  /// The newest `limit` suggestions, newest first, as `recentSuggestions(limit:)`
+  /// reads them: now, and again after every change to them, for the History
+  /// window.
+  ///
+  /// Like every live list here, it starts from what is in the journal when
+  /// iteration begins and misses no write after that, so a list shown from
+  /// launch has every row written since, however soon after the launch it came.
+  /// A burst of writes may arrive as one fresh list, and a list the reader has
+  /// not taken yet is replaced by the next.
+  public nonisolated func liveSuggestions(
+    limit: Int
+  ) -> some AsyncSequence<[Suggestion], any Error> {
+    live { db in try Journal.recentSuggestions(limit: limit, db) }
+  }
+
+  /// The newest `limit` follow-ups across every suggestion, newest first:
+  /// now, and again after every change, for the History window's exchanges.
+  public nonisolated func liveFollowUps(limit: Int) -> some AsyncSequence<[FollowUp], any Error> {
+    live { db in try Journal.recentFollowUps(limit: limit, db) }
+  }
+
+  /// The newest `limit` model calls, newest first: now, and again after every
+  /// change, for the debug panel's call log.
+  public nonisolated func liveModelCalls(
+    limit: Int
+  ) -> some AsyncSequence<[ModelCallRecord], any Error> {
+    live { db in try Journal.recentModelCalls(limit: limit, db) }
+  }
+
+  /// The newest `limit` entries of both kinds, newest first, as
+  /// `recentEntries(limit:)` reads them: now, and again after every change,
+  /// for the debug panel's timeline.
+  ///
+  /// Each fetch counts the text blocks of every observation it lists, which
+  /// reads all their text, so it is for a list that is on screen.
+  public nonisolated func liveEntries(limit: Int) -> some AsyncSequence<[JournalEntry], any Error> {
+    live { db in try Journal.recentEntries(limit: limit, db) }
+  }
+
+  /// What `fetch` reads, fetched again after every transaction that changes
+  /// a table it reads.
+  ///
+  /// The tables a fetch reads never depend on the rows it finds, so GRDB can
+  /// fetch from a reader while the writer goes on.
+  private nonisolated func live<Value: Sendable>(
+    _ fetch: @escaping @Sendable (Database) throws -> Value
+  ) -> some AsyncSequence<Value, any Error> {
+    ValueObservation.trackingConstantRegion(fetch)
+      .values(in: db, bufferingPolicy: .bufferingNewest(1))
   }
 
   // MARK: Understanding
@@ -543,54 +660,65 @@ public actor Journal {
   /// an expired revision from being current again, while the revision itself
   /// stays in the trail.
   public func latestUnderstanding() throws -> UnderstandingRecord? {
-    try db.query(
-      """
-      SELECT \(Journal.understandingColumns) FROM (
-          SELECT \(Journal.understandingColumns) FROM understanding
-          ORDER BY updated_at DESC, id DESC LIMIT 1
-      ) AS latest
-      WHERE NOT EXISTS (
-          SELECT 1 FROM events WHERE kind = ? AND events.timestamp > latest.updated_at)
-      """,
-      [.text(JournalEvent.Kind.understanding.rawValue)]
-    ) { try self.makeUnderstanding(from: $0) }.first
+    try db.read { db in
+      try Journal.rows(
+        db,
+        """
+        SELECT \(Journal.understandingColumns) FROM (
+            SELECT \(Journal.understandingColumns) FROM understanding
+            ORDER BY updated_at DESC, id DESC LIMIT 1
+        ) AS latest
+        WHERE NOT EXISTS (
+            SELECT 1 FROM events WHERE kind = ? AND events.timestamp > latest.updated_at)
+        """,
+        [JournalEvent.Kind.understanding.rawValue],
+        Journal.makeUnderstanding
+      ).first
+    }
   }
 
   /// Forgets every revision, for "Reset Understanding".
   public func clearUnderstanding() throws {
-    try db.execute("DELETE FROM understanding")
-    try db.execute("PRAGMA incremental_vacuum")
+    try db.writeWithoutTransaction { db in
+      try db.execute(sql: "DELETE FROM understanding")
+      try db.execute(sql: "PRAGMA incremental_vacuum")
+    }
   }
 
   /// Keeps the count toward the next understanding refresh in place of the
   /// one before it, or forgets it when `period` is nil.
   public func storeRefreshPeriod(_ period: RefreshPeriod?) throws {
-    guard let period else {
-      try db.execute("DELETE FROM refresh_period")
-      return
+    try db.write { db in
+      guard let period else {
+        try db.execute(sql: "DELETE FROM refresh_period")
+        return
+      }
+      try db.execute(
+        sql: """
+          INSERT OR REPLACE INTO refresh_period (id, started_at, active_use, counted_at) VALUES \
+          (1, ?, ?, ?)
+          """,
+        arguments: [
+          period.startedAt.timeIntervalSince1970,
+          period.activeUse,
+          period.countedAt.timeIntervalSince1970,
+        ]
+      )
     }
-    try db.run(
-      """
-      INSERT OR REPLACE INTO refresh_period (id, started_at, active_use, counted_at) VALUES \
-      (1, ?, ?, ?)
-      """,
-      [
-        .double(period.startedAt.timeIntervalSince1970),
-        .double(period.activeUse),
-        .double(period.countedAt.timeIntervalSince1970),
-      ]
-    )
   }
 
   /// The count toward the next understanding refresh, or nil when none is kept.
   public func refreshPeriod() throws -> RefreshPeriod? {
-    try db.query("SELECT started_at, active_use, counted_at FROM refresh_period") { row in
-      RefreshPeriod(
-        startedAt: Date(timeIntervalSince1970: row.double(0)),
-        activeUse: row.double(1),
-        countedAt: Date(timeIntervalSince1970: row.double(2))
-      )
-    }.first
+    try db.read { db in
+      try Journal.rows(db, "SELECT started_at, active_use, counted_at FROM refresh_period") {
+        row in
+        RefreshPeriod(
+          startedAt: Date(timeIntervalSince1970: row[0]),
+          activeUse: row[1],
+          countedAt: Date(timeIntervalSince1970: row[2])
+        )
+      }.first
+    }
   }
 
   // MARK: Reads
@@ -598,21 +726,22 @@ public actor Journal {
   /// The latest time anything in the journal is stamped with, or nil when
   /// it holds nothing.
   public func newestTimestamp() throws -> Date? {
-    try db.query(
-      """
-      SELECT MAX(newest) FROM (
-          SELECT MAX(timestamp) AS newest FROM observations
-          UNION ALL SELECT MAX(timestamp) FROM events
-          UNION ALL SELECT MAX(MAX(timestamp), COALESCE(MAX(feedback_at), 0)) FROM suggestions
-          UNION ALL SELECT MAX(timestamp) FROM follow_ups
-          UNION ALL SELECT MAX(timestamp) FROM model_calls
-          UNION ALL SELECT MAX(updated_at) FROM understanding
-          UNION ALL SELECT MAX(counted_at) FROM refresh_period
-      )
-      """
-    ) { row in
-      row.isNull(0) ? nil : Date(timeIntervalSince1970: row.double(0))
-    }.first ?? nil
+    try db.read { db in
+      try Double.fetchOne(
+        db,
+        sql: """
+          SELECT MAX(newest) FROM (
+              SELECT MAX(timestamp) AS newest FROM observations
+              UNION ALL SELECT MAX(timestamp) FROM events
+              UNION ALL SELECT MAX(MAX(timestamp), COALESCE(MAX(feedback_at), 0)) FROM suggestions
+              UNION ALL SELECT MAX(timestamp) FROM follow_ups
+              UNION ALL SELECT MAX(timestamp) FROM model_calls
+              UNION ALL SELECT MAX(updated_at) FROM understanding
+              UNION ALL SELECT MAX(counted_at) FROM refresh_period
+          )
+          """
+      ).map(Date.init(timeIntervalSince1970:))
+    }
   }
 
   /// The newest `limit` observations at or after `since` or with an id above
@@ -624,253 +753,355 @@ public actor Journal {
     after cursor: Int64? = nil,
     limit: Int
   ) throws -> [ActivityObservation] {
-    try db.query(
-      """
-      SELECT \(Journal.observationColumns) FROM observations WHERE timestamp >= ? OR id > ? \
-      ORDER BY timestamp DESC, id DESC LIMIT ?
-      """,
-      [
-        since.map { .double($0.timeIntervalSince1970) } ?? .null,
-        cursor.map(Value.int) ?? .null,
-        .int(Int64(limit)),
-      ]
-    ) { try self.makeObservation(from: $0) }
+    try db.read { db in
+      try Journal.rows(
+        db,
+        """
+        SELECT \(Journal.observationColumns) FROM observations WHERE timestamp >= ? OR id > ? \
+        ORDER BY timestamp DESC, id DESC LIMIT ?
+        """,
+        [since?.timeIntervalSince1970, cursor, limit],
+        Journal.makeObservation
+      )
+    }
   }
 
   /// Newest first, without thumbnail bytes.
   public func recentObservations(limit: Int) throws -> [ActivityObservation] {
-    try db.query(
-      """
-      SELECT \(Journal.observationColumns) FROM observations ORDER BY timestamp DESC, id \
-      DESC LIMIT ?
-      """,
-      [.int(Int64(limit))]
-    ) { try self.makeObservation(from: $0) }
+    try db.read { db in try Journal.recentObservations(limit: limit, db) }
+  }
+
+  private static func recentObservations(
+    limit: Int,
+    _ db: Database
+  ) throws -> [ActivityObservation] {
+    try rows(
+      db,
+      "SELECT \(observationColumns) FROM observations ORDER BY timestamp DESC, id DESC LIMIT ?",
+      [limit],
+      makeObservation
+    )
   }
 
   /// How many observations are at or after `since` or have an id above
   /// `cursor`, so a capped read can say how many it left unread.
   public func observationCount(since: Date?, after cursor: Int64?) throws -> Int {
-    Int(
-      try db.scalarInt(
-        "SELECT COUNT(*) FROM observations WHERE timestamp >= ? OR id > ?",
-        [since.map { .double($0.timeIntervalSince1970) } ?? .null, cursor.map(Value.int) ?? .null]
-      )
-    )
+    try db.read { db in
+      try Int.fetchOne(
+        db,
+        sql: "SELECT COUNT(*) FROM observations WHERE timestamp >= ? OR id > ?",
+        arguments: [since?.timeIntervalSince1970, cursor]
+      ) ?? 0
+    }
   }
 
-  /// The newest `limit` entries of both kinds, newest first, without thumbnail bytes.
+  /// The newest `limit` entries of both kinds, newest first, each observation
+  /// as its summary.
   public func recentEntries(limit: Int) throws -> [JournalEntry] {
-    let observations = try recentObservations(limit: limit).map(JournalEntry.observation)
-    let events = try recentEvents(limit: limit).map(JournalEntry.event)
+    try db.read { db in try Journal.recentEntries(limit: limit, db) }
+  }
+
+  private static func recentEntries(limit: Int, _ db: Database) throws -> [JournalEntry] {
+    // SQLite counts the blocks, so no observation's text is decoded here.
+    let observations = try rows(
+      db,
+      """
+      SELECT id, timestamp, app_name, window_title, reason, json_array_length(text_blocks_json)
+      FROM observations ORDER BY timestamp DESC, id DESC LIMIT ?
+      """,
+      [limit]
+    ) { row in
+      JournalEntry.observation(
+        ObservationSummary(
+          id: row[0],
+          timestamp: Date(timeIntervalSince1970: row[1]),
+          appName: row[2],
+          windowTitle: row[3],
+          reason: CaptureReason(rawValue: row[4]) ?? .floor,
+          textBlockCount: row[5]
+        )
+      )
+    }
+    let events = try recentEvents(limit: limit, db).map(JournalEntry.event)
     return Array((observations + events).sorted(by: JournalEntry.newerFirst).prefix(limit))
   }
 
   /// Returns the newest `limit` events, newest first.
   public func recentEvents(limit: Int) throws -> [JournalEvent] {
-    try db.query(
+    try db.read { db in try Journal.recentEvents(limit: limit, db) }
+  }
+
+  private static func recentEvents(limit: Int, _ db: Database) throws -> [JournalEvent] {
+    try rows(
+      db,
       """
       SELECT id, timestamp, kind, bundle_id, app_name, detail FROM events ORDER BY timestamp \
       DESC, id DESC LIMIT ?
       """,
-      [.int(Int64(limit))]
+      [limit]
     ) { row in
       JournalEvent(
-        id: row.int(0),
-        timestamp: Date(timeIntervalSince1970: row.double(1)),
-        kind: JournalEvent.Kind(rawValue: row.text(2) ?? "") ?? .started,
-        bundleID: row.text(3),
-        appName: row.text(4),
-        detail: row.text(5)
+        id: row[0],
+        timestamp: Date(timeIntervalSince1970: row[1]),
+        kind: JournalEvent.Kind(rawValue: row[2]) ?? .started,
+        bundleID: row[3],
+        appName: row[4],
+        detail: row[5]
       )
     }
   }
 
   /// Observations at or after `since`, oldest first, without thumbnail bytes.
   public func observations(since: Date, limit: Int) throws -> [ActivityObservation] {
-    try db.query(
-      """
-      SELECT \(Journal.observationColumns) FROM observations WHERE timestamp >= ? ORDER BY \
-      timestamp ASC, id ASC LIMIT ?
-      """,
-      [.double(since.timeIntervalSince1970), .int(Int64(limit))]
-    ) { try self.makeObservation(from: $0) }
+    try db.read { db in
+      try Journal.rows(
+        db,
+        """
+        SELECT \(Journal.observationColumns) FROM observations WHERE timestamp >= ? ORDER BY \
+        timestamp ASC, id ASC LIMIT ?
+        """,
+        [since.timeIntervalSince1970, limit],
+        Journal.makeObservation
+      )
+    }
   }
 
   /// Returns the observation with this id, without thumbnail bytes, or nil if
   /// there is none.
   public func observation(id: Int64) throws -> ActivityObservation? {
-    try db.query(
-      "SELECT \(Journal.observationColumns) FROM observations WHERE id = ?",
-      [.int(id)]
-    ) { try self.makeObservation(from: $0) }.first
+    try db.read { db in
+      try Journal.rows(
+        db,
+        "SELECT \(Journal.observationColumns) FROM observations WHERE id = ?",
+        [id],
+        Journal.makeObservation
+      ).first
+    }
   }
 
   /// Returns the JPEG thumbnail stored with an observation.
   ///
   /// Nil when the observation had no thumbnail or retention has deleted it.
   public func thumbnail(observationID: Int64) throws -> Data? {
-    try db.query("SELECT jpeg FROM thumbnails WHERE observation_id = ?", [.int(observationID)]) {
-      $0.blob(0)
+    try db.read { db in
+      try Data.fetchOne(
+        db,
+        sql: "SELECT jpeg FROM thumbnails WHERE observation_id = ?",
+        arguments: [observationID]
+      )
     }
-    .first ?? nil
   }
 
   /// Returns every row of `sql`, a query that changes nothing, each column as text.
   ///
   /// It is how the control API answers the end-to-end harness's named journal
-  /// queries from the app's own connection (docs/e2e.md "The control API"). A
-  /// statement that would write is refused rather than run.
+  /// queries from the app's own connection (docs/e2e.md "The control API"). Each
+  /// column is the text SQLite gives it and a NULL is empty text, as the
+  /// `sqlite3` tool prints them. A statement that would write is refused
+  /// before it runs.
   public func readOnlyRows(_ sql: String) throws -> [[String]] {
-    try db.readOnlyRows(sql)
+    try db.read { db in
+      let statement = try db.makeStatement(sql: sql)
+      guard statement.isReadonly else {
+        throw DatabaseError(
+          resultCode: .SQLITE_READONLY,
+          message: "only a statement that changes nothing is run here"
+        )
+      }
+      let columns = statement.columnCount
+      return try Journal.rows(statement) { row in
+        (0..<columns).map { (row[$0] as String?) ?? "" }
+      }
+    }
   }
 
   /// Returns the journal's counts, size, and time span, for Settings and the
   /// debug panel.
   public func stats() throws -> JournalStats {
-    let observationCount = try db.scalarInt("SELECT COUNT(*) FROM observations")
-    let thumbnailCount = try db.scalarInt("SELECT COUNT(*) FROM thumbnails")
-    let eventCount = try db.scalarInt("SELECT COUNT(*) FROM events")
-    let bounds =
-      try db.query(
-        """
-        SELECT MIN(t), MAX(t) FROM (
-            SELECT timestamp AS t FROM observations UNION ALL SELECT timestamp FROM events
-        )
-        """
-      ) { row -> (Date?, Date?) in
-        (
-          row.isNull(0) ? nil : Date(timeIntervalSince1970: row.double(0)),
-          row.isNull(1) ? nil : Date(timeIntervalSince1970: row.double(1))
-        )
-      }.first ?? (nil, nil)
-    return JournalStats(
-      observationCount: Int(observationCount),
-      thumbnailCount: Int(thumbnailCount),
-      eventCount: Int(eventCount),
-      usedBytes: try usedBytes(),
-      oldest: bounds.0,
-      newest: bounds.1
-    )
+    try db.read { db in
+      let count = { (table: String) in
+        try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM \(table)") ?? 0
+      }
+      let bounds = try Row.fetchOne(
+        db,
+        sql: """
+          SELECT MIN(t), MAX(t) FROM (
+              SELECT timestamp AS t FROM observations UNION ALL SELECT timestamp FROM events
+          )
+          """
+      )
+      let oldest: Double? = bounds?[0]
+      let newest: Double? = bounds?[1]
+      return JournalStats(
+        observationCount: try count("observations"),
+        thumbnailCount: try count("thumbnails"),
+        eventCount: try count("events"),
+        usedBytes: try Journal.usedBytes(db),
+        oldest: oldest.map(Date.init(timeIntervalSince1970:)),
+        newest: newest.map(Date.init(timeIntervalSince1970:))
+      )
+    }
   }
 
   /// Bytes in use by live pages (free pages are reclaimed by incremental vacuum).
   public func usedBytes() throws -> Int64 {
-    let pageSize = try db.scalarInt("PRAGMA page_size")
-    let pageCount = try db.scalarInt("PRAGMA page_count")
-    let freelist = try db.scalarInt("PRAGMA freelist_count")
-    return (pageCount - freelist) * pageSize
+    try db.read(Journal.usedBytes)
+  }
+
+  private static func usedBytes(_ db: Database) throws -> Int64 {
+    let pragma = { (name: String) in try Int64.fetchOne(db, sql: "PRAGMA \(name)") ?? 0 }
+    return try (pragma("page_count") - pragma("freelist_count")) * pragma("page_size")
   }
 
   // MARK: Maintenance
 
   /// Deletes everything and records a single `journalCleared` event at `now`.
   public func clear(at now: Date) throws {
-    try db.execute("BEGIN")
-    do {
-      try db.execute(
-        """
-        DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events;
-        DELETE FROM suggestions; DELETE FROM follow_ups; DELETE FROM model_calls;
-        DELETE FROM understanding; DELETE FROM refresh_period;
-        """
-      )
-      try db.execute("COMMIT")
-    } catch {
-      try? db.execute("ROLLBACK")
-      throw error
+    try db.writeWithoutTransaction { db in
+      try db.inTransaction {
+        try db.execute(
+          sql: """
+            DELETE FROM thumbnails; DELETE FROM observations; DELETE FROM events;
+            DELETE FROM suggestions; DELETE FROM follow_ups; DELETE FROM model_calls;
+            DELETE FROM understanding; DELETE FROM refresh_period;
+            """
+        )
+        return .commit
+      }
+      try db.execute(sql: "PRAGMA incremental_vacuum")
+      try db.execute(sql: "PRAGMA wal_checkpoint(TRUNCATE)")
+      _ = try Journal.insert(JournalEvent(timestamp: now, kind: .journalCleared), db)
     }
-    try db.execute("PRAGMA incremental_vacuum")
-    try db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-    try record(JournalEvent(timestamp: now, kind: .journalCleared))
   }
 
   /// Applies age limits, then the size cap.
   ///
   /// Returns what was removed.
   public func applyRetention(_ policy: RetentionPolicy, now: Date) throws -> RetentionResult {
-    var result = RetentionResult(bytesBefore: try usedBytes())
+    try db.writeWithoutTransaction { db in
+      try Journal.applyRetention(policy, now: now, db)
+    }
+  }
+
+  private static func applyRetention(
+    _ policy: RetentionPolicy,
+    now: Date,
+    _ db: Database
+  ) throws -> RetentionResult {
+    var result = RetentionResult(bytesBefore: try usedBytes(db))
+    /// Runs a statement and returns how many rows it changed.
+    let run = { (sql: String, arguments: StatementArguments) -> Int in
+      try db.execute(sql: sql, arguments: arguments)
+      return db.changesCount
+    }
 
     let thumbnailCutoff = policy.thumbnailCutoff(now: now).timeIntervalSince1970
-    try db.run("DELETE FROM thumbnails WHERE timestamp < ?", [.double(thumbnailCutoff)])
-    result.thumbnailsDeleted += db.changes
+    result.thumbnailsDeleted += try run(
+      "DELETE FROM thumbnails WHERE timestamp < ?",
+      [thumbnailCutoff]
+    )
 
     let textCutoff = policy.textCutoff(now: now).timeIntervalSince1970
-    try db.run("DELETE FROM observations WHERE timestamp < ?", [.double(textCutoff)])
-    result.observationsDeleted += db.changes
-    try db.run("DELETE FROM events WHERE timestamp < ?", [.double(textCutoff)])
-    result.eventsDeleted += db.changes
-    try db.run("DELETE FROM suggestions WHERE timestamp < ?", [.double(textCutoff)])
-    result.suggestionsDeleted += db.changes
-    try db.run("DELETE FROM follow_ups WHERE timestamp < ?", [.double(textCutoff)])
-    result.followUpsDeleted += db.changes
-    try db.run("DELETE FROM model_calls WHERE timestamp < ?", [.double(textCutoff)])
-    result.modelCallsDeleted += db.changes
-    try db.run("DELETE FROM understanding WHERE updated_at < ?", [.double(textCutoff)])
-    result.understandingDeleted += db.changes
-    try db.run("DELETE FROM refresh_period WHERE started_at < ?", [.double(textCutoff)])
+    result.observationsDeleted += try run(
+      "DELETE FROM observations WHERE timestamp < ?",
+      [textCutoff]
+    )
+    result.eventsDeleted += try run("DELETE FROM events WHERE timestamp < ?", [textCutoff])
+    result.suggestionsDeleted += try run(
+      "DELETE FROM suggestions WHERE timestamp < ?",
+      [textCutoff]
+    )
+    result.followUpsDeleted += try run("DELETE FROM follow_ups WHERE timestamp < ?", [textCutoff])
+    result.modelCallsDeleted += try run(
+      "DELETE FROM model_calls WHERE timestamp < ?",
+      [textCutoff]
+    )
+    result.understandingDeleted += try run(
+      "DELETE FROM understanding WHERE updated_at < ?",
+      [textCutoff]
+    )
+    _ = try run("DELETE FROM refresh_period WHERE started_at < ?", [textCutoff])
 
-    try db.execute("PRAGMA incremental_vacuum")
-    var used = try usedBytes()
+    try db.execute(sql: "PRAGMA incremental_vacuum")
+    var used = try usedBytes(db)
     if used > policy.sizeCapBytes {
       // Oldest thumbnails first, in batches, until under the target.
       while used > policy.sizeTargetBytes {
-        try db.run(
+        let removed = try run(
           """
           DELETE FROM thumbnails WHERE observation_id IN (
               SELECT observation_id FROM thumbnails ORDER BY timestamp ASC LIMIT 10
           )
-          """
+          """,
+          []
         )
-        let removed = db.changes
         result.thumbnailsDeleted += removed
         if removed == 0 { break }
-        try db.execute("PRAGMA incremental_vacuum")
-        used = try usedBytes()
+        try db.execute(sql: "PRAGMA incremental_vacuum")
+        used = try usedBytes(db)
       }
       // Then the oldest observations, events, and understanding together.
       while used > policy.sizeTargetBytes {
-        let oldest =
-          try db.query(
-            """
-            SELECT MIN(t) FROM (
+        let span = try Row.fetchOne(
+          db,
+          sql: """
+            SELECT MIN(t), MAX(t) FROM (
                 SELECT timestamp AS t FROM observations UNION ALL SELECT timestamp FROM events
             )
             """
-          ) { $0.isNull(0) ? nil : $0.double(0) }.first ?? nil
-        guard let oldest else { break }
-        let newest =
-          try db.query(
-            """
-            SELECT MAX(t) FROM (
-                SELECT timestamp AS t FROM observations UNION ALL SELECT timestamp FROM events
-            )
-            """
-          ) { $0.double(0) }.first ?? oldest
+        )
+        guard let oldest = span?[0] as Double? else { break }
+        let newest = span?[1] as Double? ?? oldest
         // Drop the oldest tenth of the remaining time span, at least one row.
         let cutoff = oldest + max(1, (newest - oldest) / 10)
-        try db.run("DELETE FROM observations WHERE timestamp <= ?", [.double(cutoff)])
-        let observationsRemoved = db.changes
-        try db.run("DELETE FROM events WHERE timestamp <= ?", [.double(cutoff)])
-        let eventsRemoved = db.changes
-        try db.run("DELETE FROM understanding WHERE updated_at <= ?", [.double(cutoff)])
-        result.understandingDeleted += db.changes
-        try db.run("DELETE FROM refresh_period WHERE started_at <= ?", [.double(cutoff)])
+        let observationsRemoved = try run(
+          "DELETE FROM observations WHERE timestamp <= ?",
+          [cutoff]
+        )
+        let eventsRemoved = try run("DELETE FROM events WHERE timestamp <= ?", [cutoff])
+        result.understandingDeleted += try run(
+          "DELETE FROM understanding WHERE updated_at <= ?",
+          [cutoff]
+        )
+        _ = try run("DELETE FROM refresh_period WHERE started_at <= ?", [cutoff])
         result.observationsDeleted += observationsRemoved
         result.eventsDeleted += eventsRemoved
         if observationsRemoved + eventsRemoved == 0 { break }
-        try db.execute("PRAGMA incremental_vacuum")
-        used = try usedBytes()
+        try db.execute(sql: "PRAGMA incremental_vacuum")
+        used = try usedBytes(db)
       }
     }
-    try db.execute("PRAGMA wal_checkpoint(PASSIVE)")
-    result.bytesAfter = try usedBytes()
+    try db.execute(sql: "PRAGMA wal_checkpoint(PASSIVE)")
+    result.bytesAfter = try usedBytes(db)
     return result
   }
 
   // MARK: Row mapping
 
-  private typealias Value = SQLiteConnection.Value
+  /// Maps every row `sql` returns, each while the statement is still on it,
+  /// so a column reads as SQLite's own conversion of it.
+  private static func rows<T>(
+    _ db: Database,
+    _ sql: String,
+    _ arguments: StatementArguments = StatementArguments(),
+    _ map: (Row) throws -> T
+  ) throws -> [T] {
+    try rows(try db.cachedStatement(sql: sql), arguments, map)
+  }
+
+  private static func rows<T>(
+    _ statement: Statement,
+    _ arguments: StatementArguments = StatementArguments(),
+    _ map: (Row) throws -> T
+  ) throws -> [T] {
+    let cursor = try Row.fetchCursor(statement, arguments: arguments)
+    var mapped: [T] = []
+    while let row = try cursor.next() { mapped.append(try map(row)) }
+    return mapped
+  }
+
+  /// Decodes the JSON columns, which Swift concurrency lets every fetch share.
+  private static let decoder = JSONDecoder()
 
   private static let observationColumns = """
     id, timestamp, focus_json, text_blocks_json, frame_hash, frame_width, frame_height, display_id,
@@ -888,42 +1119,43 @@ public actor Journal {
     id, suggestion_id, timestamp, question, answer, error, model, prompt_version
     """
 
-  private static func makeFollowUp(from row: SQLiteConnection.Statement) -> FollowUp {
+  private static func makeFollowUp(from row: Row) -> FollowUp {
     FollowUp(
-      id: row.int(0),
-      suggestionID: row.int(1),
-      timestamp: Date(timeIntervalSince1970: row.double(2)),
-      question: row.text(3) ?? "",
-      answer: row.text(4),
-      error: row.text(5),
-      model: row.text(6) ?? "",
-      promptVersion: Int(row.int(7))
+      id: row[0],
+      suggestionID: row[1],
+      timestamp: Date(timeIntervalSince1970: row[2]),
+      question: row[3],
+      answer: row[4],
+      error: row[5],
+      model: row[6],
+      promptVersion: row[7]
     )
   }
 
-  private static func makeSuggestion(from row: SQLiteConnection.Statement) -> Suggestion {
-    let region = row.text(16).flatMap {
-      try? JSONDecoder().decode(CalloutRegion.self, from: Data($0.utf8))
+  private static func makeSuggestion(from row: Row) -> Suggestion {
+    let region = (row[16] as String?).flatMap {
+      try? decoder.decode(CalloutRegion.self, from: Data($0.utf8))
     }
+    let feedbackAt: Double? = row[15]
     return Suggestion(
-      id: row.int(0),
-      timestamp: Date(timeIntervalSince1970: row.double(1)),
-      bundleID: row.text(2),
-      appName: row.text(3) ?? "",
-      windowTitle: row.text(4),
-      category: SuggestionCategory(rawValue: row.text(5) ?? "") ?? .other,
-      title: row.text(6) ?? "",
-      body: row.text(7) ?? "",
-      explanation: row.text(8) ?? "",
-      confidence: row.double(9),
-      judgedGoal: row.text(10),
-      observationID: row.isNull(11) ? nil : row.int(11),
-      model: row.text(12) ?? "",
-      promptVersion: Int(row.int(13)),
-      feedback: row.text(14).flatMap(SuggestionFeedback.init(rawValue:)),
-      feedbackAt: row.isNull(15) ? nil : Date(timeIntervalSince1970: row.double(15)),
+      id: row[0],
+      timestamp: Date(timeIntervalSince1970: row[1]),
+      bundleID: row[2],
+      appName: row[3],
+      windowTitle: row[4],
+      category: SuggestionCategory(rawValue: row[5]) ?? .other,
+      title: row[6],
+      body: row[7],
+      explanation: row[8],
+      confidence: row[9],
+      judgedGoal: row[10],
+      observationID: row[11],
+      model: row[12],
+      promptVersion: row[13],
+      feedback: (row[14] as String?).flatMap(SuggestionFeedback.init(rawValue:)),
+      feedbackAt: feedbackAt.map(Date.init(timeIntervalSince1970:)),
       region: region,
-      calloutShown: row.int(17) != 0
+      calloutShown: row[17]
     )
   }
 
@@ -933,26 +1165,26 @@ public actor Journal {
     cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail, replayed
     """
 
-  private static func makeModelCall(from row: SQLiteConnection.Statement) -> ModelCallRecord {
+  private static func makeModelCall(from row: Row) -> ModelCallRecord {
     ModelCallRecord(
-      id: row.int(0),
-      timestamp: Date(timeIntervalSince1970: row.double(1)),
-      tier: ModelTier(rawValue: row.text(2) ?? "") ?? .triage,
-      model: row.text(3) ?? "",
-      promptVersion: Int(row.int(4)),
-      promptCharacters: Int(row.int(5)),
-      imageBytes: Int(row.int(6)),
+      id: row[0],
+      timestamp: Date(timeIntervalSince1970: row[1]),
+      tier: ModelTier(rawValue: row[2]) ?? .triage,
+      model: row[3],
+      promptVersion: row[4],
+      promptCharacters: row[5],
+      imageBytes: row[6],
       usage: Usage(
-        inputTokens: Int(row.int(7)),
-        outputTokens: Int(row.int(8)),
-        cacheCreationInputTokens: Int(row.int(9)),
-        cacheReadInputTokens: Int(row.int(10))
+        inputTokens: row[7],
+        outputTokens: row[8],
+        cacheCreationInputTokens: row[9],
+        cacheReadInputTokens: row[10]
       ),
-      cost: row.double(11),
-      latency: row.double(12),
-      outcome: ModelCallOutcome(rawValue: row.text(13) ?? "") ?? .error,
-      detail: row.text(14),
-      replayed: row.int(15) != 0
+      cost: row[11],
+      latency: row[12],
+      outcome: ModelCallOutcome(rawValue: row[13]) ?? .error,
+      detail: row[14],
+      replayed: row[15]
     )
   }
 
@@ -961,47 +1193,42 @@ public actor Journal {
     cumulative_cost, content_json, covered_through_observation_id
     """
 
-  private func makeUnderstanding(from row: SQLiteConnection.Statement) throws -> UnderstandingRecord
-  {
+  private static func makeUnderstanding(from row: Row) throws -> UnderstandingRecord {
     UnderstandingRecord(
-      id: row.int(0),
-      updatedAt: Date(timeIntervalSince1970: row.double(1)),
-      startedAt: Date(timeIntervalSince1970: row.double(2)),
-      revision: Int(row.int(3)),
-      promptVersion: Int(row.int(4)),
-      model: row.text(5) ?? "",
-      source: UnderstandingSource(rawValue: row.text(6) ?? "") ?? .periodic,
-      cost: row.double(7),
-      cumulativeCost: row.double(8),
-      content: try decoder.decode(Understanding.self, from: Data((row.text(9) ?? "{}").utf8)),
-      coveredThroughObservationID: row.isNull(10) ? nil : row.int(10)
+      id: row[0],
+      updatedAt: Date(timeIntervalSince1970: row[1]),
+      startedAt: Date(timeIntervalSince1970: row[2]),
+      revision: row[3],
+      promptVersion: row[4],
+      model: row[5],
+      source: UnderstandingSource(rawValue: row[6]) ?? .periodic,
+      cost: row[7],
+      cumulativeCost: row[8],
+      content: try decoder.decode(Understanding.self, from: Data((row[9] as String).utf8)),
+      coveredThroughObservationID: row[10]
     )
   }
 
-  private func makeObservation(from row: SQLiteConnection.Statement) throws -> ActivityObservation {
-    let focus = try decoder.decode(FocusContext.self, from: Data((row.text(2) ?? "{}").utf8))
-    let blocks = try decoder.decode([TextBlock].self, from: Data((row.text(3) ?? "[]").utf8))
-    let hash = PerceptualHash(hexString: row.text(4) ?? "") ?? PerceptualHash(words: [0, 0, 0, 0])
+  private static func makeObservation(from row: Row) throws -> ActivityObservation {
+    let focus = try decoder.decode(FocusContext.self, from: Data((row[2] as String).utf8))
+    let blocks = try decoder.decode([TextBlock].self, from: Data((row[3] as String).utf8))
+    let hash = PerceptualHash(hexString: row[4]) ?? PerceptualHash(words: [0, 0, 0, 0])
+    let displayID: Int64 = row[7]
     let frame = FrameInfo(
       hash: hash,
-      width: Int(row.int(5)),
-      height: Int(row.int(6)),
-      displayID: UInt32(truncatingIfNeeded: row.int(7)),
-      screenRect: CGRect(
-        x: row.double(8),
-        y: row.double(9),
-        width: row.double(10),
-        height: row.double(11)
-      ),
+      width: row[5],
+      height: row[6],
+      displayID: UInt32(truncatingIfNeeded: displayID),
+      screenRect: CGRect(x: row[8] as Double, y: row[9], width: row[10], height: row[11]),
       jpeg: nil
     )
     return ActivityObservation(
-      id: row.int(0),
-      timestamp: Date(timeIntervalSince1970: row.double(1)),
+      id: row[0],
+      timestamp: Date(timeIntervalSince1970: row[1]),
       focus: focus,
       frame: frame,
       textBlocks: blocks,
-      reason: CaptureReason(rawValue: row.text(12) ?? "") ?? .floor
+      reason: CaptureReason(rawValue: row[12]) ?? .floor
     )
   }
 }

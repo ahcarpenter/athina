@@ -16,11 +16,13 @@ coding agents, with pointers into these docs.
   the end-to-end harness's real-screen tier, Screen Recording and
   Accessibility granted to the terminal that runs it (see [Permissions](README.md#permissions)).
   `make doctor` names whatever is missing
-- The app has one third-party dependency, KeyboardShortcuts, for its global
-  keyboard shortcuts and their recorder (see [Keyboard shortcuts](docs/mentor-loop.md#keyboard-shortcuts)), which
-  SwiftPM fetches, pinned; the rest is the system's: SwiftUI,
-  ScreenCaptureKit, Vision, the accessibility API, AVFoundation and Speech
-  for talking back, and the system SQLite
+- The app has two third-party dependencies, which SwiftPM fetches, pinned:
+  KeyboardShortcuts, for its global keyboard shortcuts and their recorder
+  (see [Keyboard shortcuts](docs/mentor-loop.md#keyboard-shortcuts)), and
+  GRDB, through which the journal reaches the system SQLite (see
+  [Journal](docs/architecture.md#journal)); the rest is the system's:
+  SwiftUI, ScreenCaptureKit, Vision, the accessibility API, and AVFoundation
+  and Speech for talking back
 - The UI smoke test alone (see [UI snapshot smoke test](docs/ci.md#ui-snapshot-smoke-test)) uses
   swift-snapshot-testing, which SwiftPM fetches, pinned, only when that test
   runs; the app never links it

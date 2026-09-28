@@ -7,13 +7,12 @@
     ///
     /// A timeline that read the journal back after sensing had journaled its first events,
     /// Started among them, while the live stream carried the same rows, showed every startup row
-    /// twice. AppState loads the timeline before pipeline.start(), so the startup rows arrive on
-    /// the stream alone, and the timeline merges rows by journal id for any later load that
-    /// overlaps the stream, such as the reload after Clear Journal, and for ids the journal
-    /// reuses. The panel is open from launch here, which is where a person saw it. The Timeline
-    /// is read through Athina's own accessibility tree, and the journal through the app's named
-    /// queries. The run scripts no sensing, so it senses nothing: Started is the startup row
-    /// counted, and the rows of an app switch or capture are not there to be.
+    /// twice. The Timeline is now a live query of the journal while the panel is open, so it
+    /// lists what the journal holds and nothing else. The panel is open from launch here, which
+    /// is where a person saw it. The Timeline is read through Athina's own accessibility tree,
+    /// and the journal through the app's named queries. The run scripts no sensing, so it senses
+    /// nothing: Started is the startup row counted, and the rows of an app switch or capture are
+    /// not there to be.
     @Test func `debug-timeline`() async {
       await Run.scenario("debug-timeline", arguments: ["--open", "debug"]) { run in
         let control = run.control

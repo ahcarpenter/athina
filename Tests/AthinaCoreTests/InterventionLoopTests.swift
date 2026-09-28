@@ -294,6 +294,135 @@ struct InterventionLoopTests {
     #expect(try await h.journal.suggestion(id: s2.id)?.feedback == nil)
   }
 
+  /// What the app lists, as it does: the journal's live suggestions less the
+  /// ones the loop's floor or latest status holds, each value it would show kept.
+  @MainActor private final class ListedSuggestions {
+    var status: MentorStatus
+    let floor: SuggestionFloor
+    var journaled: [Suggestion] = []
+    private(set) var listed: [[Int64]] = []
+    let changes: AsyncStream<Void>
+    private let changed: AsyncStream<Void>.Continuation
+
+    init(status: MentorStatus, floor: SuggestionFloor) {
+      self.status = status
+      self.floor = floor
+      (changes, changed) = AsyncStream.makeStream(of: Void.self)
+    }
+
+    func list() {
+      listed.append(status.shown(journaled, floor: floor).map(\.id))
+      changed.yield()
+    }
+
+    func wait(until condition: () -> Bool) async {
+      var next = changes.makeAsyncIterator()
+      while !condition() {
+        guard await next.next() != nil else { return }
+      }
+    }
+  }
+
+  /// A suggestion held while the person talks to another toast is not theirs
+  /// yet: History and Show Last Suggestion never list it, not even as its row
+  /// is journaled, until it is shown.
+  @Test @MainActor func aHeldSuggestionIsListedOnlyOnceItIsShown() async throws {
+    let h = try await MentorLoopTests.Harness()
+    let a = try await journaledSuggestion(h)
+    await h.loop.setTalkingBack(true)
+
+    let view = await ListedSuggestions(
+      status: h.loop.currentStatus(),
+      floor: h.loop.suggestionFloor
+    )
+    let events = await h.loop.events()
+    let journal = h.journal
+    let following = [
+      Task { @MainActor in
+        for await event in events {
+          guard case .status(let status) = event else { continue }
+          view.status = status
+          view.list()
+        }
+      },
+      Task { @MainActor in
+        for try await suggestions in journal.liveSuggestions(limit: 10) {
+          view.journaled = suggestions
+          view.list()
+        }
+      },
+    ]
+    defer { for task in following { task.cancel() } }
+    await view.wait { view.journaled.map(\.id) == [a.id] }
+
+    await h.client.enqueue(json: Self.yes)
+    await h.client.enqueue(json: Self.suggestion(region: "null"))
+    await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
+    let b = try #require(try await h.journal.recentSuggestions(limit: 1).first)
+    #expect(b.id != a.id)
+    await view.wait { view.journaled.contains { $0.id == b.id } }
+    let whileHeld = view.listed
+
+    await h.loop.setTalkingBack(false)
+    await view.wait { view.listed.last == [b.id, a.id] }
+
+    #expect(whileHeld.allSatisfy { !$0.contains(b.id) })
+    #expect(whileHeld.last == [a.id])
+  }
+
+  /// Talking back that begins while a new suggestion's row is being journaled
+  /// still keeps it out of every list until the loop shows it.
+  @Test @MainActor func aSuggestionJournaledAsTalkBackBeginsIsListedOnlyOnceShown() async throws {
+    let h = try await MentorLoopTests.Harness()
+    let a = try await journaledSuggestion(h)
+
+    let view = await ListedSuggestions(
+      status: h.loop.currentStatus(),
+      floor: h.loop.suggestionFloor
+    )
+    let events = await h.loop.events()
+    let journal = h.journal
+    let loop = h.loop
+    let following = [
+      Task { @MainActor in
+        var talking = false
+        for await event in events {
+          guard case .status(let status) = event else { continue }
+          view.status = status
+          view.list()
+          if !talking, status.holdsSuggestionsAfter != nil {
+            talking = true
+            await loop.setTalkingBack(true)
+          }
+        }
+      },
+      Task { @MainActor in
+        for try await suggestions in journal.liveSuggestions(limit: 10) {
+          view.journaled = suggestions
+          view.list()
+        }
+      },
+    ]
+    defer { for task in following { task.cancel() } }
+    await view.wait { view.journaled.map(\.id) == [a.id] }
+
+    await h.client.enqueue(json: Self.yes)
+    await h.client.enqueue(json: Self.suggestion(region: "null"))
+    await h.observe(Fixtures.observation(id: 1, at: h.clock.date), expectCalls: 2)
+    let b = try #require(try await h.journal.recentSuggestions(limit: 1).first)
+    #expect(b.id != a.id)
+    await view.wait { view.journaled.contains { $0.id == b.id } }
+    // Whether talking back caught B depends on where the loop was; when it
+    // did, B stays held from before its row was journaled until released.
+    let whileUndecided = view.listed
+    let held = h.loop.suggestionFloor.value != nil
+
+    await h.loop.setTalkingBack(false)
+    await view.wait { view.listed.last == [b.id, a.id] }
+
+    if held { #expect(whileUndecided.allSatisfy { !$0.contains(b.id) }) }
+  }
+
   @Test func aHeldSuggestionThatOutlivedTheExchangeExpiresUnseen() async throws {
     let h = try await MentorLoopTests.Harness()
     await h.loop.setTalkingBack(true)
