@@ -2,9 +2,9 @@
 
 This file owns the development loop: setup, the everyday commands, the rules,
 and how a change reaches `main`. The [README](README.md) introduces Athina,
-`docs/` holds the reference (listed under [The docs](#the-docs)), and
-[AGENTS.md](AGENTS.md) holds the rules for coding agents, with pointers into
-these docs.
+`docs/` holds the reference (listed under the README's
+[Develop](README.md#develop)), and [AGENTS.md](AGENTS.md) holds the rules for
+coding agents, with pointers into these docs.
 
 ## Requirements
 
@@ -15,7 +15,7 @@ these docs.
   signed in, which `make snapshots-approve` downloads CI's renders with;
   `oxipng` (`brew install oxipng`), which it losslessly shrinks them with; and, for
   the end-to-end harness's real-screen tier, Screen Recording and
-  Accessibility granted to the terminal that runs it (see [Permissions](docs/setup.md#permissions)).
+  Accessibility granted to the terminal that runs it (see [Permissions](README.md#permissions)).
   `make doctor` names whatever is missing
 - The app has two third-party dependencies, which SwiftPM fetches, pinned:
   KeyboardShortcuts, for its global keyboard shortcuts and their recorder
@@ -36,23 +36,6 @@ end-to-end harness's own doctor for the grants, the drive tool and the warm
 home, which `scripts/e2e/athina-e2e warm` makes once per machine and again
 with `--force` after a macOS upgrade (see
 [The warm fixture home](docs/e2e.md#the-warm-fixture-home)).
-
-## The docs
-
-| Doc | Covers |
-| --- | --- |
-| [setup.md](docs/setup.md) | installing, the API key, what calls cost, the permissions |
-| [architecture.md](docs/architecture.md) | the source layout, the sensing loop, the journal, the subscription point |
-| [mentor-loop.md](docs/mentor-loop.md) | triage and mentor calls, callouts, keyboard shortcuts, talking back, mentorship contexts, the standing understanding, spend control |
-| [privacy.md](docs/privacy.md) | what leaves the Mac, what is kept, and for how long |
-| [debug-panel.md](docs/debug-panel.md) | the debug panel |
-| [design.md](docs/design.md) | the design conventions, the app icon and the menu bar mark |
-| [code-style.md](docs/code-style.md) | the Swift style, the pinned swift-format, rebasing across the reformat |
-| [testing.md](docs/testing.md) | each test layer's job, where it runs, and what the tests and snapshots cover |
-| [replay.md](docs/replay.md) | replay, the faster clock, replays side by side, recording, the committed fixtures |
-| [e2e.md](docs/e2e.md) | the end-to-end harness, its scenarios and tiers, the control API, hermetic runs |
-| [ci.md](docs/ci.md) | the CI checks, the ready-for-review snapshot gate, checkpoints |
-| [releasing.md](docs/releasing.md) | releases, unsigned releases, code signing |
 
 ## Build, run, test
 
