@@ -175,7 +175,7 @@ import Testing
     #expect(noScreen.heading != "Athina is set up")
     #expect(
       noScreen.stillToDo == [
-        "Screen Recording is still off. Allow it from the menu's Permissions…."
+        "Screen Recording is still off. Allow it from Permissions in the Athina menu."
       ]
     )
 
@@ -185,7 +185,7 @@ import Testing
     )
     #expect(
       nothing.stillToDo == [
-        "Screen Recording and Accessibility are still off. Allow them from the menu's Permissions….",
+        "Screen Recording and Accessibility are still off. Allow them from Permissions in the Athina menu.",
         "An API key is still needed. Add it in Settings > Models.",
       ]
     )

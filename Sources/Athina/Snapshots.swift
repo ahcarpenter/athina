@@ -126,7 +126,7 @@ enum Snapshots {
         "setup-ready",
         CGSize(width: 600, height: 560),
         AnyView(SetupView()),
-        AppState.sample().onSetupPage(.ready)
+        AppState.sample().withRequiredPermissions().onSetupPage(.ready)
       ),
       Spec("debug-panel", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), state),
       Spec(
@@ -1020,6 +1020,14 @@ extension AppState {
   /// The sample with the Setup window on a page of a first launch's walk through.
   func onSetupPage(_ page: SetupPage) -> AppState {
     setup = SetupState(page: page, walksThrough: true)
+    return self
+  }
+
+  /// The sample with both sensing permissions granted, so a walk through's
+  /// last page shows nothing still to do.
+  func withRequiredPermissions() -> AppState {
+    permissions.screenRecording = true
+    permissions.accessibility = true
     return self
   }
 

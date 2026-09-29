@@ -155,10 +155,10 @@ public struct SetupReadiness: Equatable, Sendable {
     var lines: [String] = []
     let titles = missingPermissions.map(\.title)
     if titles.count == 1 {
-      lines.append("\(titles[0]) is still off. Allow it from the menu's Permissions….")
+      lines.append("\(titles[0]) is still off. Allow it from Permissions in the Athina menu.")
     } else if !titles.isEmpty {
       lines.append(
-        "\(titles.joined(separator: " and ")) are still off. Allow them from the menu's Permissions…."
+        "\(titles.joined(separator: " and ")) are still off. Allow them from Permissions in the Athina menu."
       )
     }
     if needsKey {
