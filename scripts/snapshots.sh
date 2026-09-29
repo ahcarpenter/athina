@@ -30,6 +30,10 @@
 #                   publishes it; all three are fetched and checked before any
 #                   approved image changes, and when one has no run to take,
 #                   nothing changes and it fails naming each one missing.
+#                   Every fetched image is first recompressed losslessly with
+#                   oxipng, so an approved image is smaller than CI's render
+#                   but is the same 8-bit RGBA pixels, which is all every gate
+#                   compares.
 #                   Every approval lists the images it would add, change or
 #                   delete before it writes any, and on a terminal asks first
 #   baselines-approve [<run>]
@@ -147,6 +151,22 @@ need_gh() {
   command -v gh >/dev/null || die "approving needs the GitHub CLI (gh) to fetch the images CI made; make doctor says how to get it"
 }
 
+need_oxipng() {
+  command -v oxipng >/dev/null || die "approving needs oxipng to losslessly shrink the images it writes (brew install oxipng); make doctor says what else is missing"
+}
+
+# Losslessly recompresses every PNG under <dir> in place. oxipng changes only
+# how the pixels are compressed, never what they are, and gives the same bytes
+# for the same pixels, so an image that did not change comes back byte for
+# byte. --nx keeps each image the 8-bit RGBA a render is: the smoke test's
+# swift-snapshot-testing draws a reference in the reference's own colour space
+# and cannot load one reduced to a palette or to grey.
+compress() {
+  local dir="$1"
+  find "$dir" -name '*.png' -print0 | xargs -0 oxipng --quiet --opt 4 --nx \
+    || die "could not recompress the images in $dir with oxipng"
+}
+
 # Prints the newest completed run of <workflow> for HEAD that was neither
 # cancelled nor skipped, or dies naming <what> it was wanted for and <hint> on
 # how to get one.
@@ -231,6 +251,7 @@ preview_smoke() {
 fetch_baselines() {
   local run="${1:-}" tree first count k dir run_tree extra
   need_gh
+  need_oxipng
   if [ -z "$run" ]; then
     run="$(newest_run snapshots.yml "the snapshots baselines" \
       "push it to a pull request ready for review and let the run finish")" || exit 2
@@ -259,6 +280,7 @@ fetch_baselines() {
   done
   extra="$(find "$OUT/approved-shards" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')"
   [ "$extra" -eq "$count" ] || die "CI run $run has renders from $extra shards, not $count"
+  compress "$OUT/approved-run"
 }
 
 apply_baselines() {
@@ -269,6 +291,7 @@ apply_baselines() {
 fetch_smoke() {
   local run="${1:-}" tree run_tree
   need_gh
+  need_oxipng
   if [ -z "$run" ]; then
     run="$(newest_run ci.yml "the snapshots-smoke references" "push it and let CI finish")" || exit 2
   fi
@@ -288,6 +311,7 @@ fetch_smoke() {
     || die "CI run $run rendered source tree $run_tree, not HEAD's ($tree), and approving it would bake another tree's UI into the references; a pull request's run renders the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
   mkdir -p "$SMOKE_OUT/approved-run" || die "could not make $SMOKE_OUT/approved-run"
   cp "$SMOKE_OUT"/approved-set/*.png "$SMOKE_OUT/approved-run/" || die "CI run $run published a smoke set with no images"
+  compress "$SMOKE_OUT/approved-run"
 }
 
 apply_smoke() {
@@ -303,6 +327,7 @@ apply_smoke() {
 fetch_checkpoints() {
   local run="${1:-}" tree run_tree
   need_gh
+  need_oxipng
   if [ -z "$run" ]; then
     run="$(newest_run ci.yml "the test-e2e checkpoints" "push it and let CI finish")" || exit 2
   fi
@@ -315,6 +340,7 @@ fetch_checkpoints() {
     || die "CI run $run does not name the source tree its checkpoints were taken from, so they cannot be matched to HEAD"
   [ "$run_tree" = "$tree" ] \
     || die "CI run $run took its checkpoints of source tree $run_tree, not HEAD's ($tree), and approving them would bake another tree's UI into the baselines; a pull request's run tests the branch merged with main, so merge or rebase onto main, push, and approve the run CI makes of that"
+  compress "$CHECKPOINTS_OUT/approved-run"
 }
 
 apply_checkpoints() {
@@ -425,6 +451,10 @@ case "$command" in
 
   approve)
     [ "$#" -eq 1 ] || die "usage: scripts/snapshots.sh approve"
+    # Without these every fetch below fails, and would read as three approvals
+    # with no run to take.
+    need_gh
+    need_oxipng
     # Every kind is fetched, each from its own run, before any is applied, so
     # a kind with no run to take leaves every approved set as it was.
     missing=()
