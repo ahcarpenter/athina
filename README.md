@@ -34,7 +34,7 @@ It asks a model with your own API key, and nothing but those calls leaves your M
    └───────────────────────────────────────────────────┘
             │  a better way, when there is one
             ▼
-        a note under the menu bar, outlining the spot it is about
+        a note under the menu bar, which can outline the spot it is about
 ```
 
 **Sensing** reads the screen on your Mac and keeps what it reads in a local **journal**.
@@ -67,12 +67,21 @@ Releases are not notarized yet, so allow the first launch in System Settings > P
 
 No key yet? From a source checkout, `make run` starts a replay that answers from recorded calls and spends nothing.
 
+## Development
+
+```sh
+make        # list every command
+make run    # the app on recorded answers: no key, nothing spent
+make check  # lint, test and snapshots: what a change passes before a push
+```
+
+[Contributing](CONTRIBUTING.md) has the setup, the rules and the docs.
+
 ## Learn more
 
 - [Privacy](docs/privacy.md): what each call carries and what stays on your Mac.
 - [Setup](docs/setup.md): install, API keys, what calls cost, permissions.
 - [The mentor loop](docs/mentor-loop.md): every gate, tier and setting.
-- [Contributing](CONTRIBUTING.md): building from source, the daily loop and the docs.
 
 Athina is early, and [issues](https://github.com/getathina/athina/issues) are welcome.
 It is open source under the [MIT License](LICENSE).
