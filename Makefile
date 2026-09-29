@@ -9,7 +9,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help doctor build all run test test-e2e snapshots check snapshots-approve \
-	lint format run-live record snapshots-smoke icons diagram measure release clean
+	lint format run-live record snapshots-smoke icons measure release clean
 
 help:
 	@awk -f scripts/make-help.awk $(MAKEFILE_LIST)
@@ -82,9 +82,6 @@ snapshots-smoke: ## CI's snapshots-smoke check reproduced; drifts on a Mac unlik
 
 icons: ## redraw the app icon, menu bar mark and README icon from Resources/Mark
 	swift scripts/mark-assets.swift .
-
-diagram: ## redraw the README's How it works diagram in docs/images
-	swift scripts/how-it-works-diagram.swift .
 
 measure: ## the running app's CPU and memory over 60 seconds
 	ATHINA_PID="$(PID)" scripts/measure.sh

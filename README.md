@@ -29,10 +29,18 @@ and nothing else leaves your Mac.
 
 ## How it works
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/how-it-works-dark.svg">
-  <img src="docs/images/how-it-works-light.svg" width="800" alt="How Athina works. On your Mac, what you are doing (the app in front and its window) goes to sensing, which reads it on the Mac and keeps it in a local journal. At a change, the screen text goes to triage, the cheap model (Haiku 4.5 by default), which asks whether it is worth a look. If it is, mentor, the strong model (Opus 5 by default), reads recent screen text and a thumbnail and returns a suggestion or nothing. A suggestion comes back to the Mac as a note under the menu bar, which can outline the spot it means with a callout. Every call counts against the hourly spend cap, $1 by default, and nothing is sensed before Allow, while paused, or on an excluded app.">
-</picture>
+```
+        what you are doing on your Mac
+            │  the app in front, its window, the screen text
+            ▼
+   ┌─────────────────────────────────────────────────┐
+   │  read on your Mac - only model calls leave it   │
+   │  sensing → journal → triage → mentor            │
+   └─────────────────────────────────────────────────┘
+            │  a better way, when there is one
+            ▼
+        a note under the menu bar, and the spot outlined if it has one
+```
 
 **Sensing** reads the screen on your Mac and keeps it in a local journal.
 Nothing is sensed before you choose **Allow**, while you **pause**, or while an **excluded app** is in front.
