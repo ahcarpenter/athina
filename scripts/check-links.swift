@@ -1,16 +1,17 @@
 #!/usr/bin/env swift
 import Foundation
 
-// `make links`, which CI's lint job runs on every pull request: every relative
-// link in the repository's Markdown, and every #anchor in one, resolves inside
-// the checkout, the file or folder it names existing and the heading or
-// explicit anchor it names being in that file. Every tracked Markdown file is
-// read, not only the changed ones, so renaming a heading or moving a doc
-// fails wherever it was linked from. It reads nothing but the checkout: a link
-// with a scheme, such as https: or mailto:, is left alone, so the check needs
-// no network and cannot flake. Code blocks and code spans are skipped, and an
-// anchor is a heading's slug as GitHub makes it, lowercased, with punctuation
-// dropped, spaces as hyphens and -1, -2 on repeats, or an id or name attribute.
+// The Markdown half of `make lint` (scripts/lint.sh), which CI's lint job runs
+// on every pull request: every relative link in the repository's Markdown, and
+// every #anchor in one, resolves inside the checkout, the file or folder it
+// names existing and the heading or explicit anchor it names being in that
+// file. Every tracked Markdown file is read, not only the changed ones, so
+// renaming a heading or moving a doc fails wherever it was linked from. It
+// reads nothing but the checkout: a link with a scheme, such as https: or
+// mailto:, is left alone, so the check needs no network and cannot flake. Code
+// blocks and code spans are skipped, and an anchor is a heading's slug as
+// GitHub makes it, lowercased, with punctuation dropped, spaces as hyphens and
+// -1, -2 on repeats, or an id or name attribute.
 //
 // Usage: scripts/check-links.swift [<file.md> ...]
 //   <file.md>  check only these files; every tracked Markdown file by default

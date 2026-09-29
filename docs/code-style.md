@@ -58,7 +58,7 @@ names each path):
   `Task.sleep(for: d)`. The pinned Swift 6.3 links our copy of
   `Clock.sleep(for:)`'s `ContinuousClock` specialization and
   KeyboardShortcuts' copy, whose sizes differ, into one, which corrupts the
-  task allocator and crashes the app in CI's `e2e-api`
+  task allocator and crashes the app in CI's `test-e2e`
   ([swiftlang/swift#86204](https://github.com/swiftlang/swift/issues/86204));
   a Mac on Swift 6.4 never shows it. The rule can go once the pin reaches
   Swift 6.4.

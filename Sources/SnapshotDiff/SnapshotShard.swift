@@ -1,7 +1,7 @@
 import Foundation
 
-/// One of the CI runners each UI snapshot gate, `ui-snapshots` and
-/// `ui-snapshots-smoke`, is split across: each renders and compares only the
+/// One of the CI runners each UI snapshot gate, `snapshots` and
+/// `snapshots-smoke`, is split across: each renders and compares only the
 /// snapshots `assignment` gives it, and a gate passes only when every shard
 /// does (docs/ci.md "UI snapshot baselines" and "UI snapshot smoke test").
 public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {

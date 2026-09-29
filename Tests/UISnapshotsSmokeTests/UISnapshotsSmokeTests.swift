@@ -1,4 +1,4 @@
-// Built only with the UISnapshotsSmoke trait on (Package.swift), which `make snapshots-ci`
+// Built only with the UISnapshotsSmoke trait on (Package.swift), which `make snapshots-smoke`
 // and `make snapshots` turn on, so `make test` compiles none of this.
 #if UISnapshotsSmoke
   import AppKit
@@ -15,9 +15,9 @@
   ///
   /// It never records a reference. A missing one fails like a changed one, and the render that
   /// would replace it goes to `build/snapshots-smoke/references`, which CI uploads for
-  /// `make approve` to take. With `UI_SNAPSHOTS_SMOKE_SHARD` set to `k/n`, as each
+  /// `make snapshots-approve` to take. With `UI_SNAPSHOTS_SMOKE_SHARD` set to `k/n`, as each
   /// of CI's four runners sets it, it draws and checks only the snapshots `SnapshotShard` gives
-  /// shard k, the same split `ui-snapshots` uses.
+  /// shard k, the same split `snapshots` uses.
   ///
   /// With `UI_SNAPSHOTS_SMOKE_AGAINST` set to a folder, as `make snapshots` sets
   /// it, it compares each snapshot with that folder's render of it instead, drawn on this Mac

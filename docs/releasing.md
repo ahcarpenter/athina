@@ -137,7 +137,7 @@ but missing, fails before anything is built.
 runner:
 
 - **On every push to main**, beside the whole suite that `ci.yml` and
-  `merge-checks.yml` run there ([Continuous integration](ci.md)), so the
+  `snapshots.yml` run there ([Continuous integration](ci.md)), so the
   artifact a release would ship is proven on every merge. With the secrets
   below it signs and notarizes; without them it builds signed ad hoc, as
   above, passes, and the job summary names the missing secrets. The job

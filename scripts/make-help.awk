@@ -12,7 +12,7 @@ BEGIN { print "Usage: make <target> [NAME=value ...]" }
 /^[a-z][a-z0-9-]*:.*## / {
 	name = $0; sub(/:.*/, "", name)
 	text = $0; sub(/^[^#]*## /, "", text)
-	printf "  %-14s %s\n", name, text
+	printf "  %-17s %s\n", name, text
 	next
 }
 /^##= / {

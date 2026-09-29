@@ -3,7 +3,7 @@ name: Release
 # Builds the direct-download release with make release (scripts/release.sh,
 # docs/releasing.md), the artifact people would be sent, on every push to main
 # as well as for a release, so a release never finds a broken build. ci.yml and
-# merge-checks.yml run the whole suite on the same pushes.
+# snapshots.yml run the whole suite on the same pushes.
 #
 # It signs and notarizes when the Apple secrets exist, and otherwise builds it
 # signed ad hoc and says so in the job summary; on a push to main a missing

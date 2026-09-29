@@ -42,10 +42,10 @@ if command -v gh >/dev/null; then
 	if gh auth status >/dev/null 2>&1; then
 		report gh "$(command -v gh), signed in"
 	else
-		lack gh "signed in (gh auth login): the approve targets download CI's renders"
+		lack gh "signed in (gh auth login): make snapshots-approve downloads CI's renders"
 	fi
 else
-	lack gh "the approve targets download CI's renders with it (brew install gh)"
+	lack gh "make snapshots-approve downloads CI's renders with it (brew install gh)"
 fi
 
 echo

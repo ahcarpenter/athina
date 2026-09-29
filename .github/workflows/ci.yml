@@ -1,16 +1,16 @@
 name: CI
 
 # Runs on every push to a pull request and to main, and on every group the
-# merge queue builds: build-and-test, lint,
-# the API tier of the end-to-end harness with its checkpoints, e2e-api, and
-# the fast UI check, ui-snapshots-smoke. The slow, full-fidelity ui-snapshots
-# check lives in merge-checks.yml, which runs on push to main and for a pull
-# request only once it is ready for review; the main ruleset requires all five,
-# with pr-title.yml's title check, at a pull request's head before it merges,
-# and again on the merge queue's group before it lands on main (docs/ci.md
-# "The merge queue"). A pull request that touches only documentation runs lint
-# alone here: the changes job decides,
-# and every other job here is skipped, which a required check counts as passed
+# merge queue builds: test, lint, the API tier of the end-to-end harness with
+# its checkpoints, test-e2e, and the fast UI check, snapshots-smoke, each named
+# for its make target (docs/ci.md "The checks and their make targets"). The
+# slow, full-fidelity snapshots check lives in snapshots.yml, which runs on
+# push to main and for a pull request only once it is ready for review; the
+# main ruleset requires all five, with pr-title.yml's title check, at a pull
+# request's head before it merges, and again on the merge queue's group before
+# it lands on main (docs/ci.md "The merge queue"). A pull request that touches
+# only documentation runs lint alone here: the changes job decides, and every
+# other job here is skipped, which a required check counts as passed
 # (docs/ci.md "Docs-only pull requests").
 on:
   push:
@@ -30,8 +30,8 @@ concurrency:
 jobs:
   changes:
     # Whether this pull request touches only documentation nothing builds,
-    # tests or runs (scripts/docs-only.sh), which build-and-test, e2e-api and
-    # ui-snapshots-smoke read to skip themselves. Only a pull request is ever
+    # tests or runs (scripts/docs-only.sh), which test, test-e2e and
+    # snapshots-smoke read to skip themselves. Only a pull request is ever
     # docs-only: a push to main, and any other event, runs everything. The
     # checkout is the pull request merged into its base, so its first parent is
     # the base and the diff between them is what the merge would change. Should
@@ -52,7 +52,7 @@ jobs:
           echo "Docs-only: $docs_only"
           echo "docs-only=$docs_only" >> "$GITHUB_OUTPUT"
 
-  build-and-test:
+  test:
     # The package targets macOS 26, so it needs the Xcode 26 SDK that the
     # macos-26 image ships. Older images cannot build it.
     needs: changes
@@ -63,13 +63,13 @@ jobs:
       - uses: ./.github/actions/select-xcode
       - uses: ./.github/actions/swiftpm-cache
         with:
-          name: build-and-test
+          name: test
       - name: Test
         # make test, as people and local validation run it: swift test, then
         # the check that a build without the ControlAPI trait carries no
         # control API, on the debug Athina the tests' build already made, so
         # this job compiles the package once (scripts/test.sh). The
-        # development bundle, which must carry it, is e2e-api's to build and
+        # development bundle, which must carry it, is test-e2e's to build and
         # check. The suite runs on a test clock and takes seconds once built;
         # a wait that never ends fails the job here rather than at the
         # six-hour limit.
@@ -79,23 +79,19 @@ jobs:
   lint:
     # Google's Swift style (docs/code-style.md): swift-format from the Xcode
     # that .xcode-version pins checks every Swift file against the committed
-    # .swift-format and fails on any finding. Then every relative link and
-    # anchor in the Markdown, and the drift check: the rules GitHub enforces on
-    # main against the committed ruleset. Never skipped, so a docs-only pull
-    # request gets its links checked.
+    # .swift-format and fails on any finding, then every relative link and
+    # anchor in the Markdown resolves (scripts/lint.sh). Then the drift check:
+    # the rules GitHub enforces on main against the committed ruleset. Never
+    # skipped, so a docs-only pull request gets its links checked.
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/select-xcode
       - name: Lint
-        timeout-minutes: 10
+        # The Swift style, then the Markdown links, checked after a style
+        # failure too so both are reported at once.
+        timeout-minutes: 15
         run: make lint
-      - name: Every relative link and anchor in the Markdown resolves
-        # Offline: a link with a scheme is left alone (scripts/check-links.swift).
-        # It runs after a lint failure too, so both are reported at once.
-        if: ${{ !cancelled() }}
-        timeout-minutes: 5
-        run: make links
       - name: The checks GitHub requires on main match .github/rulesets/main.json
         # GitHub never reads the file, which is applied by hand
         # (docs/ci.md), so this reads the live rules and fails
@@ -108,12 +104,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: scripts/check-ruleset.sh
 
-  e2e-api:
+  test-e2e:
     # Every API-tier scenario of the end-to-end harness, the Swift Testing
     # tests in Tests/E2EAPITests, each launching a hermetic replay and driving
     # it through the app's control API, run twice, then their checkpoints
     # compared with the approved baselines in Tests/Checkpoints as
-    # ui-snapshots compares a snapshot (docs/ci.md "Checkpoints"). The app is launched through
+    # snapshots compares a snapshot (docs/ci.md "Checkpoints"). The app is launched through
     # LaunchServices (--launch open): exec'd from this job's shell, which the
     # runner image grants Accessibility, it would inherit the grant, and the
     # run could never catch a change that made the API tier need one.
@@ -144,18 +140,18 @@ jobs:
         # Screen Recording for the API tier's copy of the app, which the
         # harness makes under this identifier, so a checkpoint is captured
         # with ScreenCaptureKit, glass, title bar and toolbar included, as
-        # ui-snapshots captures a snapshot. Only Screen Recording: an
+        # snapshots captures a snapshot. Only Screen Recording: an
         # Accessibility grant is what the launch through open keeps away.
         run: |
           sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
             "insert or replace into access (service, client, client_type, auth_value, auth_reason, auth_version, flags) values ('kTCCServiceScreenCapture', 'com.ahcarpenter.athina.e2e', 0, 2, 4, 1, 0)"
       - uses: ./.github/actions/swiftpm-cache
         with:
-          name: e2e-api
+          name: test-e2e
       - name: Build the app bundle
         # The development bundle, built with the ControlAPI trait, so it must
-        # carry the control API; build-and-test checks that a build without the
-        # trait carries none (docs/e2e.md "The control API").
+        # carry the control API; test checks that a build without the trait
+        # carries none (docs/e2e.md "The control API").
         run: |
           scripts/bundle.sh release
           if scripts/check-no-control-api.sh build/Athina.app/Contents/MacOS/Athina; then
@@ -185,7 +181,7 @@ jobs:
             if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
           done
       - name: Upload the checkpoints
-        # What `make approve` fetches to approve a checkpoint drift.
+        # What `make snapshots-approve` fetches to approve a checkpoint drift.
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -203,11 +199,11 @@ jobs:
             build/checkpoints/runs
           if-no-files-found: ignore
 
-  ui-snapshots-smoke:
+  snapshots-smoke:
     # The fast UI check, and the check the main ruleset requires: draws every
     # snapshot in the test process with swift-snapshot-testing and compares
     # each with its reference image, recorded on this image with the pinned
-    # Xcode as the ui-snapshots baselines were (docs/ci.md "UI snapshot smoke
+    # Xcode as the snapshots baselines were (docs/ci.md "UI snapshot smoke
     # test"). One runner: most of the job is fetching and compiling, which the
     # build cache cuts to what changed, and drawing all 76 images takes about a
     # minute, where four runners each compiled it again.
@@ -219,10 +215,10 @@ jobs:
       - uses: ./.github/actions/select-xcode
       - uses: ./.github/actions/swiftpm-cache
         with:
-          name: ui-snapshots-smoke
+          name: snapshots-smoke
       - name: Draw every snapshot and compare with its reference
         timeout-minutes: 20
-        run: make snapshots-ci
+        run: make snapshots-smoke
       - name: Summarize
         if: always()
         run: |
@@ -230,11 +226,11 @@ jobs:
             cat build/snapshots-smoke/summary.md >> "$GITHUB_STEP_SUMMARY"
           fi
       - name: Upload the approvable set
-        # What `make approve` fetches to approve a smoke drift.
+        # What `make snapshots-approve` fetches to approve a smoke drift.
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ui-snapshots-smoke-set
+          name: snapshots-smoke-set
           path: build/snapshots-smoke/references
           if-no-files-found: ignore
       - name: Upload the drift report
@@ -243,6 +239,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: ui-snapshots-smoke-report
+          name: snapshots-smoke-report
           path: build/snapshots-smoke/drift
           if-no-files-found: ignore
