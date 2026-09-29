@@ -45,16 +45,16 @@ It asks a model with your own API key, and nothing but those calls leaves your M
                    ▼                  ┆
  ┌──────────────────────────────────┐ ┆  ┌────────────────────────────────┐
  │ triage                           │ ┆  │ the cheap model                │
- │ at most once every 20 s, and     ├──┼──▶ is the latest screen's         │
- │ only when the screen changed     ◀──┼──┤ text worth a look?             │
+ │ at most once every 20 s, and     ├─┼──▶ is the latest screen's         │
+ │ only when the screen changed     ◀─┼──┤ text worth a look?             │
  └─────────────────┬────────────────┘ ┆  └────────────────────────────────┘
    no: back to     │ yes              ┆
    watching        ▼                  ┆
  ┌──────────────────────────────────┐ ┆  ┌────────────────────────────────┐
  │ mentor                           │ ┆  │ the strong model               │
- │ 2 min since the last mentor      ├──┼──▶ reads the recent screens'      │
+ │ 2 min since the last mentor      ├─┼──▶ reads the recent screens'      │
  │ call, and under the hourly       │ ┆  │ text, a thumbnail and what     │
- │ spend cap                        ◀──┼──┤ you seem to be after           │
+ │ spend cap                        ◀─┼──┤ you seem to be after           │
  └─────────────────┬────────────────┘ ┆  └────────────────────────────────┘
    most often      │ a suggestion     ┆
    nothing         ▼                  ┆
@@ -67,7 +67,8 @@ It asks a model with your own API key, and nothing but those calls leaves your M
    your answer, kept in the journal:  ┆
    Tell Me More, Not Now (that kind   ┆
    of note waits an hour) or Never    ┆
-   for This (it stops for this app)   ┆
+   for This (that kind of note stops  ┆
+   for this app)                      ┆
 ```
 
 By default the cheap model is Claude Haiku 4.5 and the strong one Claude Opus 5, or GPT-6 Luna and GPT-6 Sol on OpenAI.
