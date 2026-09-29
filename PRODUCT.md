@@ -52,7 +52,7 @@ It speaks up unprompted. Athina watches the user's real screen live and offers g
 ## Evidence on Hand
 
 - Recorded real model calls in Tests/AthinaCoreTests/Fixtures/Replay, and UI snapshot baselines in Tests/Snapshots.
-- The README's cost receipt of a short session.
+- The cost receipt of a short session in docs/setup.md "What it costs".
 - No testimonials, customers, usage numbers or press exist yet; do not fabricate them.
 
 ## Product Principles
