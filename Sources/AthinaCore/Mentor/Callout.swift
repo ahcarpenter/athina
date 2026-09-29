@@ -2,14 +2,15 @@ import CoreGraphics
 import Foundation
 
 /// A spot on the screen the mentor tier pointed at, in the pixel coordinates
-/// of the frame it saw (origin top-left), with a few words to show beside it.
+/// of the frame it saw (origin top-left), with a few words the toast shows
+/// about it while it is outlined.
 public struct CalloutRegion: Codable, Equatable, Sendable {
   /// The longest note kept, in characters; a longer one is cut off.
   public static let maxNoteLength = 80
 
   /// The spot, in pixels of the frame the model saw, origin top-left.
   public var rect: CGRect
-  /// The few words the model gave to show beside the spot.
+  /// The few words the model gave to say what the spot is.
   public var note: String
 
   /// Creates a region, cutting the note to `maxNoteLength` characters.
@@ -228,8 +229,8 @@ public enum CalloutAnchor {
   }
 }
 
-/// Where the box and the note go inside the overlay window, and where the
-/// window goes on the display.
+/// Where the box goes inside the overlay window, and where the window goes on
+/// the display.
 ///
 /// Global coordinates are display points with the origin at the top-left of the
 /// main display; local ones are points from the window's top-left, which is
@@ -237,42 +238,18 @@ public enum CalloutAnchor {
 /// because a window is placed on whole points anyway; the box keeps its exact
 /// fractional position inside it, so rounding the window never moves the box.
 ///
-/// The note goes beside the box, to its right, where the rest of a line of
-/// text usually is empty. Only when the display has no room there does it go
-/// below the box, or above it at the bottom of the display, where it covers
-/// the next line.
+/// The callout carries no words of its own: the note under the menu bar says
+/// what it points at, so nothing it draws covers the lines around the spot.
 public struct CalloutLayout: Equatable, Sendable {
-  /// Where the note sits relative to the box: beside it to the right, below
-  /// it, or above it.
-  public enum NotePlacement: Equatable, Sendable {
-    case trailing
-    case below
-    case above
-  }
-
-  /// Room around the box and the note for the stroke, glow, and shadow.
-  public static let glow: CGFloat = 12
-  /// Space between the box and the note.
-  public static let gap: CGFloat = 8
-  /// Height reserved for the note, enough for the three lines the longest
-  /// note (`CalloutRegion.maxNoteLength`) wraps to at `noteMaxWidth`, so no
-  /// note is ever cut short.
-  public static let noteHeight: CGFloat = 64
-  /// A note wider than this wraps.
-  public static let noteMaxWidth: CGFloat = 320
+  /// Room around the box for the stroke's halo and the kind's tile, which
+  /// sits centred on the box's top-left corner.
+  public static let margin: CGFloat = 12
 
   /// The overlay window's frame in global coordinates, on whole points and
   /// kept on the display.
   public var windowRect: CGRect
   /// The highlighted spot, in window coordinates.
   public var box: CGRect
-  /// Where the note may be drawn, in window coordinates.
-  ///
-  /// The note is aligned to its leading edge, and to its vertical centre beside
-  /// the box or its edge nearest the box otherwise.
-  public var noteRect: CGRect
-  /// Which side of the box the note went on.
-  public var notePlacement: NotePlacement
 
   /// Lays out a callout for a spot on a display.
   ///
@@ -281,35 +258,9 @@ public struct CalloutLayout: Equatable, Sendable {
   ///   - display: The bounds of the display the spot is on, in global
   ///     coordinates.
   public init(screenRect spot: CGRect, display: CGRect) {
-    let glow = CalloutLayout.glow
-    let gap = CalloutLayout.gap
-    let noteWidth = CalloutLayout.noteMaxWidth
-    let noteHeight = CalloutLayout.noteHeight
-    let note: CGRect
-    if spot.maxX + gap + noteWidth + glow <= display.maxX {
-      notePlacement = .trailing
-      note = CGRect(
-        x: spot.maxX + gap,
-        y: spot.midY - noteHeight / 2,
-        width: noteWidth,
-        height: noteHeight
-      )
-    } else if spot.maxY + gap + noteHeight + glow <= display.maxY
-      || spot.minY - gap - noteHeight - glow < display.minY
-    {
-      notePlacement = .below
-      note = CGRect(x: spot.minX, y: spot.maxY + gap, width: noteWidth, height: noteHeight)
-    } else {
-      notePlacement = .above
-      note = CGRect(
-        x: spot.minX,
-        y: spot.minY - gap - noteHeight,
-        width: noteWidth,
-        height: noteHeight
-      )
-    }
-    // Everything drawn, with room for the glow, then whole points, then kept on the display.
-    let content = spot.union(note).insetBy(dx: -glow, dy: -glow)
+    // The box with room for its halo and tile, then whole points, then kept
+    // on the display.
+    let content = spot.insetBy(dx: -CalloutLayout.margin, dy: -CalloutLayout.margin)
     var origin = CGPoint(x: content.minX.rounded(.down), y: content.minY.rounded(.down))
     let size = CGSize(
       width: min(ceil(content.maxX - origin.x), display.width.rounded(.down)),
@@ -319,7 +270,6 @@ public struct CalloutLayout: Equatable, Sendable {
     origin.y = min(max(origin.y, display.minY), display.maxY - size.height)
     windowRect = CGRect(origin: origin, size: size)
     box = spot.offsetBy(dx: -origin.x, dy: -origin.y)
-    noteRect = note.offsetBy(dx: -origin.x, dy: -origin.y)
   }
 }
 

@@ -413,6 +413,9 @@ final class AppState {
     toast.onHover = { [weak self] hovering in
       self?.toastHoverChanged(hovering)
     }
+    callouts.onChange = { [weak self] outlined in
+      self?.toast.showOutlined(outlined)
+    }
     toast.setTalkBackKey(talkBackKey)
     screenObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.didChangeScreenParametersNotification,
@@ -1245,7 +1248,7 @@ final class AppState {
         switch result {
         case .success(let placement):
           if !shown || self.callouts.placement != placement {
-            self.callouts.show(placement)
+            self.callouts.show(placement, kind: NoteKind(suggestion.category))
             self.toast.bringToFront()
           }
           if self.lastCallout?.status != .shown || self.lastCallout?.suggestionID != suggestion.id

@@ -53,15 +53,18 @@ particular to this app:
   makes them look away; a missing permission or key leaves them open and
   empty, unable to see; held half-lids them. Which variant a mode gets is
   `MenuBarMark.resolve`, a pure function with the whole table under test.
-- **Athina has one colour of its own, and it is the accent.** Glaukos, the
-  grey-green of Homer's word for Athena's eyes, is the `AccentColor` in
+- **Glaukos is Athina's accent, and its own colours stay in its own views.**
+  Glaukos, the grey-green of Homer's word for Athena's eyes, is the `AccentColor` in
   `Resources/Assets.xcassets` (`#11746B`, `#4BA297` in Dark Mode, darker and
   lighter again under Increase Contrast), which `Resources/Info.plist` names
   and `scripts/bundle.sh` compiles into the bundle. The HIG (Color) lets an app
   set an accent that controls use while the person keeps System Settings >
   Appearance at Multicolor, and any accent they pick instead still wins, so
-  Athina never overrides that choice. Text, backgrounds and status stay the
-  system's own colours.
+  Athina never overrides that choice. Beyond the accent, `AthinaColor` in
+  `Sources/Athina/Tokens.swift` holds the only other colours Athina draws, and
+  only its own views draw them: the callout's pointer, never the accent so it
+  can never read as a focus ring, and the three kind tiles. Text, backgrounds
+  and status stay the system's own colours.
 - **The toast is a non-activating panel, not a notification.** It floats under
   the menu bar on Liquid Glass and never takes keyboard focus, with corners
   concentric with its small capsule buttons. Because it cannot be focused, the
@@ -71,13 +74,20 @@ particular to this app:
   key would draw a system prominent button in the inactive grey. A person may
   drag it aside, and it keeps that place, growing downward, until the next
   suggestion; it grows and shrinks in a short animation, at once with Reduce
-  Motion. A kind of suggestion that warns of something going wrong draws its
-  symbol in the attention tint, a tip in the accent.
-- **The callout is a click-through overlay** that draws its own accent stroke,
-  since nothing in the system frames a spot in another app's window; its note
-  sits on the toast's glass, whole, never cut short. It only fades in, and
-  Increase Contrast thickens the stroke and drops the glow. VoiceOver never
-  visits it, so it is announced as it appears.
+  Motion. Its header leads with the note's kind, one of PRODUCT.md's three
+  (`NoteKind`: a faster way, a risk, a dead end), as a System Settings style
+  tile in the kind's own colour beside the kind's name in words, then the
+  app; the model's own category is a hover away. While a callout is up, a
+  line under the body says what it outlines, since the callout draws no words.
+- **The callout is a click-through overlay** that draws its own frame, since
+  nothing in the system frames a spot in another app's window: a halo, then a
+  pointer stroke over a faint fill, in a colour of its own rather than the
+  accent (`AthinaColor.pointer`), so it can never read as the other app's
+  keyboard focus ring whatever accent the person picked. The note's kind tile
+  sits on its top-left corner and the words stay in the note, so it covers
+  nothing around the spot. It only fades in, and Increase Contrast thickens
+  the stroke and makes the halo solid. VoiceOver never visits it, so it is
+  announced as it appears.
 - **Settings is the SwiftUI `Settings` scene**: a toolbar of panes, the window
   titled by its pane, the last pane remembered, each pane a fixed-size grouped
   form that scrolls. Rows use the form's own label and subtitle styling, and a

@@ -186,10 +186,11 @@ re-shows the callout only when its anchor still passes.
 The overlay itself is `CalloutController`: a transparent, borderless,
 non-activating panel above normal windows on the display the frame came from,
 with `ignoresMouseEvents` set, so it never takes focus and never intercepts a
-click, key, or scroll. It draws a tinted rounded box with a soft glow around
-the spot and the note beside it on the same Liquid Glass as the toast, to its
-right, where the rest of a line of text is usually empty (below the box, or
-above it at the bottom of the display, only when there is no room). Athina's own windows are excluded from
+click, key, or scroll. It draws a rounded box around the spot, a pointer
+stroke over a faint fill with a halo outside it, and the note's kind tile on
+its top-left corner, so the spot and the note it belongs to read as a pair.
+It draws no words: what it points at is the toast's to say, so nothing covers
+the lines around the spot. Athina's own windows are excluded from
 capture, so the overlay never appears in a frame. Settings > General > "Show
 callouts on screen" (on by default) turns callouts off; the history window
 records for each suggestion whether one was drawn, and the debug panel's
