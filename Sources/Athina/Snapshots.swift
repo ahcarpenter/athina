@@ -176,22 +176,22 @@ enum Snapshots {
         AnyView(StatusMessagesPreview()),
         noSpeech
       ),
-      Spec("settings-models", whole(2140), AnyView(ModelSettings().formStyle(.grouped)), state),
+      Spec("settings-models", whole(2000), AnyView(ModelSettings().formStyle(.grouped)), state),
       Spec(
         "settings-models-openai",
-        whole(2140),
+        whole(2000),
         AnyView(ModelSettings().formStyle(.grouped)),
         AppState.sample(provider: .openAI)
       ),
       Spec(
         "settings-models-opencode",
-        whole(2140),
+        whole(2000),
         AnyView(ModelSettings().formStyle(.grouped)),
         AppState.sample(provider: .openCode)
       ),
       Spec(
         "settings-models-empty",
-        whole(2140),
+        whole(2000),
         AnyView(ModelSettings().formStyle(.grouped)),
         empty
       ),
@@ -204,17 +204,17 @@ enum Snapshots {
         AnyView(SampleUnderstandingSettings()),
         noUnderstanding
       ),
-      Spec("settings-capture", whole(920), AnyView(CaptureSettings().formStyle(.grouped)), state),
+      Spec("settings-capture", whole(1100), AnyView(CaptureSettings().formStyle(.grouped)), state),
       Spec(
         "settings-journal",
         CGSize(width: SettingsView.paneWidth, height: 500),
         AnyView(JournalSettings().formStyle(.grouped)),
         state
       ),
-      Spec("settings-privacy", whole(760), AnyView(PrivacySettings().formStyle(.grouped)), state),
+      Spec("settings-privacy", whole(620), AnyView(PrivacySettings().formStyle(.grouped)), state),
       Spec(
         "settings-privacy-withdrawn",
-        whole(760),
+        whole(620),
         AnyView(PrivacySettings().formStyle(.grouped)),
         AppState.sampleWithoutConsent(declined: true)
       ),
@@ -309,7 +309,7 @@ enum Snapshots {
       ),
       Spec(
         "settings-models-replay",
-        whole(2140),
+        whole(2000),
         AnyView(ModelSettings().formStyle(.grouped)),
         replay
       ),
@@ -1252,14 +1252,13 @@ struct StatusMessagesPreview: View {
             host: "api.anthropic.com"
           )
         }
-        StatusLabel("Paste the whole key. It is one word with no spaces.", kind: .error)
+        StatusLabel(APIKeyEntry.saveFailure, kind: .error)
       }
       Section("Shortcuts") {
+        // Each reason a shortcut can fail, as the pane names the one that applies.
+        StatusLabel(ShortcutProblem.sentence(for: HotKey.defaultPause), kind: .warning)
         StatusLabel(
-          """
-          Another app uses this combination, or it lacks Control, Option, or Command. Choose \
-          another.
-          """,
+          ShortcutProblem.sentence(for: HotKey(keyCode: 35, modifiers: [.shift])),
           kind: .warning
         )
       }

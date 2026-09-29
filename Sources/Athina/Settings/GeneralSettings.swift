@@ -88,10 +88,10 @@ struct VoiceSection: View {
           label: {
             Text("Talk-back shortcut")
             if state.isRunning,
-              state.settings.mentor.pushToTalkHotKey != nil,
+              let key = state.settings.mentor.pushToTalkHotKey,
               !state.pushToTalkRegistered
             {
-              StatusLabel("Another app uses this combination. Choose another.", kind: .warning)
+              StatusLabel(ShortcutProblem.sentence(for: key), kind: .warning)
             } else {
               Text("Hold it and speak, then let go to send.")
             }

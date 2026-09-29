@@ -1,8 +1,9 @@
 import AthinaCore
 import SwiftUI
 
-/// The Models pane: which provider answers and its key, each model and its
-/// effort, how often they are called, what the mentor model sees, and spend.
+/// The Models pane: which provider answers and its key, and what it may spend
+/// first, as the two things a person must set, then each model and its effort,
+/// how often they are called, what the mentor model sees, and the understanding.
 struct ModelSettings: View {
   @Environment(AppState.self)
   private var state
@@ -12,6 +13,7 @@ struct ModelSettings: View {
     let provider = state.settings.mentor.provider
     Form {
       ProviderSection()
+      SpendSection()
 
       Section(
         content: {
@@ -126,7 +128,6 @@ struct ModelSettings: View {
       )
 
       UnderstandingSection()
-      SpendSection()
     }
   }
 }
@@ -209,6 +210,11 @@ private struct TierRows: View {
   }
 }
 
+/// What the key section says when a pasted key cannot be used.
+enum APIKeyEntry {
+  static let saveFailure = "Paste the whole key. It is one word with no spaces."
+}
+
 /// The provider in force's key: pasted here, kept in the login keychain, and
 /// tested with one tiny call, with `leading` first when the layout keeps the
 /// picker in this section.
@@ -224,6 +230,7 @@ private struct APIKeySection<Leading: View>: View {
   @State private var testing = false
   @State private var testResult: Result<String, ClaudeClientError>?
   @State private var saveFailed = false
+  @State private var confirmRemove = false
 
   init(provider: ModelProvider, header: String, @ViewBuilder leading: () -> Leading) {
     self.provider = provider
@@ -240,12 +247,15 @@ private struct APIKeySection<Leading: View>: View {
             SecureField("API key", text: $draft, prompt: Text(provider.keyPlaceholder))
               .labelsHidden()
               .onSubmit(save)
+              // The complaint is about the key that was saved; a new one being
+              // typed has not been judged yet.
+              .onChange(of: draft) { _, _ in saveFailed = false }
             Button("Save", action: save)
               .disabled(APIKey.normalized(draft) == nil)
           }
         }
         if saveFailed {
-          StatusLabel("Paste the whole key. It is one word with no spaces.", kind: .error)
+          StatusLabel(APIKeyEntry.saveFailure, kind: .error)
         }
         if let error = state.apiKeyError {
           StatusLabel(error, kind: .error)
@@ -255,11 +265,11 @@ private struct APIKeySection<Leading: View>: View {
             HStack(spacing: 8) {
               Text("Ends in \(hint)")
                 .monospacedDigit()
-              Button("Remove") {
-                state.removeAPIKey()
-                testResult = nil
+              Button("Remove…", role: .destructive) {
+                confirmRemove = true
               }
               .accessibilityLabel("Remove saved key")
+              .accessibilityIdentifier("models.removeKey")
             }
           } else {
             Text("None")
@@ -295,6 +305,28 @@ private struct APIKeySection<Leading: View>: View {
       testResult = nil
       saveFailed = false
     }
+    // Only a new key from the provider's account brings it back, so it asks
+    // first; the confirming button is plain, since it is what the person chose.
+    .confirmationDialog(
+      "Remove the saved API key?",
+      isPresented: $confirmRemove,
+      titleVisibility: .visible,
+      actions: {
+        Button("Remove Key") {
+          state.removeAPIKey()
+          testResult = nil
+        }
+        Button("Cancel", role: .cancel) {}
+      },
+      message: {
+        Text(
+          """
+          Athina stops asking \(provider.name) until you paste a key again, and a removed key \
+          can only be copied again from your \(provider.name) account.
+          """
+        )
+      }
+    )
   }
 
   private var footer: String {
@@ -313,7 +345,9 @@ private struct APIKeySection<Leading: View>: View {
 
   private func save() {
     saveFailed = !state.saveAPIKey(draft)
-    if !saveFailed {
+    if saveFailed {
+      Announce.post(APIKeyEntry.saveFailure)
+    } else {
       draft = ""
       testResult = nil
     }
@@ -323,8 +357,10 @@ private struct APIKeySection<Leading: View>: View {
     testing = true
     testResult = nil
     Task {
-      testResult = await state.testConnection()
+      let result = await state.testConnection()
+      testResult = result
       testing = false
+      ConnectionResult.announce(result, replayed: false)
     }
   }
 }
@@ -386,13 +422,18 @@ private struct ReplayConnectionSection<Leading: View>: View {
     testing = true
     testResult = nil
     Task {
-      testResult = await state.testConnection()
+      let result = await state.testConnection()
+      testResult = result
       testing = false
+      ConnectionResult.announce(result, replayed: true)
     }
   }
 }
 
 /// What the last Test Connection found, under the Connection label.
+///
+/// A failure says what it means in Athina's words (`UserFacing`), with the
+/// API's own text as the tooltip.
 struct ConnectionResult: View {
   let testing: Bool
   let result: Result<String, ClaudeClientError>?
@@ -402,23 +443,40 @@ struct ConnectionResult: View {
 
   var body: some View {
     if testing {
-      Text(replayed ? "Replaying the recorded test call…" : "Contacting \(host ?? "the provider")…")
-    } else {
+      HStack(spacing: 6) {
+        ProgressView()
+          .controlSize(.small)
+          .accessibilityHidden(true)
+        Text(replayed ? "Replaying the recorded test call…" : "Contacting \(host ?? "the provider")…")
+      }
+    } else if let result {
       switch result {
-      case nil:
-        EmptyView()
-      case .success(let model):
-        StatusLabel(
-          replayed
-            ? "Replayed: \(ModelCatalog.displayName(for: model)) answered when it was recorded."
-            : "Connected: \(ModelCatalog.displayName(for: model)) answered.",
-          kind: .success
-        )
+      case .success:
+        StatusLabel(Self.sentence(for: result, replayed: replayed), kind: .success)
       case .failure(let error):
-        StatusLabel(error.description, kind: .error)
+        StatusLabel(Self.sentence(for: result, replayed: replayed), kind: .error)
           .textSelection(.enabled)
+          .help(error.description)
       }
     }
+  }
+
+  static func sentence(for result: Result<String, ClaudeClientError>, replayed: Bool) -> String {
+    switch result {
+    case .success(let model):
+      replayed
+        ? "Replayed: \(ModelCatalog.displayName(for: model)) answered when it was recorded."
+        : "Connected: \(ModelCatalog.displayName(for: model)) answered."
+    case .failure(let error):
+      UserFacing.sentence(for: error)
+    }
+  }
+
+  /// Tells VoiceOver what the test found, since it comes after the button
+  /// that asked, in a line the person is not on.
+  @MainActor
+  static func announce(_ result: Result<String, ClaudeClientError>, replayed: Bool) {
+    Announce.post(sentence(for: result, replayed: replayed))
   }
 }
 
@@ -441,7 +499,8 @@ private struct SpendSection: View {
             """
             Calls slow down as the hour's estimated spend nears this amount and stop at it \
             until the next hour begins.
-            """
+            """,
+          identifier: "models.spendCap"
         )
         LabeledContent("This hour") {
           if state.clientMode.isOffline {
@@ -461,10 +520,14 @@ private struct SpendSection: View {
             .monospacedDigit()
           }
         }
-        PriceTableEditor(
-          table: $state.settings.mentor.prices,
-          models: ModelCatalog.models(for: state.settings.mentor.provider)
-        )
+        // Twenty prices a person rarely changes, folded away until wanted.
+        DisclosureGroup("Prices per million tokens") {
+          PriceTableEditor(
+            table: $state.settings.mentor.prices,
+            models: ModelCatalog.models(for: state.settings.mentor.provider)
+          )
+        }
+        .accessibilityIdentifier("models.prices")
       },
       header: {
         Text("Spend per hour")

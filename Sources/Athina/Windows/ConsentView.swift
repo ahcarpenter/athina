@@ -36,7 +36,6 @@ struct ConsentView: View {
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityAddTraits(.isHeader)
           Text(disclosure.summary)
-            .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
       }
@@ -64,7 +63,6 @@ struct ConsentView: View {
           )
           Text(disclosure.destination)
             .font(.callout)
-            .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
         .padding(6)
@@ -105,7 +103,6 @@ struct ConsentView: View {
         "You can withdraw this at any time in Privacy settings, and Athina stops capturing and sending at once."
       )
       .font(.callout)
-      .foregroundStyle(.secondary)
       .fixedSize(horizontal: false, vertical: true)
 
       HStack {
