@@ -1,33 +1,34 @@
 # Continuous integration
 
 CI runs five checks on GitHub's `macos-26` runner, which ships Xcode 26 and
-the macOS 26 SDK this package targets: `build-and-test` runs `make test`: `swift test`, then
+the macOS 26 SDK this package targets: `test` runs `make test`: `swift test`, then
 `scripts/check-no-control-api.sh`, which must find no control API in a build
 without the `ControlAPI` trait, for which it takes the debug `Athina` the
-tests' build already made rather than compiling the package again; `lint` runs `make lint` (see [Code style](code-style.md)) and fails on any
-finding, then `make links`, which fails on a relative link or anchor in the
-Markdown that does not resolve, then checks the rules GitHub enforces on main
-against the committed ruleset (see below); `e2e-api` builds the development bundle with the bundle script,
+tests' build already made rather than compiling the package again; `lint`
+runs `make lint`, which fails on any Swift style finding (see [Code
+style](code-style.md)) and on a relative link or anchor in the Markdown that
+does not resolve, then checks the rules GitHub enforces on main against the
+committed ruleset (see below); `test-e2e` builds the development bundle with the bundle script,
 checks that it carries the control API, runs every API-tier scenario of the
 end-to-end harness and compares their checkpoints with approved baselines (see
 [Checkpoints](#checkpoints));
-`ui-snapshots-smoke`, the fast UI check, draws every
+`snapshots-smoke`, the fast UI check, draws every
 snapshot inside a test process with swift-snapshot-testing and compares each
-with its reference image (see [UI snapshot smoke test](#ui-snapshot-smoke-test)); and `ui-snapshots`, the
+with its reference image (see [UI snapshot smoke test](#ui-snapshot-smoke-test)); and `snapshots`, the
 full-fidelity UI check, renders every snapshot with `Athina --snapshot`
 through the window server, so Liquid Glass and materials are in them,
 replay-mode renders on a scaled clock included, compares the renders with the
 approved baselines, and uploads them (see [UI snapshot baselines](#ui-snapshot-baselines)).
-`ui-snapshots` is split across four runners that each take a quarter of the
-snapshots, by the `SnapshotShard` table, and `ui-snapshots-smoke` draws them
+`snapshots` is split across four runners that each take a quarter of the
+snapshots, by the `SnapshotShard` table, and `snapshots-smoke` draws them
 all on one. Both draw the same list of snapshots, so a UI change drifts both,
-and often `e2e-api`'s checkpoints too; each has its own approved images, and
-`make approve` takes all three from the runner, never from a Mac: the
-`ui-snapshots` baselines from HEAD's newest completed, non-cancelled
-merge-checks run, and the `ui-snapshots-smoke` references and the checkpoints
+and often `test-e2e`'s checkpoints too; each has its own approved images, and
+`make snapshots-approve` takes all three from the runner, never from a Mac: the
+`snapshots` baselines from HEAD's newest completed, non-cancelled
+snapshots.yml run, and the `snapshots-smoke` references and the checkpoints
 from HEAD's newest completed, non-cancelled CI run. It fetches and checks all
 three before it changes any approved image, so when one has no run to take
-(a run still going, a merge-checks run never started because the pull
+(a run still going, a snapshots.yml run never started because the pull
 request is still a draft, a job that published nothing), it changes nothing
 and fails naming each one missing and why. Once all three are fetched, it
 lists every image it would add, change or delete in each set before it writes
@@ -42,12 +43,12 @@ starts (see "The merge queue", below), and every push to main also runs
 with `make release`, signed and notarized when the Apple secrets exist, and
 which a pushed version tag turns into a GitHub Release (see
 [Releasing](releasing.md#ci)); no pull request runs it or waits for it. On a
-pull request, the fast lane, `build-and-test`, `lint`, `e2e-api` and
-`ui-snapshots-smoke` (`.github/workflows/ci.yml`), runs on every push, draft
-or not, and the slow `ui-snapshots` (`.github/workflows/merge-checks.yml`)
+pull request, the fast lane, `test`, `lint`, `test-e2e` and
+`snapshots-smoke` (`.github/workflows/ci.yml`), runs on every push, draft
+or not, and the slow `snapshots` (`.github/workflows/snapshots.yml`)
 runs only while the pull request is ready for review: marking a draft ready
 runs it, and so does every push while it is ready, and a pull request opened
-ready runs it at once. A draft never starts it, so the four runners it takes
+ready runs it at once. A draft never renders it, so the four runners it takes
 stay free for the fast lane while a change is still moving. A pull request
 goes through it in these steps, whoever opens it:
 
@@ -55,11 +56,11 @@ goes through it in these steps, whoever opens it:
    `.no-mistakes.yaml` sets `providers.github.draft_pull_requests`; by hand,
    `gh pr create --draft` (or `gh-axi pr create --draft`).
 2. Wait for the fast lane to pass on its head. The no-mistakes pipeline's CI
-   step reports `checks-passed` then, since a draft's `ui-snapshots` is only
-   expected, not run.
+   step reports `checks-passed` then, since a draft's `snapshots` passes
+   without rendering.
 3. Mark it ready: `gh pr ready <number>` (or `gh-axi pr ready <number>`). That
-   runs `ui-snapshots` on the same head; the fast lane does not run again.
-4. Wait for `ui-snapshots` to pass. A push after this runs both again, and
+   runs `snapshots` on the same head; the fast lane does not run again.
+4. Wait for `snapshots` to pass. A push after this runs both again, and
    should the change need more work first, `gh pr ready --undo <number>`
    makes it a draft again.
 5. Add it to the merge queue: `gh pr merge --auto --squash <number>` (or
@@ -74,14 +75,13 @@ changing its title starts and cancels nothing.
 All five, and `pr-title` (see "The pull request title", below), must pass at
 a pull request's head before it can enter the merge queue, and again in its
 merge queue run before it lands: the `main` ruleset requires them, with no
-bypass, and until `ui-snapshots` has run there,
-the pull request lists it as expected and cannot merge. Two traps shape this.
-A job that an `if` skips still reports a check run, and a skipped check counts
-as passed for a required one, so the skipped job takes another name: GitHub
-names a skipped job after its unevaluated `name:` expression, which is not
-`ui-snapshots`, and the expression's own answer for a skip is not either. And
-a `workflow_dispatch` run of the same job does not count: its checks are on
-the commit, but a pull request's required checks ignore them. A pull request
+bypass. On a draft, `snapshots` keeps its one name and passes without
+rendering, its job summary saying it skipped the gate. That pass is never what
+lets a change land: a draft cannot merge, marking it ready runs the gate on
+the same head, whose `snapshots` replaces the draft's, and the merge queue
+runs the full gate again on its group whatever the head reported. A
+`workflow_dispatch` run of the same job does not count: its checks are on the
+commit, but a pull request's required checks ignore them. A pull request
 that touches only documentation runs `lint` and `pr-title` alone and skips the other four on
 purpose, with the names they are required under (see [Docs-only pull
 requests](#docs-only-pull-requests)).
@@ -117,7 +117,7 @@ pass at its head (step 5 above); the queue then tests it on top of main plus
 every pull request queued ahead of it, on a temporary
 `gh-readonly-queue/main/...` branch, and runs the three workflows there as a
 `merge_group` event, where `pr-title` checks the subject of the squash commit
-that would land. There is no draft there, so `ui-snapshots` always runs in
+that would land. There is no draft there, so `snapshots` always runs in
 full, and no pull request, so no drift comment is posted and no image is
 approved from it: approval stays with the ready pull request's own runs. Each
 queue run keeps its own concurrency group, so a push to a pull request never
@@ -133,7 +133,7 @@ from the queue; the ones behind it are tested again without it and keep their
 place. A removed pull request needs a fix pushed and step 5 again.
 
 The queue runs one at a time because each run takes eight macOS jobs (four
-fast-lane jobs and four `ui-snapshots` shards), the account runs five at once,
+fast-lane jobs and four `snapshots` shards), the account runs five at once,
 and pull requests' own runs want the same runners: a second run alongside
 would mostly wait for them, and a check still queued after 60 minutes fails
 like any other failure. Testing each pull request in its own run also keeps
@@ -220,19 +220,38 @@ runs five macOS jobs at once. Pushes to main are never cancelled; each keeps
 its own run, and so does every merge queue run.
 
 Local validation, the no-mistakes pipeline a change goes through before its
-pull request, never runs the Xcode project steps, the full `ui-snapshots` gate,
-the checkpoint gate (`scripts/snapshots.sh checkpoints`) or `make approve`
+pull request, never runs the Xcode project steps, the full `snapshots` gate,
+the checkpoint gate (`scripts/snapshots.sh checkpoints`) or `make snapshots-approve`
 (or any other approve command), which only CI proves, and compares the UI smoke set
 with main's on the Mac itself (see [UI snapshot smoke test](#ui-snapshot-smoke-test));
 `test.instructions` in `.no-mistakes.yaml` carries that rule to its test step.
 
+## The checks and their make targets
+
+Each check is named for the make target that does its work on a Mac, so a
+failing check says what to run:
+
+| Check | On a Mac | In CI |
+| --- | --- | --- |
+| `test` | `make test` | the same |
+| `lint` | `make lint` | the same, then the ruleset check above |
+| `test-e2e` | `make test-e2e`, the end-to-end scenarios | the API tier twice, its checkpoints compared with their baselines (see [Checkpoints](#checkpoints)) |
+| `snapshots-smoke` | `make snapshots-smoke` | the same |
+| `snapshots` | `make snapshots`, the smoke set drawn at HEAD and at main | the full-fidelity gate on four runners, `snapshots (1/4)` to `snapshots (4/4)`, rolled up into `snapshots` (see [UI snapshot baselines](#ui-snapshot-baselines)) |
+| `pr-title` | none | the pull request title (see "The pull request title", above) |
+
+`make snapshots-approve` takes the images the three image checks publish.
+`.github/workflows/snapshots.yml`, the Snapshots workflow, holds `snapshots`;
+`.github/workflows/ci.yml` holds the others but `pr-title`, which is in
+`.github/workflows/pr-title.yml`.
+
 ## Docs-only pull requests
 
 A pull request that changes only documentation cannot change a test result
-or a pixel, so it runs `lint`, whose `make links` step checks its links, and
-`pr-title`, and nothing that builds: `build-and-test`, `e2e-api`,
-`ui-snapshots-smoke` and the four `ui-snapshots` shards are skipped, and the
-`ui-snapshots` roll-up passes without them. It gets every required check in a
+or a pixel, so it runs `lint`, whose `make lint` checks its links, and
+`pr-title`, and nothing that builds: `test`, `test-e2e`,
+`snapshots-smoke` and the four `snapshots` shards are skipped, and the
+`snapshots` roll-up passes without them. It gets every required check in a
 few minutes, as `lint` takes.
 
 Documentation is a Markdown file at the top of the repository or anything
@@ -251,15 +270,15 @@ parent, and the jobs above read its answer in their `if`. The skip is a job's,
 never the workflow's: `paths-ignore` on a workflow would leave the required
 checks never reported, so the pull request would wait for them for ever. A
 skipped job still reports a check run under its own name, and a skipped
-required check counts as passed; the `ui-snapshots` roll-up, which fails on
+required check counts as passed; the `snapshots` roll-up, which fails on
 skipped shards otherwise, passes when `changes` says docs-only. When `changes`
 itself fails, the jobs get no answer and run, and only a `pull_request` event
 is ever docs-only: pushes to main, the nightly run, releases and a merge
 queue's `merge_group` run everything. A draft is still a draft: its
-`ui-snapshots` waits for ready for review under its other name, as above.
+`snapshots` passes without rendering until it is ready for review, as above.
 
-`make links` (`scripts/check-links.swift`), in `lint` on every pull request
-and push, reads every tracked Markdown file, not only the changed ones, so a
+The link check (`scripts/check-links.swift`), part of `make lint` and so of
+`lint` on every pull request and push, reads every tracked Markdown file, not only the changed ones, so a
 renamed heading or a moved doc fails wherever it was linked from. Each
 relative link must name a file or folder in the checkout, and each `#anchor` a
 heading of the file it points into, as GitHub slugs it, or an `id` or `name`
@@ -270,8 +289,8 @@ it needs no network and adds nothing that can flake. `make check` runs it too.
 
 `Tests/Snapshots` holds the approved render of every snapshot, light and dark,
 rendered on the CI runner, which is the one reference environment. The
-`ui-snapshots` check runs on four runners at once, the `ui-snapshots shard 1`
-to `4` jobs, and passes only when all four do. Each (`scripts/snapshots.sh
+`snapshots` check runs on four runners at once, the `snapshots (1/4)` to
+`snapshots (4/4)` jobs, and passes only when all four do. Each (`scripts/snapshots.sh
 gate <k>/4`) builds the app, renders its own snapshots twice and fails unless
 the two renders are the same picture, then compares each render with its
 baseline and fails on any drift. Which shard renders a snapshot is fixed in
@@ -289,13 +308,13 @@ would see, since a shifted edge, a new colour or a moved line moves some
 channel much further. A new snapshot fails until its baseline is approved, and
 a baseline the renderer no longer produces fails until it is deleted. For
 every drifted snapshot the shard lists what changed in its summary and uploads
-the `ui-snapshot-report-shard-<k>` artifact: the approved image, the new render and the
+the `snapshots-report-shard-<k>` artifact: the approved image, the new render and the
 difference (changed pixels in red over a faded copy), one folder each, with an
 `index.html` that shows them side by side at real size. The comparison is
 `snapshot-diff` (`Sources/SnapshotDiff`, with unit tests), and the renderer
 uses the same rule.
 
-On a pull request, the `ui-snapshots drift comment` job, which runs once
+On a pull request, the `snapshots drift comment` job, which runs once
 every shard has finished and is not required, puts the drift where the
 reviewer already is: one comment on the pull request, updated in place by
 every later run, with a row per drifted snapshot showing its approved image,
@@ -350,11 +369,11 @@ where it was made:
   that fails is taken again, never drawn the other way.
 
 **Approving an intended change.** Push the change to a pull request ready
-for review (see [Continuous integration](#continuous-integration)), and let `ui-snapshots`
-fail on the drift, look at the drift comment or the report, then run `make approve` (see
+for review (see [Continuous integration](#continuous-integration)), and let `snapshots`
+fail on the drift, look at the drift comment or the report, then run `make snapshots-approve` (see
 [Continuous integration](#continuous-integration); `scripts/snapshots.sh baselines-approve [<run id>]`
 takes these alone), which downloads the renders of all four
-shards of HEAD's newest merge-checks run, the `ui-snapshots-shard-<k>`
+shards of HEAD's newest snapshots.yml run, the `snapshots-shard-<k>`
 artifacts, and makes `Tests/Snapshots` match them: a changed or new
 snapshot's render replaces its baseline, a removed snapshot's baseline is
 deleted, and every other file is left alone.
@@ -385,8 +404,8 @@ which would add a download quota and an extra step to every checkout.
 
 ## UI snapshot smoke test
 
-`ui-snapshots-smoke` is the fast UI check, run on every push to a pull request
-and to main. `make snapshots-ci` (`scripts/snapshots.sh smoke`) runs
+`snapshots-smoke` is the fast UI check, run on every push to a pull request
+and to main. `make snapshots-smoke` (`scripts/snapshots.sh smoke`) runs
 the `UISnapshotsSmokeTests` target, which draws every snapshot `--snapshot`
 renders, from the same list (`Snapshots.specs()`) and the same sample data,
 light and dark, in the same kind of window, settled by the same rule, and
@@ -395,27 +414,27 @@ compares each with its reference image in
 [swift-snapshot-testing](https://github.com/pointfreeco/swift-snapshot-testing).
 The two gates cannot drift apart: a snapshot added to the list is in both.
 
-In CI it runs on one runner, the `ui-snapshots-smoke` job, the check the
-ruleset requires, which runs `make snapshots-ci` and draws every
+In CI it runs on one runner, the `snapshots-smoke` job, the check the
+ruleset requires, which runs `make snapshots-smoke` and draws every
 snapshot. Most of that job is fetching and compiling, which the build cache
 cuts to what changed (see [Continuous integration](#continuous-integration)); drawing all 76 images takes
 about a minute, where four runners each compiled the test again for a quarter
 of the drawing.
-`make snapshots-ci SHARD=<k>/4` still draws only the snapshots
+`make snapshots-smoke SHARD=<k>/4` still draws only the snapshots
 `SnapshotShard` gives shard k (the test reads the shard from
 `UI_SNAPSHOTS_SMOKE_SHARD`), should it be split again.
 
 It draws each window inside the test process, with swift-snapshot-testing's
 view strategy on the window's frame view (the view under the content that
 paints the window's background), rather than capturing it from the window
-server, so it builds and runs in a fraction of the time `ui-snapshots` takes.
+server, so it builds and runs in a fraction of the time `snapshots` takes.
 Its pictures leave out what only the window server composites: Liquid Glass
 and materials are not drawn, so a toast shows its words and controls on the
 plain window background, and what sits on glass can take another colour or,
 like the toast's button bezels, close button and microphone in light mode,
 not show at all. Scroll bars are always shown, as on the runner, whatever the
 Mac is set to. It catches a changed
-layout, text, colour, control or state; how glass looks is `ui-snapshots`' to
+layout, text, colour, control or state; how glass looks is `snapshots`' to
 check. A pixel matches when it is within 2 Delta E of the reference (a
 perceptual precision of 98 percent), the difference the eye cannot see, which
 covers anti-aliasing and nothing a person would notice. A render reads the same
@@ -429,24 +448,24 @@ it skips the frames `--snapshot` waits for before its first capture.
 The test never records a reference. A snapshot with no reference fails, as a
 drifted one does, and a reference no snapshot produces fails until it is
 deleted. The job names each drifted snapshot in its summary and uploads the
-`ui-snapshots-smoke-report` artifact: one folder per snapshot with the
+`snapshots-smoke-report` artifact: one folder per snapshot with the
 reference (`reference.png`), the new render (`failure.png`) and their
 difference (`difference.png`), or only the render when there is no reference
 yet.
 
 The target and its one dependency sit behind the `UISnapshotsSmoke` package
-trait, which only `make snapshots-ci` and `make snapshots`
+trait, which only `make snapshots-smoke` and `make snapshots`
 turn on. Without it the target
 has no tests and no dependencies, so a plain `swift test` (what `make test`
-runs), `build-and-test`, the app, `make release` and the Xcode project never
+runs), `test`, the app, `make release` and the Xcode project never
 fetch, build or run it. It is pinned to one release in `Package.swift`, and
 the package's `Package.resolved` is not committed, since a committed one would
 have every build fetch every package it names.
 
 **Approving an intended change.** Push the change and let
-`ui-snapshots-smoke` fail on the drift, look at the report, then run `make
-approve` (`scripts/snapshots.sh smoke-approve [<run id>]` takes these alone),
-which downloads the set HEAD's newest CI run published (`ui-snapshots-smoke-set`)
+`snapshots-smoke` fail on the drift, look at the report, then run `make
+snapshots-approve` (`scripts/snapshots.sh smoke-approve [<run id>]` takes these alone),
+which downloads the set HEAD's newest CI run published (`snapshots-smoke-set`)
 and makes the references folder match it exactly: the run's render of every
 snapshot that drifted or was new, the reference of every one that matched,
 which comes back unchanged, and nothing else, so a removed snapshot's
@@ -454,11 +473,11 @@ reference goes. The job publishes the set
 only once every snapshot has rendered, the set names the source tree it was
 made from, and approving refuses any tree but HEAD's, as it does for the
 baselines, and a set that names a shard, which holds only that
-shard's snapshots. A UI change drifts both gates, and `make approve` takes
+shard's snapshots. A UI change drifts both gates, and `make snapshots-approve` takes
 both, each from its own run of HEAD; commit the images together
 with the change that caused them. References never come from a Mac: they are the
 runner's, rendered at its 1x scale on its macOS, and a Mac on another macOS or
-display scale draws differently everywhere, so `make snapshots-ci` on a
+display scale draws differently everywhere, so `make snapshots-smoke` on a
 Mac only shows how it would draw. The runner's image and the pinned Xcode are a
 deliberate refresh here too, approved with the baselines in a commit of their
 own.
@@ -502,13 +521,13 @@ keeps its picture as plain evidence (`run.picture(<window>, <name>)`). An API-ti
 numbers in UTC and US English with scroll bars always shown, as `--snapshot`
 does, so a checkpoint reads the same on every machine that draws it alike.
 
-**The gate.** `e2e-api` (`scripts/snapshots.sh checkpoints`) runs every
+**The gate.** `test-e2e` (`scripts/snapshots.sh checkpoints`) runs every
 API-tier scenario four at a time, twice, and fails when a scenario fails, when
 the two runs took different pictures (reported in its
 `checkpoints-report` artifact as `determinism/`, like two `--snapshot`
 renders that differ), and on any drift of a checkpoint from its approved
 baseline in `Tests/Checkpoints/<scenario>/`, by the rule and in the report
-`ui-snapshots` uses (see [UI snapshot baselines](#ui-snapshot-baselines)): a changed, new or removed
+`snapshots` uses (see [UI snapshot baselines](#ui-snapshot-baselines)): a changed, new or removed
 checkpoint fails until approved. The job, from a clean runner to the answer,
 takes about four minutes with the build cache, so it runs on every push to a
 pull request. On the runner, whose display is 1024 by 768, it hides the Dock
@@ -524,15 +543,15 @@ untrusted as the hermetic copy is on a Mac. `--launch open` runs the app
 outside the sandbox, so the harness refuses it on a Mac that holds Athina
 data. The job does grant the hermetic copy's identifier Screen Recording, and
 only that, in the runner's TCC database, so a checkpoint is captured with
-ScreenCaptureKit, glass, title bar and toolbar included, as `ui-snapshots`
+ScreenCaptureKit, glass, title bar and toolbar included, as `snapshots`
 captures a snapshot.
 
-**Approving an intended change.** Push the change and let `e2e-api` fail on
-the drift, look at the report, then run `make approve`
+**Approving an intended change.** Push the change and let `test-e2e` fail on
+the drift, look at the report, then run `make snapshots-approve`
 (`scripts/snapshots.sh checkpoints-approve [<run id>]` takes these alone),
 which downloads the `checkpoints` artifact of HEAD's newest CI run and makes
 `Tests/Checkpoints` match it the way it makes `Tests/Snapshots` match the
-`ui-snapshots` renders. The job publishes the artifact only once
+`snapshots` renders. The job publishes the artifact only once
 both runs passed and agree, it names the source tree it was taken from, and
 approving refuses any tree but HEAD's. Commit the images with the change that
 caused them. Baselines never come from a Mac: on a Mac a checkpoint is

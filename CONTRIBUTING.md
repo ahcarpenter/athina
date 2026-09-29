@@ -12,7 +12,7 @@ coding agents, with pointers into these docs.
 - Xcode 26 or later with its command line tools (`swift`, `codesign`)
 - For development: bash 4 or newer first on `PATH` (macOS ships 3.2; `brew
   install bash`), which the end-to-end harness runs on; `gh`,
-  signed in, which `make approve` downloads CI's renders with; and, for
+  signed in, which `make snapshots-approve` downloads CI's renders with; and, for
   the end-to-end harness's real-screen tier, Screen Recording and
   Accessibility granted to the terminal that runs it (see [Permissions](README.md#permissions)).
   `make doctor` names whatever is missing
@@ -43,18 +43,17 @@ make doctor                  # start here: names what this Mac is missing (Xcode
 make                         # lists every command with its variables under it, grouped Everyday and Occasional
 make build                   # builds build/Athina.app, the development bundle (make all is the same)
 make run                     # builds and launches a replay: recorded fixtures, no network, no key, no spend (TIME_SCALE=60 runs its clock faster)
-make test                    # runs swift test, the replayed loop and the fixture freshness check included (FILTER=<name> for some), then checks a build without the ControlAPI trait carries no control API, as CI's build-and-test does
+make test                    # runs swift test, the replayed loop and the fixture freshness check included (FILTER=<name> for some), then checks a build without the ControlAPI trait carries no control API, as CI's test check does
 make test-e2e                # runs the end-to-end scenarios, replays only (SCENARIO=<name>, JOBS=<n>; see docs/e2e.md)
 make snapshots               # the smoke set drawn on this Mac at HEAD and at main, and every changed screen reported
-make check                   # lint, links, test and snapshots: the one command to run before a push, and what local validation runs
-make approve                 # after an intended UI change, takes the ui-snapshots baselines, smoke references and e2e checkpoints from CI's runs of HEAD, all or none, listing each image before it writes it (see docs/ci.md)
-make lint                    # checks every Swift file against the style without changing it, as CI does
-make links                   # checks every relative link and anchor in the Markdown resolves, offline, as CI's lint does
+make check                   # lint, test and snapshots: the one command to run before a push, and what local validation runs
+make snapshots-approve       # after an intended UI change, takes the snapshots baselines, smoke references and e2e checkpoints from CI's runs of HEAD, all or none, listing each image before it writes it (see docs/ci.md)
+make lint                    # checks every Swift file against the style without changing it, then that every relative link and anchor in the Markdown resolves, offline, as CI does
 make format                  # formats every Swift file in place to Google's Swift style (see docs/code-style.md)
 
 make run-live SPEND=1        # builds and launches the live app, replacing only the copy this checkout's run-live or record launched (spends API credits, up to the spend cap it prints first; refused without SPEND=1)
 make record SPEND=1          # the same, writing every model call to a fixture file (spends API credits; refused without SPEND=1)
-make snapshots-ci            # the UI smoke test as CI runs it, compared with the runner's references, which a Mac unlike the runner drifts from
+make snapshots-smoke         # the UI smoke test as CI runs it, compared with the runner's references, which a Mac unlike the runner drifts from
 make icons                   # rebuilds the app icon and the README's copy of it from AthinaMark.svg, and the menu bar mark from AthinaOwl.svg (their outputs are committed, so a plain build never needs it)
 make measure                 # samples the running app's CPU and memory for 60 seconds (PID=<pid> when several run)
 make release                 # builds, signs, notarizes, and packages a direct-download release into build/release (see docs/releasing.md)
@@ -179,26 +178,27 @@ For example `feat(history): search past suggestions`,
 
 ## How a change reaches main
 
-1. **Before the push**, `make check` runs `make lint`, `make links`,
-   `make test` and `make snapshots`, which draws the UI smoke set on this Mac at HEAD and
-   at main and reports every screen the change altered, added or removed.
-   Local validation never runs the full `ui-snapshots` gate, the checkpoint
-   gate or `make approve`, which only CI proves, nor the Xcode project steps.
+1. **Before the push**, `make check` runs `make lint`, `make test` and
+   `make snapshots`, which draws the UI smoke set on this Mac at HEAD and at
+   main and reports every screen the change altered, added or removed.
+   Local validation never runs the full `snapshots` gate, the checkpoint gate
+   or `make snapshots-approve`, which only CI proves, nor the Xcode project steps.
 2. **On the pull request**, opened as a draft, CI runs the fast lane,
-   `build-and-test`, `lint`, `e2e-api` and `ui-snapshots-smoke`, on every
-   push, and a newer push cancels the runs still going.
+   `test`, `lint`, `test-e2e` and `snapshots-smoke`, each named for its make
+   target, on every push, and a newer push cancels the runs still going.
 3. **Ready for review**: once the fast lane passes, mark the pull request
-   ready (`gh pr ready <number>`), which runs `ui-snapshots`, the
-   full-fidelity gate, on four runners, and runs it on every push after. The
+   ready (`gh pr ready <number>`), which runs `snapshots`, the full-fidelity
+   gate, on four runners, and runs it on every push after; on a draft it
+   passes without rendering and its job summary says it skipped. The
    `main` ruleset requires all five checks at the pull request's head, and
    `pr-title`, which checks the title on every push and every edit of it. A
    pull request that changes only documentation runs `lint` and `pr-title`
    alone and reports the other four as skipped, which passes them (see [Docs-only pull
    requests](docs/ci.md#docs-only-pull-requests)).
 4. **An intended UI change** fails the image gates until it is approved: read
-   each report, then `make approve` takes the `ui-snapshots` baselines, the
-   smoke references and the e2e checkpoints from CI's runs of HEAD, all or
-   none, naming any run it is missing. Commit the images with the change.
+   each report, then `make snapshots-approve` takes the `snapshots`
+   baselines, the smoke references and the e2e checkpoints from CI's runs of
+   HEAD, all or none, naming any run it is missing. Commit the images with the change.
    Approve only a drift the change meant.
 5. **The merge queue** lands it: once the pull request is green,
    `gh pr merge --auto --squash <number>`, or the Merge when ready button,

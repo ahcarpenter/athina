@@ -8,7 +8,7 @@
 #                   are the same picture, then fail on any drift from the
 #                   baselines; with k/n, only the snapshots CI shard k of n
 #                   renders and compares (SnapshotShard, in Sources/SnapshotDiff)
-#   smoke [<k>/<n>] what CI's ui-snapshots-smoke runs: draw every snapshot in
+#   smoke [<k>/<n>] what CI's snapshots-smoke runs: draw every snapshot in
 #                   the test process with swift-snapshot-testing and fail on any
 #                   drift from its reference image; with k/n, only the snapshots
 #                   shard k of n draws, by the SnapshotShard table the full gate
@@ -20,12 +20,12 @@
 #                   added or was removed; fails only when a snapshot could not
 #                   be drawn
 #   checkpoints [<athina-e2e option> ...]
-#                   what CI's e2e-api job runs: every API-tier scenario of the
+#                   what CI's test-e2e job runs: every API-tier scenario of the
 #                   end-to-end harness, twice, failing unless both runs pass and
 #                   their checkpoints are the same pictures, then on any drift of
 #                   a checkpoint from its baseline in Tests/Checkpoints; the
 #                   options go to `athina-e2e run`, as CI's --launch open does
-#   approve         what `make approve` runs: every approval below, each
+#   approve         what `make snapshots-approve` runs: every approval below, each
 #                   from the newest completed, non-cancelled run of HEAD that
 #                   publishes it; all three are fetched and checked before any
 #                   approved image changes, and when one has no run to take,
@@ -33,7 +33,7 @@
 #                   Every approval lists the images it would add, change or
 #                   delete before it writes any, and on a terminal asks first
 #   baselines-approve [<run>]
-#                   make the baselines match the renders of merge-checks run
+#                   make the baselines match the renders of snapshots.yml run
 #                   <run>, every shard's together, by default HEAD's newest
 #   smoke-approve [<run>]
 #                   make the smoke test's references match the set CI run <run>
@@ -198,11 +198,11 @@ preview_diff() {
 }
 
 preview_baselines() {
-  preview_diff "the ui-snapshots baselines" "$BASELINES" "$OUT/approved-run" "$OUT/approve-report"
+  preview_diff "the snapshots baselines" "$BASELINES" "$OUT/approved-run" "$OUT/approve-report"
 }
 
 preview_checkpoints() {
-  preview_diff "the e2e-api checkpoints" "$CHECKPOINT_BASELINES" "$CHECKPOINTS_OUT/approved-run" "$CHECKPOINTS_OUT/approve-report"
+  preview_diff "the test-e2e checkpoints" "$CHECKPOINT_BASELINES" "$CHECKPOINTS_OUT/approved-run" "$CHECKPOINTS_OUT/approve-report"
 }
 
 # The smoke set replaces its folder whole, so what changes is any file that
@@ -227,28 +227,28 @@ preview_smoke() {
   echo "$count"
 }
 
-# The ui-snapshots baselines, from merge-checks run <run> or HEAD's newest.
+# The snapshots baselines, from snapshots.yml run <run> or HEAD's newest.
 fetch_baselines() {
   local run="${1:-}" tree first count k dir run_tree extra
   need_gh
   if [ -z "$run" ]; then
-    run="$(newest_run merge-checks.yml "the ui-snapshots baselines" \
+    run="$(newest_run snapshots.yml "the snapshots baselines" \
       "push it to a pull request ready for review and let the run finish")" || exit 2
   fi
   tree="$(head_tree)" || exit 2
   # Each shard uploads the renders of its own snapshots as
-  # ui-snapshots-shard-<k>; approving takes them all together, and only
+  # snapshots-shard-<k>; approving takes them all together, and only
   # when every shard's are there, since a missing shard's snapshots would
   # read as removed and have their baselines deleted.
   rm -rf "$OUT/approved-run" "$OUT/approved-shards"
-  gh run download "$run" --pattern 'ui-snapshots-shard-*' --dir "$OUT/approved-shards" \
+  gh run download "$run" --pattern 'snapshots-shard-*' --dir "$OUT/approved-shards" \
     || die "could not download the renders of CI run $run"
-  first="$(cat "$OUT/approved-shards/ui-snapshots-shard-1/shard" 2>/dev/null)" \
+  first="$(cat "$OUT/approved-shards/snapshots-shard-1/shard" 2>/dev/null)" \
     || die "CI run $run has no renders from shard 1 to approve; a shard publishes them only when both its renders finished and agree"
   count="${first#*/}"
   mkdir -p "$OUT/approved-run" || die "could not make $OUT/approved-run"
   for k in $(seq 1 "$count"); do
-    dir="$OUT/approved-shards/ui-snapshots-shard-$k"
+    dir="$OUT/approved-shards/snapshots-shard-$k"
     [ "$(cat "$dir/shard" 2>/dev/null)" = "$k/$count" ] \
       || die "CI run $run has no renders from shard $k of $count to approve; a shard publishes them only when both its renders finished and agree"
     run_tree="$(cat "$dir/source-tree" 2>/dev/null)" \
@@ -265,21 +265,21 @@ apply_baselines() {
   diff_tool approve "$BASELINES" "$OUT/approved-run" >/dev/null
 }
 
-# The ui-snapshots-smoke references, from CI run <run> or HEAD's newest.
+# The snapshots-smoke references, from CI run <run> or HEAD's newest.
 fetch_smoke() {
   local run="${1:-}" tree run_tree
   need_gh
   if [ -z "$run" ]; then
-    run="$(newest_run ci.yml "the ui-snapshots-smoke references" "push it and let CI finish")" || exit 2
+    run="$(newest_run ci.yml "the snapshots-smoke references" "push it and let CI finish")" || exit 2
   fi
   tree="$(head_tree)" || exit 2
   # CI's one smoke runner uploads the set for every snapshot as
-  # ui-snapshots-smoke-set, only once every snapshot has rendered. A set
+  # snapshots-smoke-set, only once every snapshot has rendered. A set
   # naming a shard holds only that shard's snapshots, and approving it would
   # delete every other reference as removed, so it is refused.
   rm -rf "$SMOKE_OUT/approved-run" "$SMOKE_OUT/approved-set"
-  gh run download "$run" --name ui-snapshots-smoke-set --dir "$SMOKE_OUT/approved-set" \
-    || die "CI run $run has no ui-snapshots-smoke-set to approve; the smoke job publishes one only once every snapshot has rendered"
+  gh run download "$run" --name snapshots-smoke-set --dir "$SMOKE_OUT/approved-set" \
+    || die "CI run $run has no snapshots-smoke-set to approve; the smoke job publishes one only once every snapshot has rendered"
   [ ! -f "$SMOKE_OUT/approved-set/shard" ] \
     || die "CI run $run published the set of shard $(cat "$SMOKE_OUT/approved-set/shard") only, not every snapshot's"
   run_tree="$(cat "$SMOKE_OUT/approved-set/source-tree" 2>/dev/null)" \
@@ -299,18 +299,18 @@ apply_smoke() {
   cp "$SMOKE_OUT"/approved-run/*.png "$SMOKE_REFERENCES/"
 }
 
-# The e2e-api checkpoints, from CI run <run> or HEAD's newest.
+# The test-e2e checkpoints, from CI run <run> or HEAD's newest.
 fetch_checkpoints() {
   local run="${1:-}" tree run_tree
   need_gh
   if [ -z "$run" ]; then
-    run="$(newest_run ci.yml "the e2e-api checkpoints" "push it and let CI finish")" || exit 2
+    run="$(newest_run ci.yml "the test-e2e checkpoints" "push it and let CI finish")" || exit 2
   fi
   tree="$(head_tree)" || exit 2
   rm -rf "$CHECKPOINTS_OUT/approved-run"
   # The job publishes its checkpoints only once both runs passed and agree.
   gh run download "$run" --name checkpoints --dir "$CHECKPOINTS_OUT/approved-run" \
-    || die "CI run $run has no checkpoints to approve; its e2e-api job publishes them only once both runs of the API tier passed and took the same pictures"
+    || die "CI run $run has no checkpoints to approve; its test-e2e job publishes them only once both runs of the API tier passed and took the same pictures"
   run_tree="$(cat "$CHECKPOINTS_OUT/approved-run/source-tree" 2>/dev/null)" \
     || die "CI run $run does not name the source tree its checkpoints were taken from, so they cannot be matched to HEAD"
   [ "$run_tree" = "$tree" ] \
@@ -392,7 +392,7 @@ case "$command" in
     # test reads the shard from UI_SNAPSHOTS_SMOKE_SHARD, since swift test
     # passes a test no arguments.
     status=0
-    smoke_test "$ROOT" "$shard" "" "" snapshots-ci || status=1
+    smoke_test "$ROOT" "$shard" "" "" snapshots-smoke || status=1
     if [ -d "$SMOKE_OUT/references" ]; then
       git -C "$ROOT" rev-parse 'HEAD^{tree}' > "$SMOKE_OUT/references/source-tree"
       if [ -n "$shard" ]; then echo "$shard" > "$SMOKE_OUT/references/shard"; fi
@@ -401,7 +401,7 @@ case "$command" in
       echo "## UI snapshot smoke test${shard:+, shard $shard}"
       echo
       if [ -d "$SMOKE_OUT/drift" ] && [ -n "$(ls -A "$SMOKE_OUT/drift")" ]; then
-        echo "Drifted from its reference, or has none yet (the shard's ui-snapshots-smoke-report artifact holds each one's images):"
+        echo "Drifted from its reference, or has none yet (the shard's snapshots-smoke-report artifact holds each one's images):"
         echo
         for snapshot in "$SMOKE_OUT"/drift/*; do echo "- \`$(basename "$snapshot")\`"; done
       elif [ "$status" -eq 0 ]; then
@@ -414,11 +414,11 @@ case "$command" in
     drifted="$({ find "$SMOKE_OUT/drift" -mindepth 1 -maxdepth 1 2>/dev/null || true; } | wc -l | tr -d ' ')"
     drawn="$({ find "$SMOKE_OUT/references" -name '*.png' 2>/dev/null || true; } | wc -l | tr -d ' ')"
     if [ "$status" -eq 0 ]; then
-      echo "snapshots-ci: passed, all $drawn snapshots match their references"
+      echo "snapshots-smoke: passed, all $drawn snapshots match their references"
     elif [ "$drifted" -gt 0 ]; then
-      echo "snapshots-ci: failed, $drifted of $drawn snapshots drifted from the runner's references (expected on a Mac unlike the runner); build/snapshots-smoke/summary.md" >&2
+      echo "snapshots-smoke: failed, $drifted of $drawn snapshots drifted from the runner's references (expected on a Mac unlike the runner); build/snapshots-smoke/summary.md" >&2
     else
-      echo "snapshots-ci: failed, the smoke test did not finish; log build/logs/snapshots-ci.log" >&2
+      echo "snapshots-smoke: failed, the smoke test did not finish; log build/logs/snapshots-smoke.log" >&2
     fi
     exit "$status"
     ;;
@@ -428,14 +428,14 @@ case "$command" in
     # Every kind is fetched, each from its own run, before any is applied, so
     # a kind with no run to take leaves every approved set as it was.
     missing=()
-    ( fetch_baselines ) || missing+=("the ui-snapshots baselines (Tests/Snapshots): scripts/snapshots.sh baselines-approve")
+    ( fetch_baselines ) || missing+=("the snapshots baselines (Tests/Snapshots): scripts/snapshots.sh baselines-approve")
     ( fetch_smoke ) || missing+=("the smoke references (Tests/UISnapshotsSmokeTests): scripts/snapshots.sh smoke-approve")
-    ( fetch_checkpoints ) || missing+=("the e2e-api checkpoints (Tests/Checkpoints): scripts/snapshots.sh checkpoints-approve")
+    ( fetch_checkpoints ) || missing+=("the test-e2e checkpoints (Tests/Checkpoints): scripts/snapshots.sh checkpoints-approve")
     if [ "${#missing[@]}" -gt 0 ]; then
       {
         echo "snapshots: approved nothing; ${#missing[@]} of 3 approvals have no run of HEAD to take, for the reasons above:"
         for approval in "${missing[@]}"; do echo "  - $approval"; done
-        echo "snapshots: once each has its run, make approve again; to take only some, run their own commands (each takes a run id too)"
+        echo "snapshots: once each has its run, make snapshots-approve again; to take only some, run their own commands (each takes a run id too)"
       } >&2
       exit 2
     fi

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# `make lint` and `make format`: swift-format over every Swift file in the
-# checkout, tracked or new, that git does not ignore, with the .swift-format
-# configuration (docs/code-style.md). `lint` changes nothing and fails on any
-# finding, as CI's lint job does; `format` rewrites the files in place. Either
-# first warns when the selected Xcode is not the one CI lints with, and ends in
-# one summary line.
+# `make format`, and the Swift style half of `make lint` (scripts/lint.sh):
+# swift-format over every Swift file in the checkout, tracked or new, that git
+# does not ignore, with the .swift-format configuration (docs/code-style.md).
+# `lint` changes nothing and fails on any finding, as CI's lint job does;
+# `format` rewrites the files in place. Either first warns when the selected
+# Xcode is not the one CI lints with, and ends in one summary line.
 #
 # Usage: scripts/swift-format.sh lint|format
 set -uo pipefail

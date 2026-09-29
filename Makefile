@@ -8,8 +8,8 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help doctor build all run test test-e2e snapshots check approve lint \
-	links format run-live record snapshots-ci icons measure release clean
+.PHONY: help doctor build all run test test-e2e snapshots check snapshots-approve \
+	lint format run-live record snapshots-smoke icons measure release clean
 
 help:
 	@awk -f scripts/make-help.awk $(MAKEFILE_LIST)
@@ -53,17 +53,14 @@ snapshots: ## screenshots of your change vs main, drawn here, listing every diff
 	@scripts/snapshots.sh smoke-local $(BASE)
 ##= BASE=<commit> compare with this commit rather than main
 
-check: ## lint, links, test and snapshots: the one command to run before a push
+check: ## lint, test and snapshots: the one command to run before a push
 	@scripts/check.sh
 
-approve: ## accept CI's new screenshots of HEAD, listing each before writing it
+snapshots-approve: ## accept CI's new screenshots of HEAD, listing each before writing it
 	@scripts/snapshots.sh approve
 
-lint: ## the Swift style check, as CI runs it
-	@scripts/swift-format.sh lint
-
-links: ## every relative link and anchor in the Markdown resolves, offline, as CI checks it
-	@scripts/check-links.swift
+lint: ## the Swift style check and every Markdown link, offline, as CI runs them
+	@scripts/lint.sh
 
 format: ## fix the Swift style of every file in place
 	@scripts/swift-format.sh format
@@ -79,7 +76,7 @@ record: $(if $(filter 1,$(SPEND)),build) ## the app on your API key, saving each
 ##= SPEND=1 spend, up to the hourly cap in Settings > Models
 ##= RECORD_DIR=<dir> save the fixtures here; the app's recordings folder by default
 
-snapshots-ci: ## CI's screenshot check reproduced; drifts on a Mac unlike CI's
+snapshots-smoke: ## CI's snapshots-smoke check reproduced; drifts on a Mac unlike CI's
 	@scripts/snapshots.sh smoke $(SHARD)
 ##= SHARD=<k>/<n> only the screenshots CI's shard k of n draws
 

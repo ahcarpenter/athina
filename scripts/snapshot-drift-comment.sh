@@ -2,10 +2,10 @@
 # Posts the full UI snapshot gate's drift on its pull request as one comment,
 # updated in place on every later run: each drifted snapshot's approved image,
 # this run's render and their difference, inline (docs/ci.md "UI snapshot
-# baselines"). merge-checks.yml runs it once every shard has finished.
+# baselines"). snapshots.yml runs it once every shard has finished.
 #
 # Usage: scripts/snapshot-drift-comment.sh <reports>
-#   <reports> holds the shards' ui-snapshot-report-shard-<k> artifacts, one
+#   <reports> holds the shards' snapshots-report-shard-<k> artifacts, one
 #   folder each, as actions/download-artifact lays them out.
 #
 # Reads GH_TOKEN (a token that can push and comment), GITHUB_REPOSITORY,
@@ -107,7 +107,7 @@ cell() {
   echo "### UI snapshot drift"
   echo
   if [ "${#drifted[@]}" -eq 1 ]; then drift="1 snapshot drifts from its baseline"; else drift="${#drifted[@]} snapshots drift from their baselines"; fi
-  echo "$drift at $head ([run]($RUN_URL)). Changed pixels are red in the difference; select an image for its real size. When the change means it, run \`make approve\` and commit the images it takes (docs/ci.md \"UI snapshot baselines\")."
+  echo "$drift at $head ([run]($RUN_URL)). Changed pixels are red in the difference; select an image for its real size. When the change means it, run \`make snapshots-approve\` and commit the images it takes (docs/ci.md \"UI snapshot baselines\")."
 } >"$body"
 unlisted=()
 for dir in "${drifted[@]}"; do

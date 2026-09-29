@@ -16,7 +16,7 @@ scripts/e2e/athina-e2e warm          # once per machine: prepare the warm home
 scripts/e2e/athina-e2e list          # the scenarios and what each one proves
 scripts/e2e/athina-e2e run all       # run them; one JSON line of result each
 scripts/e2e/athina-e2e run --jobs 4 all   # up to 4 API-tier scenarios at once
-scripts/e2e/athina-e2e run --tier api     # every API-tier scenario, as CI's e2e-api runs them
+scripts/e2e/athina-e2e run --tier api     # every API-tier scenario, as CI's test-e2e runs them
 scripts/e2e/athina-e2e run --tier screen  # every real-screen scenario
 scripts/e2e/athina-e2e run toast-menu-answers
 scripts/e2e/athina-e2e doctor        # what is missing before a run
@@ -25,7 +25,7 @@ scripts/e2e/athina-e2e journal suggestions   # a named query over the last run
 
 Every run is replay only: no API key is read, no network is reachable inside
 the sandbox, and nothing is billed. The real-screen tier needs a person's
-screen and runs only on a Mac; CI's `e2e-api` job runs every API-tier scenario
+screen and runs only on a Mac; CI's `test-e2e` job runs every API-tier scenario
 on the runner, and compares their checkpoints with approved baselines (see
 [Checkpoints](ci.md#checkpoints)), and CI runs the harness's unit tests with the rest of the suite.
 `ATHINA_E2E_APP=<bundle>` runs the scenarios against another bundle than

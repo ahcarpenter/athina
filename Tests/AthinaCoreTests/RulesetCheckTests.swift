@@ -97,7 +97,7 @@ import Testing
     let answer = try withRequiredChecks(try answer()) { checks in
       checks.map { check in
         var check = check
-        if check["context"] as? String == "build-and-test" { check["integration_id"] = nil }
+        if check["context"] as? String == "test" { check["integration_id"] = nil }
         return check
       }
     }

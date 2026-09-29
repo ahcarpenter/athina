@@ -28,13 +28,13 @@ jobs:
       - uses: ./.github/actions/select-xcode
       - uses: ./.github/actions/swiftpm-cache
         with:
-          # The same debug build of the package as build-and-test's make test,
+          # The same debug build of the package as the test check's make test,
           # so main's newest cache of it serves, and this saves none of its own.
-          name: build-and-test
+          name: test
       - name: Replay the committed fixtures against the current prompts
         # ReplayLoopTests' theCommittedFixturesAreCurrent is the freshness
         # check; the rest of it and ReplayInterventionTests replay the set
-        # strictly through the loop, as build-and-test does on every push.
+        # strictly through the loop, as the test check does on every push.
         timeout-minutes: 20
         run: make test FILTER='ReplayLoopTests|ReplayInterventionTests'
       - name: Open or update the issue
