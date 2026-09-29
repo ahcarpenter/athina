@@ -6,9 +6,13 @@ name: PR title
 # name, an optional ! for a breaking change, then the description, such as
 # `fix(e2e): wait for the window`. Its own workflow, since it reruns when the
 # title is edited, which must not rerun or cancel ci.yml's fast lane. The main
-# ruleset requires it, so it also reports on every group the merge queue
-# builds, where it passes: a group has no title of its own, and the queued
-# pull request's title was checked at its head before it could enter.
+# ruleset requires it, so it also runs on every group the merge queue builds,
+# where it checks the subject of the group's head commit, the squash commit
+# that lands on main: GitHub builds it from the repository's squash commit
+# message setting, the pull request's title, or its one commit's title, with
+# " (#n)" appended (docs.github.com/en/pull-requests/reference/pull-request-merges
+# and docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/configuring-commit-squashing-for-pull-requests),
+# so a title edited after the pull request entered the queue is caught too.
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
@@ -19,10 +23,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: The title follows Conventional Commits
-        if: github.event_name == 'pull_request'
         env:
           TITLE: ${{ github.event.pull_request.title }}
+          MESSAGE: ${{ github.event.merge_group.head_commit.message }}
         run: |
+          if [[ "$GITHUB_EVENT_NAME" == merge_group ]]; then
+            TITLE="${MESSAGE%%$'\n'*}"
+          fi
           pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\(([a-z0-9][a-z0-9._/-]*)\))?!?: [^ ]'
           if [[ ! "$TITLE" =~ $pattern ]]; then
             echo "::error::The title \"$TITLE\" is not Conventional Commits 1.0.0: type(scope)!: description, where type is one of build, chore, ci, docs, feat, fix, perf, refactor, revert, style or test, the scope is optional, a ! before the colon marks a breaking change, and one space follows the colon (CONTRIBUTING.md \"Conventional Commits\")."
@@ -34,6 +41,3 @@ jobs:
             exit 1
           fi
           echo "The title follows Conventional Commits."
-      - name: A merge queue group passes
-        if: github.event_name == 'merge_group'
-        run: echo "The queued pull request's title was checked at its head."

@@ -116,8 +116,8 @@ requests out of date. A pull request enters it once its required checks
 pass at its head (step 5 above); the queue then tests it on top of main plus
 every pull request queued ahead of it, on a temporary
 `gh-readonly-queue/main/...` branch, and runs the three workflows there as a
-`merge_group` event, where `pr-title` passes at once, since a group has no
-title of its own. There is no draft there, so `ui-snapshots` always runs in
+`merge_group` event, where `pr-title` checks the subject of the squash commit
+that would land. There is no draft there, so `ui-snapshots` always runs in
 full, and no pull request, so no drift comment is posted and no image is
 approved from it: approval stays with the ready pull request's own runs. Each
 queue run keeps its own concurrency group, so a push to a pull request never
@@ -149,8 +149,10 @@ title scoped with the app's name, `athina` or `mentor`, since the title
 becomes the squash commit's subject on main. It runs again when the title is
 edited, in a workflow of its own so an edit never restarts the fast lane. The
 `main` ruleset requires it, so it also runs on every merge queue group, where
-it passes: the queued pull request's title was checked at its head, and the
-group has none of its own. It runs on GitHub's Ubuntu runner, in seconds.
+it checks the first line of the group's head commit, the squash commit that
+lands on main, so a title edited after the pull request entered the queue, or
+a one-commit pull request squashed under its commit's title, fails there. It
+runs on GitHub's Ubuntu runner, in seconds.
 
 **Dependency updates.** Renovate (`.github/renovate.json5`) opens the update
 pull requests, weekly on Monday morning: one for the GitHub Actions the
