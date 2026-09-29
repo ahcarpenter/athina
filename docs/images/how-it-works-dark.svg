@@ -13,7 +13,7 @@
 <text x="1240.0" y="62.0" font-size="22.0" font-weight="400" fill="#B9AC96" text-anchor="end">nothing is sensed before Allow, while paused, or on an excluded app</text>
 
 <line x1="12" y1="380.0" x2="1268.0" y2="380.0" stroke="#B9AC96" stroke-width="2" stroke-dasharray="10 8"/>
-<text x="40.0" y="428.0" font-size="22.0" font-weight="700" fill="#B9AC96" text-anchor="start">TO ANTHROPIC'S API, WITH YOUR OWN KEY</text>
+<text x="40.0" y="428.0" font-size="22.0" font-weight="700" fill="#B9AC96" text-anchor="start">TO YOUR MODEL PROVIDER, WITH YOUR OWN KEY</text>
 
 <rect x="40.0" y="92.0" width="300.0" height="230.0" rx="18" fill="#2A2423" stroke="#F1DEB7" stroke-width="2.5"/>
 

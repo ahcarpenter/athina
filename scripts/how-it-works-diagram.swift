@@ -188,7 +188,7 @@ func diagram(_ t: Theme, owl: (d: String, width: Double, height: Double)) -> Str
     \(lines(["nothing is sensed before Allow, while paused, or on an excluded app"], x: width - 40, y: 62, size: 22, leading: 0, fill: t.muted, anchor: "end"))
 
     <line x1="12" y1="\(dashY)" x2="\(width - 12)" y2="\(dashY)" stroke="\(t.muted)" stroke-width="2" stroke-dasharray="10 8"/>
-    \(lines(["TO ANTHROPIC'S API, WITH YOUR OWN KEY"], x: 40, y: bottomY - 22, size: 22, leading: 0, fill: t.muted, weight: 700))
+    \(lines(["TO YOUR MODEL PROVIDER, WITH YOUR OWN KEY"], x: 40, y: bottomY - 22, size: 22, leading: 0, fill: t.muted, weight: 700))
 
     \(card(x: c1, y: topY, w: cw, h: ch, shape: "", title: "", body: [], t))
     \(lines(["What you are doing"], x: c1 + 24, y: topY + 54, size: 30, leading: 0, fill: t.ink, weight: 600))
