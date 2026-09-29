@@ -472,8 +472,8 @@ launched for these requests, failed at 2.05 seconds there.
 - **Leftover documents.** TextEdit brings back at its next launch every window
   it was stopped with, so a run closes the documents earlier runs left in it
   before it opens its own, and its own at cleanup before TextEdit is stopped
-  (`sweep`), each found by its path under the runs directory, never by a
-  title the owner's own documents could share.
+  (`sweep`), each found by its path under the runs directory (or the `--out`
+  directory), never by a title the owner's own documents could share.
 - **A sandbox** denies the real `~/Library/Application Support/athina`, the
   `mentor` folder beside it that the app kept before the rename, and all
   outbound network, so no run can reach live data or make a live call.

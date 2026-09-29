@@ -766,12 +766,16 @@ has_window() {
 	grep -q "name=\"$2" <<<"$("$DRIVE" windows "$1" 2>/dev/null)"
 }
 
-# Closes every window of a pid showing a document under the runs directory:
-# this run's, and any an earlier run left behind. By the document's path, so a
-# document of the owner's with the same name is never touched.
+# Closes every window of a pid showing a document under the runs directory,
+# or under the evidence directory `--out` gave, where this run's documents
+# then are: this run's, and any an earlier run left behind. By the document's
+# path, so a document of the owner's with the same name is never touched.
 sweep_documents() {
-	"$DRIVE" sweep "$1" "$RUNS_ROOT" >>"$RUN_DIR/transcript.log" 2>&1 \
-		|| log "WARNING: a staged document would not close; see transcript.log"
+	local root
+	for root in "$RUNS_ROOT" ${OUT_ROOT:+"$OUT_ROOT"}; do
+		"$DRIVE" sweep "$1" "$root" >>"$RUN_DIR/transcript.log" 2>&1 \
+			|| log "WARNING: a staged document would not close; see transcript.log"
+	done
 	return 0
 }
 
