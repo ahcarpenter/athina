@@ -173,7 +173,7 @@ so its scenarios start sensing as the owner's own Athina does.
 
 ## Permissions
 
-The [README](../README.md#permissions) lists each permission, what it is used
+[Setup](setup.md#permissions) lists each permission, what it is used
 for, and how Athina works without it. Athina explains each in a window that
 opens at launch whenever one is missing, once the person has allowed it (see
 [Consent](#consent)). The window explains before it asks: no
