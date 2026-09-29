@@ -13,6 +13,13 @@
 #   ATHINA_NOTARY_PROFILE    the `xcrun notarytool store-credentials` keychain
 #                            profile to submit with
 #
+# One more says the build is the release of a version, not a snapshot of main:
+#
+#   ATHINA_RELEASE_TAG       the version tag this build releases, v<version>;
+#                            unset, the build is a snapshot of the commit, and a
+#                            version already tagged on another commit is built
+#                            as it stands
+#
 # Two more serve CI's release workflow (.github/workflows/release.yml), which
 # keeps the credentials in a keychain of its own:
 #
@@ -78,11 +85,17 @@ NOTES="$OUT/Athina-$VERSION-notes.md"
 WRITTEN_NOTES="docs/release-notes/$VERSION.md"
 say "Athina $VERSION (build $BUILD)"
 
-# A released version is never built again from other code: a copy that says
-# 0.1.0 has to be the 0.1.0 people downloaded.
-if tagged="$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" 2>/dev/null)" &&
-	[ "$tagged" != "$(git rev-parse HEAD)" ]; then
-	fail "Athina $VERSION was already released from ${tagged:0:12} (tag $TAG); raise CFBundleShortVersionString and CFBundleVersion in Resources/Info.plist"
+# A released version is never released again from other code: a copy that
+# says 0.1.0 has to be the 0.1.0 people downloaded. A snapshot of main between
+# releases still says the last release's version, and is only for checking.
+RELEASE_TAG="${ATHINA_RELEASE_TAG:-}"
+if [ -n "$RELEASE_TAG" ]; then
+	[ "$RELEASE_TAG" = "$TAG" ] ||
+		fail "ATHINA_RELEASE_TAG is $RELEASE_TAG, but Resources/Info.plist sets version $VERSION; release it as $TAG"
+	if tagged="$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" 2>/dev/null)" &&
+		[ "$tagged" != "$(git rev-parse HEAD)" ]; then
+		fail "Athina $VERSION was already released from ${tagged:0:12} (tag $TAG); release a new version through the release pull request (docs/releasing.md \"Each release\")"
+	fi
 fi
 # The release before this one, whose build number this one has to exceed,
 # since macOS and notarization order copies of one app by it.
@@ -362,7 +375,7 @@ fi
 
 # --- Release notes ------------------------------------------------------------
 
-# What changed: any notes written by hand and committed with the version,
+# What changed: any notes written by hand for the version and merged first,
 # outside build/release, which every run replaces, then the Conventional Commit
 # titles since the previous release, by type. Only the types people using
 # Athina notice are listed (as release-please does), and a breaking change

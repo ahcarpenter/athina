@@ -5,7 +5,8 @@ signed with a Developer ID, notarized by Apple, with no App Sandbox and no App
 Review; until the Developer ID exists, CI releases them unsigned instead (see
 [Unsigned releases](#unsigned-releases)). `make release` (`scripts/release.sh`) does all of it, on the owner's
 Mac or in CI, whose release workflow runs it on every push to main and
-publishes a release when a version tag is pushed (see [CI](#ci)):
+publishes a release for each version tag, which release-please makes (see
+[Each release](#each-release) and [CI](#ci)):
 
 1. Builds the Release configuration for Apple silicon and Intel in one binary,
    without the end-to-end harness's control API, and fails if the binary
@@ -72,35 +73,73 @@ secrets](#cis-secrets).
 
 ## Each release
 
-1. Raise `CFBundleShortVersionString` and `CFBundleVersion` in
-   `Resources/Info.plist` and merge it to main (`chore(release): 0.2.0`). The
-   commit titles since the last release become its notes; anything more to
-   say to the people using Athina goes, if you like, in
-   `docs/release-notes/<version>.md` (`## What's new`, say), committed with
-   the version and set before the titles. The notes live there, not in
-   `build/release`, which every `make release` replaces.
-2. Push the version's tag on that commit, and CI releases it (see [CI](#ci)):
+release-please (`.github/workflows/release-please.yml`, configured by
+`release-please-config.json` and `.release-please-manifest.json`) keeps one
+release pull request open, `chore(release): <version>`, and updates it on every
+push to main from the Conventional Commit titles since the last release. It
+proposes the next version: a `feat` raises the minor version and a `fix` or
+`perf` the patch, and a breaking change (`type!:`) the major version, or,
+before 1.0.0, the minor version. It sets that version as
+`CFBundleShortVersionString` in `Resources/Info.plist` and in the manifest,
+and the workflow then raises `CFBundleVersion` on the same branch to one more
+than main's, so every release has a higher build number. Its entry in
+`CHANGELOG.md`, which release-please writes and nobody edits, lists the
+titles by the headings the release notes use (a breaking change of a type the
+notes leave out, such as `refactor!:`, also appears under that type).
 
-   ```sh
-   git tag v0.2.0 && git push origin v0.2.0
-   ```
+1. When Athina is ready to release, read the release pull request: the
+   version and its `CHANGELOG.md` entry. Anything more to say to the people
+   using Athina goes, if you like, in `docs/release-notes/<version>.md`
+   (`## What's new`, say), merged to main first, and is set before the titles
+   in the notes the build writes. To release a version other than the one
+   proposed, such as 1.0.0, set `"release-as": "1.0.0"` in
+   `release-please-config.json` in a pull request, and take it out again
+   after that release.
+2. Close and reopen the release pull request, then take it through the merge
+   queue like any other ([Continuous integration](ci.md)). GitHub runs no
+   workflow for what the workflow's own `GITHUB_TOKEN` does, so a pull request
+   release-please opened or pushed to has no checks until a person reopens
+   it, which runs them all on its head; do it again after any later push to
+   main has updated it. release-please can open the pull request only while
+   the repository's Settings > Actions > General > Workflow permissions allows
+   GitHub Actions to create and approve pull requests.
+3. Once it lands, the next run of the workflow tags its commit `v<version>`
+   and makes the GitHub Release as a draft, with its changelog entry as the
+   notes, then calls the release workflow for the tag, which builds and
+   verifies, adds the download's files to the draft, sets its notes and
+   publishes it (see [CI](#ci)). Until then nobody but the repository's
+   writers sees the release.
 
-   The tag is what the next release's build number has to exceed and what
-   stops a version being built twice.
+If the release workflow fails, only the draft and its tag are left, which
+nobody outside sees. When the cause is outside the release's commit (a
+secret, say, or Apple's service), fix it and rerun the failed jobs of that
+release-please workflow run, which builds the same tag again. When the commit
+itself has to change, delete the draft and its tag (`gh release delete
+v<version> --cleanup-tag`) and land the fix on main; that version is never
+published, and the next release pull request proposes the one after it.
+
+The tag is what the next release's build number has to exceed and what
+stops a version being released twice. Between releases main still carries the
+last release's version, so the build of each push to main is a snapshot of
+it, not a release of it. Pushing a version tag by hand still
+releases, as below, but raising the version by hand leaves release-please's
+manifest behind, so a release goes through the release pull request.
 
 To release from the Mac instead, or to rehearse one first:
 
 1. From a clean checkout of the version's commit:
 
    ```sh
-   ATHINA_NOTARY_PROFILE=athina-notary make release
+   ATHINA_RELEASE_TAG=v0.2.0 ATHINA_NOTARY_PROFILE=athina-notary make release
    ```
 
    `ATHINA_RELEASE_IDENTITY=<name or SHA-1>` chooses the identity when the
    keychain holds more than one Developer ID Application identity; with one,
-   it is found. The release refuses a worktree with changes, a version whose
-   tag already points at another commit, and a build number no higher than
-   the last release's.
+   it is found. The release refuses a worktree with changes, and a build
+   number no higher than the last release's; `ATHINA_RELEASE_TAG` says it is
+   the release of that version, so it also refuses a tag other than
+   `v<version>` and a version whose tag already points at another commit.
+   Without it the build is a snapshot, as CI builds main.
 2. Check the release build itself end to end, in replay as always:
    `ATHINA_E2E_APP=build/release/Athina.app scripts/e2e/athina-e2e run all`.
    That covers the real-screen tier; step 1's check proves the build carries
@@ -109,9 +148,10 @@ To release from the Mac instead, or to rehearse one first:
    (`scripts/e2e/athina-e2e run all` without `ATHINA_E2E_APP`).
 3. To publish it yourself, make a GitHub Release of the disk image and the
    zip, for anyone who prefers it, with the checksums file and the debug
-   symbols, and `Athina-<version>-notes.md` as its notes, then push the tag
-   as above; CI then puts its own build's files in that release in place of
-   yours, and leaves your notes.
+   symbols, and `Athina-<version>-notes.md` as its notes, then push the
+   version's tag on that commit (`git tag v0.2.0 && git push origin v0.2.0`);
+   CI then puts its own build's files in that release in place of yours, and
+   leaves your notes.
 
 There are no automatic updates yet: a new version is downloaded and dragged
 over the old one.
@@ -144,9 +184,12 @@ runner:
   summary shows the notes, and the `release-build` artifact holds everything
   in `build/release` but `Athina.app` itself, which the disk image and the
   zip hold.
-- **On a pushed version tag** (`v1.2.3`), it first checks that the tag is
-  `v` and the version `Resources/Info.plist` sets, on a commit on main. Then
-  it builds and verifies, and publishes a GitHub Release named `Athina
+- **For a version tag** (`v1.2.3`), one release-please made, for which
+  `.github/workflows/release-please.yml` calls this workflow, or one pushed by
+  hand, it first checks that the tag is on a commit on main. Then it builds
+  with `ATHINA_RELEASE_TAG` set to the tag, so the build fails unless the tag
+  is `v` and the version `Resources/Info.plist` sets, and verifies, and
+  publishes a GitHub Release named `Athina
   <version>` with the disk image, the zip, the checksums file and the debug
   symbols, its notes `Athina-<version>-notes.md` without their title line.
   It releases in one of two modes, by the secrets below:
@@ -161,12 +204,19 @@ runner:
   never ships an unsigned release unnoticed.
 
 A release that already exists for the tag gets the files, replacing any of
-the same name, and keeps its own notes, so a release made by hand, or by
-release-please, which creates the release and its tag from the Conventional
-Commit titles, works as it is. release-please needs two things: a tag pushed
-with the workflow's own `GITHUB_TOKEN` starts no workflow, so it must run with
-a GitHub App's token or a fine-grained personal access token instead, and its
-version has to reach `Resources/Info.plist` (an `extra-files` entry).
+the same name. One made by hand keeps its own notes, so it works as it is.
+The draft release-please made, which it creates with its tag from the
+Conventional Commit titles, keeps its notes, its changelog entry, which stand
+in place of the build's list of the same titles (the Changes section) in
+`Athina-<version>-notes.md`; the rest of those notes go around them, so an
+unsigned release still opens with how to open it, then the install steps,
+any notes written by hand, the changelog entry and the checksums. The same
+edit publishes it; once published it keeps its notes, as a release made by
+hand does.
+release-please's tag is pushed with the
+workflow's own `GITHUB_TOKEN`, which starts no workflow, so the release-please
+workflow calls this one for it rather than a tag push starting it, and needs
+no other token.
 
 ### Unsigned releases
 
