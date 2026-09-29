@@ -208,6 +208,7 @@ a negative coordinate or a title starting with a dash included.
 | `arrange <pid> <title> <x> <y> <w> <h>` | move and size one of a pid's windows, in points from the top left of the main display, so a staged document sits where a recorded scene had it |
 | `close <pid> <title>` | close one of a pid's windows through its close button |
 | `sweep <pid> <directory>` | close every window of a pid whose document is a file under that directory, through its close button, which is how the documents a run staged in TextEdit come down, this run's and any an earlier run left behind, and never one of the owner's own however it is titled; exit 2 when one would not close |
+| `quit <pid>` | ask a pid to quit through the quit Apple Event its Quit menu item sends, and wait up to 10 seconds for it to exit, which is how a TextEdit the harness started comes down after `sweep`, with its window state saved so it brings back none of the closed documents; exit 2 when it is still running |
 | `menupick <pid> <row> <item>` | hover a submenu row and click one of its items with the pointer |
 | `tap session` | a listen-only event tap logging every mouse-down and what is under it, which is what attributes a dismissal to a real click rather than a timeout |
 | `tap pid <pid>` | the same for one app's mouse-downs |
@@ -473,7 +474,10 @@ launched for these requests, failed at 2.05 seconds there.
   it was stopped with, so a run closes the documents earlier runs left in it
   before it opens its own, and its own at cleanup before TextEdit is stopped
   (`sweep`), each found by its path under the runs directory (or the `--out`
-  directory), never by a title the owner's own documents could share.
+  directory), never by a title the owner's own documents could share. A
+  TextEdit the harness started is then quit by its pid (`quit`), not signalled:
+  one stopped by a signal right after the sweep can still bring the swept
+  documents back, its saved window state not yet caught up.
 - **A sandbox** denies the real `~/Library/Application Support/athina`, the
   `mentor` folder beside it that the app kept before the rename, and all
   outbound network, so no run can reach live data or make a live call.

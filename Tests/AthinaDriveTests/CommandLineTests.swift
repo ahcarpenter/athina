@@ -100,6 +100,8 @@ import Testing
       ["park", "12"],
       ["park", "1", "2", "3"],
       ["sweep", "12", "/a", "/b"],
+      ["quit"],
+      ["quit", "12", "13"],
       ["api", "ping", "timeout"],
     ] {
       #expect(exitCode(arguments) == 64, "\(arguments)")

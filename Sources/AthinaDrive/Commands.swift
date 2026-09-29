@@ -29,6 +29,7 @@ struct AthinaDrive: ParsableCommand {
       Arrange.self,
       Close.self,
       Sweep.self,
+      Quit.self,
       MenuPick.self,
       Tap.self,
       Announce.self,
@@ -444,6 +445,30 @@ struct Sweep: ParsableCommand {
     let left = mine().count
     say("swept pid \(pid.value) of documents under \(directory): closed \(closed), left \(left)")
     Darwin.exit(left == 0 ? 0 : 2)
+  }
+}
+
+struct Quit: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    abstract: "Ask a pid to quit as its Quit menu item would, and wait for it to exit.",
+    usage: "athina-drive quit <pid>"
+  )
+
+  @Argument var pid: ProcessID
+
+  func run() {
+    // The quit Apple Event goes to this one process, never to an app by name.
+    // An app quit this way saves its window state first, where one stopped by
+    // a signal can bring back at its next launch the windows a sweep closed a
+    // moment before.
+    guard let app = NSRunningApplication(processIdentifier: pid.value) else {
+      say("quit: pid \(pid.value) is not running")
+      return
+    }
+    _ = app.terminate()
+    for _ in 0..<40 where kill(pid.value, 0) == 0 { usleep(250_000) }
+    guard kill(pid.value, 0) != 0 else { fail("quit: pid \(pid.value) is still running", code: 2) }
+    say("quit pid \(pid.value)")
   }
 }
 

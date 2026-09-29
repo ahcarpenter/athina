@@ -518,6 +518,13 @@ stop_pid() {
 	return 0
 }
 
+# Quit an app by pid through its quit Apple Event, waiting a bounded time,
+# and stop it by signal only when it will not go.
+quit_pid() {
+	[ -n "$1" ] || return 0
+	"$DRIVE" quit "$1" >>"$RUN_DIR/transcript.log" 2>&1 || stop_pid "$1"
+}
+
 # Stop the run's Athina and launch it again in the same home with the same
 # arguments. A replay makes a new data directory for each launch, so the new one
 # starts from an empty journal, as the first did. The earlier launch's journal
@@ -558,7 +565,10 @@ cleanup() {
 	# next launch, into the owner's session and into the next run's staging.
 	[ -n "$TEXTEDIT_PID" ] && sweep_documents "$TEXTEDIT_PID"
 	for pid in ${HELPER_PIDS[@]+"${HELPER_PIDS[@]}"} ${WATCHER_PIDS[@]+"${WATCHER_PIDS[@]}"}; do stop_pid "$pid"; done
-	for pid in ${STAGED_PIDS[@]+"${STAGED_PIDS[@]}"}; do stop_pid "$pid"; done
+	# Staged apps are quit by pid as their Quit menu item would, so TextEdit
+	# saves its window state without the documents just swept: one stopped by
+	# a signal right after the sweep has brought them back at its next launch.
+	for pid in ${STAGED_PIDS[@]+"${STAGED_PIDS[@]}"}; do quit_pid "$pid"; done
 	stop_pid "$ATHINA_PID"
 	[ -n "${CONTROL_DIR:-}" ] && rm -rf "$CONTROL_DIR"
 	prefs_restore
