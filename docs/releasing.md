@@ -110,13 +110,18 @@ notes leave out, such as `refactor!:`, also appears under that type).
    publishes it (see [CI](#ci)). Until then nobody but the repository's
    writers sees the release.
 
-If the release workflow fails, only the draft and its tag are left, which
-nobody outside sees. When the cause is outside the release's commit (a
-secret, say, or Apple's service), fix it and rerun the failed jobs of that
-release-please workflow run, which builds the same tag again. When the commit
-itself has to change, delete the draft and its tag (`gh release delete
-v<version> --cleanup-tag`) and land the fix on main; that version is never
-published, and the next release pull request proposes the one after it.
+If a run fails between the tag and the release workflow's publish, only the
+draft and its tag are left, with no files, which nobody outside sees.
+Rerunning that release-please workflow run does not finish it: a rerun runs
+the workflow as it was, and release-please, having tagged already, reports no
+new release. When the cause is outside the release's commit (a secret, say,
+Apple's service or a workflow), fix it on main, then run the release workflow
+for the tag (`gh workflow run release.yml --ref main -f tag=v<version>`),
+which builds and verifies it, adds the files to the draft, sets its notes and
+publishes it, as the call from the release-please workflow would have. When
+the commit itself has to change, delete the draft and its tag (`gh release
+delete v<version> --cleanup-tag`) and land the fix on main; that version is
+never published, and the next release pull request proposes the one after it.
 
 The tag is what the next release's build number has to exceed and what
 stops a version being released twice. Between releases main still carries the
@@ -185,13 +190,15 @@ runner:
   in `build/release` but `Athina.app` itself, which the disk image and the
   zip hold.
 - **For a version tag** (`v1.2.3`), one release-please made, for which
-  `.github/workflows/release-please.yml` calls this workflow, or one pushed by
-  hand, it first checks that the tag is on a commit on main. Then it builds
-  with `ATHINA_RELEASE_TAG` set to the tag, so the build fails unless the tag
-  is `v` and the version `Resources/Info.plist` sets, and verifies, and
-  publishes a GitHub Release named `Athina
-  <version>` with the disk image, the zip, the checksums file and the debug
-  symbols, its notes `Athina-<version>-notes.md` without their title line.
+  `.github/workflows/release-please.yml` calls this workflow (or it is run by
+  hand for the tag when that run failed first, see [Each
+  release](#each-release)), or one pushed by hand, it first checks that the
+  tag is on a commit on main. Then it builds with `ATHINA_RELEASE_TAG` set
+  to the tag, so the build fails unless the tag is `v` and the version
+  `Resources/Info.plist` sets, and verifies, and publishes a GitHub Release
+  named `Athina <version>` with the disk image, the zip, the checksums file
+  and the debug symbols, its notes `Athina-<version>-notes.md` without their
+  title line.
   It releases in one of two modes, by the secrets below:
   - **Signed**, with every secret: signed with the Developer ID, notarized
     and stapled, as `make release` does with the identity and the profile.
