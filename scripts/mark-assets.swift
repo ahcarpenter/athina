@@ -5,254 +5,84 @@ import CryptoKit
 import Foundation
 
 // Builds every asset the app draws its mark from, out of the two committed
-// masters: Resources/Mark/AthinaMark.svg, the Athena drawing, for the app
-// icon, and Resources/Mark/AthinaOwl.svg, the owl, for the menu bar. Run it
-// with `make icons` whenever either changes; its outputs are committed so a
-// plain `make build` needs nothing but the repository.
+// masters: Resources/Mark/AthinaMark.svg, the app icon, and
+// Resources/Mark/AthinaGaze.svg, the Gaze, for the menu bar. Run it with
+// `make icons` whenever either changes; its outputs are committed so a plain
+// `make build` needs nothing but the repository.
 //
 // It produces:
 //
-//   Resources/AppIcon.icns           the app icon, full Athena artwork, every size
-//   Resources/Mark/MenuBarMark-*.pdf the menu bar mark, the owl's silhouette,
-//                                    one file per variant of MenuBarMark
+//   Resources/AppIcon.icns           the app icon, every size
+//   Resources/Mark/MenuBarMark-*.pdf the menu bar mark, one file per variant
+//                                    of MenuBarMark
 //   Resources/Mark/ReadmeIcon.png    the app icon as Finder draws it, for the
 //                                    top of README.md
 //
-// Two things about macOS 26 shape what it does. First, the system masks a
-// legacy .icns to the standard app icon shape itself and adds the shadow: a
-// full bleed square here is scaled into the 824 of 1024 body and rounded off,
-// in Finder, in the Dock and in About. So nothing here draws a rounded
-// rectangle or a shadow of its own. Second, a menu bar extra's image is
-// tinted by the system when it is a template, so the menu bar files carry
-// shape and alpha only, never colour.
+// Both masters are drawn by macOS's own SVG renderer, which draws vector
+// paths into a PDF, and every shape lives in them: this script only picks the
+// groups to draw, sizes them and writes the files. Two things about macOS 26
+// shape what it does. First, the system masks a legacy .icns to the standard
+// app icon shape itself and adds the shadow: a full bleed square here is
+// scaled into the 824 of 1024 body and rounded off, in Finder, in the Dock
+// and in About. So nothing here draws a rounded rectangle or a shadow of its
+// own around the icon. Second, a menu bar extra's image is tinted by the
+// system when it is a template, so the menu bar files carry shape and alpha
+// only, never colour.
 
 enum Failure: Error {
   case iconutil, pdfLengthChanged
-  case owlShape(String)
   case svg(String)
   case readmeIcon(String)
 }
 
-/// The owl master, read as the one path it is.
+/// A master, read as XML so that parts of it can be drawn alone.
 ///
-/// The icon master is drawn by macOS's own SVG renderer, but the owl is not
-/// drawn as it stands: its states are made from the four subpaths of its one
-/// path, so those are needed as geometry, and path data is all this reads. Any
-/// other shape in the master stops the build rather than being left out of
-/// every state without a word.
-enum OwlMaster {
-  static func path(contentsOf url: URL) throws -> CGPath {
-    let root = try XMLDocument(contentsOf: url).rootElement()
-    let drawn = root?.children?.compactMap { $0 as? XMLElement } ?? []
-    guard drawn.count == 1, let element = drawn.first, element.name == "path",
-      let d = element.attribute(forName: "d")?.stringValue
-    else {
-      throw Failure.svg(
-        "the owl master should be one <path> and nothing else; found "
-          + drawn.map { "<\($0.name ?? "?")>" }.joined(separator: ", ")
-      )
-    }
-    // The states are drawn in the path's own coordinates, so a transform
-    // would be ignored and the owl drawn somewhere it was never put.
-    guard [root, element].allSatisfy({ $0?.attribute(forName: "transform") == nil }) else {
-      throw Failure.svg("the owl master carries a transform, which this reader does not apply")
-    }
-    return try pathData(d)
-  }
-
-  static func pathData(_ d: String) throws -> CGMutablePath {
-    let path = CGMutablePath()
-    var tokens: [String] = []
-    var current = ""
-    for character in d {
-      if character.isLetter {
-        if !current.isEmpty {
-          tokens.append(current)
-          current = ""
-        }
-        tokens.append(String(character))
-      } else if character == "-" || character == "+" {
-        if current.hasSuffix("e") || current.hasSuffix("E") {
-          current.append(character)
-        } else {
-          if !current.isEmpty { tokens.append(current) }
-          current = String(character)
-        }
-      } else if character.isNumber || character == "." || character == "e" || character == "E" {
-        current.append(character)
-      } else {
-        if !current.isEmpty {
-          tokens.append(current)
-          current = ""
-        }
-      }
-    }
-    if !current.isEmpty { tokens.append(current) }
-
-    var point = CGPoint.zero
-    var start = CGPoint.zero
-    var command = "M"
-    var i = 0
-    func next() -> CGFloat {
-      defer { i += 1 }
-      return CGFloat(Double(tokens[i]) ?? 0)
-    }
-    while i < tokens.count {
-      if tokens[i].count == 1, let c = tokens[i].first, c.isLetter {
-        command = tokens[i]
-        i += 1
-      }
-      guard i < tokens.count || command.lowercased() == "z" else { break }
-      switch command {
-      case "M", "m":
-        var p = CGPoint(x: next(), y: next())
-        if command == "m" {
-          p.x += point.x
-          p.y += point.y
-        }
-        path.move(to: p)
-        point = p
-        start = p
-        command = command == "M" ? "L" : "l"
-      case "L", "l":
-        var p = CGPoint(x: next(), y: next())
-        if command == "l" {
-          p.x += point.x
-          p.y += point.y
-        }
-        path.addLine(to: p)
-        point = p
-      case "H", "h":
-        var x = next()
-        if command == "h" { x += point.x }
-        let p = CGPoint(x: x, y: point.y)
-        path.addLine(to: p)
-        point = p
-      case "V", "v":
-        var y = next()
-        if command == "v" { y += point.y }
-        let p = CGPoint(x: point.x, y: y)
-        path.addLine(to: p)
-        point = p
-      case "C", "c":
-        var c1 = CGPoint(x: next(), y: next())
-        var c2 = CGPoint(x: next(), y: next())
-        var p = CGPoint(x: next(), y: next())
-        if command == "c" {
-          c1.x += point.x
-          c1.y += point.y
-          c2.x += point.x
-          c2.y += point.y
-          p.x += point.x
-          p.y += point.y
-        }
-        path.addCurve(to: p, control1: c1, control2: c2)
-        point = p
-      case "Z", "z":
-        path.closeSubpath()
-        point = start
-        // Nothing follows a close but the next command.
-        if i < tokens.count, let c = tokens[i].first, !c.isLetter { i += 1 }
-      default:
-        throw Failure.svg(
-          "path command '\(command)' is not one this reader draws; the "
-            + "owl master is written with M, L, H, V, C and Z alone"
-        )
-      }
-    }
-    return path
-  }
-}
-
-/// The icon master, drawn by macOS's own SVG renderer.
-///
-/// The one thing added to the master before it is drawn is the per-size
-/// thickening: a stroke on the line art group in the line art's own colour.
-struct IconMaster {
+/// Each part is an element with an `id` directly under the root; `drawing`
+/// keeps the parts asked for and every element with no `id` (the gradients),
+/// and drops the other parts, so the page and its coordinates never change.
+struct Master {
+  var name: String
   var source: Data
+  /// The ids of the root's parts, in document order.
+  var parts: [String]
   /// The master's page, its `viewBox`, which the renderer maps onto whatever
   /// rectangle it is drawn into.
   var page: CGRect
 
   init(contentsOf url: URL) throws {
+    name = url.lastPathComponent
     source = try Data(contentsOf: url)
-    let numbers = try XMLDocument(data: source).rootElement()?
-      .attribute(forName: "viewBox")?.stringValue?
+    let root = try XMLDocument(data: source).rootElement()
+    parts = (root?.children ?? []).compactMap {
+      ($0 as? XMLElement)?.attribute(forName: "id")?.stringValue
+    }
+    let numbers = root?.attribute(forName: "viewBox")?.stringValue?
       .split(whereSeparator: { $0 == " " || $0 == "," }).compactMap { Double($0) }
     guard let n = numbers, n.count == 4 else {
-      throw Failure.svg("AthinaMark.svg carries no viewBox to draw its page from")
+      throw Failure.svg("\(name) carries no viewBox to draw its page from")
     }
     page = CGRect(x: n[0], y: n[1], width: n[2], height: n[3])
   }
 
-  /// The master ready to draw, its line art widened by `thicken` units.
+  /// The master with only `keep` of its parts, ready to draw.
   ///
-  /// Stroking the same outline widens it evenly on both sides, so the line
-  /// keeps its shape and only gains weight.
-  func image(thicken: Double) throws -> NSImageRep {
-    let document = try XMLDocument(data: source)
-    if thicken > 0 {
-      guard let lineart = try document.nodes(forXPath: "//*[@id='lineart']").first as? XMLElement,
-        let ink = lineart.attribute(forName: "fill")?.stringValue
-      else {
-        throw Failure.svg("AthinaMark.svg has no line art group with a fill to thicken")
-      }
-      for (name, value) in [
-        ("stroke", ink), ("stroke-width", "\(thicken)"), ("stroke-linejoin", "round"),
-      ] {
-        // An attribute node made from a name and a string is always one.
-        lineart.addAttribute(XMLNode.attribute(withName: name, stringValue: value) as! XMLNode)
-      }
+  /// The representation, not an NSImage around it: an NSImage caches a
+  /// bitmap of its own and draws that, a fraction of a pixel off the vector.
+  func drawing(of keep: Set<String>) throws -> NSImageRep {
+    for id in keep where !parts.contains(id) {
+      throw Failure.svg("\(name) has no part \"\(id)\"")
     }
-    // The representation, not an NSImage around it: an NSImage caches a
-    // bitmap of its own and draws that, a fraction of a pixel off the vector.
+    let document = try XMLDocument(data: source)
+    for child in document.rootElement()?.children ?? [] {
+      guard let element = child as? XMLElement,
+        let id = element.attribute(forName: "id")?.stringValue
+      else { continue }
+      if !keep.contains(id) { element.detach() }
+    }
     guard let rep = NSImage(data: document.xmlData)?.representations.first else {
-      throw Failure.svg("macOS could not read AthinaMark.svg")
+      throw Failure.svg("macOS could not read \(name)")
     }
     return rep
-  }
-
-  /// The drawing's own extent in the page's units, measured from the
-  /// renderer's own drawing of it at 8192 px on the long side, a fraction of
-  /// a unit out at most.
-  func inkExtent() throws -> CGRect {
-    let rep = try image(thicken: 0)
-    let scale = 8192 / max(page.width, page.height)
-    let width = Int((page.width * scale).rounded(.up))
-    let height = Int((page.height * scale).rounded(.up))
-    // An alpha-only bitmap of positive size is a format bitmap contexts support.
-    let context = CGContext(
-      data: nil,
-      width: width,
-      height: height,
-      bitsPerComponent: 8,
-      bytesPerRow: 0,
-      space: CGColorSpaceCreateDeviceGray(),
-      bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue
-    )!
-    NSGraphicsContext.saveGraphicsState()
-    NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-    rep.draw(in: CGRect(x: 0, y: 0, width: page.width * scale, height: page.height * scale))
-    NSGraphicsContext.restoreGraphicsState()
-    // A bitmap context made with no buffer of its own allocates one.
-    let alpha = context.data!.assumingMemoryBound(to: UInt8.self)
-    var (minX, minY, maxX, maxY) = (width, height, -1, -1)
-    for row in 0..<height {
-      for column in 0..<width where alpha[row * context.bytesPerRow + column] > 0 {
-        minX = min(minX, column)
-        maxX = max(maxX, column)
-        minY = min(minY, row)
-        maxY = max(maxY, row)
-      }
-    }
-    guard maxX >= 0 else { throw Failure.svg("AthinaMark.svg draws nothing") }
-    // The bitmap's first row is the top of the page, as SVG counts it.
-    return CGRect(
-      x: page.minX + Double(minX) / scale,
-      y: page.minY + Double(minY) / scale,
-      width: Double(maxX + 1 - minX) / scale,
-      height: Double(maxY + 1 - minY) / scale
-    )
   }
 }
 
@@ -262,43 +92,32 @@ let root = URL(
   fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : ".",
   isDirectory: true
 )
-let master = root.appendingPathComponent("Resources/Mark/AthinaMark.svg")
 let markDirectory = root.appendingPathComponent("Resources/Mark", isDirectory: true)
+let master = markDirectory.appendingPathComponent("AthinaMark.svg")
+let gazeMaster = markDirectory.appendingPathComponent("AthinaGaze.svg")
 
-let ink = CGColor(red: 0, green: 0, blue: 0, alpha: 1)
-
-let icon = try IconMaster(contentsOf: master)
-
-/// The drawing's own extent, which is what gets centred: the master's page has
-/// uneven margins around it.
-let content = try icon.inkExtent()
+let icon = try Master(contentsOf: master)
+guard icon.parts == ["field", "gaze"] else {
+  throw Failure.svg("AthinaMark.svg should be the field and the gaze; found \(icon.parts)")
+}
 
 // MARK: The app icon
 
-/// Full bleed, because macOS does the masking.
+/// How much larger the Gaze is drawn at each icon size.
 ///
-/// The drawing is kept clear of the corners, which the mask rounds away.
-let iconBackground = CGColor(red: 1, green: 1, blue: 1, alpha: 1)
-let iconHeightFraction = 0.86
-
-/// How much bigger and heavier the drawing is drawn at each icon size.
-///
-/// A 22 unit stroke in a 1143 tall drawing is under a pixel by the time the
-/// icon is 32 px, so without this the line art greys out instead of reading as
-/// lines. Drawing each size to suit itself is what the .icns format exists to
-/// allow; it is optical sizing, not a different drawing.
-func iconTuning(for size: Int) -> (fraction: Double, thicken: Double) {
+/// At 16 and 32 px the pupils and the disc's pinch are a pixel or two, so the
+/// Gaze grows a little into the field's margin there. Drawing each size to
+/// suit itself is what the .icns format exists to allow; it is optical sizing,
+/// not a different drawing.
+func gazeScale(for size: Int) -> Double {
   switch size {
-  case ...16: (0.98, 15)
-  case 17...32: (0.94, 11)
-  case 33...64: (0.90, 5)
-  case 65...128: (0.88, 2)
-  default: (iconHeightFraction, 0)
+  case ...16: 1.14
+  case 17...32: 1.08
+  default: 1
   }
 }
 
 func drawIcon(size: Int) throws -> CGImage {
-  let tuned = iconTuning(for: size)
   // 8-bit sRGB with premultiplied alpha is a format bitmap contexts support,
   // and every size drawn is positive, so neither this nor the sRGB space fails.
   let context = CGContext(
@@ -310,26 +129,25 @@ func drawIcon(size: Int) throws -> CGImage {
     space: CGColorSpace(name: CGColorSpace.sRGB)!,
     bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
   )!
-  context.setFillColor(iconBackground)
-  context.fill(CGRect(x: 0, y: 0, width: size, height: size))
-
   let canvas = Double(size)
-  let scale = canvas * tuned.fraction / content.height
-  // The whole page is drawn, placed so the drawing's own extent lands centred:
-  // drawing only that extent would clip the soft edge pixels just outside it
-  // and every thickened stroke. SVG counts y down the page and the bitmap up.
-  let drawnWidth = content.width * scale
-  let drawnHeight = content.height * scale
-  let top = (canvas + drawnHeight) / 2 + (content.minY - icon.page.minY) * scale
-  let page = CGRect(
-    x: (canvas - drawnWidth) / 2 - (content.minX - icon.page.minX) * scale,
-    y: top - icon.page.height * scale,
-    width: icon.page.width * scale,
-    height: icon.page.height * scale
-  )
   NSGraphicsContext.saveGraphicsState()
   NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
-  try icon.image(thicken: tuned.thicken).draw(in: page)
+  try icon.drawing(of: ["field"]).draw(in: CGRect(x: 0, y: 0, width: canvas, height: canvas))
+  // The Gaze sits a little above the field, lifted by a soft shadow straight
+  // down, the one depth the icon draws itself.
+  context.setShadow(
+    offset: CGSize(width: 0, height: -canvas * 0.014),
+    blur: canvas * 0.035,
+    color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.3)
+  )
+  // One transparency layer, so the Gaze casts one shadow as a whole rather
+  // than every iris and pupil casting its own onto the disc.
+  context.beginTransparencyLayer(auxiliaryInfo: nil)
+  let drawn = canvas * gazeScale(for: size)
+  try icon.drawing(of: ["gaze"]).draw(
+    in: CGRect(x: (canvas - drawn) / 2, y: (canvas - drawn) / 2, width: drawn, height: drawn)
+  )
+  context.endTransparencyLayer()
   NSGraphicsContext.restoreGraphicsState()
   // A bitmap context always has an image to make.
   return context.makeImage()!
@@ -373,286 +191,44 @@ func writeIcon() throws {
   process.waitUntilExit()
   guard process.terminationStatus == 0 else { throw Failure.iconutil }
   try FileManager.default.removeItem(at: iconset)
-  print(
-    """
-      Resources/AppIcon.icns  (\(sizes.count) sizes, drawing at \(iconHeightFraction) of the \
-    canvas)
-    """
-  )
+  print("  Resources/AppIcon.icns  (\(sizes.count) sizes, the Gaze on its field)")
 }
 
 // MARK: The menu bar mark
 
-// The menu bar shows the owl, the captain's own artwork, not a reduction of
-// the Athena drawing: it is a solid silhouette, so it sits among the menu
-// bar's other extras instead of reading lighter than all of them the way a
-// line drawing does at 16 points.
-//
-// Its states are made out of the drawing rather than hung off it. The owl's
-// eyes are the boldest thing in it at this size and they are what watching
-// means, so they carry the states: the silhouette never changes, and the item
-// keeps ONE width in every mode.
+// The menu bar shows the Gaze: two eyes drawn as one line, bold enough to sit
+// among the bar's other extras at 16 points. Its states are made out of the
+// eyes rather than hung off them, since the eyes are what watching means: the
+// outline never changes, and the item keeps ONE width in every mode.
 
-let owlMaster = root.appendingPathComponent("Resources/Mark/AthinaOwl.svg")
+let gaze = try Master(contentsOf: gazeMaster)
 
-/// The owl is one path made of four closed subpaths.
+/// The states, in the order the master draws them.
 ///
-/// They are told apart by what they are rather than by the order they happen to
-/// be written in, so a re-export of the artwork does not silently swap them.
-struct Owl {
-  var body: CGPath
-  var faceCutout: CGPath
-  var pupils: [CGPath]
-  /// The white of each eye, concentric with its pupil.
-  ///
-  /// Measured from the drawing: the cutout reaches 35.8 units from each pupil's
-  /// centre before the body's ink begins again.
-  var eyes: [CGPath]
-  var bounds: CGRect
-
-  static func read(_ path: CGPath) throws -> Owl {
-    // Copying a path, done below as each next subpath starts and after the
-    // last, cannot fail.
-    var subpaths: [CGPath] = []
-    var current = CGMutablePath()
-    path.applyWithBlock { pointer in
-      let e = pointer.pointee
-      switch e.type {
-      case .moveToPoint:
-        if !current.isEmpty { subpaths.append(current.copy()!) }
-        current = CGMutablePath()
-        current.move(to: e.points[0])
-      case .addLineToPoint: current.addLine(to: e.points[0])
-      case .addCurveToPoint:
-        current.addCurve(to: e.points[2], control1: e.points[0], control2: e.points[1])
-      case .addQuadCurveToPoint: current.addQuadCurve(to: e.points[1], control: e.points[0])
-      case .closeSubpath: current.closeSubpath()
-      @unknown default: break
-      }
-    }
-    if !current.isEmpty { subpaths.append(current.copy()!) }
-    guard subpaths.count == 4 else {
-      throw Failure.owlShape("expected 4 subpaths, found \(subpaths.count)")
-    }
-
-    let byArea = subpaths.sorted {
-      $0.boundingBoxOfPath.width * $0.boundingBoxOfPath.height
-        > $1.boundingBoxOfPath.width * $1.boundingBoxOfPath.height
-    }
-    let body = byArea[0]
-    let faceCutout = byArea[1]
-    // The pupils are the two small round ones, left first.
-    let pupils = byArea[2...].sorted { $0.boundingBoxOfPath.midX < $1.boundingBoxOfPath.midX }
-    for pupil in pupils {
-      let box = pupil.boundingBoxOfPath
-      guard abs(box.width - box.height) < 1, box.width < faceCutout.boundingBoxOfPath.width / 3
-      else {
-        throw Failure.owlShape("a pupil is not the round shape it should be: \(box)")
-      }
-    }
-    let eyeRadius = 35.8
-    let eyes = pupils.map { pupil -> CGPath in
-      let centre = pupil.boundingBoxOfPath
-      return CGPath(
-        ellipseIn: CGRect(
-          x: centre.midX - eyeRadius,
-          y: centre.midY - eyeRadius,
-          width: eyeRadius * 2,
-          height: eyeRadius * 2
-        ),
-        transform: nil
-      )
-    }
-    return Owl(
-      body: body,
-      faceCutout: faceCutout,
-      pupils: pupils,
-      eyes: eyes,
-      bounds: body.boundingBoxOfPath
-    )
-  }
-
-  /// Everything but the eyes: the silhouette with the face cut out of it.
-  ///
-  /// Every state starts here, which is why none of them can change the outline
-  /// or the width.
-  var base: CGPath { body.subtracting(faceCutout) }
-}
-
-let parts = try Owl.read(OwlMaster.path(contentsOf: owlMaster))
-
-/// What a state does to the owl's eyes.
-///
-/// The drawing carries the state; nothing is hung off the side of it.
-enum Eyes: String {
-  /// Both pupils where the artist put them.
-  case open
-  /// No pupils, so the eye cutouts read as closed. The captain's own words,
-  /// said of the sleeping state when idle and paused wore each other's
-  /// faces: "have it have no dots in it's eyes as if they're closed".
-  case closed
-  /// A lid down over the top of each eye, pupils still under it.
-  case halfLidded
-  /// Pupils pushed to one side: awake, looking away from what is in front.
-  case asideRight
-  /// Pupils grown to fill most of the eye: a wide stare.
-  case wide
-  /// One eye open and one closed.
-  case winking
-}
-
-/// Two z's drifting off the owl, in the style of the reference the captain
-/// sent: bold and geometric, square cut, the larger one nearest the owl and the
-/// smaller one rising away from it.
-///
-/// They sit in the clear upper left of the owl's own bounding box, which is
-/// empty in the drawing, so adding them does not widen the item. The width has
-/// to be the same in every state or the menu bar's other extras move when
-/// Athina's does.
-func zed(height: Double, at origin: CGPoint) -> CGPath {
-  // Proportions taken from the reference: a little taller than wide, one
-  // weight for all three strokes, square cut ends, and counters left open
-  // enough to survive a few pixels.
-  let width = height * 0.80
-  let t = height * 0.24
-
-  // Built with y running up, which is how a Z reads when it is written out,
-  // and then flipped into the drawing's own space, where y runs down the
-  // page. Doing the flip here rather than by hand in the numbers is what
-  // keeps the diagonal from coming out as an N.
-  let top = origin.y + height - t
-  let glyph = CGMutablePath()
-  glyph.addRect(CGRect(x: origin.x, y: top, width: width, height: t))
-  glyph.addRect(CGRect(x: origin.x, y: origin.y, width: width, height: t))
-  let diagonal = CGMutablePath()
-  diagonal.move(to: CGPoint(x: origin.x + width - t / 2, y: top))
-  diagonal.addLine(to: CGPoint(x: origin.x + t / 2, y: origin.y + t))
-  let band = diagonal.copy(
-    strokingWithWidth: CGFloat(t),
-    lineCap: .butt,
-    lineJoin: .miter,
-    miterLimit: 10
+/// Changing this list, and the master's groups with it, is the whole of
+/// changing the set: the modes, their names and the resolution that picks
+/// between them live in `MenuBarMark` and do not move.
+let set = ["watching", "idle", "paused", "excluded", "needsSomething", "held"]
+guard gaze.parts == ["outline"] + set else {
+  throw Failure.svg(
+    "AthinaGaze.svg should be the outline and one group per state, \(set); found \(gaze.parts)"
   )
-  let upright = glyph.union(band)
-
-  var flip = CGAffineTransform(translationX: 0, y: CGFloat(2 * origin.y + height))
-    .scaledBy(x: 1, y: -1)
-  return upright.copy(using: &flip) ?? upright
 }
 
-/// The pair, in the clear upper left of the owl's own bounding box: the larger
-/// nearest the owl and the smaller drifting away from it, as in the reference.
-var sleepMarks: CGPath {
-  zed(height: 72, at: CGPoint(x: 70, y: 74))
-    .union(zed(height: 50, at: CGPoint(x: 26, y: 20)))
-}
-
-func drawEyes(_ eyes: Eyes) -> CGPath {
-  var path = parts.base
-  func addPupil(_ index: Int, offsetBy dx: Double = 0, scaledBy factor: Double = 1) {
-    let box = parts.pupils[index].boundingBoxOfPath
-    let radius = box.width / 2 * factor
-    let disc = CGPath(
-      ellipseIn: CGRect(
-        x: box.midX + dx - radius,
-        y: box.midY - radius,
-        width: radius * 2,
-        height: radius * 2
-      ),
-      transform: nil
-    )
-    path = path.union(disc)
-  }
-  switch eyes {
-  case .open:
-    addPupil(0)
-    addPupil(1)
-  case .closed:
-    break
-  case .halfLidded:
-    // A drowsy eye closes from the top, and y runs down the page here, so
-    // the lid falls from the eye's own minY to just past its centre. It is
-    // cut to the eye's disc, so it can never spill past the cutout and
-    // change the silhouette, and the pupils still show beneath it.
-    for eye in parts.eyes {
-      let box = eye.boundingBoxOfPath
-      let lid = CGPath(
-        rect: CGRect(
-          x: box.minX - 1,
-          y: box.minY,
-          width: box.width + 2,
-          height: box.height * 0.56
-        ),
-        transform: nil
-      )
-      path = path.union(eye.intersection(lid))
-    }
-    addPupil(0)
-    addPupil(1)
-  case .asideRight:
-    // Far enough to sit against the rim of the eye without touching it.
-    let shift = 13.0
-    addPupil(0, offsetBy: shift)
-    addPupil(1, offsetBy: shift)
-  case .wide:
-    addPupil(0, scaledBy: 1.7)
-    addPupil(1, scaledBy: 1.7)
-  case .winking:
-    addPupil(0)
-    // The closed eye is filled in, so only one eye is still looking.
-    path = path.union(parts.eyes[1])
-  }
-  return path
-}
-
-/// The item's box in points, the size the menu bar gives a symbol, and the
-/// owl's width at that height from its own proportions.
+/// The item's box in points: the height the menu bar gives a symbol, and the
+/// Gaze's width at the height it is drawn, rounded up to a half point.
 ///
 /// The drawing is held off the top and bottom of that box by `menuBarInset`,
 /// so the item sits inside its box the way the system's own extras do rather
-/// than reading as the tallest thing in the bar. The box keeps its size
-/// whatever the inset is, and every state is drawn at the same scale, so the
-/// item is still one width in every mode.
+/// than reading as the tallest thing in the bar. Every state is drawn at the
+/// same scale in the same box, so the item is one width in every mode.
 let menuBarHeight = 16.0
-let menuBarInset = 1.0
-let menuBarWidth = (menuBarHeight * parts.bounds.width / parts.bounds.height * 2).rounded() / 2
-
-/// Which treatment each state gets.
-///
-/// Changing this table is the whole of changing the set: the modes, their
-/// names and the resolution that picks between them live in `MenuBarMark` and
-/// do not move.
-let set: [(mark: String, eyes: Eyes, asleep: Bool)] = [
-  ("watching", .open, false),
-  // Idle is the state that says the user has stepped away, so it is the
-  // sleeping one: it takes the z's as well as the eyes.
-  ("idle", .closed, true),
-  ("paused", .halfLidded, false),
-  ("excluded", .asideRight, false),
-  ("needsSomething", .wide, false),
-  ("held", .winking, false),
-]
-
-func drawMenuBarMark(_ eyes: Eyes, asleep: Bool, into context: CGContext) {
-  context.setAllowsAntialiasing(true)
-  context.setFillColor(ink)
-  context.saveGState()
-  let scale = (menuBarHeight - menuBarInset * 2) / parts.bounds.height
-  // The owl's own extent, centred in the item's box. SVG counts y down the
-  // page and a PDF counts it up, so the drawing is flipped as well as
-  // scaled, or the owl stands on its head.
-  let drawnWidth = parts.bounds.width * scale
-  let drawnHeight = parts.bounds.height * scale
-  context.translateBy(
-    x: CGFloat((menuBarWidth - drawnWidth) / 2),
-    y: CGFloat(menuBarHeight - (menuBarHeight - drawnHeight) / 2)
-  )
-  context.scaleBy(x: CGFloat(scale), y: CGFloat(-scale))
-  context.translateBy(x: -parts.bounds.minX, y: -parts.bounds.minY)
-  context.addPath(asleep ? drawEyes(eyes).union(sleepMarks) : drawEyes(eyes))
-  context.fillPath(using: .winding)
-  context.restoreGState()
-}
+let menuBarInset = 1.5
+let menuBarDrawn = CGSize(
+  width: (menuBarHeight - menuBarInset * 2) * gaze.page.width / gaze.page.height,
+  height: menuBarHeight - menuBarInset * 2
+)
+let menuBarWidth = (menuBarDrawn.width * 2).rounded(.up) / 2
 
 /// Core Graphics stamps every PDF it writes with the time it was written and an
 /// id derived from it, so two runs over the same drawing produce two different
@@ -713,20 +289,30 @@ func makeReproducible(_ url: URL) throws {
 /// PDF, so one file serves every display scale the menu bar is drawn at, and
 /// so it stays a template: shape and alpha only, no colour of its own.
 func writeMenuBarMarks() throws {
-  for (mark, eyes, asleep) in set {
+  for mark in set {
     let url = markDirectory.appendingPathComponent("MenuBarMark-\(mark).pdf")
     var page = CGRect(x: 0, y: 0, width: menuBarWidth, height: menuBarHeight)
     guard let consumer = CGDataConsumer(url: url as CFURL),
       let context = CGContext(consumer: consumer, mediaBox: &page, nil)
     else { throw Failure.iconutil }
     context.beginPDFPage(nil)
-    drawMenuBarMark(eyes, asleep: asleep, into: context)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+    try gaze.drawing(of: ["outline", mark]).draw(
+      in: CGRect(
+        x: (menuBarWidth - menuBarDrawn.width) / 2,
+        y: menuBarInset,
+        width: menuBarDrawn.width,
+        height: menuBarDrawn.height
+      )
+    )
+    NSGraphicsContext.restoreGraphicsState()
     context.endPDFPage()
     context.closePDF()
     try makeReproducible(url)
   }
   print(
-    "  Resources/Mark/MenuBarMark-*.pdf  (\(set.count) states of the owl, "
+    "  Resources/Mark/MenuBarMark-*.pdf  (\(set.count) states of the Gaze, "
       + "\(menuBarWidth) x \(Int(menuBarHeight)) pt, one width in every mode)"
   )
 }
@@ -857,15 +443,15 @@ func samePicture(_ a: NSBitmapImageRep, _ b: NSBitmapImageRep) -> Bool {
 /// that is what this records: `MarkAssetTests` fails when any of the three has
 /// changed and `make icons` has not been run.
 ///
-/// The script is in the record because most of the drawing lives here rather
-/// than in the masters: the inset, the eye treatments, the z's and the
-/// per-size thickening are all constants in this file, and an edit to any of
-/// them leaves the committed assets stale with nothing else to catch it. The
-/// output is a pure function of these three on any one Mac, so rerunning
-/// after an edit rewrites one line here and leaves the drawn files untouched.
+/// The script is in the record because it still decides how the masters are
+/// drawn: the icon's per-size scale and shadow, and the menu bar's box and
+/// inset are constants in this file, and an edit to any of them leaves the
+/// committed assets stale with nothing else to catch it. The output is a pure
+/// function of these three on any one Mac, so rerunning after an edit
+/// rewrites one line here and leaves the drawn files untouched.
 func writeProvenance() throws {
   let generator = URL(fileURLWithPath: #filePath)
-  let digest = try [master, owlMaster, generator].map { url -> String in
+  let digest = try [master, gazeMaster, generator].map { url -> String in
     let data = try Data(contentsOf: url)
     return url.lastPathComponent + " "
       + SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -876,7 +462,7 @@ func writeProvenance() throws {
     # scripts/mark-assets.swift; run `make icons` after changing a master, the
     # script or the variant set, never edit this by hand.
     \(digest)
-    variants \(set.map(\.mark).joined(separator: " "))
+    variants \(set.joined(separator: " "))
 
     """
   try text.write(

@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4.75 16.75 54.5 30.5">
+  <!-- The Gaze: Athina's menu bar mark, two eyes drawn as one line.
+
+       On a 64-unit grid, two circles of radius 13 centred at (20, 32) and
+       (44, 32), their union outlined with one 4.5 stroke; the circles meet at
+       (32, 27) and (32, 37). The viewBox is the stroked outline's extent.
+
+       The outline is every state's; each group is one state's eyes, named for
+       its MenuBarMark case. scripts/mark-assets.swift draws the outline with
+       one group at a time, so every state has the same outline and the same
+       width. Black here only because a template image is shape and alpha:
+       macOS draws it in the menu bar's own colour. -->
+  <path id="outline" d="M32 27 A13 13 0 1 0 32 37 A13 13 0 1 0 32 27 Z" fill="none" stroke="#000" stroke-width="4.5" stroke-linejoin="round"/>
+  <!-- Pupils a little in and down: looking at the work below the menu bar. -->
+  <g id="watching" fill="#000">
+    <circle cx="21" cy="35" r="4.6"/>
+    <circle cx="43" cy="35" r="4.6"/>
+  </g>
+  <!-- The person stepped away: eyes closed, curved, asleep. -->
+  <g id="idle" fill="none" stroke="#000" stroke-width="4" stroke-linecap="round">
+    <path d="M13.5 31 Q20 38.5 26.5 31 M37.5 31 Q44 38.5 50.5 31"/>
+  </g>
+  <!-- Stopped, or not allowed to watch: eyes shut to a line. -->
+  <g id="paused" fill="none" stroke="#000" stroke-width="4" stroke-linecap="round">
+    <path d="M13.2 32 H26.8 M37.2 32 H50.8"/>
+  </g>
+  <!-- An excluded app is in front: looking away, up and to the left. -->
+  <g id="excluded" fill="#000">
+    <circle cx="15.5" cy="28.5" r="4.2"/>
+    <circle cx="39.5" cy="28.5" r="4.2"/>
+  </g>
+  <!-- A permission or key is missing: open eyes that cannot see. -->
+  <g id="needsSomething"/>
+  <!-- Sensing but not advising for now: half-lidded, pupils under the lids.
+       One lid over both eyes, the outline's own upper half down to y 32, so
+       it meets the stroke with no seam and fills the pinch between them. -->
+  <g id="held" fill="#000">
+    <path d="M7 32 A13 13 0 0 1 32 27 A13 13 0 0 1 57 32 Z"/>
+    <circle cx="20" cy="37.2" r="3.8"/>
+    <circle cx="44" cy="37.2" r="3.8"/>
+  </g>
+</svg>

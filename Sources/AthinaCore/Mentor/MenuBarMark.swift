@@ -3,10 +3,11 @@ import Foundation
 /// Which variant of Athina's mark the menu bar shows, and the pure function
 /// that decides it.
 ///
-/// The menu bar's mark is one drawing, the owl of `Resources/Mark/AthinaOwl.svg`.
-/// Every variant keeps that silhouette and the same width, so the modes read as
-/// one family rather than as six different icons, and so the item never shifts
-/// the menu bar's other extras sideways when Athina's state changes.
+/// The menu bar's mark is one drawing, the Gaze of `Resources/Mark/AthinaGaze.svg`:
+/// two eyes drawn as one line. Every variant keeps that outline and the same
+/// width and changes only the eyes, so the modes read as one family rather
+/// than as six different icons, and so the item never shifts the menu bar's
+/// other extras sideways when Athina's state changes.
 ///
 /// Two signals already carried elsewhere decide the variant, and this function
 /// is the only place they are combined: `SensingMode` says what the pipeline is

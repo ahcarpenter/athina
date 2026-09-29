@@ -87,7 +87,7 @@ struct ConsentView: View {
         VStack(alignment: .leading, spacing: 10) {
           ConsentMarkRow(
             mark: .watching,
-            text: "While Athina watches, the owl in the menu bar has its eyes open."
+            text: "While Athina watches, the eyes in the menu bar are open."
           )
           ConsentMarkRow(
             mark: .paused,
@@ -140,14 +140,14 @@ struct ConsentView: View {
     }
   }
 
-  /// What the lidded owl means, and how to pause, with the pause shortcut
+  /// What the shut eyes mean, and how to pause, with the pause shortcut
   /// when the person has one.
   private var pausedText: String {
     let pause =
       state.settings.pauseShortcut.map { "from its menu or with \($0.displayString)" }
       ?? "from its menu"
     return
-      "While it is paused or not allowed to watch, its eyes are lidded. Pause it at any time \(pause)."
+      "While it is paused or not allowed to watch, its eyes are shut. Pause it at any time \(pause)."
   }
 
   /// What the journal keeps, from the settings in force, so the window

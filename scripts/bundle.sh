@@ -66,11 +66,22 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Athina"
 
 cp "$ROOT/Resources/Info.plist" "$APP/Contents/Info.plist"
+# The asset catalog, compiled to Assets.car: Athina's AccentColor, which
+# Info.plist names, so under Multicolor (System Settings > Appearance) the
+# system draws Athina's controls in it; any other accent the person picks
+# still wins (docs/design.md).
+scripts/quietly.sh assets xcrun actool "$ROOT/Resources/Assets.xcassets" \
+  --compile "$APP/Contents/Resources" --platform macosx \
+  --minimum-deployment-target "$(plutil -extract LSMinimumSystemVersion raw "$ROOT/Resources/Info.plist")" \
+  --output-partial-info-plist "$APP.assets.plist" \
+  || { echo "bundle: actool could not compile Resources/Assets.xcassets" >&2; exit 1; }
+# Nothing for Info.plist comes out of a catalog holding only colours.
+rm -f "$APP.assets.plist"
 if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
   cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 fi
 # The menu bar mark, one template PDF per variant, built from
-# Resources/Mark/AthinaOwl.svg by `make icons`, as the icon above is from
+# Resources/Mark/AthinaGaze.svg by `make icons`, as the icon above is from
 # AthinaMark.svg. Both are committed, so a plain build needs nothing but the
 # repository.
 cp "$ROOT"/Resources/Mark/MenuBarMark-*.pdf "$APP/Contents/Resources/"

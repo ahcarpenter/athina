@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="Resources/Mark/ReadmeIcon.png" width="96" alt="Athina's app icon: Athena in a crested helmet, drawn in dark ink over cream shapes">
+  <img src="Resources/Mark/ReadmeIcon.png" width="96" alt="Athina's app icon: two eyes drawn as one line, with gold irises, on a grey-green field">
 </p>
 <h1 align="center">Athina</h1>
 <p align="center">

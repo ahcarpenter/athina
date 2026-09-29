@@ -154,7 +154,7 @@ import Testing
     #expect(mode(both, idle: true) == .idle)
   }
 
-  @Test func waitingForConsentShowsTheLiddedMark() {
+  @Test func waitingForConsentShowsTheShutMark() {
     for availability in [MentorStatus.Availability.ready, .noAPIKey, .noConsent] {
       #expect(
         MenuBarMark.resolve(mode: .waitingForConsent, availability: availability, offline: false)

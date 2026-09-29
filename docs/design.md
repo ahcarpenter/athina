@@ -14,49 +14,54 @@ particular to this app:
   as a missing key, is the command that fixes it), then commands, windows, and
   the app menu's About and Quit. Menu items use title case and an ellipsis only
   where more input follows, and no standard keyboard shortcut is repurposed.
-  The icon is the owl as a template image, one variant per mode, with a word
+  The icon is the Gaze as a template image, one variant per mode, with a word
   beside it only in replay or recording.
-- **The mark is the artist's drawing, and every asset comes from a vector.**
-  `Resources/Mark/AthinaMark.svg` is the master for the app icon: a profile in a crested
-  Corinthian helmet over a flat cream circle, square and hexagon, in the
-  reference bitmap's own coordinates, with the line art and the cream shapes in
-  separate groups so either stands alone. Ink is `#332C2B` and cream `#F1DEB7`,
-  both sampled from the drawing rather than chosen. `make icons`
-  (`scripts/mark-assets.swift`) builds the app icon from it, the icon at the
-  top of the [README](../README.md) from that icon (as macOS itself draws it, masked and
-  shadowed), and the menu bar mark from the second master, the owl below;
-  their outputs are committed, so a plain `make build` needs nothing else, and
+- **The mark is the Gaze, and every asset comes from a vector.** Athina is
+  named for Athena, whom Homer calls owl-eyed, so the mark is two eyes drawn as
+  one line: on a 64-unit grid, two circles of radius 13 centred at (20, 32) and
+  (44, 32), their union outlined with one 4.5 stroke. Two masters hold every
+  shape: `Resources/Mark/AthinaMark.svg`, the app icon, and
+  `Resources/Mark/AthinaGaze.svg`, the menu bar mark. `make icons`
+  (`scripts/mark-assets.swift`) draws both with macOS's own SVG renderer into
+  the app icon, the menu bar PDFs and the icon at the top of the
+  [README](../README.md) (as macOS itself draws it, masked and shadowed); the
+  script only picks each master's parts, sizes them and writes the files. The
+  outputs are committed, so a plain `make build` needs nothing else, and
   `MarkAssetTests` fails when either master or the script changes without
   `make icons` being run, since `make icons` records all three in
-  `Resources/Mark/built-from.txt`. The script is in that record because most of the drawing lives there rather than in the
-  masters: the menu bar inset, the eye treatments, the z's and the per-size
-  thickening are all constants in it.
-- **The app icon is the full artwork, full bleed.** macOS 26 masks a legacy
-  `.icns` to the standard app icon shape itself and adds the shadow, in Finder,
-  in the Dock and in About, scaling the artwork into the 824 of 1024 body, so
-  the icon draws no rounded rectangle and no shadow of its own and keeps the
-  drawing clear of the corners the mask rounds away. Each size is drawn from
-  the vector and weighted for itself, which is what the `.icns` format exists
-  to allow: the drawing's stroke is under a pixel by 32 px and would otherwise
-  grey out.
-- **The menu bar mark is the owl, at one width in every mode.**
-  `Resources/Mark/AthinaOwl.svg` is a second master, for the menu bar only: a
-  solid owl silhouette, so it sits among the bar's other extras instead of
-  reading lighter than all of them the way a line drawing does at 16 points.
-  It ships as a template PDF per mode, so macOS tints it like every other extra
-  and one file serves every display scale. The states are made out of the
-  drawing rather than hung off it: the owl's eyes are the boldest thing in it
-  at this size and they are what watching means, so they carry the modes and
-  the silhouette never changes. Idle, the state that says the user has stepped
-  away, also gets two z's drifting off it, drawn in the clear upper left of the
-  owl's own bounding box: with the pupils gone the eyes are the whitest thing
-  in the set and read wide awake rather than shut, so the z's are what actually
-  say asleep. Paused, the deliberate stop, takes the half-lidded eyes, as does
-  waiting for consent, since nothing is captured either way. Every
-  state, the z's included, is made inside the owl's own box, which is what
-  keeps the item one width throughout, so the other extras never shift
-  sideways when Athina's state changes. Which variant a mode gets is
+  `Resources/Mark/built-from.txt`.
+- **The app icon is the Gaze on its field, full bleed.** The field is glaukos,
+  Athina's grey-green, lit from above; the Gaze is a pale facial disc with gold
+  irises and near-black pupils looking down at the work, two parts in the
+  master so the script can lift the Gaze off the field with one soft shadow.
+  macOS 26 masks a legacy `.icns` to the standard app icon shape itself and
+  adds the shadow, in Finder, in the Dock and in About, scaling the artwork
+  into the 824 of 1024 body, so the icon draws no rounded rectangle and no
+  shadow around itself and keeps the Gaze clear of the corners the mask rounds
+  away. Each size is drawn from the vector, the Gaze a little larger at 16 and
+  32 px, which is what the `.icns` format exists to allow.
+- **The menu bar mark is the Gaze, at one width in every mode.** Its outline
+  is bold enough to sit among the bar's other extras at 16 points, and it
+  ships as a template PDF per mode, so macOS tints it like every other extra
+  and one file serves every display scale. The states are the eyes alone, one
+  group each in the master, named for `MenuBarMark`'s cases; the outline never
+  changes, which keeps the item one width throughout, so the other extras
+  never shift sideways when Athina's state changes. Watching looks down at the
+  work; idle, the person stepped away, closes the eyes in a curve, asleep;
+  paused, the deliberate stop, shuts them to a line, as does waiting for
+  consent, since nothing is captured either way; an excluded app in front
+  makes them look away; a missing permission or key leaves them open and
+  empty, unable to see; held half-lids them. Which variant a mode gets is
   `MenuBarMark.resolve`, a pure function with the whole table under test.
+- **Athina has one colour of its own, and it is the accent.** Glaukos, the
+  grey-green of Homer's word for Athena's eyes, is the `AccentColor` in
+  `Resources/Assets.xcassets` (`#11746B`, `#4BA297` in Dark Mode, darker and
+  lighter again under Increase Contrast), which `Resources/Info.plist` names
+  and `scripts/bundle.sh` compiles into the bundle. The HIG (Color) lets an app
+  set an accent that controls use while the person keeps System Settings >
+  Appearance at Multicolor, and any accent they pick instead still wins, so
+  Athina never overrides that choice. Text, backgrounds and status stay the
+  system's own colours.
 - **The toast is a non-activating panel, not a notification.** It floats under
   the menu bar on Liquid Glass and never takes keyboard focus, with corners
   concentric with its small capsule buttons. Because it cannot be focused, the
@@ -114,7 +119,7 @@ particular to this app:
   thing a launch shows until there is an Allow, as the HIG (Privacy) asks
   for data collection to be explained before it starts; it says who receives
   what in short rows, leads with its answer as the default button (Allow)
-  beside Not Now as the cancel button, and shows the menu bar owl itself as
+  beside Not Now as the cancel button, and shows the menu bar's Gaze itself as
   the sign that Athina is watching. Withdrawing is a button beside the
   answer in Settings > Privacy with no confirmation, since Allow undoes it.
 - **Permissions explain before they ask.** The window never prompts on its own,
