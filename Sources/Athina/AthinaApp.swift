@@ -208,7 +208,7 @@ final class WindowOpener {
 ///
 /// `Athina --open debug|settings|history` presents that window at launch, and
 /// `--open consent|permissions|model|ready` the Setup window on that page
-/// (`SetupPage`), the debug panel on a live launch only while Settings > Advanced
+/// (`SetupPage`) once consent is given (`SetupFlow.atLaunch`), the debug panel on a live launch only while Settings > Advanced
 /// turns it on (`DebugPanelAccess`) (for example
 /// `open -n build/Athina.app --args --replay <dir> --open debug`; a plain
 /// `open` brings an already running Athina forward and drops the arguments,

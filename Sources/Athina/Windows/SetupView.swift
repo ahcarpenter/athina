@@ -73,8 +73,12 @@ struct SetupView: View {
   }
 
   @ViewBuilder private var trailing: some View {
-    switch state.setup.page {
-    case .consent where !state.settings.hasConsent:
+    switch SetupFlow.footer(
+      on: state.setup,
+      hasConsent: state.settings.hasConsent,
+      permissionsGranted: state.permissions.allGranted
+    ) {
+    case .answer:
       Button("Not Now") {
         state.declineConsent()
         dismiss()
@@ -84,20 +88,18 @@ struct SetupView: View {
       Button("Allow") { allow() }
         .keyboardShortcut(.defaultAction)
         .accessibilityIdentifier("consent.allow")
-    case .ready:
+    case .continue:
+      Button("Continue") { advance() }
+        .keyboardShortcut(.defaultAction)
+        .accessibilityIdentifier("setup.continue")
+    case .done:
       Button("Done") { dismiss() }
         .keyboardShortcut(.defaultAction)
         .accessibilityIdentifier("setup.done")
-    default:
-      if state.setup.walksThrough {
-        Button("Continue") { advance() }
-          .keyboardShortcut(.defaultAction)
-          .accessibilityIdentifier("setup.continue")
-      } else {
-        Button(state.permissions.allGranted ? "Done" : "Not Now") { dismiss() }
-          .keyboardShortcut(.defaultAction)
-          .accessibilityIdentifier("setup.done")
-      }
+    case .notNow:
+      Button("Not Now") { dismiss() }
+        .keyboardShortcut(.defaultAction)
+        .accessibilityIdentifier("setup.done")
     }
   }
 
@@ -117,7 +119,7 @@ struct SetupView: View {
   }
 
   private func advance() {
-    if let next = SetupFlow.page(after: state.setup.page) {
+    if let next = SetupFlow.page(after: state.setup.page, needsKey: state.needsAPIKey) {
       state.setup.page = next
     } else {
       dismiss()
@@ -197,7 +199,7 @@ struct ReadyPage: View {
           .frame(width: 64, height: 64)
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 4) {
-          Text("Athina is set up")
+          Text(readiness.heading)
             .font(.title2.weight(.semibold))
             .accessibilityAddTraits(.isHeader)
           Text(
@@ -207,6 +209,14 @@ struct ReadyPage: View {
             """
           )
           .fixedSize(horizontal: false, vertical: true)
+        }
+      }
+
+      if !readiness.isSetUp {
+        VStack(alignment: .leading, spacing: 6) {
+          ForEach(readiness.stillToDo, id: \.self) { line in
+            StatusLabel(line, kind: .warning)
+          }
         }
       }
 
@@ -237,6 +247,10 @@ struct ReadyPage: View {
         .font(.callout)
         .foregroundStyle(.secondary)
     }
+  }
+
+  private var readiness: SetupReadiness {
+    SetupReadiness(permissions: state.permissions, needsKey: state.needsAPIKey)
   }
 
   private var talkBack: String {

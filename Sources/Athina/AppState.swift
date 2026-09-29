@@ -297,16 +297,10 @@ final class AppState {
       ? [] : Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
     needsPermissionsOnboarding = !status.allGranted
     speechAvailability = SpeechListener.availability()
-    // A page named on the command line opens on its own; a launch with no
-    // consent walks through every page from the first.
-    if let requested = LaunchArguments.windowToOpen.flatMap(SetupPage.init(rawValue:)) {
-      setup = SetupState(page: requested, walksThrough: false)
-    } else {
-      setup = SetupState(
-        page: settings.hasConsent ? .permissions : .consent,
-        walksThrough: !settings.hasConsent
-      )
-    }
+    setup = SetupFlow.atLaunch(
+      requested: LaunchArguments.windowToOpen.flatMap(SetupPage.init(rawValue:)),
+      hasConsent: settings.hasConsent
+    )
   }
 
   /// A detached state for snapshots and previews: never starts the pipeline.
@@ -702,9 +696,15 @@ final class AppState {
   var needsAPIKey: Bool { !clientMode.isOffline && !hasAPIKey }
 
   /// Opens the Setup window on a page, on its own unless a walk through is
-  /// already open.
+  /// already open, or brings forward an unanswered consent page it shows
+  /// (`SetupFlow.opening`).
   func openSetup(on page: SetupPage) {
-    setup = SetupState(page: page, walksThrough: setupIsOpen && setup.walksThrough)
+    setup = SetupFlow.opening(
+      page,
+      from: setup,
+      isOpen: setupIsOpen,
+      hasConsent: settings.hasConsent
+    )
     windows.open(WindowID.setup)
   }
 
