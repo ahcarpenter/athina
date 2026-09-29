@@ -38,8 +38,20 @@ final class ToastController {
   private var model = ToastModel()
   private var outsideClickMonitors: [Any] = []
   /// Watch for any key going down while a note that names a next step is up
-  /// (`showNote(_:untilClicked:)`), and only then.
+  /// (`showNote(_:untilClicked:)`) and `sensingMode` allows it, and only then.
   private var keyPressMonitors: [Any] = []
+  /// What Athina is sensing: a waiting note notices key presses only while
+  /// `ToastPlacement.noticesKeyPresses(in:)` allows it, and is click-only
+  /// otherwise.
+  var sensingMode: SensingMode = .stopped {
+    didSet {
+      if noteUntilClicked, ToastPlacement.noticesKeyPresses(in: sensingMode) {
+        startWatchingForKeyPresses()
+      } else {
+        stopWatchingForKeyPresses()
+      }
+    }
+  }
   private var noteTask: Task<Void, Never>?
   /// The note's time on screen, held while the pointer is over the panel.
   private var noteCountdown = ToastCountdown()
@@ -179,7 +191,8 @@ final class ToastController {
   /// - Parameters:
   ///   - text: What the note says.
   ///   - untilClicked: For a note that names a next step: it stays until the
-  ///     next click or key press, anywhere, instead of timing out.
+  ///     next click, anywhere, instead of timing out, or the next key press
+  ///     while `sensingMode` lets a note notice one.
   func showNote(_ text: String, untilClicked: Bool = false) {
     clearNote()
     model.note = text
@@ -243,17 +256,24 @@ final class ToastController {
 
   // MARK: Key presses
 
-  /// The next key press anywhere takes down a note that waits for one.
+  /// The next key press anywhere takes down a note that waits for one, while
+  /// Athina is allowed to watch and is watching
+  /// (`ToastPlacement.noticesKeyPresses(in:)`); before Allow, while paused,
+  /// with an excluded app in front or in any other mode no key is watched at
+  /// all, and only a click takes the note down.
   ///
   /// Only that a key went down, and not by auto-repeat, is used, never which
-  /// key: the event is not otherwise read, and nothing of it is logged or kept. Key presses in other apps reach Athina only with
-  /// the Accessibility access it already asks for, which a global key-down
-  /// monitor needs and which asks for nothing more, never Input Monitoring;
-  /// without it, or in a hermetic run, which listens to nothing outside
-  /// itself, only presses in Athina's own windows count, and a click still
-  /// takes the note down. The monitors exist only while such a note is up.
+  /// key: the event is not otherwise read, and nothing of it is logged or
+  /// kept. Key presses in other apps reach Athina only with the Accessibility
+  /// access it already asks for, which a global key-down monitor needs and
+  /// which asks for nothing more, never Input Monitoring; without it, or in a
+  /// hermetic run, which listens to nothing outside itself, only presses in
+  /// Athina's own windows count, and a click still takes the note down. The
+  /// monitors exist only while such a note is up and the mode allows them.
   private func startWatchingForKeyPresses() {
-    guard keyPressMonitors.isEmpty else { return }
+    guard keyPressMonitors.isEmpty, ToastPlacement.noticesKeyPresses(in: sensingMode) else {
+      return
+    }
     if watchesOtherApps, AXIsProcessTrusted(),
       let global = NSEvent.addGlobalMonitorForEvents(
         matching: .keyDown,

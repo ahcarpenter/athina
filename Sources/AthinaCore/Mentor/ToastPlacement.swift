@@ -1,7 +1,8 @@
 import CoreGraphics
 import Foundation
 
-/// Where the toast's panel goes on a screen, and how long a note stays.
+/// Where the toast's panel goes on a screen, how long a note stays, and
+/// whether a key press may take one down.
 ///
 /// The toast opens under the menu bar at the top right of the screen. A
 /// person may drag it off what it covers; from then until the next suggestion
@@ -52,5 +53,13 @@ public enum ToastPlacement {
   public static func noteDuration(for text: String) -> TimeInterval {
     let words = text.split(whereSeparator: \.isWhitespace).count
     return max(minimumNoteDuration, (Double(words) / wordsPerSecond).rounded(.up))
+  }
+
+  /// Whether a note that names a next step may notice a key going down to
+  /// come down: only while Athina is allowed to watch and is watching (an
+  /// active `SensingMode`), never before Allow, while paused, while an
+  /// excluded app is in front, or in any other mode, where it is click-only.
+  public static func noticesKeyPresses(in mode: SensingMode) -> Bool {
+    mode.isActive
   }
 }

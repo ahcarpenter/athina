@@ -101,7 +101,9 @@ final class AppState {
   /// False when no talk-back hotkey is set or it could not be registered.
   private(set) var pushToTalkRegistered = false
 
-  var mode: SensingMode = .stopped
+  var mode: SensingMode = .stopped {
+    didSet { toast.sensingMode = mode }
+  }
   var permissions: PermissionStatus
   /// Permissions the system has never asked about, so asking shows its alert.
   private(set) var undeterminedPermissions: Set<Permission>

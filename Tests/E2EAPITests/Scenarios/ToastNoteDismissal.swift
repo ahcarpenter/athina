@@ -3,17 +3,15 @@
   import Testing
 
   extension Scenarios {
-    /// A note that names a next step waits for the person rather than a timer, and comes down on
-    /// their next key press or click.
+    /// A note that names a next step waits for the person rather than a timer, and before Allow
+    /// comes down only on their next click, since no key is watched until Athina may watch.
     ///
     /// Started without the seeded Allow, a press of the talk-back shortcut (recorded first in
     /// Settings > General) brings up the note saying Athina is not allowed to watch and how to
     /// allow it. It is still up after the replay's clock moves a minute on, far past the reading
-    /// time that takes an ordinary note down; a key press in one of Athina's windows takes it
-    /// down, and so does a click outside Athina's windows for the next one. A hermetic run
-    /// listens to nothing outside itself, so the key press is posted to Athina's own event queue
-    /// (docs/e2e.md "The control API"); that a press in another app reaches it needs the
-    /// Accessibility access Athina asks for and is not proven here.
+    /// time that takes an ordinary note down, and after a key press in one of Athina's windows,
+    /// posted to Athina's own event queue as the window server delivers one (docs/e2e.md "The
+    /// control API"); a click outside Athina's windows takes it down.
     @Test func `toast-note-dismissal`() async {
       await Run.scenario(
         "toast-note-dismissal",
@@ -67,9 +65,11 @@
           true,
           try await control.key(80, in: "General")["dispatched"]?.bool
         )
-        run.check("the key press takes the note down", true, try await noteUp(false))
-
-        try await pressTalkBack()
+        run.check(
+          "the key press leaves the note up, since no key is watched before Allow",
+          false,
+          try await control.waitWindow(note, present: false, timeout: 2)
+        )
         run.check(
           "a click outside Athina's windows reaches the note",
           true,

@@ -64,4 +64,36 @@ import Testing
     // 18 words at 3 a second.
     #expect(ToastPlacement.noteDuration(for: instruction) == 6)
   }
+
+  @Test func aNoteNoticesKeyPressesOnlyWhileAthinaWatches() {
+    for mode in [SensingMode.watching, .accessibilityOnly, .screenOnly] {
+      #expect(ToastPlacement.noticesKeyPresses(in: mode), "\(mode)")
+    }
+    let silent: [SensingMode] = [
+      .waitingForConsent, .paused, .excluded, .waitingForPermissions, .idle, .stopped,
+    ]
+    #expect(
+      Set(silent).union([.watching, .accessibilityOnly, .screenOnly]) == Set(SensingMode.allCases)
+    )
+    for mode in silent {
+      #expect(!ToastPlacement.noticesKeyPresses(in: mode), "\(mode)")
+    }
+  }
+
+  @Test func noKeyPressIsNoticedBeforeAllowPausedOrWithAnExcludedAppInFront() {
+    let granted = PermissionStatus(screenRecording: true, accessibility: true)
+    let resolve = { (consented: Bool, paused: Bool, excluded: Bool) in
+      SensingMode.resolve(
+        consented: consented,
+        paused: paused,
+        permissions: granted,
+        frontmostExcluded: excluded,
+        idle: false
+      )
+    }
+    #expect(!ToastPlacement.noticesKeyPresses(in: resolve(false, false, false)))
+    #expect(!ToastPlacement.noticesKeyPresses(in: resolve(true, true, false)))
+    #expect(!ToastPlacement.noticesKeyPresses(in: resolve(true, false, true)))
+    #expect(ToastPlacement.noticesKeyPresses(in: resolve(true, false, false)))
+  }
 }
