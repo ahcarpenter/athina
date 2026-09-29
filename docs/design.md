@@ -97,8 +97,9 @@ particular to this app:
   and talking back; Mentoring what it mentors in, how its suggestions show and
   what Never for This turned off; Privacy consent, the pause shortcut, excluded
   apps, the journal and the two permissions it needs to watch; Models the
-  provider, spend and models; Advanced the debug panel, then capture timing. Rows use the form's own label and subtitle styling, and a
-  place elsewhere in Settings is a link, not a description. A duration row given
+  provider, spend and models; Advanced the debug panel, then capture timing.
+  Rows use the form's own label and subtitle styling, and a place elsewhere in
+  Settings is a link, not a description. A duration row given
   its setting's range offers only what that setting accepts: its unit pop-up
   lists the units the range holds a whole amount of. In every number row an
   amount typed outside the range settles at the nearest allowed one as the
