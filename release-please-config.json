@@ -5,6 +5,8 @@
   "include-component-in-tag": false,
   "include-v-in-release-name": false,
   "bump-minor-pre-major": true,
+  "draft": true,
+  "force-tag-creation": true,
   "pull-request-title-pattern": "chore(release): ${version}",
   "pull-request-footer": "GitHub runs no checks on a pull request that GitHub Actions opened or pushed to, so close and reopen this one right before merging it, and its required checks run on its head (docs/releasing.md \"Each release\").",
   "changelog-sections": [

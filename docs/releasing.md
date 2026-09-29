@@ -104,13 +104,24 @@ notes leave out, such as `refactor!:`, also appears under that type).
    the repository's Settings > Actions > General > Workflow permissions allows
    GitHub Actions to create and approve pull requests.
 3. Once it lands, the next run of the workflow tags its commit `v<version>`
-   and makes the GitHub Release, with its changelog entry as the notes, then
-   calls the release workflow for the tag, which builds and verifies, adds
-   the download's files to that release and gives it the notes the build
-   wrote in place of the changelog entry (see [CI](#ci)).
+   and makes the GitHub Release as a draft, with its changelog entry as the
+   notes, then calls the release workflow for the tag, which builds and
+   verifies, adds the download's files to the draft, sets its notes and
+   publishes it (see [CI](#ci)). Until then nobody but the repository's
+   writers sees the release.
+
+If the release workflow fails, only the draft and its tag are left, which
+nobody outside sees. When the cause is outside the release's commit (a
+secret, say, or Apple's service), fix it and rerun the failed jobs of that
+release-please workflow run, which builds the same tag again. When the commit
+itself has to change, delete the draft and its tag (`gh release delete
+v<version> --cleanup-tag`) and land the fix on main; that version is never
+published, and the next release pull request proposes the one after it.
 
 The tag is what the next release's build number has to exceed and what
-stops a version being built twice. Pushing a version tag by hand still
+stops a version being released twice. Between releases main still carries the
+last release's version, so the build of each push to main is a snapshot of
+it, not a release of it. Pushing a version tag by hand still
 releases, as below, but raising the version by hand leaves release-please's
 manifest behind, so a release goes through the release pull request.
 
@@ -119,14 +130,16 @@ To release from the Mac instead, or to rehearse one first:
 1. From a clean checkout of the version's commit:
 
    ```sh
-   ATHINA_NOTARY_PROFILE=athina-notary make release
+   ATHINA_RELEASE_TAG=v0.2.0 ATHINA_NOTARY_PROFILE=athina-notary make release
    ```
 
    `ATHINA_RELEASE_IDENTITY=<name or SHA-1>` chooses the identity when the
    keychain holds more than one Developer ID Application identity; with one,
-   it is found. The release refuses a worktree with changes, a version whose
-   tag already points at another commit, and a build number no higher than
-   the last release's.
+   it is found. The release refuses a worktree with changes, and a build
+   number no higher than the last release's; `ATHINA_RELEASE_TAG` says it is
+   the release of that version, so it also refuses a tag other than
+   `v<version>` and a version whose tag already points at another commit.
+   Without it the build is a snapshot, as CI builds main.
 2. Check the release build itself end to end, in replay as always:
    `ATHINA_E2E_APP=build/release/Athina.app scripts/e2e/athina-e2e run all`.
    That covers the real-screen tier; step 1's check proves the build carries
@@ -173,9 +186,10 @@ runner:
   zip hold.
 - **For a version tag** (`v1.2.3`), one release-please made, for which
   `.github/workflows/release-please.yml` calls this workflow, or one pushed by
-  hand, it first checks that the tag is
-  `v` and the version `Resources/Info.plist` sets, on a commit on main. Then
-  it builds and verifies, and publishes a GitHub Release named `Athina
+  hand, it first checks that the tag is on a commit on main. Then it builds
+  with `ATHINA_RELEASE_TAG` set to the tag, so the build fails unless the tag
+  is `v` and the version `Resources/Info.plist` sets, and verifies, and
+  publishes a GitHub Release named `Athina
   <version>` with the disk image, the zip, the checksums file and the debug
   symbols, its notes `Athina-<version>-notes.md` without their title line.
   It releases in one of two modes, by the secrets below:
@@ -190,10 +204,15 @@ runner:
   never ships an unsigned release unnoticed.
 
 A release that already exists for the tag gets the files, replacing any of
-the same name. One made by hand keeps its own notes, so it works as it is;
-one release-please made, which creates the release and its tag from the
-Conventional Commit titles, takes `Athina-<version>-notes.md` in place of its
-changelog entry, so an unsigned release still opens with how to open it.
+the same name. One made by hand keeps its own notes, so it works as it is.
+The draft release-please made, which it creates with its tag from the
+Conventional Commit titles, keeps its notes, its changelog entry, which stand
+in place of the build's list of the same titles (the Changes section) in
+`Athina-<version>-notes.md`; the rest of those notes go around them, so an
+unsigned release still opens with how to open it, then the install steps,
+any notes written by hand, the changelog entry and the checksums. The same
+edit publishes it; once published it keeps its notes, as a release made by
+hand does.
 release-please's tag is pushed with the
 workflow's own `GITHUB_TOKEN`, which starts no workflow, so the release-please
 workflow calls this one for it rather than a tag push starting it, and needs

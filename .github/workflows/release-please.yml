@@ -10,11 +10,11 @@ name: Release Please
 # than main's, since release-please can only write a semantic version.
 #
 # Once the pull request lands, the next run tags its commit vX.Y.Z and makes
-# the GitHub Release, whose notes are its changelog entry. It does both with
-# this workflow's own GITHUB_TOKEN, and a tag pushed with that token starts no
-# workflow, so release.yml's tag trigger never sees it: the release job below
-# calls release.yml for the tag instead, which builds, verifies and adds the
-# download's files to that release. The same token also means GitHub runs no
+# the GitHub Release as a draft, whose notes are its changelog entry. It does
+# both with this workflow's own GITHUB_TOKEN, and a tag pushed with that token
+# starts no workflow, so release.yml's tag trigger never sees it: the release
+# job below calls release.yml for the tag instead, which builds, verifies, adds
+# the download's files to that draft and publishes it. The same token also means GitHub runs no
 # checks on the release pull request, so it is closed and reopened by hand
 # right before merging, which runs them on its head.
 on:

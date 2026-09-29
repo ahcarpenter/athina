@@ -7,16 +7,21 @@ name: Release
 #
 # It signs and notarizes when the Apple secrets exist, and otherwise builds it
 # signed ad hoc and says so in the job summary; on a push to main a missing
-# secret never fails a run. For a version tag it then publishes a GitHub
-# Release with the disk image, the zip, their checksums and the debug symbols,
-# with release.sh's notes, which list the Conventional Commit titles since the
-# previous tag and, for an unsigned release, open with how to open it. A tag
-# with only some of the secrets fails, so a half-configured signing setup never
-# ships unsigned unnoticed. If a release already
-# exists for the tag, it gets the files; one made by hand keeps its notes, and
-# one release-please made takes release.sh's instead. The tag is one pushed by hand, or one release-please made,
-# for which release-please.yml calls this workflow with it: a tag pushed with a
-# workflow's own token starts no workflow.
+# secret never fails a run. A push to main builds a snapshot, which may still
+# carry the version of the last release; a version tag builds that release,
+# and release.sh refuses it if the tag is not the version Resources/Info.plist
+# sets or already points at another commit. For a version tag it then
+# publishes a GitHub Release with the disk image, the zip, their checksums and
+# the debug symbols, with release.sh's notes, which list the Conventional
+# Commit titles since the previous tag and, for an unsigned release, open with
+# how to open it. A tag with only some of the secrets fails, so a
+# half-configured signing setup never ships unsigned unnoticed. If a release
+# already exists for the tag, it gets the files; one made by hand keeps its
+# notes, and the draft release-please made keeps its changelog entry in place
+# of release.sh's list of titles, takes the rest of release.sh's notes around
+# it, and is published. The tag is one pushed by hand, or one release-please
+# made, for which release-please.yml calls this workflow with it: a tag pushed
+# with a workflow's own token starts no workflow.
 on:
   push:
     branches: [main]
@@ -53,15 +58,10 @@ jobs:
           # tag and lists the commits since it.
           fetch-depth: 0
       - name: Check the tag
-        # A release is exactly the version Resources/Info.plist sets, from a
-        # commit on main.
+        # A release is built only from a commit on main; release.sh checks
+        # that the tag is its version.
         if: env.TAG
         run: |
-          version="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Resources/Info.plist)"
-          if [ "$TAG" != "v$version" ]; then
-            echo "::error::The tag is $TAG, but Resources/Info.plist sets version $version; tag v$version instead."
-            exit 1
-          fi
           if ! git merge-base --is-ancestor HEAD origin/main; then
             echo "::error::$TAG points at $(git rev-parse HEAD), which is not on main; a release is built only from main."
             exit 1
@@ -125,6 +125,9 @@ jobs:
       - name: Build, sign, notarize and verify
         # Notarization waits on Apple, usually minutes, sometimes much longer.
         timeout-minutes: 120
+        env:
+          # Empty on a push to main, which builds a snapshot.
+          ATHINA_RELEASE_TAG: ${{ env.TAG }}
         run: make release
       - name: Summarize
         if: always()
@@ -182,13 +185,19 @@ jobs:
           files=("Athina-$version.dmg" "Athina-$version.zip" "Athina-$version-checksums.txt" "Athina-$version.dSYM.zip")
           # The notes without their first line, the title the release shows.
           sed '1{/^# /d;}' "Athina-$version-notes.md" > notes.md
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+          if draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null)"; then
             gh release upload "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" --clobber
-            # release-please's notes are its changelog entry alone; this
-            # build's list the same titles, and for an unsigned release open
-            # with how to open it. A release made by hand keeps its own.
-            if [ -n "$FROM_RELEASE_PLEASE" ]; then
-              gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "Athina $version" --notes-file notes.md
+            # The draft release-please made: its notes, its changelog entry,
+            # stand in place of this build's list of the same titles, among the
+            # rest of this build's notes, and it is published in the same edit.
+            # Once published it keeps its notes, as a release made by hand does.
+            if [ -n "$FROM_RELEASE_PLEASE" ] && [ "$draft" = true ]; then
+              gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > changelog.md
+              awk -v changelog=changelog.md '
+                /^## Changes / { skip = 1; while ((getline line < changelog) > 0) print line; print ""; next }
+                /^## / { skip = 0 }
+                !skip' notes.md > body.md
+              gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "Athina $version" --notes-file body.md --draft=false
             fi
           else
             gh release create "$TAG" "${files[@]}" --repo "$GITHUB_REPOSITORY" \
