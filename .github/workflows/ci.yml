@@ -6,9 +6,10 @@ name: CI
 # the fast UI check, ui-snapshots-smoke. The slow, full-fidelity ui-snapshots
 # check lives in merge-checks.yml, which runs on push to main and for a pull
 # request only once it is ready for review; the main ruleset requires all five,
-# with pr-title.yml's title check, at a pull request's head before it merges, and again on the merge queue's
-# group before it lands on main (docs/ci.md "The merge queue"). A pull request
-# that touches only documentation runs lint alone: the changes job decides,
+# with pr-title.yml's title check, at a pull request's head before it merges,
+# and again on the merge queue's group before it lands on main (docs/ci.md
+# "The merge queue"). A pull request that touches only documentation runs lint
+# alone here: the changes job decides,
 # and every other job here is skipped, which a required check counts as passed
 # (docs/ci.md "Docs-only pull requests").
 on:
