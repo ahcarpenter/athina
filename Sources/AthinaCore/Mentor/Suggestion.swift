@@ -36,6 +36,15 @@ public enum SuggestionCategory: String, Codable, CaseIterable, Sendable, Identif
     }
   }
 
+  /// True for the kinds that warn of something going wrong, rather than
+  /// offering a better way: these are drawn as a warning, not as a tip.
+  public var isWarning: Bool {
+    switch self {
+    case .correctness, .risk, .wontAchieveGoal, .unwantedSideEffect: true
+    case .shortcut, .workflow, .tool, .approach, .other, .lessEfficient: false
+    }
+  }
+
   /// The category's name as the toast, the history window, and Settings show
   /// it.
   public var label: String {
@@ -60,7 +69,7 @@ public enum SuggestionCategory: String, Codable, CaseIterable, Sendable, Identif
     case .workflow: "arrow.triangle.branch"
     case .tool: "wrench.and.screwdriver"
     case .approach: "lightbulb"
-    case .correctness: "checkmark.circle"
+    case .correctness: "exclamationmark.circle"
     case .risk: "exclamationmark.triangle"
     case .other: "sparkles"
     case .wontAchieveGoal: "flag.slash"

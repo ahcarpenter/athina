@@ -30,3 +30,13 @@ import Testing
     }
   }
 }
+
+@Suite struct SuggestionCategoryWarningTests {
+  /// The kinds that warn of something going wrong are drawn as warnings, and
+  /// none of them wears a checkmark that reads as all clear.
+  @Test func warningsAreTheKindsThatSaySomethingGoesWrong() {
+    let warnings = SuggestionCategory.allCases.filter(\.isWarning)
+    #expect(Set(warnings) == [.correctness, .risk, .wontAchieveGoal, .unwantedSideEffect])
+    #expect(!warnings.contains { $0.symbol.hasPrefix("checkmark") })
+  }
+}
