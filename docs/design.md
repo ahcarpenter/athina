@@ -53,15 +53,18 @@ particular to this app:
   makes them look away; a missing permission or key leaves them open and
   empty, unable to see; held half-lids them. Which variant a mode gets is
   `MenuBarMark.resolve`, a pure function with the whole table under test.
-- **Athina has one colour of its own, and it is the accent.** Glaukos, the
-  grey-green of Homer's word for Athena's eyes, is the `AccentColor` in
+- **Glaukos is Athina's accent, and its own colours stay in its own views.**
+  Glaukos, the grey-green of Homer's word for Athena's eyes, is the `AccentColor` in
   `Resources/Assets.xcassets` (`#11746B`, `#4BA297` in Dark Mode, darker and
   lighter again under Increase Contrast), which `Resources/Info.plist` names
   and `scripts/bundle.sh` compiles into the bundle. The HIG (Color) lets an app
   set an accent that controls use while the person keeps System Settings >
   Appearance at Multicolor, and any accent they pick instead still wins, so
-  Athina never overrides that choice. Text, backgrounds and status stay the
-  system's own colours.
+  Athina never overrides that choice. Beyond the accent, `AthinaColor` in
+  `Sources/Athina/Tokens.swift` holds the only other colours Athina draws, and
+  only its own views draw them: the callout's pointer, never the accent so it
+  can never read as a focus ring, and the three kind tiles. Text, backgrounds
+  and status stay the system's own colours.
 - **The toast is a non-activating panel, not a notification.** It floats under
   the menu bar on Liquid Glass and never takes keyboard focus, with corners
   concentric with its small capsule buttons. Because it cannot be focused, the
