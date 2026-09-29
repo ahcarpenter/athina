@@ -28,7 +28,7 @@ public enum UserFacing {
     case .replay:
       return "There is no recorded answer to replay for this call."
     case .notSent(let reason):
-      return "Athina did not send the call, since \(reason)."
+      return holdSentence(forLabel: reason) ?? "Athina did not send the call, since \(reason)."
     }
   }
 
@@ -78,11 +78,7 @@ public enum UserFacing {
   ///   - provider: Whose API the question went to, which the sentence names.
   /// - Returns: The sentence the toast and the Suggestions window show.
   public static func followUpError(_ raw: String, provider: ModelProvider) -> String {
-    if let hold = holdsByLabel[raw] { return sentence(for: hold) }
-    if raw.hasPrefix(spendCapPrefix) {
-      return "Athina did not ask: this hour's spend limit is reached. It can ask again at "
-        + String(raw.dropFirst(spendCapPrefix.count)) + "."
-    }
+    if let sentence = holdSentence(forLabel: raw) { return sentence }
     if let error = clientError(from: raw) { return sentence(for: error, provider: provider) }
     switch raw {
     case "the API declined this request":
@@ -131,6 +127,15 @@ public enum UserFacing {
   )
 
   private static let spendCapPrefix = "spend cap reached until "
+
+  /// The sentence for the hold whose `Hold.label` is `label`, or nil when it
+  /// is not one.
+  private static func holdSentence(forLabel label: String) -> String? {
+    if let hold = holdsByLabel[label] { return sentence(for: hold) }
+    guard label.hasPrefix(spendCapPrefix) else { return nil }
+    return "Athina did not ask: this hour's spend limit is reached. It can ask again at "
+      + String(label.dropFirst(spendCapPrefix.count)) + "."
+  }
 
   /// The error `ClaudeClientError.description` wrote, read back.
   static func clientError(from raw: String) -> ClaudeClientError? {

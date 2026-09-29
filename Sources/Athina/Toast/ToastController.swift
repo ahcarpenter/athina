@@ -110,7 +110,7 @@ final class ToastController {
     model.suggestion = nil
     model.exchange = []
     model.talkBack = .idle
-    panel?.orderOut(nil)
+    orderOut()
   }
 
   /// Orders the toast above anything shown since, such as a callout.
@@ -214,8 +214,17 @@ final class ToastController {
     clearNote()
     if model.suggestion == nil {
       stopWatchingForOutsideClicks()
-      panel?.orderOut(nil)
+      orderOut()
     }
+  }
+
+  /// Takes the panel off screen.
+  ///
+  /// An ordered-out panel is not told the pointer left it, so the pointer is
+  /// taken to be off it until it comes over again.
+  private func orderOut() {
+    panel?.orderOut(nil)
+    pointerOverPanel = false
   }
 
   private func clearNote() {

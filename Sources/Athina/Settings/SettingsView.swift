@@ -727,7 +727,19 @@ final class RemovalUndo<Item: Equatable> {
   static var shownFor: Duration { .seconds(10) }
 
   private(set) var last: Removal<Item>?
+  /// The undo manager's action for `last`, taken off its stack when the row
+  /// undoes the removal instead.
+  private var lastRegistration: Registration?
   private var expiry: Task<Void, Never>?
+
+  /// One removal's place on an undo manager's stack.
+  private final class Registration {
+    weak var undoManager: UndoManager?
+
+    init(undoManager: UndoManager?) {
+      self.undoManager = undoManager
+    }
+  }
 
   /// Removes the item at `index` of the list `list` reads and writes, and
   /// keeps it for Undo.
@@ -741,26 +753,42 @@ final class RemovalUndo<Item: Equatable> {
     guard list.wrappedValue.indices.contains(index) else { return }
     let removal = Removal(item: list.wrappedValue[index], index: index, name: name)
     list.wrappedValue.remove(at: index)
+    let registration = Registration(undoManager: undoManager)
     last = removal
+    lastRegistration = registration
     Announce.post("Removed \(name)")
-    undoManager?.registerUndo(withTarget: self) { undo in
-      MainActor.assumeIsolated { undo.undo(into: list) }
+    undoManager?.registerUndo(withTarget: registration) { _ in
+      MainActor.assumeIsolated { self.restore(removal, registeredAs: registration, into: list) }
     }
     undoManager?.setActionName("Remove \(name)")
     expiry?.cancel()
     expiry = Task { [weak self] in
       try? await clock.sleep(for: Self.shownFor)
-      guard !Task.isCancelled, let self, self.last == removal else { return }
+      guard !Task.isCancelled, let self, self.lastRegistration === registration else { return }
       self.last = nil
+      self.lastRegistration = nil
     }
   }
 
-  /// Puts the last removal back.
+  /// Puts the last removal back, from the row under the list.
   func undo(into list: Binding<[Item]>) {
-    guard let removal = last else { return }
+    guard let removal = last, let registration = lastRegistration else { return }
+    registration.undoManager?.removeAllActions(withTarget: registration)
+    restore(removal, registeredAs: registration, into: list)
+  }
+
+  /// Puts `removal` back, and stops offering it in the row if it is the last.
+  private func restore(
+    _ removal: Removal<Item>,
+    registeredAs registration: Registration,
+    into list: Binding<[Item]>
+  ) {
     list.wrappedValue = removal.restored(in: list.wrappedValue)
-    last = nil
-    expiry?.cancel()
+    if lastRegistration === registration {
+      last = nil
+      lastRegistration = nil
+      expiry?.cancel()
+    }
     Announce.post("Restored \(removal.name)")
   }
 }

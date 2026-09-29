@@ -110,6 +110,26 @@ import Testing
     #expect(capped.hasSuffix("\(until.formatted(date: .omitted, time: .shortened))."))
   }
 
+  @Test(arguments: ModelProvider.allCases)
+  func aCallHeldBackSaysWhyInItsHoldsWords(provider: ModelProvider) {
+    for hold in [MentorScheduler.Hold.noConsent, .noAPIKey, .paused] {
+      #expect(
+        UserFacing.sentence(for: .notSent(hold.label), provider: provider)
+          == UserFacing.sentence(for: hold)
+      )
+    }
+    let capped = UserFacing.sentence(
+      for: .notSent("spend cap reached until 3:00 PM"),
+      provider: provider
+    )
+    #expect(capped.contains("spend limit is reached"))
+    #expect(capped.hasSuffix("3:00 PM."))
+    #expect(
+      UserFacing.sentence(for: .notSent("the model is unknown"), provider: provider)
+        == "Athina did not send the call, since the model is unknown."
+    )
+  }
+
   @Test func theLoopsOwnFailuresAndUnknownTextReadBack() {
     #expect(
       UserFacing.followUpError("the API declined this request", provider: .anthropic)
