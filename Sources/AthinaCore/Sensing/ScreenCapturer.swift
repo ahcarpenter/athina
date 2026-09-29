@@ -53,12 +53,22 @@ public actor ScreenCapturer {
   ///   fails, and ScreenCaptureKit's own error when the list of displays
   ///   cannot be fetched.
   public func capture(windowFrame: CGRect?, maxDimension: Int) async throws -> CapturedFrame {
-    let content = try await shareableContent()
+    var content = try await shareableContent()
     guard let display = ScreenCapturer.display(for: windowFrame, in: content.displays) else {
       throw ScreenCaptureError.noDisplays
     }
     let ownPID = ProcessInfo.processInfo.processIdentifier
-    let ownApps = content.applications.filter { $0.processID == ownPID }
+    var ownApps = content.applications.filter { $0.processID == ownPID }
+    if ownApps.isEmpty {
+      // The list names only apps with a window on screen when it was fetched,
+      // and Athina has none most of the time: a toast and a callout that came
+      // up since are not in it, and a capture through the cached list would
+      // take them in, text and all. So the list is fetched again when Athina
+      // is not on it; when it still is not, there is nothing of its to leave out.
+      self.content = nil
+      content = try await shareableContent()
+      ownApps = content.applications.filter { $0.processID == ownPID }
+    }
     let filter = SCContentFilter(
       display: display,
       excludingApplications: ownApps,
