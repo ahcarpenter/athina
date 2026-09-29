@@ -32,7 +32,7 @@
 #                   nothing changes and it fails naming each one missing.
 #                   Every fetched image is first recompressed losslessly with
 #                   oxipng, so an approved image is smaller than CI's render
-#                   but decodes to the same pixels, which is all every gate
+#                   but is the same 8-bit RGBA pixels, which is all every gate
 #                   compares.
 #                   Every approval lists the images it would add, change or
 #                   delete before it writes any, and on a terminal asks first
@@ -156,11 +156,14 @@ need_oxipng() {
 }
 
 # Losslessly recompresses every PNG under <dir> in place. oxipng changes only
-# how the pixels are encoded, never what they are, and gives the same bytes for
-# the same pixels, so an image that did not change comes back byte for byte.
+# how the pixels are compressed, never what they are, and gives the same bytes
+# for the same pixels, so an image that did not change comes back byte for
+# byte. --nx keeps each image the 8-bit RGBA a render is: the smoke test's
+# swift-snapshot-testing draws a reference in the reference's own colour space
+# and cannot load one reduced to a palette or to grey.
 compress() {
   local dir="$1"
-  find "$dir" -name '*.png' -print0 | xargs -0 oxipng --quiet --opt 4 \
+  find "$dir" -name '*.png' -print0 | xargs -0 oxipng --quiet --opt 4 --nx \
     || die "could not recompress the images in $dir with oxipng"
 }
 

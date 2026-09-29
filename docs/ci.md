@@ -34,9 +34,12 @@ and fails naming each one missing and why. Once all three are fetched, it
 lists every image it would add, change or delete in each set before it writes
 any, and on a terminal asks first. It recompresses every image it fetched
 with oxipng before listing any, losslessly: an approved image takes less
-room than CI's render but decodes to the same pixels, and every gate compares
-decoded pixels, never file bytes. `swift scripts/png-lossless-check.swift
-<before> <after>` proves a recompression lossless, pixel for pixel.
+room than CI's render but holds the same pixels in the same 8-bit RGBA
+format, and every gate compares decoded pixels, never file bytes. The format
+stays because the smoke test's swift-snapshot-testing cannot load a
+reference reduced to a palette or to grey. `swift
+scripts/png-lossless-check.swift <before> <after>` proves a recompression
+lossless: the same pixels, and the same format.
 `scripts/snapshots.sh baselines-approve`,
 `smoke-approve` and `checkpoints-approve` each take one alone, from HEAD's
 newest run or the run id given, for a change that drifts only some, listing
