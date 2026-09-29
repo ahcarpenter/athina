@@ -49,6 +49,19 @@ public enum HistoryDays {
     }
   }
 
+  /// Waits on `clock` until the day after the one it reads now begins, by
+  /// time passing or by the clock being moved ahead, and returns the date
+  /// then, so a list grouped with the old today can be grouped again.
+  ///
+  /// - Throws: `CancellationError` when the task is cancelled.
+  public static func nextDay(on clock: some AthinaClock, calendar: Calendar) async throws -> Date {
+    let today = calendar.startOfDay(for: clock.date)
+    if let tomorrow = calendar.date(byAdding: .day, value: 1, to: today) {
+      try await clock.sleep(untilDate: tomorrow)
+    }
+    return clock.date
+  }
+
   /// The heading for the day `day` falls in: "Today", "Yesterday", the date
   /// ("Sep 13") within this year, and the date with its year ("Sep 13, 2025")
   /// before it.

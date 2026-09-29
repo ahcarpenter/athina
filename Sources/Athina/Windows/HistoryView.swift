@@ -10,6 +10,9 @@ struct HistoryView: View {
   private var state
 
   @State private var selectedID: Int64?
+  /// The present as the day headings last read it, moved on each time a new
+  /// day begins on the injected clock.
+  @State private var now: Date?
 
   init(initialSelection: Int64? = nil) {
     _selectedID = State(initialValue: initialSelection)
@@ -26,7 +29,7 @@ struct HistoryView: View {
     HistoryDays.group(
       state.suggestionHistory,
       date: \.timestamp,
-      now: state.clock.date,
+      now: now ?? state.clock.date,
       calendar: .current
     )
   }
@@ -71,6 +74,11 @@ struct HistoryView: View {
       .background(Color(nsColor: .windowBackgroundColor))
     }
     .frame(minWidth: 760, minHeight: 440)
+    .task {
+      while let next = try? await HistoryDays.nextDay(on: state.clock, calendar: .current) {
+        now = next
+      }
+    }
     .navigationSubtitle(Plural.count(state.suggestionHistory.count, "suggestion", "suggestions"))
   }
 }

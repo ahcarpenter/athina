@@ -53,4 +53,24 @@ import Testing
     let days = HistoryDays.group(none, date: { $0 }, now: Self.now, calendar: try Self.calendar())
     #expect(days.isEmpty)
   }
+
+  /// A list left open over midnight is regrouped when the clock reaches the
+  /// next day, so an item made before midnight moves from Today to Yesterday.
+  @Test(.timeLimit(.minutes(1))) func theNextDayArrivesWhenTheClockReachesMidnight() async throws {
+    let calendar = try Self.calendar()
+    let beforeMidnight = Self.now.addingTimeInterval(9 * 3600 + 17 * 60)
+    let item = beforeMidnight.addingTimeInterval(-60)
+    let clock = AdjustableClock(startingAt: beforeMidnight)
+    #expect(HistoryDays.title(for: item, now: clock.date, calendar: calendar) == "Today")
+
+    let waiting = Task { try await HistoryDays.nextDay(on: clock, calendar: calendar) }
+    await clock.waitForSleepers()
+    clock.advance(by: .seconds(60))
+    #expect(clock.sleeperCount == 1)
+    clock.advance(by: .seconds(3600))
+    let next = try await waiting.value
+
+    #expect(next == clock.date)
+    #expect(HistoryDays.title(for: item, now: next, calendar: calendar) == "Yesterday")
+  }
 }

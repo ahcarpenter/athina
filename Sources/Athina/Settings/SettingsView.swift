@@ -20,6 +20,17 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 
   var id: String { rawValue }
 
+  /// The pane a name saved under `storageKey` stands for, including the names
+  /// of the panes an earlier build had, which now live inside another pane.
+  init?(saved name: String) {
+    switch name {
+    case "contexts": self = .mentoring
+    case "capture": self = .advanced
+    case "journal": self = .privacy
+    default: self.init(rawValue: name)
+    }
+  }
+
   /// The link text in another pane opens this pane by, as Markdown.
   func link(_ title: String) -> String {
     "[\(title)](\(SettingsPane.linkScheme):\(rawValue))"
@@ -89,7 +100,7 @@ final class SettingsPaneSelection {
   init(remembers: Bool) {
     self.remembers = remembers
     let saved = remembers ? UserDefaults.standard.string(forKey: SettingsPane.storageKey) : nil
-    pane = saved.flatMap(SettingsPane.init(rawValue:)) ?? .general
+    pane = saved.flatMap(SettingsPane.init(saved:)) ?? .general
   }
 }
 
