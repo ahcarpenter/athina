@@ -97,6 +97,8 @@ import Testing
       ["arrange", "12", "notes.txt", "0", "0", "1728"],
       ["arrange", "12", "notes.txt", "0", "0", "wide", "1117"],
       ["sweep", "12"],
+      ["park", "12"],
+      ["park", "1", "2", "3"],
       ["sweep", "12", "/a", "/b"],
       ["api", "ping", "timeout"],
     ] {

@@ -15,7 +15,7 @@
 <p align="center">
   <img src="docs/images/demo.gif" width="800" alt="Athina's demo. Someone reading notes in TextEdit switches to a cleanup script they are about to run. A callout with a Risk tile outlines the line rm -rf $BUILD_ROOT/* in the script. Under the menu bar, a note headed Risk, TextEdit reads: Unset BUILD_ROOT could rm -rf your whole disk. If ~/.config/nightly/build-root is missing or empty, BUILD_ROOT is blank and rm -rf $BUILD_ROOT/* becomes rm -rf /*, wiping the root filesystem. Add a check before deleting. Tell Me More opens the full explanation with a guard to add.">
 </p>
-<p align="center"><sub>The real screen, replaying the <a href="docs/replay.md#the-committed-fixtures">committed fixtures</a>: the script and its callout, then the note under the menu bar.</sub></p>
+<p align="center"><sub>The real screen, replaying the <a href="docs/replay.md#the-committed-fixtures">committed fixtures</a>: the note under the menu bar, and the callout on the line it means.</sub></p>
 
 **Status:** early. Athina runs on macOS 26 or later, and feedback is wanted:
 [issues](https://github.com/getathina/athina/issues) are welcome. It is

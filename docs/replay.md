@@ -346,7 +346,9 @@ scenario and an empty journal:
    scenario, see [End-to-end harness](e2e.md#scenarios)), records the top of
    the screen through the switch to the script, the note with its callout on
    the script's line, and Tell Me More, and cuts the GIF from the recording
-   (`scripts/demo-gif.swift`), leaving every frame in `build/demo-frames`.
+   (`scripts/demo-gif.swift`: a camera over the recording that pulls back
+   for the moment the note and the callout arrive and closes in on each),
+   leaving every frame in `build/demo-frames`.
    Re-record it with the new set, and look at each frame before committing
    the GIF: the callout must sit on the line the new answer means, which the
    staging in `scripts/e2e/lib/harness.sh` (`stage_scenario_documents`) puts

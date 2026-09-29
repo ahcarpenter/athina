@@ -31,8 +31,9 @@ SCENARIO_ON_REQUEST=yes
 # be seen before the switch, the note to be read before Tell Me More, and the
 # explanation to be read before the recording ends.
 DEMO_SECONDS=18
-# The top of the screen, down past the note as Tell Me More opens it.
-DEMO_HEIGHT=520
+# The top of the screen, down past the note as Tell Me More opens it, and as
+# tall as the GIF's widest frame, the whole width at half scale.
+DEMO_HEIGHT=1010
 DEMO_BEFORE_SWITCH=2.5
 DEMO_BEFORE_TELL_ME_MORE=5
 
@@ -79,7 +80,10 @@ scenario_run() {
 	sleep 6
 
 	step "2 the recording"
-	"$DRIVE" shot video 0 0 "$SCENE_WIDTH" "$DEMO_HEIGHT" "$DEMO_SECONDS" "$RUN_DIR/demo.mov" \
+	# The recording takes in the pointer wherever it is: the bottom right
+	# corner of the display is out of its picture.
+	"$DRIVE" park $((SCREEN_WIDTH - 1)) $((SCENE_HEIGHT - 1)) >>"$RUN_DIR/transcript.log" 2>&1
+	"$DRIVE" shot video 0 0 "$SCREEN_WIDTH" "$DEMO_HEIGHT" "$DEMO_SECONDS" "$RUN_DIR/demo.mov" \
 		>>"$RUN_DIR/transcript.log" 2>&1 8>&- 9>&- &
 	video_pid=$!
 	track_helper "$video_pid"

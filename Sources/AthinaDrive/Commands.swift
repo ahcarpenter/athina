@@ -35,6 +35,7 @@ struct AthinaDrive: ParsableCommand {
       Flip.self,
       Journal.self,
       Key.self,
+      Park.self,
       Shot.self,
       API.self,
     ]
@@ -530,6 +531,26 @@ struct Key: ParsableCommand {
   func run() { Pointer.key(keycode, command: cmd, shift: shift) }
 }
 
+struct Park: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    abstract: "Move the pointer to a point, in points from the top left of the main display.",
+    usage: "athina-drive park <x> <y>"
+  )
+
+  @Argument(parsing: .allUnrecognized, help: .hidden) var words: [String] = []
+
+  mutating func validate() throws { _ = try Words.numbers(words, ["x", "y"]) }
+
+  func run() throws {
+    // A recording takes in the pointer wherever it is; a scenario moves it
+    // out of the picture first, as a real move, and says where it was.
+    let numbers = try Words.numbers(words, ["x", "y"])
+    let was = Pointer.location()
+    Pointer.move(to: CGPoint(x: numbers[0], y: numbers[1]))
+    say("pointer parked at \(Int(numbers[0])),\(Int(numbers[1])) from \(Int(was.x)),\(Int(was.y))")
+  }
+}
+
 struct Shot: ParsableCommand {
   static let configuration = CommandConfiguration(
     abstract: "Capture a window by id or a screen region, or record a region for a while.",
@@ -575,7 +596,7 @@ struct Shot: ParsableCommand {
 
   struct Video: ParsableCommand {
     static let configuration = CommandConfiguration(
-      abstract: "Record a region of the screen for a number of seconds, with no pointer in it.",
+      abstract: "Record a region of the screen for a number of seconds.",
       usage: "athina-drive shot video <x> <y> <w> <h> <seconds> <out.mov>"
     )
 
@@ -597,11 +618,11 @@ struct Shot: ParsableCommand {
     }
 
     func run() throws {
-      // What the display shows, at its own pixel scale, in a QuickTime movie
-      // with a frame for each change of the picture: the README's demo is cut
-      // from one (scripts/demo-gif.swift). The recording ends on its own after
-      // the seconds asked for, so a run that is killed leaves no recorder
-      // behind.
+      // What the display shows, at its own pixel scale, the pointer included
+      // wherever it is, in a QuickTime movie with a frame for each change of
+      // the picture: the README's demo is cut from one (scripts/demo-gif.swift).
+      // The recording ends on its own after the seconds asked for, so a run
+      // that is killed leaves no recorder behind.
       let (region, seconds, out) = try recording()
       screencapture(["-x", "-V", "\(seconds)", "-R", region, out])
       say("video of \(region) for \(seconds)s -> \(out)")

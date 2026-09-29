@@ -828,13 +828,15 @@ open_documents() {
 # The display's size is the recording's, 1728 by 1117 points: on a smaller
 # display macOS keeps the window inside the screen, and the run stops there
 # rather than record a callout on the wrong line. The script's first line is
-# wrapped after "terminal", which does two things: its longest line then fits
-# the demo's crop of the script beside the note's, and the lines below it
-# move down a line's height of 24 points, where the box the model gave, which
-# lies about 9 points below the line it means, holds the line with the same
-# room above it as below rather than cutting through its glyphs. The window
-# stays under the menu bar, where a gap would show whatever is behind it.
-SCENE_WIDTH=1728
+# wrapped after "terminal", which does two things: its
+# longest line then fits the demo's frame of the script beside the note's,
+# and the lines below it move down a line's height of 24 points, where the
+# box the model gave, which lies about 8 points below the line it means,
+# holds the line with the same room above it as below rather than cutting
+# through its glyphs. The window stays under the menu bar, where a gap would
+# show whatever is behind it.
+SCREEN_WIDTH=1728
+SCENE_WIDTH=$SCREEN_WIDTH
 SCENE_HEIGHT=1117
 SCENE_TEXT_SIZE=20
 stage_scenario_documents() {

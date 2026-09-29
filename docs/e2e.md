@@ -215,9 +215,10 @@ a negative coordinate or a title starting with a dash included.
 | `flip <x> <y> <w> <h>` | a click-through helper window that changes text and colour on `SIGUSR1`, so sensing has something to see |
 | `journal <db> <query>` | a named read-only query over a journal (`journal - queries` lists them), including `capture-race` |
 | `key <keycode>` | post a key press, with `--cmd` and `--shift` as modifiers |
+| `park <x> <y>` | move the pointer to a point, in points from the top left of the main display: out of a recording's picture, which takes it in wherever it is |
 | `shot window <id> <out.png>` | capture a window by id |
 | `shot region <x> <y> <w> <h> <out.png>` | capture a region of the screen |
-| `shot video <x> <y> <w> <h> <seconds> <out.mov>` | record a region of the screen for that many seconds, at the display's pixel scale with a frame for each change and no pointer, ending on its own; what `demo` cuts the README's GIF from |
+| `shot video <x> <y> <w> <h> <seconds> <out.mov>` | record a region of the screen for that many seconds, at the display's pixel scale with a frame for each change, the pointer included wherever it is, ending on its own; what `demo` cuts the README's GIF from |
 | `api <command> [<key=value> ...]` | one request to a replay's control API, in `ATHINA_CONTROL_DIR` (the harness sets it); prints the answer, or one field of it with `--field <path>` such as `elements.0.enabled`; exit 0 when the answer is ok, 1 when not, 2 when no app answered |
 
 The maths behind them is a plain library (`Sources/AthinaE2E`) with unit
