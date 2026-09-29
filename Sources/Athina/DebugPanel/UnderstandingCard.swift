@@ -136,8 +136,10 @@ struct UnderstandingCard: View {
                   .accessibilityLabel("\(confidence) confidence")
               }
               if !goal.evidence.isEmpty {
+                // Read, not glanced at: callout, as the rest of the card's
+                // content is, rather than caption.
                 Text(goal.evidence)
-                  .font(.caption)
+                  .font(.callout)
                   .foregroundStyle(.secondary)
                   .textSelection(.enabled)
                   .fixedSize(horizontal: false, vertical: true)
@@ -175,7 +177,7 @@ struct UnderstandingCard: View {
               .fixedSize(horizontal: false, vertical: true)
               .frame(maxWidth: .infinity, alignment: .leading)
           }
-          .font(.caption)
+          .font(.callout)
         }
       }
     }
