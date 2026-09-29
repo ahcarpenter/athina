@@ -190,13 +190,15 @@ runner:
   in `build/release` but `Athina.app` itself, which the disk image and the
   zip hold.
 - **For a version tag** (`v1.2.3`), one release-please made, for which
-  `.github/workflows/release-please.yml` calls this workflow, or one pushed by
-  hand, it first checks that the tag is on a commit on main. Then it builds
-  with `ATHINA_RELEASE_TAG` set to the tag, so the build fails unless the tag
-  is `v` and the version `Resources/Info.plist` sets, and verifies, and
-  publishes a GitHub Release named `Athina
-  <version>` with the disk image, the zip, the checksums file and the debug
-  symbols, its notes `Athina-<version>-notes.md` without their title line.
+  `.github/workflows/release-please.yml` calls this workflow (or it is run by
+  hand for the tag when that run failed first, see [Each
+  release](#each-release)), or one pushed by hand, it first checks that the
+  tag is on a commit on main. Then it builds with `ATHINA_RELEASE_TAG` set
+  to the tag, so the build fails unless the tag is `v` and the version
+  `Resources/Info.plist` sets, and verifies, and publishes a GitHub Release
+  named `Athina <version>` with the disk image, the zip, the checksums file
+  and the debug symbols, its notes `Athina-<version>-notes.md` without their
+  title line.
   It releases in one of two modes, by the secrets below:
   - **Signed**, with every secret: signed with the Developer ID, notarized
     and stapled, as `make release` does with the identity and the profile.
