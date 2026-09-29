@@ -66,19 +66,30 @@ particular to this app:
   the menu bar on Liquid Glass and never takes keyboard focus, with corners
   concentric with its small capsule buttons. Because it cannot be focused, the
   menu's Answer Suggestion submenu carries its answers, VoiceOver announces
-  it, and it does not expire while VoiceOver or Switch Control is on.
+  it, and it does not expire while VoiceOver or Switch Control is on. Its
+  prominent button draws its own accent capsule, since a panel that is never
+  key would draw a system prominent button in the inactive grey. A person may
+  drag it aside, and it keeps that place, growing downward, until the next
+  suggestion; it grows and shrinks in a short animation, at once with Reduce
+  Motion. A kind of suggestion that warns of something going wrong draws its
+  symbol in the attention tint, a tip in the accent.
 - **The callout is a click-through overlay** that draws its own accent stroke,
   since nothing in the system frames a spot in another app's window; its note
-  sits on the toast's glass. It only fades in, and Increase Contrast thickens
-  the stroke and drops the glow.
+  sits on the toast's glass, whole, never cut short. It only fades in, and
+  Increase Contrast thickens the stroke and drops the glow. VoiceOver never
+  visits it, so it is announced as it appears.
 - **Settings is the SwiftUI `Settings` scene**: a toolbar of panes, the window
   titled by its pane, the last pane remembered, each pane a fixed-size grouped
   form that scrolls. Rows use the form's own label and subtitle styling, and a
   place elsewhere in Settings is a link, not a description. A duration row given
   its setting's range offers only what that setting accepts: its unit pop-up
-  lists the units the range holds a whole amount of, and an amount typed outside
-  the range settles at the nearest allowed one as the edit ends, rather than
-  being clamped out of sight afterwards.
+  lists the units the range holds a whole amount of. In every number row an
+  amount typed outside the range settles at the nearest allowed one as the
+  edit ends, rather than being clamped out of sight afterwards, and the row
+  says what it was set to and what the range is; the money and time rows name
+  their range in their help from the start. A row's Remove button takes a
+  click across the HIG's 20 by 20 point minimum, whatever the size of its
+  glyph.
 - **The model provider is a pop-up button at the top of Settings > Models**,
   with the chosen provider's key rows below it in the same section: the HIG
   (Pop-up buttons) gives a pop-up button to a flat list of mutually exclusive
@@ -108,13 +119,31 @@ particular to this app:
   person chooses, have one.
 - **Status is never color alone.** Inline messages are `StatusLabel` and badges
   are `StatusBadge` (`Sources/Athina/Components.swift`): the symbol or capsule
-  carries the color, the words stay in a label color. Text uses system text
-  styles and label colors, never fixed point sizes or tertiary text for
-  anything that must be read.
-- **What cannot be undone asks first.** Clear Journal… and Reset
-  Understanding… open a confirmation that names what is lost; the confirming
-  button is plain, since it is what the person chose, and Cancel is always
-  there.
+  carries the color, the words stay in the primary label color. A status color
+  is a `StatusTint`, each meaning with one hue: good (green), attention
+  (orange), neutral (grey: the person's own choices, such as an answer to a
+  suggestion, and quiet states) and active (red: listening, recording). The
+  call tiers' and replay's colors in the debug panel name a kind, not a status.
+  Text uses system text styles and label colors, never fixed point sizes or
+  tertiary text for anything that must be read, and secondary text only for
+  hints: what a person must read to decide, such as the consent window's
+  words or a permission's purpose, is primary.
+- **Changes VoiceOver cannot see are announced.** A result that arrives after
+  the control that asked for it (Test Connection, a failed key save), a
+  warning that appears beside a field, a permission turning Granted, a
+  removal and its Undo, and a number corrected into range all go through
+  `Announce`; news nobody asked for queues behind what VoiceOver is saying,
+  and only the answer to something the person just asked interrupts.
+- **Errors are said in Athina's words.** A failed call or a held question
+  says what it means and what to do (`UserFacing`), with the code's own text
+  kept as the tooltip, in the call log and in the journal.
+- **What cannot be undone asks first.** Clear Journal…, Reset
+  Understanding… and the saved key's Remove… open a confirmation that names
+  what is lost; the confirming button is plain, since it is what the person
+  chose, and Cancel is always there. A common removal that can be put back,
+  a context or an excluded app, acts at once instead, as the HIG asks, and a
+  row under its list offers Undo for a while, as Edit > Undo does while
+  Settings is in front.
 - **Consent comes first and asks plainly.** The consent window is the first
   thing a launch shows until there is an Allow, as the HIG (Privacy) asks
   for data collection to be explained before it starts; it says who receives
