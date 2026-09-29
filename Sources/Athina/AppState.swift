@@ -101,7 +101,9 @@ final class AppState {
   /// False when no talk-back hotkey is set or it could not be registered.
   private(set) var pushToTalkRegistered = false
 
-  var mode: SensingMode = .stopped
+  var mode: SensingMode = .stopped {
+    didSet { toast.sensingMode = mode }
+  }
   var permissions: PermissionStatus
   /// Permissions the system has never asked about, so asking shows its alert.
   private(set) var undeterminedPermissions: Set<Permission>
@@ -399,6 +401,11 @@ final class AppState {
     AppState.log.notice("files: \(self.launchFilesLog, privacy: .public)")
     if let refusal = controlMode.refusal {
       AppState.log.error("control API refused: \(refusal, privacy: .public)")
+    }
+    if case .on = controlMode {
+      Announce.recorder = { [weak self] text, priority in
+        self?.controlEvents.appendAnnouncement(text, priority: priority.name)
+      }
     }
     toast.onAction = { [weak self] id, feedback in
       self?.respond(to: id, with: feedback)
@@ -858,6 +865,7 @@ final class AppState {
     } catch {
       apiKeyError = "Could not save the key: \(error)"
       AppState.log.error("api key save failed: \(String(describing: error), privacy: .public)")
+      Announce.post(apiKeyError ?? "")
     }
     reloadKeyHint()
     Task { await mentor?.apiKeyChanged() }
@@ -871,8 +879,10 @@ final class AppState {
       try keyStore.delete(for: provider)
       apiKeyError = nil
       AppState.log.notice("\(provider.rawValue, privacy: .public) api key removed")
+      Announce.post("Saved \(provider.name) API key removed")
     } catch {
       apiKeyError = "Could not remove the key: \(error)"
+      Announce.post(apiKeyError ?? "")
     }
     reloadKeyHint()
     Task { await mentor?.apiKeyChanged() }
@@ -928,7 +938,8 @@ final class AppState {
     // The toast's own copy for one the live list has not had back from the
     // journal yet.
     let suggestion = listed ?? activeSuggestion.flatMap { $0.id == suggestionID ? $0 : nil }
-    if activeSuggestion?.id == suggestionID {
+    let onToast = activeSuggestion?.id == suggestionID
+    if onToast {
       cancelToastExpiry()
       if feedback != .tellMeMore {
         takeDown()
@@ -963,10 +974,50 @@ final class AppState {
     case .tellMeMore, .expired, .expiredUnseen, .dismissed:
       break
     }
+    // The toast is gone, so a note in its place says what the answer did;
+    // the Suggestions window says it beside the suggestion instead.
+    if onToast, let suggestion, let line = consequence(of: feedback, for: suggestion) {
+      toast.showNote(line)
+    }
     AppState.log.notice(
       "suggestion \(suggestionID) feedback \(feedback.rawValue, privacy: .public)"
     )
     return Task { await mentor?.recordFeedback(suggestionID: suggestionID, feedback: feedback) }
+  }
+
+  /// What Not Now or Never for This did to suggestions like this one, and
+  /// until when, as the note after the answer and the Suggestions window say
+  /// it; nil for any other answer, and once the snooze or the rule it made is
+  /// gone.
+  func consequence(of feedback: SuggestionFeedback, for suggestion: Suggestion) -> String? {
+    // One snooze and one rule per app and category, keyed as their `id`s key them.
+    let key = NeverRule(
+      bundleID: suggestion.bundleID,
+      appName: suggestion.appName,
+      category: suggestion.category,
+      createdAt: clock.date
+    ).id
+    var until: String?
+    switch feedback {
+    case .notNow:
+      guard let snooze = settings.mentor.snoozes.first(where: { $0.id == key }),
+        snooze.until > clock.date
+      else { return nil }
+      until =
+        Calendar.current.isDate(snooze.until, inSameDayAs: clock.date)
+        ? snooze.until.formatted(date: .omitted, time: .shortened)
+        : snooze.until.formatted(date: .abbreviated, time: .shortened)
+    case .never:
+      guard settings.mentor.neverRules.contains(where: { $0.id == key }) else { return nil }
+    case .tellMeMore, .expired, .expiredUnseen, .dismissed:
+      return nil
+    }
+    return UserFacing.confirmation(
+      of: feedback,
+      category: suggestion.category,
+      appName: suggestion.appName,
+      until: until
+    )
   }
 
   /// The most recent suggestion that was ever on screen.
@@ -1015,7 +1066,12 @@ final class AppState {
     toastHovered = false
     cancelTalkBack()
     activeSuggestion = suggestion
-    toast.show(suggestion, expanded: false, exchange: exchange(for: suggestion.id))
+    toast.show(
+      suggestion,
+      expanded: false,
+      exchange: exchange(for: suggestion.id),
+      asked: !autoExpires
+    )
     // With VoiceOver or Switch Control on, a suggestion waits to be
     // answered or closed instead of timing out while it is being reached.
     if autoExpires, !AppState.assistiveTechnologyIsRunning {
@@ -1457,7 +1513,11 @@ final class AppState {
     guard talkBack.acceptsAQuestion else { return }
     guard settings.hasConsent else {
       toast.showNote(
-        "Athina is not listening: it is not allowed to watch. Choose Allow Watching in the Athina menu."
+        """
+        Athina is not listening: it is not allowed to watch. Choose Allow Watching in the \
+        Athina menu.
+        """,
+        untilClicked: true
       )
       return
     }
@@ -1487,7 +1547,8 @@ final class AppState {
           : """
           Athina needs Microphone and Speech Recognition to hear you. Choose Set Up Talk \
           Back in the Athina menu to allow them.
-          """
+          """,
+        untilClicked: true
       )
       return
     }
@@ -1661,7 +1722,10 @@ final class AppState {
         talkBack == .thinking(question: question) || talkBack == .waiting(question: question)
       else { return }
       setTalkBack(.idle)
-      toast.setExchange(exchange(for: suggestion.id, including: followUp))
+      toast.setExchange(
+        exchange(for: suggestion.id, including: followUp),
+        provider: settings.mentor.provider
+      )
     }
   }
 
@@ -1959,7 +2023,10 @@ final class AppState {
       show(suggestion, autoExpires: true)
     case .followUp(let followUp):
       if activeSuggestion?.id == followUp.suggestionID {
-        toast.setExchange(exchange(for: followUp.suggestionID, including: followUp))
+        toast.setExchange(
+          exchange(for: followUp.suggestionID, including: followUp),
+          provider: settings.mentor.provider
+        )
       }
     case .feedback, .call, .event:
       // The live lists have these from the journal.

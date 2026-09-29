@@ -254,8 +254,10 @@ public struct CalloutLayout: Equatable, Sendable {
   public static let glow: CGFloat = 12
   /// Space between the box and the note.
   public static let gap: CGFloat = 8
-  /// Height reserved for the note, enough for two lines.
-  public static let noteHeight: CGFloat = 48
+  /// Height reserved for the note, enough for the three lines the longest
+  /// note (`CalloutRegion.maxNoteLength`) wraps to at `noteMaxWidth`, so no
+  /// note is ever cut short.
+  public static let noteHeight: CGFloat = 64
   /// A note wider than this wraps.
   public static let noteMaxWidth: CGFloat = 320
 

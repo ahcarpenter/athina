@@ -12,6 +12,7 @@ extension ControlCommands {
   /// The names `wait-event` waits for (`ControlEventLog.Entry.name`).
   static let eventNames = [
     "observation", "focus", "mode", "event", "status", "suggestion", "feedback", "followUp", "call",
+    "announcement",
   ]
 
   // MARK: - Scripted sensing

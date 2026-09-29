@@ -6,6 +6,7 @@ import Foundation
 ///
 /// It holds what the sensing pipeline and the mentor loop publish, each once
 /// the app has acted on it: a `suggestion` is logged once its toast is up.
+/// It also holds what the app told VoiceOver, as `announcement`s.
 /// Only the newest `capacity` are kept. The cadence bookkeeping the pipeline
 /// publishes several times a second is left out.
 public struct ControlEventLog: Equatable, Sendable {
@@ -15,7 +16,8 @@ public struct ControlEventLog: Equatable, Sendable {
     public var sequence: Int
 
     /// What kind of event it is: `observation`, `focus`, `mode`, `event`,
-    /// `status`, `suggestion`, `feedback`, `followUp` or `call`.
+    /// `status`, `suggestion`, `feedback`, `followUp`, `call` or
+    /// `announcement`.
     public var name: String
 
     /// What `wait-event` matches on and answers with.
@@ -114,6 +116,12 @@ public struct ControlEventLog: Equatable, Sendable {
     case .event(let event):
       append(event)
     }
+  }
+
+  /// Logs what the app asked VoiceOver to say, and at which priority
+  /// (`low`, `medium` or `high`).
+  public mutating func appendAnnouncement(_ text: String, priority: String) {
+    append("announcement", ["text": text, "priority": priority])
   }
 
   private mutating func append(_ event: JournalEvent) {

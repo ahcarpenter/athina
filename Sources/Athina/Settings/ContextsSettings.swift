@@ -22,7 +22,11 @@ struct MentorshipContextsSection: View {
   @Environment(AppState.self)
   private var state
 
+  @Environment(\.undoManager)
+  private var undoManager
+
   @State private var editing: MentorshipContext?
+  @State private var removals = RemovalUndo<MentorshipContext>()
 
   private var contexts: [MentorshipContext] { state.settings.mentor.contexts }
   private var enforcing: Bool { state.settings.mentor.onlyMentorInsideContexts }
@@ -52,9 +56,29 @@ struct MentorshipContextsSection: View {
             .foregroundStyle(.secondary)
         } else {
           ForEach(contexts) { context in
-            ContextRow(context: context) { editing = context }
+            ContextRow(
+              context: context,
+              onEdit: { editing = context },
+              onRemove: {
+                guard let index = contexts.firstIndex(where: { $0.id == context.id }) else {
+                  return
+                }
+                removals.remove(
+                  at: index,
+                  named: context.name,
+                  from: $state.settings.mentor.contexts,
+                  clock: state.clock,
+                  undoManager: undoManager
+                )
+              }
+            )
           }
         }
+        UndoRemovalRow(
+          undo: removals,
+          list: $state.settings.mentor.contexts,
+          identifier: "contexts.undoRemove"
+        )
         LabeledContent(
           content: {
             Button("Add Context…") {
@@ -107,11 +131,9 @@ struct MentorshipContextsSection: View {
 
 /// One declared context: its name and what it covers, with Edit and Remove.
 private struct ContextRow: View {
-  @Environment(AppState.self)
-  private var state
-
   let context: MentorshipContext
   let onEdit: () -> Void
+  let onRemove: () -> Void
 
   var body: some View {
     LabeledContent(
@@ -119,9 +141,7 @@ private struct ContextRow: View {
         HStack(spacing: 8) {
           Button("Edit…", action: onEdit)
             .accessibilityLabel("Edit \(context.name)")
-          RemoveButton(itemName: context.name) {
-            state.settings.mentor.contexts.removeAll { $0.id == context.id }
-          }
+          RemoveButton(itemName: context.name, action: onRemove)
         }
       },
       label: {
@@ -178,6 +198,10 @@ struct ContextEditor: View {
     ContextRules.isDuplicateName(draft.name, in: existing, excluding: draft.id)
   }
 
+  private var duplicateWarning: String {
+    "Another context is already called \"\(trimmedName)\". Choose a different name."
+  }
+
   private var nameAtLimit: Bool { trimmedName.count >= MentorshipContext.maxNameLength }
 
   private var detailAtLimit: Bool {
@@ -196,11 +220,13 @@ struct ContextEditor: View {
               .onChange(of: draft.name) { _, typed in
                 draft.name = ContextRules.capped(typed, to: MentorshipContext.maxNameLength)
               }
+              // The warning appears beside the field as the name is typed;
+              // VoiceOver hears it then too.
+              .onChange(of: isDuplicate) { _, duplicate in
+                if duplicate { Announce.post(duplicateWarning) }
+              }
             if isDuplicate {
-              StatusLabel(
-                "Another context is already called \"\(trimmedName)\". Choose a different name.",
-                kind: .warning
-              )
+              StatusLabel(duplicateWarning, kind: .warning)
             } else if nameAtLimit {
               Text("A name can be at most \(MentorshipContext.maxNameLength) characters.")
                 .foregroundStyle(.secondary)

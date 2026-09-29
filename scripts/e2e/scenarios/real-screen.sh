@@ -365,7 +365,7 @@ scenario_run() {
 	sleep 1.2
 	snapshot_state "after-tell-me-more"
 	check "feedback recorded" "tellMeMore" "$(suggestion_feedback "$suggestion")"
-	check "the toast was announced" "yes" "$(grep -q 'Athina suggestion' "$RUN_DIR/announcements.log" 2>/dev/null && echo yes || echo no)"
+	check "the toast was announced" "yes" "$(grep -q 'AXAnnouncementRequested priority=[0-9]* "Athina, [^:]* in [^:]*: ' "$RUN_DIR/announcements.log" 2>/dev/null && echo yes || echo no)"
 
 	step "5 a real click on empty menu bar space dismisses a new toast, and that is recorded"
 	relaunch_athina

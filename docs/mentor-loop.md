@@ -77,13 +77,20 @@ each kept observation it runs, in order:
    toast stays until closed. *Not Now* dismisses and snoozes that category for
    that app for `notNowSnooze` (1 h). *Never for This* records that the
    category must never be raised for that app again (the rule is listed and
-   removable in Settings > General). The toast never takes keyboard focus, so
+   removable in Settings > General). Either answer, from the toast, the menu or
+   a spoken reply, leaves a note in the toast's place saying what it did
+   (`UserFacing.confirmation`), and the history window says it beside the
+   suggestion. The toast never takes keyboard focus, so
    the menu's Answer Suggestion submenu offers the same answers to the
-   keyboard and VoiceOver, and VoiceOver announces a toast as it appears; while
-   VoiceOver or Switch Control is on, a toast does not expire on its own. Every
+   keyboard and VoiceOver, and VoiceOver announces a toast as it appears, with
+   its kind and app: one that came unasked after what VoiceOver is saying, one
+   brought back on request at once. While
+   VoiceOver or Switch Control is on, a toast does not expire on its own. A
+   toast dragged aside stays where it was put until the next suggestion
+   (`ToastPlacement`). Every
    suggestion and every answer is journaled, and the history window
    (menu > Suggestions) lists them with time, app, category, feedback, and full
-   text.
+   text, with Not Now, Never for This and Copy Suggestion in its context menu.
 
 The system prompts and output schemas of every tier live in
 `Prompts.swift` under a version number that is stored with every call and
@@ -276,8 +283,17 @@ soon as that call returns. At most one question waits; pressing the key again
 withdraws it and the new question takes its place, and closing the toast or
 pausing withdraws it too, in neither case journaling anything. The key does
 nothing with no suggestion to talk back to except a brief note in the toast
-area, and with no toast up it brings the most recent suggestion back to talk
-to. The history window shows the full exchange under each suggestion, and the
+area, which stays long enough to read (`ToastPlacement.noteDuration`), holds
+while the pointer is over it, and, when it names a next step such as granting
+a permission, stays until the next click, or the next key press while Athina
+is allowed to watch and is watching (`ToastPlacement.noticesKeyPresses`: never
+before Allow, while paused or while an excluded app is in front, when no key
+is watched at all and only a click takes it down; only that a key went down is
+used, never which; presses in other apps count only with the Accessibility
+access Athina already has, never Input Monitoring); with no toast up the key brings the
+most recent suggestion back to talk
+to. A question that got no answer says why in Athina's words (`UserFacing`),
+with the journaled error as its tooltip. The history window shows the full exchange under each suggestion, and the
 debug panel's Mentor card shows the last transcript and what was done with it.
 
 A suggestion the mentor tier finishes while a talked-to toast is up never

@@ -319,7 +319,9 @@ import Testing
     let spot = CGRect(x: 5.4, y: 276.75, width: 351, height: 40.5)
     let layout = CalloutLayout(screenRect: spot, display: display)
     #expect(layout.notePlacement == .trailing)
-    #expect(layout.windowRect.origin == CGPoint(x: 0, y: 261))
+    // The note's three lines, centred on the box, reach above it: its top at
+    // 297 - 32 = 265, less the glow's 12.
+    #expect(layout.windowRect.origin == CGPoint(x: 0, y: 253))
     #expect(layout.windowRect.origin.x.rounded() == layout.windowRect.origin.x)
     #expect(layout.windowRect.size.width.rounded() == layout.windowRect.size.width)
     #expect(abs(boxOrigin(layout).x - spot.minX) < 0.001)

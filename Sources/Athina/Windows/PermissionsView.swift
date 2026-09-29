@@ -34,7 +34,6 @@ struct PermissionsView: View {
             api.anthropic.com, and only after you save an API key.
             """
           )
-          .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
         }
       }
@@ -122,6 +121,11 @@ private struct PermissionRows: View {
     VStack(spacing: 0) {
       ForEach(permissions) { permission in
         PermissionRow(permission: permission, granted: state.permissions.isGranted(permission))
+          // The window polls while the person grants it in System Settings;
+          // a VoiceOver user coming back hears that it worked.
+          .onChange(of: state.permissions.isGranted(permission)) { was, granted in
+            if granted, !was { Announce.post("\(permission.title) granted") }
+          }
         if permission != permissions.last {
           Divider()
         }
@@ -145,7 +149,7 @@ private struct PermissionRow: View {
     HStack(alignment: .center, spacing: 12) {
       Image(systemName: symbol)
         .font(.title2)
-        .foregroundStyle(granted ? AnyShapeStyle(.green) : AnyShapeStyle(.secondary))
+        .foregroundStyle(granted ? AnyShapeStyle(StatusTint.good.color) : AnyShapeStyle(.secondary))
         .frame(width: 32)
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 4) {
@@ -155,7 +159,6 @@ private struct PermissionRow: View {
           PermissionBadge(granted: granted)
         }
         Text(permission.purpose)
-          .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -190,6 +193,6 @@ struct PermissionBadge: View {
   let granted: Bool
 
   var body: some View {
-    StatusBadge(text: granted ? "Granted" : "Not granted", tint: granted ? .green : .orange)
+    StatusBadge(text: granted ? "Granted" : "Not granted", status: granted ? .good : .attention)
   }
 }

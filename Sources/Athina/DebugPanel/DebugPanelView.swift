@@ -25,10 +25,11 @@ struct DebugPanelView: View {
     VStack(spacing: 0) {
       DebugStatusBar()
       Divider()
-      HStack(spacing: 0) {
+      // Split views, so a wider window can give either side column more room
+      // rather than only the frame.
+      HSplitView {
         NowPane()
-          .frame(width: 340)
-        Divider()
+          .frame(minWidth: 300, idealWidth: 340, maxWidth: 520)
         FramePane(
           observation: selected?.observation ?? state.latestObservation,
           image: selected?.image ?? (selected == nil ? state.latestImage : nil),
@@ -39,13 +40,12 @@ struct DebugPanelView: View {
           selected = nil
           selectedEntryID = nil
         }
-        .frame(maxWidth: .infinity)
-        Divider()
+        .frame(minWidth: 360, maxWidth: .infinity)
         TimelinePane(selectedID: $selectedEntryID, page: $sidePage)
-          .frame(width: 360)
+          .frame(minWidth: 300, idealWidth: 360, maxWidth: 560)
       }
     }
-    .frame(minWidth: 1120, minHeight: 640)
+    .frame(minWidth: 960, minHeight: 640)
     .task {
       await state.refreshJournalStats()
     }
@@ -154,7 +154,7 @@ struct ClientModeBadge: View {
     case .record:
       title = "Recording"
       symbol = "record.circle"
-      color = .red
+      color = StatusTint.active.color
       help =
         recordingUnavailableReason.map {
           "Recording is unavailable, so every model call is refused and nothing is sent: \($0)"
@@ -188,12 +188,10 @@ struct ModeBadge: View {
 
   private var color: Color {
     switch mode {
-    case .watching: .green
-    case .screenOnly, .accessibilityOnly: .yellow
-    case .idle: .gray
-    case .paused, .stopped, .waitingForConsent: .orange
-    case .excluded: .purple
-    case .waitingForPermissions: .red
+    case .watching: StatusTint.good.color
+    case .screenOnly, .accessibilityOnly, .stopped, .waitingForConsent, .waitingForPermissions:
+      StatusTint.attention.color
+    case .idle, .paused, .excluded: StatusTint.neutral.color
     }
   }
 }
@@ -432,9 +430,12 @@ struct Field: View {
 
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 8) {
+      // At least the column's width, so the values line up, and wider for a
+      // longer label rather than cutting it.
       Text(label)
         .foregroundStyle(.secondary)
-        .frame(width: 78, alignment: .trailing)
+        .fixedSize()
+        .frame(minWidth: 78, alignment: .trailing)
       Text(value)
         .lineLimit(lineLimit)
         .truncationMode(truncation)
@@ -750,11 +751,8 @@ private struct TimelineRow: View {
     case .observation: .accentColor
     case .event(let e):
       switch e.kind {
-      case .paused, .excluded: .orange
-      case .idleStart: .gray
-      case .journalCleared: .red
-      case .suggested: .yellow
-      case .feedback: .green
+      case .paused, .excluded, .idleStart, .journalCleared, .feedback: StatusTint.neutral.color
+      case .suggested: .accentColor
       case .talkBack: .teal
       case .understanding: UnderstandingCard.tint
       default: .secondary
@@ -1194,10 +1192,9 @@ private struct AvailabilityBadge: View {
 
   private var color: Color {
     switch availability {
-    case .ready: .green
-    case .disabled: .gray
-    case .noConsent, .noAPIKey: .orange
-    case .capReached: .red
+    case .ready: StatusTint.good.color
+    case .disabled: StatusTint.neutral.color
+    case .noConsent, .noAPIKey, .capReached: StatusTint.attention.color
     }
   }
 }

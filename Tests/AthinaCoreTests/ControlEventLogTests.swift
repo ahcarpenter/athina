@@ -41,4 +41,12 @@ import Testing
     #expect(log.entries.map(\.sequence) == [3, 4, 5])
     #expect(log.sequence == 5)
   }
+
+  @Test func announcementsAreLoggedWithTheirPriority() {
+    var log = ControlEventLog()
+    log.appendAnnouncement("Screen Recording granted", priority: "medium")
+    #expect(log.entries.map(\.name) == ["announcement"])
+    #expect(log.entries[0].fields == ["text": "Screen Recording granted", "priority": "medium"])
+    #expect(log.first(named: "announcement", matching: ["priority": "medium"])?.sequence == 1)
+  }
 }

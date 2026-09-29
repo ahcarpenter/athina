@@ -41,7 +41,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     switch self {
     case .general: "gearshape"
     case .contexts: "target"
-    case .models: "sparkles"
+    case .models: "cpu"
     case .capture: "camera.viewfinder"
     case .journal: "book.closed"
     case .privacy: "hand.raised"
@@ -453,7 +453,11 @@ struct PrivacySettings: View {
   @Environment(AppState.self)
   private var state
 
+  @Environment(\.undoManager)
+  private var undoManager
+
   @State private var showAdd = false
+  @State private var removals = RemovalUndo<String>()
 
   var body: some View {
     @Bindable var state = state
@@ -464,7 +468,7 @@ struct PrivacySettings: View {
             content: {
               StatusBadge(
                 text: state.settings.hasConsent ? "Allowed" : "Not allowed",
-                tint: state.settings.hasConsent ? .green : .orange
+                status: state.settings.hasConsent ? .good : .attention
               )
             },
             label: {
@@ -509,14 +513,8 @@ struct PrivacySettings: View {
             },
             label: {
               Text("Pause shortcut")
-              if state.isRunning, state.settings.pauseShortcut != nil, !state.hotKeyRegistered {
-                StatusLabel(
-                  """
-                  Another app uses this combination, or it lacks Control, Option, or Command. \
-                  Choose another.
-                  """,
-                  kind: .warning
-                )
+              if state.isRunning, let key = state.settings.pauseShortcut, !state.hotKeyRegistered {
+                StatusLabel(ShortcutProblem.sentence(for: key), kind: .warning)
               }
             }
           )
@@ -532,11 +530,6 @@ struct PrivacySettings: View {
       )
       Section(
         content: {
-          ForEach(state.settings.excludedBundleIDs, id: \.self) { id in
-            ExcludedAppRow(bundleID: id) {
-              state.settings.excludedBundleIDs.removeAll { $0 == id }
-            }
-          }
           HStack {
             Button("Add App…") { showAdd = true }
               .popover(isPresented: $showAdd, arrowEdge: .bottom) {
@@ -550,6 +543,38 @@ struct PrivacySettings: View {
             }
             .disabled(state.settings.excludedBundleIDs == ExcludedApps.defaults)
           }
+          let excluded = state.settings.excludedBundleIDs
+          let installed = excluded.filter(ExcludedAppRow.isInstalled)
+          ForEach(installed, id: \.self) { id in
+            excludedRow(id)
+          }
+          // Apps this Mac does not have are listed only on request: most of
+          // the defaults are password managers a given Mac never installed.
+          let missing = excluded.filter { !ExcludedAppRow.isInstalled($0) }
+          if !missing.isEmpty {
+            DisclosureGroup(
+              content: {
+                ForEach(missing, id: \.self) { id in
+                  excludedRow(id)
+                }
+              },
+              label: {
+                Text(
+                  Plural.count(
+                    missing.count,
+                    "app that is not installed",
+                    "apps that are not installed"
+                  )
+                )
+              }
+            )
+            .accessibilityIdentifier("privacy.notInstalledApps")
+          }
+          UndoRemovalRow(
+            undo: removals,
+            list: $state.settings.excludedBundleIDs,
+            identifier: "privacy.undoRemoveApp"
+          )
         },
         header: {
           Text("Excluded apps")
@@ -558,10 +583,25 @@ struct PrivacySettings: View {
           Text(
             """
             While one of these apps is frontmost, Athina captures nothing, reads no window or \
-            element, and journals only that the app was excluded.
+            element, and journals only that the app was excluded. Password fields in any app \
+            are never read either.
             """
           )
         }
+      )
+    }
+  }
+
+  private func excludedRow(_ id: String) -> some View {
+    @Bindable var state = state
+    return ExcludedAppRow(bundleID: id) { name in
+      guard let index = state.settings.excludedBundleIDs.firstIndex(of: id) else { return }
+      removals.remove(
+        at: index,
+        named: name,
+        from: $state.settings.excludedBundleIDs,
+        clock: state.clock,
+        undoManager: undoManager
       )
     }
   }
@@ -587,17 +627,23 @@ extension PrivacySettings {
 /// identifier always, and a button that removes it.
 private struct ExcludedAppRow: View {
   let bundleID: String
-  let onRemove: () -> Void
+  /// Removes the app, given the name the row shows for it.
+  let onRemove: (String) -> Void
 
   private var appURL: URL? {
     NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID)
   }
 
+  static func isInstalled(_ bundleID: String) -> Bool {
+    NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+  }
+
   var body: some View {
     let url = appURL
+    let name = url.map(appName) ?? bundleID
     LabeledContent(
       content: {
-        RemoveButton(itemName: url.map(appName) ?? bundleID, action: onRemove)
+        RemoveButton(itemName: name) { onRemove(name) }
       },
       label: {
         Label(
@@ -630,7 +676,12 @@ private struct ExcludedAppRow: View {
 
 /// An icon-only button that removes one item from a list, labeled for
 /// VoiceOver and the pointer with what it removes.
+///
+/// The glyph keeps its size, and the area that takes the click is the HIG's
+/// 20 by 20 point minimum for macOS around it.
 struct RemoveButton: View {
+  static let minimumHitSize: CGFloat = 20
+
   let itemName: String
   let action: () -> Void
 
@@ -638,9 +689,130 @@ struct RemoveButton: View {
     Button(role: .destructive, action: action) {
       Label("Remove \(itemName)", systemImage: "minus.circle")
         .labelStyle(.iconOnly)
+        .frame(minWidth: Self.minimumHitSize, minHeight: Self.minimumHitSize)
+        .contentShape(Rectangle())
     }
     .buttonStyle(.borderless)
     .help("Remove \(itemName)")
+  }
+}
+
+/// The last item removed from a list, and where it was, so Undo can put it
+/// back.
+struct Removal<Item: Equatable>: Equatable {
+  /// The item as it was.
+  let item: Item
+  /// Its place in the list.
+  let index: Int
+  /// What it is called, for the row that offers Undo and for VoiceOver.
+  let name: String
+
+  /// The list with the item back at its place, unless it is there already.
+  func restored(in list: [Item]) -> [Item] {
+    guard !list.contains(item) else { return list }
+    var list = list
+    list.insert(item, at: min(index, list.count))
+    return list
+  }
+}
+
+/// Removes items from a list on one click, and keeps the last removal so it
+/// can be undone, as the HIG asks of a common, cheap destructive action
+/// instead of an alert: from the row this puts under the list for a while,
+/// or with Edit > Undo while the Settings window is in front.
+@MainActor
+@Observable
+final class RemovalUndo<Item: Equatable> {
+  /// How long the Undo row stays under the list after a removal.
+  static var shownFor: Duration { .seconds(10) }
+
+  private(set) var last: Removal<Item>?
+  /// The undo manager's action for `last`, taken off its stack when the row
+  /// undoes the removal instead.
+  private var lastRegistration: Registration?
+  private var expiry: Task<Void, Never>?
+
+  /// One removal's place on an undo manager's stack.
+  private final class Registration {
+    weak var undoManager: UndoManager?
+
+    init(undoManager: UndoManager?) {
+      self.undoManager = undoManager
+    }
+  }
+
+  /// Removes the item at `index` of the list `list` reads and writes, and
+  /// keeps it for Undo.
+  func remove(
+    at index: Int,
+    named name: String,
+    from list: Binding<[Item]>,
+    clock: any AthinaClock,
+    undoManager: UndoManager?
+  ) {
+    guard list.wrappedValue.indices.contains(index) else { return }
+    let removal = Removal(item: list.wrappedValue[index], index: index, name: name)
+    list.wrappedValue.remove(at: index)
+    let registration = Registration(undoManager: undoManager)
+    last = removal
+    lastRegistration = registration
+    Announce.post("Removed \(name)")
+    undoManager?.registerUndo(withTarget: registration) { _ in
+      MainActor.assumeIsolated { self.restore(removal, registeredAs: registration, into: list) }
+    }
+    undoManager?.setActionName("Remove \(name)")
+    expiry?.cancel()
+    expiry = Task { [weak self] in
+      try? await clock.sleep(for: Self.shownFor)
+      guard !Task.isCancelled, let self, self.lastRegistration === registration else { return }
+      self.last = nil
+      self.lastRegistration = nil
+    }
+  }
+
+  /// Puts the last removal back, from the row under the list.
+  func undo(into list: Binding<[Item]>) {
+    guard let removal = last, let registration = lastRegistration else { return }
+    registration.undoManager?.removeAllActions(withTarget: registration)
+    restore(removal, registeredAs: registration, into: list)
+  }
+
+  /// Puts `removal` back, and stops offering it in the row if it is the last.
+  private func restore(
+    _ removal: Removal<Item>,
+    registeredAs registration: Registration,
+    into list: Binding<[Item]>
+  ) {
+    list.wrappedValue = removal.restored(in: list.wrappedValue)
+    if lastRegistration === registration {
+      last = nil
+      lastRegistration = nil
+      expiry?.cancel()
+    }
+    Announce.post("Restored \(removal.name)")
+  }
+}
+
+/// "Removed 1Password." with Undo, under a list for a while after a removal.
+struct UndoRemovalRow<Item: Equatable>: View {
+  let undo: RemovalUndo<Item>
+  let list: Binding<[Item]>
+  /// The Undo button's accessibility identifier, for the end-to-end harness.
+  let identifier: String
+
+  var body: some View {
+    if let removal = undo.last {
+      LabeledContent(
+        content: {
+          Button("Undo") { undo.undo(into: list) }
+            .accessibilityLabel("Undo removing \(removal.name)")
+            .accessibilityIdentifier(identifier)
+        },
+        label: {
+          Text("Removed \(removal.name).")
+        }
+      )
+    }
   }
 }
 
@@ -699,6 +871,19 @@ private struct AddExcludedAppPopover: View {
   }
 }
 
+/// Why a keyboard shortcut Settings holds is not working: the one reason
+/// that applies, not a list of possible ones.
+enum ShortcutProblem {
+  static func sentence(for key: HotKey) -> String {
+    key.isUsable
+      ? "Another app uses this combination. Choose another."
+      : """
+      This combination has no Control, Option, or Command key, so it would take a key you \
+      type. Choose another.
+      """
+  }
+}
+
 // MARK: - Rows
 
 /// The unit a number row counts in, written out for the row and for VoiceOver.
@@ -719,7 +904,8 @@ enum SettingsUnit {
 
 /// A number with a field for typing it, a stepper for nudging it, and its unit.
 ///
-/// The label can carry a line of help underneath, styled by the form.
+/// The label can carry a line of help underneath, styled by the form; a row
+/// counting seconds says its range there too.
 struct NumberRow: View {
   let title: String
   @Binding var value: Double
@@ -744,25 +930,31 @@ struct NumberRow: View {
     self.help = help
   }
 
+  private static let format = FloatingPointFormatStyle<Double>.number.precision(
+    .fractionLength(0...2)
+  )
+
   private var spokenTitle: String { "\(title), in \(unit.label(for: value))" }
 
+  private func amount(_ number: Double) -> String {
+    "\(number.formatted(Self.format)) \(unit.label(for: number))"
+  }
+
   var body: some View {
-    LabeledContent(
-      content: {
+    RangedRow(
+      title: title,
+      help: unit == .seconds ? Ranged.withRange(help, range, amount) : help,
+      value: $value,
+      range: range,
+      describe: amount,
+      controls: { draft, editing, onCommit in
         NumberControls(
           unitLabel: unit.label(for: value),
-          field: TextField(
-            spokenTitle,
-            value: $value,
-            format: .number.precision(.fractionLength(0...2))
-          )
-          .onSubmit { value = value.clamped(to: range) },
-          stepper: Stepper(title, value: $value, in: range, step: step)
+          field: TextField(spokenTitle, value: draft, format: Self.format),
+          stepper: Stepper(title, value: $value, in: range, step: step),
+          editing: editing,
+          onCommit: onCommit
         )
-      },
-      label: {
-        Text(title)
-        if let help { Text(help) }
       }
     )
   }
@@ -795,58 +987,70 @@ struct IntRow: View {
   private var spokenTitle: String { "\(title), in \(unit.label(for: Double(value)))" }
 
   var body: some View {
-    LabeledContent(
-      content: {
+    RangedRow(
+      title: title,
+      help: help,
+      value: $value,
+      range: range,
+      describe: { "\($0.formatted(.number)) \(unit.label(for: Double($0)))" },
+      controls: { draft, editing, onCommit in
         NumberControls(
           unitLabel: unit.label(for: Double(value)),
-          field: TextField(spokenTitle, value: $value, format: .number.grouping(.never))
-            .onSubmit { value = value.clamped(to: range) },
-          stepper: Stepper(title, value: $value, in: range, step: step)
+          field: TextField(spokenTitle, value: draft, format: .number.grouping(.never)),
+          stepper: Stepper(title, value: $value, in: range, step: step),
+          editing: editing,
+          onCommit: onCommit
         )
-      },
-      label: {
-        Text(title)
-        if let help { Text(help) }
       }
     )
   }
 }
 
-/// An amount of money, typed and shown in dollars.
+/// An amount of money, typed and shown in dollars, its range said in its help.
 struct DollarRow: View {
   let title: String
   @Binding var value: Double
   let range: ClosedRange<Double>
   let step: Double
   var help: String?
+  /// The field's accessibility identifier, for the end-to-end harness
+  /// (docs/e2e.md "The control API").
+  var identifier: String?
 
   init(
     _ title: String,
     value: Binding<Double>,
     range: ClosedRange<Double>,
     step: Double,
-    help: String? = nil
+    help: String? = nil,
+    identifier: String? = nil
   ) {
     self.title = title
     _value = value
     self.range = range
     self.step = step
     self.help = help
+    self.identifier = identifier
   }
 
+  private static let format = FloatingPointFormatStyle<Double>.Currency(code: "USD")
+
   var body: some View {
-    LabeledContent(
-      content: {
+    RangedRow(
+      title: title,
+      help: Ranged.withRange(help, range) { $0.formatted(Self.format) },
+      value: $value,
+      range: range,
+      describe: { $0.formatted(Self.format) },
+      controls: { draft, editing, onCommit in
         NumberControls(
           unitLabel: nil,
-          field: TextField(title, value: $value, format: .currency(code: "USD"))
-            .onSubmit { value = value.clamped(to: range) },
-          stepper: Stepper(title, value: $value, in: range, step: step)
+          field: TextField(title, value: draft, format: Self.format)
+            .accessibilityIdentifier(identifier ?? ""),
+          stepper: Stepper(title, value: $value, in: range, step: step),
+          editing: editing,
+          onCommit: onCommit
         )
-      },
-      label: {
-        Text(title)
-        if let help { Text(help) }
       }
     )
   }
@@ -874,21 +1078,110 @@ struct PercentRow: View {
     self.help = help
   }
 
+  private static let format = FloatingPointFormatStyle<Double>.Percent.percent.precision(
+    .fractionLength(0)
+  )
+
   var body: some View {
-    LabeledContent(
-      content: {
+    RangedRow(
+      title: title,
+      help: help,
+      value: $value,
+      range: range,
+      describe: { $0.formatted(Self.format) },
+      controls: { draft, editing, onCommit in
         NumberControls(
           unitLabel: nil,
-          field: TextField(title, value: $value, format: .percent.precision(.fractionLength(0)))
-            .onSubmit { value = value.clamped(to: range) },
-          stepper: Stepper(title, value: $value, in: range, step: step)
+          field: TextField(title, value: draft, format: Self.format),
+          stepper: Stepper(title, value: $value, in: range, step: step),
+          editing: editing,
+          onCommit: onCommit
         )
+      }
+    )
+  }
+}
+
+/// Help text for a row, with the range the row accepts after it.
+enum Ranged {
+  static func withRange<Value>(
+    _ help: String?,
+    _ range: ClosedRange<Value>,
+    _ describe: (Value) -> String
+  ) -> String {
+    let span = "From \(describe(range.lowerBound)) to \(describe(range.upperBound))."
+    return help.map { "\($0) \(span)" } ?? span
+  }
+}
+
+/// A number row's label and controls around a field that edits a local
+/// draft, not the setting itself.
+///
+/// The draft is written to the setting as the edit ends, however it ends,
+/// held inside `range`, so `MentorSettings.validated()`, which runs on every
+/// change of the settings, never gets a number to correct out of sight. When
+/// the typed number was outside the range the row says what it was set to and
+/// what the range is, and VoiceOver hears it, until the setting next changes.
+private struct RangedRow<Value: Comparable & Sendable, Controls: View>: View {
+  let title: String
+  let help: String?
+  @Binding var value: Value
+  let range: ClosedRange<Value>
+  let describe: (Value) -> String
+  @ViewBuilder
+  let controls: (Binding<Value>, FocusState<Bool>.Binding, @escaping () -> Void) -> Controls
+
+  @State private var draft: Value?
+  @FocusState private var editing: Bool
+  /// The number the setting was set to after a typed one outside the range.
+  @State private var corrected: Value?
+
+  var body: some View {
+    let field = Binding(get: { draft ?? value }, set: { draft = $0 })
+    LabeledContent(
+      content: {
+        controls(field, $editing, push)
       },
       label: {
         Text(title)
         if let help { Text(help) }
+        if let corrected {
+          StatusLabel(correction(corrected), kind: .info)
+        }
       }
     )
+    // However the field commits its text, before or after focus leaves it,
+    // what it typed is pushed once the edit is over.
+    .onChange(of: editing) { _, focused in
+      if !focused { push() }
+    }
+    .onChange(of: draft) { _, typed in
+      if typed != nil, !editing { push() }
+    }
+    .onChange(of: value) { _, newValue in
+      // The stepper, or a change from elsewhere: the draft follows it, and a
+      // correction the setting has moved on from is no longer news.
+      draft = nil
+      if newValue != corrected { corrected = nil }
+    }
+  }
+
+  private func correction(_ settled: Value) -> String {
+    """
+    Set to \(describe(settled)), since it can be from \(describe(range.lowerBound)) to \
+    \(describe(range.upperBound)).
+    """
+  }
+
+  private func push() {
+    guard let typed = draft else { return }
+    let settled = typed.clamped(to: range)
+    draft = nil
+    if settled != typed {
+      corrected = settled
+      Announce.post(correction(settled))
+    }
+    if settled != value { value = settled }
   }
 }
 
@@ -896,11 +1189,14 @@ struct PercentRow: View {
 ///
 /// The field and stepper are titled with the row's title, the field's with its
 /// unit too, which VoiceOver reads once; a separate accessibility label would
-/// be read beside that title.
+/// be read beside that title. The field commits as its edit ends, on Return or
+/// when focus leaves it.
 private struct NumberControls<Field: View, StepperView: View>: View {
   let unitLabel: String?
   let field: Field
   let stepper: StepperView
+  let editing: FocusState<Bool>.Binding
+  let onCommit: () -> Void
 
   var body: some View {
     HStack(spacing: 6) {
@@ -908,6 +1204,8 @@ private struct NumberControls<Field: View, StepperView: View>: View {
         .labelsHidden()
         .multilineTextAlignment(.trailing)
         .frame(width: 72)
+        .focused(editing)
+        .onSubmit(onCommit)
       stepper
         .labelsHidden()
       if let unitLabel {
@@ -1017,7 +1315,7 @@ struct DurationRow: View {
           Stepper(title, value: $amount, in: amounts(in: unit) ?? 1...10_000, step: 1) { _ in push()
           }
           .labelsHidden()
-          Picker("Unit", selection: $unit) {
+          Picker("\(title) unit", selection: $unit) {
             ForEach(units) { unit in
               Text(unit.rawValue).tag(unit)
             }

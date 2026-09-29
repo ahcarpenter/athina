@@ -8,7 +8,8 @@ import SwiftUI
 /// its note beside it.
 ///
 /// It never takes focus and never sees a click, key, or scroll;
-/// `ignoresMouseEvents` passes everything to whatever is under it. Deciding
+/// `ignoresMouseEvents` passes everything to whatever is under it, so VoiceOver
+/// never visits it either: it hears the note when the callout appears. Deciding
 /// whether the spot is still valid is `AppState`'s job with `CalloutAnchor`;
 /// this only draws and removes.
 @MainActor
@@ -39,6 +40,7 @@ final class CalloutController {
     }
     panel.setFrame(NSScreen.cocoaRect(fromGlobal: layout.windowRect), display: true)
     if !panel.isVisible {
+      Announce.post("Outlined on screen: \(placement.note)")
       // A short fade, which Reduce Motion leaves alone: it moves nothing.
       panel.alphaValue = 0
       panel.orderFrontRegardless()
@@ -137,8 +139,9 @@ struct CalloutView: View {
   private var notePill: some View {
     Label(
       title: {
+        // Never cut: the note is at most `CalloutRegion.maxNoteLength`
+        // characters, and the layout leaves room for all of them.
         Text(note)
-          .lineLimit(2)
           .fixedSize(horizontal: false, vertical: true)
       },
       icon: {
