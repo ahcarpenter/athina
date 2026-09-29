@@ -12,7 +12,8 @@ these docs.
 - Xcode 26 or later with its command line tools (`swift`, `codesign`)
 - For development: bash 4 or newer first on `PATH` (macOS ships 3.2; `brew
   install bash`), which the end-to-end harness runs on; `gh`,
-  signed in, which `make snapshots-approve` downloads CI's renders with; and, for
+  signed in, which `make snapshots-approve` downloads CI's renders with;
+  `oxipng` (`brew install oxipng`), which it losslessly shrinks them with; and, for
   the end-to-end harness's real-screen tier, Screen Recording and
   Accessibility granted to the terminal that runs it (see [Permissions](docs/setup.md#permissions)).
   `make doctor` names whatever is missing
@@ -56,7 +57,7 @@ with `--force` after a macOS upgrade (see
 ## Build, run, test
 
 ```sh
-make doctor                  # start here: names what this Mac is missing (Xcode, bash 4, gh, the grants, the warm e2e home) and how to get each
+make doctor                  # start here: names what this Mac is missing (Xcode, bash 4, gh, oxipng, the grants, the warm e2e home) and how to get each
 make                         # lists every command with its variables under it, grouped Everyday and Occasional
 make build                   # builds build/Athina.app, the development bundle (make all is the same)
 make run                     # builds and launches a replay: recorded fixtures, no network, no key, no spend (TIME_SCALE=60 runs its clock faster)

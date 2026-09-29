@@ -47,6 +47,11 @@ if command -v gh >/dev/null; then
 else
 	lack gh "make snapshots-approve downloads CI's renders with it (brew install gh)"
 fi
+if command -v oxipng >/dev/null; then
+	report oxipng "$(command -v oxipng) ($(oxipng --version 2>/dev/null))"
+else
+	lack oxipng "make snapshots-approve losslessly shrinks the images it writes with it (brew install oxipng)"
+fi
 
 echo
 if [ "$bash_major" -ge 4 ]; then
