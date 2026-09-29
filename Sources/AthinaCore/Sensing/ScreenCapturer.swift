@@ -31,13 +31,7 @@ public enum ScreenCaptureError: Error, CustomStringConvertible {
 /// Captures the display containing the focused window with ScreenCaptureKit,
 /// excluding Athina's own windows so the debug panel never captures itself.
 public actor ScreenCapturer {
-  private var content: SCShareableContent?
-  /// The window server's list changes in real time, so it is cached for
-  /// real seconds whatever clock the rest of the app runs on (`AthinaClock`).
-  private var contentFetchedAt: Date = .distantPast
-  private let contentMaxAge: TimeInterval = 30
-
-  /// Creates a capturer with no shareable content cached yet.
+  /// Creates a capturer.
   public init() {}
 
   /// Captures the display the focused window overlaps most, or the main
@@ -53,22 +47,20 @@ public actor ScreenCapturer {
   ///   fails, and ScreenCaptureKit's own error when the list of displays
   ///   cannot be fetched.
   public func capture(windowFrame: CGRect?, maxDimension: Int) async throws -> CapturedFrame {
-    var content = try await shareableContent()
+    // The list is fetched for every capture, never cached: it names only apps
+    // with a window on screen when it was fetched, and Athina has none most of
+    // the time, so a toast or callout that came up since a cached fetch would
+    // be captured, text and all. A fetch takes about 20 ms against a capture
+    // of about a second, and `SCShareableContent.currentProcess` costs the same.
+    let content = try await SCShareableContent.excludingDesktopWindows(
+      true,
+      onScreenWindowsOnly: true
+    )
     guard let display = ScreenCapturer.display(for: windowFrame, in: content.displays) else {
       throw ScreenCaptureError.noDisplays
     }
     let ownPID = ProcessInfo.processInfo.processIdentifier
-    var ownApps = content.applications.filter { $0.processID == ownPID }
-    if ownApps.isEmpty {
-      // The list names only apps with a window on screen when it was fetched,
-      // and Athina has none most of the time: a toast and a callout that came
-      // up since are not in it, and a capture through the cached list would
-      // take them in, text and all. So the list is fetched again when Athina
-      // is not on it; when it still is not, there is nothing of its to leave out.
-      self.content = nil
-      content = try await shareableContent()
-      ownApps = content.applications.filter { $0.processID == ownPID }
-    }
+    let ownApps = content.applications.filter { $0.processID == ownPID }
     let filter = SCContentFilter(
       display: display,
       excludingApplications: ownApps,
@@ -90,23 +82,8 @@ public actor ScreenCapturer {
       )
       return CapturedFrame(image: image, displayID: display.displayID, screenRect: display.frame)
     } catch {
-      // Stale display lists throw; refetch once and let the next capture retry.
-      self.content = nil
       throw ScreenCaptureError.captureFailed(error.localizedDescription)
     }
-  }
-
-  private func shareableContent() async throws -> SCShareableContent {
-    if let content, Date().timeIntervalSince(contentFetchedAt) < contentMaxAge {
-      return content
-    }
-    let fresh = try await SCShareableContent.excludingDesktopWindows(
-      true,
-      onScreenWindowsOnly: true
-    )
-    content = fresh
-    contentFetchedAt = Date()
-    return fresh
   }
 
   /// Picks the display overlapping the window most, falling back to the main display.

@@ -418,26 +418,30 @@ struct Sweep: ParsableCommand {
       URL(fileURLWithPath: try Words.text(words, ["directory"])[0])
       .standardizedFileURL.path + "/"
     let app = AXUIElementCreateApplication(pid.value)
-    var closed = 0
-    var left = 0
-    // Read again after each close: the list changes under the sweep.
-    for _ in 0..<100 {
+    func mine() -> [AXUIElement] {
       let windows = (attr(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
-      let mine = windows.filter { window in
+      return windows.filter { window in
         guard let document = attr(window, kAXDocumentAttribute) as? String,
           let url = URL(string: document), url.isFileURL
         else { return false }
         return url.standardizedFileURL.path.hasPrefix(directory)
       }
-      guard let window = mine.first else { break }
-      left = mine.count
+    }
+    var closed = 0
+    var pressed: [AXUIElement] = []
+    // Read again after each close: the list changes under the sweep. A window
+    // still there after its press, behind a save sheet say, is not pressed
+    // again, and what is left is counted afresh at the end.
+    while let window = mine().first(where: { window in !pressed.contains { CFEqual($0, window) } })
+    {
+      pressed.append(window)
       guard let button = attr(window, kAXCloseButtonAttribute),
         AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString) == .success
-      else { break }
-      closed += 1
-      left -= 1
+      else { continue }
       usleep(200_000)
+      if !mine().contains(where: { CFEqual($0, window) }) { closed += 1 }
     }
+    let left = mine().count
     say("swept pid \(pid.value) of documents under \(directory): closed \(closed), left \(left)")
     Darwin.exit(left == 0 ? 0 : 2)
   }
