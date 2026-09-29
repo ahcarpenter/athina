@@ -219,7 +219,7 @@ public actor SensingPipeline {
     return true
   }
 
-  /// Call when the permissions window sees a change so the loop reacts at once.
+  /// Call when the permissions page sees a change so the loop reacts at once.
   public func permissionsMayHaveChanged() async {
     permissionsCheckedAt = .distantPast
     await signal.signal()

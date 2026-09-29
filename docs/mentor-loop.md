@@ -114,7 +114,7 @@ it (`ModelProvider`): Anthropic, the default; OpenAI, for the GPT-6 models
 Codex uses; or OpenCode, through its Zen gateway, for its Claude and GPT-6
 models. Each provider keeps its own key in the keychain, its own model and
 effort for each tier (`TierModels`; Anthropic's stay in the settings' own
-fields), and its own Allow in the consent window, since each sends to a
+fields), and its own Allow on the Setup window's consent page, since each sends to a
 different company (see [Consent](privacy.md#consent)). A provider with no
 key holds every call as a missing key does.
 

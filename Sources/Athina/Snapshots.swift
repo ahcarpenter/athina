@@ -90,26 +90,44 @@ enum Snapshots {
       CGSize(width: SettingsView.paneWidth, height: height)
     }
     return [
-      // What a first launch shows before anything else.
+      // What a first launch shows before anything else, and the pages it walks
+      // on through (`SetupView`).
       Spec(
         "consent",
-        CGSize(width: 600, height: 900),
-        AnyView(ConsentView()),
-        AppState.sampleWithoutConsent()
+        CGSize(width: 600, height: 960),
+        AnyView(SetupView()),
+        AppState.sampleWithoutConsent().onSetupPage(.consent)
       ),
       Spec(
         "consent-openai",
-        CGSize(width: 600, height: 900),
-        AnyView(ConsentView()),
-        AppState.sampleWithoutConsent(for: .openAI)
+        CGSize(width: 600, height: 960),
+        AnyView(SetupView()),
+        AppState.sampleWithoutConsent(for: .openAI).onSetupPage(.consent)
       ),
       Spec(
         "consent-opencode",
-        CGSize(width: 600, height: 900),
-        AnyView(ConsentView()),
-        AppState.sampleWithoutConsent(for: .openCode)
+        CGSize(width: 600, height: 960),
+        AnyView(SetupView()),
+        AppState.sampleWithoutConsent(for: .openCode).onSetupPage(.consent)
       ),
-      Spec("permissions", CGSize(width: 580, height: 780), AnyView(PermissionsView()), state),
+      Spec(
+        "permissions",
+        CGSize(width: 600, height: 760),
+        AnyView(SetupView()),
+        AppState.sample().onSetupPage(.permissions)
+      ),
+      Spec(
+        "setup-model",
+        CGSize(width: 600, height: 620),
+        AnyView(SetupView()),
+        AppState.sample().onSetupPage(.model)
+      ),
+      Spec(
+        "setup-ready",
+        CGSize(width: 600, height: 560),
+        AnyView(SetupView()),
+        AppState.sample().withRequiredPermissions().onSetupPage(.ready)
+      ),
       Spec("debug-panel", CGSize(width: 1180, height: 860), AnyView(DebugPanelView()), state),
       Spec(
         "debug-panel-calls",
@@ -330,7 +348,7 @@ enum Snapshots {
       shard = parsed
     }
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    // The consent window shows Athina's icon as Finder draws it, masked to
+    // The consent page shows Athina's icon as Finder draws it, masked to
     // the app icon shape, and icon services masks it only for a bundle
     // LaunchServices knows; for one it does not, it gives the unmasked
     // full-bleed artwork. A bundle is registered on its own once Spotlight
@@ -999,7 +1017,21 @@ extension AppState {
 }
 
 extension AppState {
-  /// The consent window as it asks about `provider`: a first launch, or a
+  /// The sample with the Setup window on a page of a first launch's walk through.
+  func onSetupPage(_ page: SetupPage) -> AppState {
+    setup = SetupState(page: page, walksThrough: true)
+    return self
+  }
+
+  /// The sample with both sensing permissions granted, so a walk through's
+  /// last page shows nothing still to do.
+  func withRequiredPermissions() -> AppState {
+    permissions.screenRecording = true
+    permissions.accessibility = true
+    return self
+  }
+
+  /// The consent page as it asks about `provider`: a first launch, or a
   /// switch to a provider that was never allowed.
   static func sampleWithoutConsent(for provider: ModelProvider) -> AppState {
     var settings = SensingSettings()
@@ -1029,7 +1061,7 @@ extension AppState {
     at: Snapshots.referenceDate.addingTimeInterval(-3 * 86400)
   )
 
-  /// A first launch, before the consent window is answered, or, with
+  /// A first launch, before the consent page is answered, or, with
   /// `declined`, after Not Now or a withdrawal: nothing sensed, nothing sent.
   static func sampleWithoutConsent(declined: Bool = false) -> AppState {
     var settings = SensingSettings()

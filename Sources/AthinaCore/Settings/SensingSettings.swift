@@ -87,7 +87,7 @@ public struct SensingSettings: SettingsSection, Equatable, Sendable {
   /// Whether the person cleared the pause shortcut, which earlier builds do
   /// not read.
   private var pauseHotKeyCleared = false
-  /// The answer to the consent window for Anthropic, or nil when it was
+  /// The answer to the consent page for Anthropic, or nil when it was
   /// never given.
   ///
   /// Nil on every install until the person answers, including one from before

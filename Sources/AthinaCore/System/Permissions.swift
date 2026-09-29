@@ -52,7 +52,7 @@ public enum Permission: String, CaseIterable, Sendable, Identifiable {
   }
 
   /// What the permission lets Athina do and what stays on this Mac, as the
-  /// Permissions window explains it.
+  /// permissions page explains it.
   public var purpose: String {
     switch self {
     case .screenRecording:
@@ -141,7 +141,7 @@ public struct PermissionStatus: Equatable, Sendable {
   }
 }
 
-/// The one action the Permissions window offers for a permission, so the
+/// The one action the permissions page offers for a permission, so the
 /// window explains first and asks only when the person chooses to.
 public enum PermissionAction: Equatable, Sendable {
   /// Granted: there is nothing to do.

@@ -50,7 +50,7 @@
     /// its own, such as `["--open", "debug"]`, then checks the run showed nothing, keeps its
     /// evidence, writes its result line and takes it all down, whatever happened.
     ///
-    /// The run starts from the seeded settings, which carry an Allow in the consent window
+    /// The run starts from the seeded settings, which carry an Allow on the consent page
     /// (docs/privacy.md "Consent"); `consented: false` starts it without one, as a first launch
     /// does.
     ///
@@ -394,7 +394,7 @@
 
     /// A fresh home with the seeded settings: the owner's own apps excluded, so a replayed
     /// callout never lands on his work, the triage gate at its 5 second floor, and, unless
-    /// `consented` is false, an Allow in the consent window.
+    /// `consented` is false, an Allow on the consent page.
     private static func seed(_ home: URL, from settings: URL, consented: Bool) throws {
       let support = home.appendingPathComponent("Library/Application Support/athina")
       try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)

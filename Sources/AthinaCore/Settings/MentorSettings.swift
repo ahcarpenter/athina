@@ -11,7 +11,7 @@ public struct MentorSettings: SettingsSection, Equatable, Sendable {
   /// Anthropic unless the person picks another in Settings > Models.
   ///
   /// Each provider sends to a different company, so each needs its own Allow
-  /// in the consent window (`SensingSettings.hasConsent`).
+  /// on the consent page (`SensingSettings.hasConsent`).
   public var provider: ModelProvider = .anthropic
   /// The models and efforts OpenAI answers with.
   public var openAIModels = TierModels.openAIDefaults

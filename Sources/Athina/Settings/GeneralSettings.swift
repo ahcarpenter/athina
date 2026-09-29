@@ -114,10 +114,7 @@ struct VoiceSection: View {
         if !state.permissions.voiceGranted {
           HStack {
             Spacer()
-            Button("Show Permissions…") {
-              AppActivation.request()
-              openWindow(id: WindowID.permissions)
-            }
+            Button("Show Permissions…") { state.perform(.openPermissions) }
           }
         }
       },

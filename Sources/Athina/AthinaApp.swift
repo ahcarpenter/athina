@@ -66,27 +66,18 @@ struct AthinaApp: App {
     .restorationBehavior(.disabled)
 
     // The first thing a launch shows until the person allows Athina to
-    // watch and send, before any permission is asked about.
-    Window("Athina and Your Privacy", id: WindowID.consent) {
-      ConsentView()
+    // watch and send, before any permission is asked about, walking on
+    // through the permissions, the model and what to expect. It is titled by
+    // its page (`SetupPage.title`); this title is only its name.
+    Window("Set Up Athina", id: WindowID.setup) {
+      SetupView()
         .environment(state)
     }
     .windowResizability(.contentSize)
     .defaultLaunchBehavior(
       !Snapshots.isActive
-        && (state.needsConsentAtLaunch || LaunchArguments.windowToOpen == WindowID.consent)
-        ? .presented : .suppressed
-    )
-    .restorationBehavior(.disabled)
-
-    Window("Permissions", id: WindowID.permissions) {
-      PermissionsView()
-        .environment(state)
-    }
-    .windowResizability(.contentSize)
-    .defaultLaunchBehavior(
-      !Snapshots.isActive
-        && (state.opensPermissionsAtLaunch || LaunchArguments.windowToOpen == WindowID.permissions)
+        && (state.needsConsentAtLaunch || state.opensPermissionsAtLaunch
+          || LaunchArguments.windowToOpen.flatMap(SetupPage.init(rawValue:)) != nil)
         ? .presented : .suppressed
     )
     .restorationBehavior(.disabled)
@@ -183,9 +174,8 @@ struct WindowFrameAutosave: NSViewRepresentable {
 }
 
 enum WindowID {
-  static let consent = "consent"
   static let debug = "debug"
-  static let permissions = "permissions"
+  static let setup = "setup"
   static let settings = "settings"
   static let history = "history"
 }
@@ -216,8 +206,9 @@ final class WindowOpener {
 
 /// Developer aids on the command line.
 ///
-/// `Athina --open debug|settings|consent|permissions|history` presents that window at
-/// launch, the debug panel on a live launch only while Settings > Advanced
+/// `Athina --open debug|settings|history` presents that window at launch, and
+/// `--open consent|permissions|model|ready` the Setup window on that page
+/// (`SetupPage`) once consent is given (`SetupFlow.atLaunch`), the debug panel on a live launch only while Settings > Advanced
 /// turns it on (`DebugPanelAccess`) (for example
 /// `open -n build/Athina.app --args --replay <dir> --open debug`; a plain
 /// `open` brings an already running Athina forward and drops the arguments,

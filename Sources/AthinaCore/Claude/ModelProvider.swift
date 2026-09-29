@@ -4,7 +4,7 @@ import Foundation
 ///
 /// Chosen in Settings > Models. Anthropic is the default. Each provider's key
 /// is kept in the login keychain under its own account (`KeychainKeyStore`),
-/// and each provider needs its own Allow in the consent window, since each
+/// and each provider needs its own Allow on the consent page, since each
 /// sends to a different company (`SensingSettings.hasConsent`).
 public enum ModelProvider: String, Codable, Sendable, CaseIterable, Identifiable {
   /// The Anthropic Messages API at api.anthropic.com.

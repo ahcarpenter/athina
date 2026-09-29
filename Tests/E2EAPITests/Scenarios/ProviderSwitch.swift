@@ -10,7 +10,7 @@
     /// Each provider sends to a different company, so each needs its own Allow
     /// (docs/privacy.md "Consent"). With Anthropic allowed, as the seed has it, choosing OpenAI
     /// in the Models pane's provider pop-up records the choice, holds sensing and every call, and
-    /// opens the consent window naming OpenAI; Allow records the answer for OpenAI alone and the
+    /// opens the consent page naming OpenAI; Allow records the answer for OpenAI alone and the
     /// replay carries on, its calls journaled as going by OpenAI. Choosing Anthropic again needs
     /// no new answer. A pop-up's item is chosen through its menu's own action (`choose`), since
     /// opening the menu would hold a hermetic run; the click on Allow is simulated inside Athina
@@ -56,11 +56,11 @@
           try await control.waitSetting("mentor.provider", equals: .string("openai")).ok
         )
         guard try await control.waitWindow(consentWindow, timeout: 10) else {
-          throw AppProcess.Failure("the consent window never opened for OpenAI")
+          throw AppProcess.Failure("the consent page never opened for OpenAI")
         }
         let consent = try await control.find(.everything(in: consentWindow)).flatMap(\.texts)
         run.check(
-          "the consent window names OpenAI and its host",
+          "the consent page names OpenAI and its host",
           true,
           consent.contains { $0.contains("OpenAI") }
             && consent.contains { $0.contains("api.openai.com") }
@@ -93,7 +93,7 @@
           try await control.waitSetting("consent.answer", equals: .string("allowed")).ok
         )
         run.check(
-          "Allow closes the consent window",
+          "Allow closes the consent page",
           true,
           try await control.waitWindow(consentWindow, present: false, timeout: 5)
         )

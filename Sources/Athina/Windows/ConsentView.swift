@@ -2,20 +2,20 @@ import AppKit
 import AthinaCore
 import SwiftUI
 
-/// The consent window: the first thing a launch shows until the person allows
-/// Athina to watch and send (`Consent`), ahead of the Permissions window.
+/// The Setup window's consent page: the first thing a launch shows until the
+/// person allows Athina to watch and send (`Consent`), ahead of any permission.
 ///
 /// It says who receives what, what stays on this Mac and for how long, and how
-/// the menu bar shows that Athina is watching, then asks. Nothing is sensed
-/// or sent before Allow; Not Now leaves Athina doing nothing, with Allow
-/// Watching in its menu and Settings > Privacy as the way back.
+/// the menu bar shows that Athina is watching; the window's footer asks
+/// (`SetupView`). Nothing is sensed or sent before Allow; Not Now leaves
+/// Athina doing nothing, with Allow Watching in its menu and Settings >
+/// Privacy as the way back.
 ///
 /// It asks about the provider chosen in Settings > Models, naming the company
 /// that receives what is sent and the terms it is handled under, so choosing
 /// another provider opens it again (`SensingSettings.hasConsent`).
-struct ConsentView: View {
+struct ConsentPage: View {
   @Environment(AppState.self) private var state
-  @Environment(\.dismiss) private var dismiss
 
   private var disclosure: ConsentDisclosure {
     ConsentDisclosure(for: state.settings.mentor.provider)
@@ -104,36 +104,6 @@ struct ConsentView: View {
       )
       .font(.callout)
       .fixedSize(horizontal: false, vertical: true)
-
-      HStack {
-        Link("Privacy Policy", destination: Consent.privacyPolicyURL)
-        Spacer()
-        Button("Not Now") {
-          state.declineConsent()
-          dismiss()
-        }
-        .keyboardShortcut(.cancelAction)
-        .accessibilityIdentifier("consent.notNow")
-        Button("Allow") {
-          state.allowConsent()
-          dismiss()
-          // Permissions are asked about only once consent is given.
-          if !state.permissions.allGranted { state.perform(.openPermissions) }
-        }
-        .keyboardShortcut(.defaultAction)
-        .accessibilityIdentifier("consent.allow")
-      }
-    }
-    .padding(20)
-    .frame(width: 600)
-    .task {
-      guard !Snapshots.isActive else { return }
-      AppState.log.notice(
-        "consent window opened, consent \(state.settings.hasConsent ? "given" : "not given", privacy: .public)"
-      )
-      // An accessory app's window opened at launch does not come forward
-      // on its own, and this one must be the first thing seen.
-      AppActivation.request()
     }
   }
 
@@ -174,7 +144,7 @@ private struct ConsentRow: View {
 }
 
 /// A variant of the menu bar mark as it looks in the menu bar, and what it means.
-private struct ConsentMarkRow: View {
+struct ConsentMarkRow: View {
   let mark: MenuBarMark
   let text: String
 
