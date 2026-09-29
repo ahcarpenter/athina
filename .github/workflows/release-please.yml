@@ -60,7 +60,7 @@ jobs:
           BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
         run: |
           git fetch --depth=1 origin main
-          build() { python3 -c 'import plistlib, sys; print(plistlib.load(sys.stdin.buffer)["CFBundleVersion"])'; }
+          build() { python3 -c 'import plistlib, sys; print(plistlib.loads(sys.stdin.buffer.read())["CFBundleVersion"])'; }
           main_build="$(git show origin/main:Resources/Info.plist | build)"
           want=$((main_build + 1))
           if [ "$(build < Resources/Info.plist)" = "$want" ]; then
