@@ -375,7 +375,7 @@ fi
 
 # --- Release notes ------------------------------------------------------------
 
-# What changed: any notes written by hand and committed with the version,
+# What changed: any notes written by hand for the version and merged first,
 # outside build/release, which every run replaces, then the Conventional Commit
 # titles since the previous release, by type. Only the types people using
 # Athina notice are listed (as release-please does), and a breaking change
