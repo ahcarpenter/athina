@@ -38,6 +38,6 @@ runs:
       uses: actions/cache@v6
       with:
         path: .build
-        key: swiftpm-${{ inputs.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-${{ hashFiles('Sources/**', 'Tests/**') }}
+        key: swiftpm-${{ inputs.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('Package.swift') }}-${{ hashFiles('Sources/**', 'Tests/**') }}
         restore-keys: |
-          swiftpm-${{ inputs.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('Package.swift', 'Package.resolved') }}-
+          swiftpm-${{ inputs.name }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.toolchain.outputs.id }}-${{ hashFiles('Package.swift') }}-

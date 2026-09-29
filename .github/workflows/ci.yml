@@ -205,7 +205,7 @@ jobs:
     # each with its reference image, recorded on this image with the pinned
     # Xcode as the snapshots baselines were (docs/ci.md "UI snapshot smoke
     # test"). One runner: most of the job is fetching and compiling, which the
-    # build cache cuts to what changed, and drawing all 76 images takes about a
+    # build cache cuts to what changed, and drawing every image takes about a
     # minute, where four runners each compiled it again.
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.docs-only != 'true' }}
