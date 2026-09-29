@@ -425,7 +425,7 @@ The two gates cannot drift apart: a snapshot added to the list is in both.
 In CI it runs on one runner, the `snapshots-smoke` job, the check the
 ruleset requires, which runs `make snapshots-smoke` and draws every
 snapshot. Most of that job is fetching and compiling, which the build cache
-cuts to what changed (see [Continuous integration](#continuous-integration)); drawing all 76 images takes
+cuts to what changed (see [Continuous integration](#continuous-integration)); drawing every image takes
 about a minute, where four runners each compiled the test again for a quarter
 of the drawing.
 `make snapshots-smoke SHARD=<k>/4` still draws only the snapshots
