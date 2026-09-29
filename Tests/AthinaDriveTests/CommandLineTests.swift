@@ -46,6 +46,14 @@ import Testing
       try parse(["shot", "region", "-160", "0", "420", "33", "b.png"]) as? Shot.Region
     )
     #expect(try region.region() == ("-160,0,420,33", "b.png"))
+    let video = try #require(
+      try parse(["shot", "video", "0", "0", "1728", "480", "16", "c.mov"]) as? Shot.Video
+    )
+    #expect(try video.recording() == ("0,0,1728,480", 16, "c.mov"))
+    let arrange = try #require(
+      try parse(["arrange", "12", "-notes.txt", "-10", "0", "1728", "1117"]) as? Arrange
+    )
+    #expect(try arrange.frame() == ("-notes.txt", CGRect(x: -10, y: 0, width: 1728, height: 1117)))
   }
 
   /// Titles, matches and values are taken as written: empty, or starting
@@ -84,6 +92,16 @@ import Testing
       ["menupick", "12", "Answer Suggestion"],
       ["tap", "pid"],
       ["shot", "region", "0", "0", "10", "b.png"],
+      ["shot", "video", "0", "0", "10", "10", "c.mov"],
+      ["shot", "video", "0", "0", "10", "10", "0", "c.mov"],
+      ["arrange", "12", "notes.txt", "0", "0", "1728"],
+      ["arrange", "12", "notes.txt", "0", "0", "wide", "1117"],
+      ["sweep", "12"],
+      ["park", "12"],
+      ["park", "1", "2", "3"],
+      ["sweep", "12", "/a", "/b"],
+      ["quit"],
+      ["quit", "12", "13"],
       ["api", "ping", "timeout"],
     ] {
       #expect(exitCode(arguments) == 64, "\(arguments)")

@@ -340,9 +340,19 @@ scenario and an empty journal:
    can fill a required field with an empty string), replace the fixture directory's
    recordings with the ones you keep, update its README, delete the rest, put
    the journal and settings back, and run `make test`.
-5. The receipt table in
-   [What it costs](setup.md#what-it-costs) lists each call of this set with its tokens and
-   cost. Update it with the new set.
+5. The README's demo, `docs/images/demo.gif`, is a recording of this set
+   replaying on the real screen: `make demo` stages the `scenario/` documents
+   in TextEdit as they were recorded (the end-to-end harness's `demo`
+   scenario, see [End-to-end harness](e2e.md#scenarios)), records the top of
+   the screen through the switch to the script, the note with its callout on
+   the script's line, and Tell Me More, and cuts the GIF from the recording
+   (`scripts/demo-gif.swift`: a camera over the recording that pulls back
+   for the moment the note and the callout arrive and closes in on each),
+   leaving every frame in `build/demo-frames`.
+   Re-record it with the new set, and look at each frame before committing
+   the GIF: the callout must sit on the line the new answer means, which the
+   staging in `scripts/e2e/lib/harness.sh` (`stage_scenario_documents`) puts
+   where this set's does.
 
 `ScriptedClaudeClient` stays for unit tests that need one exact hand-written
 answer, such as a refusal, an unparseable reply, or a slow call.

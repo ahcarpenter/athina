@@ -84,7 +84,9 @@ HELPER_PIDS=()
 # The watchers of the launch now running, whose logs the checks read.
 WATCHER_PIDS=()
 STAGED_PIDS=()
-STAGED_WINDOWS=()
+# The TextEdit a run stages documents in, whose harness documents are swept
+# at cleanup (open_documents).
+TEXTEDIT_PID=""
 PREFS_BACKUP=""
 PREFS_EXISTED=0
 CHECKS_FAILED=0
@@ -202,16 +204,23 @@ scenario_tier_of() {
 	if [ -f "$SCENARIO_DIR/$1.sh" ]; then echo screen; else echo api; fi
 }
 
+# A real-screen scenario that says SCENARIO_ON_REQUEST=yes runs only when it
+# is named: the demo records the README's GIF, which a run of every scenario
+# has no use for.
+scenario_on_request() {
+	[ -f "$SCENARIO_DIR/$1.sh" ] && grep -q '^SCENARIO_ON_REQUEST=yes$' "$SCENARIO_DIR/$1.sh"
+}
+
 # The scenarios `run` runs, one to a line, in the order given: those named, or
-# every one when none is named or the first is all, kept to those of the tier
-# asked for (api, screen, or all for both). Stops when a name is no scenario's
-# or none of them is on that tier.
+# every one but those on request when none is named or the first is all, kept
+# to those of the tier asked for (api, screen, or all for both). Stops when a
+# name is no scenario's or none of them is on that tier.
 scenarios_to_run() {
 	local tier="$1" name found=0
 	shift
 	if [ $# -eq 0 ] || [ "$1" = all ]; then
 		# shellcheck disable=SC2046 # a scenario's name is one word
-		set -- $(scenario_names)
+		set -- $(scenario_names | while read -r name; do scenario_on_request "$name" || printf '%s\n' "$name"; done)
 	fi
 	local known
 	known="$(scenario_names)"
@@ -509,6 +518,13 @@ stop_pid() {
 	return 0
 }
 
+# Quit an app by pid through its quit Apple Event, waiting a bounded time,
+# and stop it by signal only when it will not go.
+quit_pid() {
+	[ -n "$1" ] || return 0
+	"$DRIVE" quit "$1" >>"$RUN_DIR/transcript.log" 2>&1 || stop_pid "$1"
+}
+
 # Stop the run's Athina and launch it again in the same home with the same
 # arguments. A replay makes a new data directory for each launch, so the new one
 # starts from an empty journal, as the first did. The earlier launch's journal
@@ -543,12 +559,16 @@ cleanup() {
 	local status=$?
 	set +e
 	log "cleanup"
-	local pid window
-	for window in ${STAGED_WINDOWS[@]+"${STAGED_WINDOWS[@]}"}; do
-		"$DRIVE" close "${window%%:*}" "${window##*:}" >>"$RUN_DIR/transcript.log" 2>&1
-	done
+	local pid
+	# The documents come down before TextEdit does, whoever started it: a
+	# TextEdit stopped with windows open brings every one of them back at its
+	# next launch, into the owner's session and into the next run's staging.
+	[ -n "$TEXTEDIT_PID" ] && sweep_documents "$TEXTEDIT_PID"
 	for pid in ${HELPER_PIDS[@]+"${HELPER_PIDS[@]}"} ${WATCHER_PIDS[@]+"${WATCHER_PIDS[@]}"}; do stop_pid "$pid"; done
-	for pid in ${STAGED_PIDS[@]+"${STAGED_PIDS[@]}"}; do stop_pid "$pid"; done
+	# Staged apps are quit by pid as their Quit menu item would, so TextEdit
+	# saves its window state without the documents just swept: one stopped by
+	# a signal right after the sweep has brought them back at its next launch.
+	for pid in ${STAGED_PIDS[@]+"${STAGED_PIDS[@]}"}; do quit_pid "$pid"; done
 	stop_pid "$ATHINA_PID"
 	[ -n "${CONTROL_DIR:-}" ] && rm -rf "$CONTROL_DIR"
 	prefs_restore
@@ -746,28 +766,121 @@ Release checklist
 - write the release notes
 - tell the team where the artifacts are
 TEXT
-	local already
+	open_documents "$first" "$second" || return 1
+	raise_window "$TEXTEDIT_PID" notes.txt
+	log "staged TextEdit pid=$TEXTEDIT_PID with notes.txt and plan.txt"
+}
+
+# Whether a pid has a window on screen whose title starts with $2.
+has_window() {
+	grep -q "name=\"$2" <<<"$("$DRIVE" windows "$1" 2>/dev/null)"
+}
+
+# Closes every window of a pid showing a document under the runs directory,
+# or under the evidence directory `--out` gave, where this run's documents
+# then are: this run's, and any an earlier run left behind. By the document's
+# path, so a document of the owner's with the same name is never touched.
+sweep_documents() {
+	local root
+	for root in "$RUNS_ROOT" ${OUT_ROOT:+"$OUT_ROOT"}; do
+		"$DRIVE" sweep "$1" "$root" >>"$RUN_DIR/transcript.log" 2>&1 \
+			|| log "WARNING: a staged document would not close; see transcript.log"
+	done
+	return 0
+}
+
+# Opens documents in TextEdit, the app sensing watches, and finds its pid.
+#
+# The terminal a run is started from is an excluded app, so a run with it in
+# front would journal nothing at all. TextEdit is started by the harness when
+# it was not running, and then stopped by pid; when the owner had it open,
+# `open -a` reuses it and only the run's documents come down, since quitting it
+# would take his work with it. Either way TextEdit brings back at launch the
+# windows it was last stopped with, so the documents of earlier runs it
+# brings back are closed before this run's are opened, and this run's are
+# closed at cleanup, before TextEdit is stopped.
+open_documents() {
+	local path title titles=() already
+	for path in "$@"; do titles+=("$(basename "$path")"); done
 	already="$(pgrep -x TextEdit || true)"
-	open -a TextEdit "$first" "$second" || { log "could not open TextEdit"; return 1; }
-	# TextEdit has been seen to take over 20 seconds to come up on a busy Mac,
-	# so this waits for the document's window rather than a fixed time: a run
-	# that went on without it would watch whatever else was in front.
+	open -g -a TextEdit || { log "could not open TextEdit"; return 1; }
 	for _ in $(seq 1 30); do
 		TEXTEDIT_PID="$(pgrep -n -x TextEdit || true)"
-		[ -n "$TEXTEDIT_PID" ] && "$DRIVE" windows "$TEXTEDIT_PID" 2>/dev/null | grep -q 'name="notes.txt' && break
+		[ -n "$TEXTEDIT_PID" ] && break
 		sleep 1
 	done
 	[ -n "$TEXTEDIT_PID" ] || { log "TextEdit did not start"; return 1; }
 	if [ -n "$already" ]; then
-		# The owner had TextEdit open and `open -a` reused it. Quitting it
-		# would take his work with it, so only these two documents come down.
-		STAGED_WINDOWS+=("$TEXTEDIT_PID:notes.txt" "$TEXTEDIT_PID:plan.txt")
 		log "TextEdit was already running (pid $TEXTEDIT_PID); only this run's documents will be closed"
 	else
 		STAGED_PIDS+=("$TEXTEDIT_PID")
+		# The windows it brings back appear a moment after it does.
+		sleep 2
 	fi
-	raise_window "$TEXTEDIT_PID" notes.txt
-	log "staged TextEdit pid=$TEXTEDIT_PID with notes.txt and plan.txt"
+	sweep_documents "$TEXTEDIT_PID"
+	open -a TextEdit "$@" || { log "could not open the documents in TextEdit"; return 1; }
+	# TextEdit has been seen to take over 20 seconds to come up on a busy Mac,
+	# so this waits for each document's window rather than a fixed time: a run
+	# that went on without them would watch whatever else was in front.
+	for title in "${titles[@]}"; do
+		for _ in $(seq 1 30); do
+			has_window "$TEXTEDIT_PID" "$title" && break
+			sleep 1
+		done
+		has_window "$TEXTEDIT_PID" "$title" || { log "TextEdit never showed $title"; return 1; }
+	done
+}
+
+# The committed fixtures' own scene, as it was recorded (docs/replay.md "The
+# committed fixtures"): the two documents in the fixture directory's scenario/
+# folder open in TextEdit, their text at size 20, each window filling the
+# display from its top left corner. The replayed mentor answer's region is in
+# the pixels of the frame the model saw, so it lands on the script line it was
+# recorded on only when the script sits where it did then; anywhere else the
+# callout outlines some other line. The demo scenario records this scene.
+#
+# The display's size is the recording's, 1728 by 1117 points: on a smaller
+# display macOS keeps the window inside the screen, and the run stops there
+# rather than record a callout on the wrong line. The script's first line is
+# wrapped after "terminal", which does two things: its
+# longest line then fits the demo's frame of the script beside the note's,
+# and the lines below it move down a line's height of 24 points, where the
+# box the model gave, which lies about 8 points below the line it means,
+# holds the line with the same room above it as below rather than cutting
+# through its glyphs. The window stays under the menu bar, where a gap would
+# show whatever is behind it.
+SCREEN_WIDTH=1728
+SCENE_WIDTH=$SCREEN_WIDTH
+SCENE_HEIGHT=1117
+SCENE_TEXT_SIZE=20
+stage_scenario_documents() {
+	local name frame width
+	cp "$FIXTURES/scenario/reading-notes.txt" "$RUN_DIR/reading-notes.txt" \
+		|| { log "could not copy reading-notes.txt from the fixtures"; return 1; }
+	awk 'NR == 1 && sub(/ and run it$/, "") { print; print "and run it"; next } { print }' \
+		"$FIXTURES/scenario/cleanup-script.txt" >"$RUN_DIR/cleanup-script.txt" \
+		|| { log "could not copy cleanup-script.txt from the fixtures"; return 1; }
+	grep -qx "and run it" "$RUN_DIR/cleanup-script.txt" \
+		|| { log "the script's first line is not the one this staging wraps"; return 1; }
+	open_documents "$RUN_DIR/reading-notes.txt" "$RUN_DIR/cleanup-script.txt" || return 1
+	for name in reading-notes.txt cleanup-script.txt; do
+		# A document's text size is TextEdit's own to set, through its
+		# scripting: accessibility has no attribute for it. TextEdit is
+		# named here rather than given by pid because the session runs one
+		# TextEdit, the pid above, and its documents are found by file name.
+		osascript -e "tell application \"TextEdit\" to set size of text of document \"$name\" to $SCENE_TEXT_SIZE" \
+			>>"$RUN_DIR/transcript.log" 2>&1 || { log "could not set the text size of $name"; return 1; }
+		"$DRIVE" arrange "$TEXTEDIT_PID" "$name" 0 0 "$SCENE_WIDTH" "$SCENE_HEIGHT" >>"$RUN_DIR/transcript.log" 2>&1 \
+			|| { log "could not arrange the $name window"; return 1; }
+	done
+	frame="$(grep 'name="cleanup-script.txt' <<<"$("$DRIVE" windows "$TEXTEDIT_PID")" | head -1)"
+	width="$(sed -n 's/.* w=\([0-9.]*\) .*/\1/p' <<<"$frame")"
+	[ "${width%%.*}" = "$SCENE_WIDTH" ] || {
+		log "the cleanup-script.txt window is ${width:-?} points wide, not $SCENE_WIDTH: the display is not the one the fixtures were recorded on ($frame)"
+		return 1
+	}
+	raise_window "$TEXTEDIT_PID" reading-notes.txt
+	log "staged the fixtures' scene in TextEdit pid=$TEXTEDIT_PID: reading-notes.txt and cleanup-script.txt at text size $SCENE_TEXT_SIZE, ${SCENE_WIDTH}x${SCENE_HEIGHT}"
 }
 
 # An app Athina is set to ignore, so a scenario can watch the item switch into
