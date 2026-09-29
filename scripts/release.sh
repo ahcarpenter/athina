@@ -94,7 +94,7 @@ if [ -n "$RELEASE_TAG" ]; then
 		fail "ATHINA_RELEASE_TAG is $RELEASE_TAG, but Resources/Info.plist sets version $VERSION; release it as $TAG"
 	if tagged="$(git rev-parse -q --verify "refs/tags/$TAG^{commit}" 2>/dev/null)" &&
 		[ "$tagged" != "$(git rev-parse HEAD)" ]; then
-		fail "Athina $VERSION was already released from ${tagged:0:12} (tag $TAG); raise CFBundleShortVersionString and CFBundleVersion in Resources/Info.plist"
+		fail "Athina $VERSION was already released from ${tagged:0:12} (tag $TAG); release a new version through the release pull request (docs/releasing.md \"Each release\")"
 	fi
 fi
 # The release before this one, whose build number this one has to exceed,
