@@ -26,7 +26,9 @@ struct AthinaDrive: ParsableCommand {
       AX.self,
       Click.self,
       Raise.self,
+      Arrange.self,
       Close.self,
+      Sweep.self,
       MenuPick.self,
       Tap.self,
       Announce.self,
@@ -320,6 +322,54 @@ struct Raise: ParsableCommand {
   }
 }
 
+struct Arrange: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    abstract:
+      "Move and size one of a pid's windows, in points from the top left of the main display.",
+    usage: "athina-drive arrange <pid> <title> <x> <y> <w> <h>"
+  )
+
+  @Argument var pid: ProcessID
+  @Argument(parsing: .allUnrecognized, help: .hidden) var words: [String] = []
+
+  static let names = ["title", "x", "y", "w", "h"]
+
+  mutating func validate() throws { _ = try frame() }
+
+  /// The window's title and the frame asked for.
+  func frame() throws -> (title: String, frame: CGRect) {
+    let words = try Words.text(words, Self.names)
+    let numbers = try Words.numbers(Array(words.dropFirst()), Array(Self.names.dropFirst()))
+    return (words[0], CGRect(x: numbers[0], y: numbers[1], width: numbers[2], height: numbers[3]))
+  }
+
+  func run() throws {
+    // By pid and window title, as `raise` finds a window: a staged document
+    // is put where a recorded scene had it, never the owner's own windows.
+    let (wanted, frame) = try frame()
+    let app = AXUIElementCreateApplication(pid.value)
+    let windows = (attr(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
+    guard let window = windows.first(where: { title($0).localizedCaseInsensitiveContains(wanted) })
+    else {
+      fail("arrange: pid \(pid.value) has no window matching \"\(wanted)\"", code: 2)
+    }
+    var origin = frame.origin
+    var size = frame.size
+    guard let position = AXValueCreate(.cgPoint, &origin),
+      let extent = AXValueCreate(.cgSize, &size)
+    else { fail("arrange: could not make the accessibility values", code: 2) }
+    // Position first, then size: macOS keeps a window's title bar on the
+    // screen, so a window sized to fill the display before it is moved to the
+    // top left corner would be pushed down and end up shorter.
+    let moved = AXUIElementSetAttributeValue(window, kAXPositionAttribute as CFString, position)
+    let sized = AXUIElementSetAttributeValue(window, kAXSizeAttribute as CFString, extent)
+    say(
+      "arranged \"\(title(window))\" of pid \(pid.value) at \(Int(frame.minX)),\(Int(frame.minY)) "
+        + "\(Int(frame.width))x\(Int(frame.height)) -> \(moved.rawValue),\(sized.rawValue)"
+    )
+  }
+}
+
 struct Close: ParsableCommand {
   static let configuration = CommandConfiguration(
     abstract: "Close one of a pid's windows through its close button.",
@@ -345,6 +395,50 @@ struct Close: ParsableCommand {
     }
     let closed = AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString)
     say("closed \"\(title(window))\" of pid \(pid.value) -> \(closed.rawValue)")
+  }
+}
+
+struct Sweep: ParsableCommand {
+  static let configuration = CommandConfiguration(
+    abstract: "Close every window of a pid whose document is a file under a directory.",
+    usage: "athina-drive sweep <pid> <directory>"
+  )
+
+  @Argument var pid: ProcessID
+  @Argument(parsing: .allUnrecognized, help: .hidden) var words: [String] = []
+
+  mutating func validate() throws { _ = try Words.text(words, ["directory"]) }
+
+  func run() throws {
+    // By the document's own path, never its title: the harness's documents
+    // all live under its runs directory, and a window of the owner's showing
+    // a file of the same name, notes.txt say, is not touched.
+    let directory =
+      URL(fileURLWithPath: try Words.text(words, ["directory"])[0])
+      .standardizedFileURL.path + "/"
+    let app = AXUIElementCreateApplication(pid.value)
+    var closed = 0
+    var left = 0
+    // Read again after each close: the list changes under the sweep.
+    for _ in 0..<100 {
+      let windows = (attr(app, kAXWindowsAttribute) as? [AXUIElement]) ?? []
+      let mine = windows.filter { window in
+        guard let document = attr(window, kAXDocumentAttribute) as? String,
+          let url = URL(string: document), url.isFileURL
+        else { return false }
+        return url.standardizedFileURL.path.hasPrefix(directory)
+      }
+      guard let window = mine.first else { break }
+      left = mine.count
+      guard let button = attr(window, kAXCloseButtonAttribute),
+        AXUIElementPerformAction(button as! AXUIElement, kAXPressAction as CFString) == .success
+      else { break }
+      closed += 1
+      left -= 1
+      usleep(200_000)
+    }
+    say("swept pid \(pid.value) of documents under \(directory): closed \(closed), left \(left)")
+    Darwin.exit(left == 0 ? 0 : 2)
   }
 }
 
@@ -438,8 +532,8 @@ struct Key: ParsableCommand {
 
 struct Shot: ParsableCommand {
   static let configuration = CommandConfiguration(
-    abstract: "Capture a window by id or a screen region.",
-    subcommands: [Window.self, Region.self]
+    abstract: "Capture a window by id or a screen region, or record a region for a while.",
+    subcommands: [Window.self, Region.self, Video.self]
   )
 
   struct Window: ParsableCommand {
@@ -476,6 +570,41 @@ struct Shot: ParsableCommand {
       let (region, out) = try region()
       screencapture(["-x", "-o", "-R", region, out])
       say("region \(region) -> \(out)")
+    }
+  }
+
+  struct Video: ParsableCommand {
+    static let configuration = CommandConfiguration(
+      abstract: "Record a region of the screen for a number of seconds, with no pointer in it.",
+      usage: "athina-drive shot video <x> <y> <w> <h> <seconds> <out.mov>"
+    )
+
+    @Argument(parsing: .allUnrecognized, help: .hidden) var words: [String] = []
+
+    mutating func validate() throws { _ = try recording() }
+
+    /// The region as `screencapture -R` takes it, the seconds `-V` takes, and
+    /// the file to write.
+    func recording() throws -> (region: String, seconds: Int, out: String) {
+      let names = ["x", "y", "w", "h", "seconds"]
+      let words = try Words.text(words, names + ["out.mov"])
+      let numbers = try Words.numbers(Array(words.prefix(5)), names)
+      guard numbers[4] >= 1 else {
+        throw ValidationError("The value '\(words[4])' is invalid for '<seconds>': at least 1")
+      }
+      let region = numbers.prefix(4).map { "\(Int($0))" }.joined(separator: ",")
+      return (region, Int(numbers[4]), words[5])
+    }
+
+    func run() throws {
+      // What the display shows, at its own pixel scale, in a QuickTime movie
+      // with a frame for each change of the picture: the README's demo is cut
+      // from one (scripts/demo-gif.swift). The recording ends on its own after
+      // the seconds asked for, so a run that is killed leaves no recorder
+      // behind.
+      let (region, seconds, out) = try recording()
+      screencapture(["-x", "-V", "\(seconds)", "-R", region, out])
+      say("video of \(region) for \(seconds)s -> \(out)")
     }
   }
 }

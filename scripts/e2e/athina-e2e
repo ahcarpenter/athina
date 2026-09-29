@@ -385,7 +385,10 @@ run_scenario() (
 	local started result detail
 	started=$(date +%s)
 
-	scenario_stage
+	if ! scenario_stage; then
+		result_line "$name" fail "$(( $(date +%s) - started ))" "the scenario could not stage the screen; see its log"
+		exit 1
+	fi
 	if [ "$SCENARIO_CONTROL" = yes ] && [ "$CONTROL_API" = yes ]; then
 		control_prepare
 		args+=(--control "$CONTROL_DIR")
