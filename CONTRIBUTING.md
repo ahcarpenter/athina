@@ -134,7 +134,8 @@ itself and says which on the line it writes as it starts.
   [Design conventions](docs/design.md) applies them.
 - **Approved images come from CI, never from a Mac** (below).
 - **Generated files are regenerated, never edited**: the app icon, the menu
-  bar mark and the README icon come from `make icons`.
+  bar mark and the README icon come from `make icons`, and the README's How it
+  works diagram from `make diagram`.
 - **A make recipe stays one line**; logic beyond one command goes in a script
   in `scripts/`.
 - **[Conventional Commits](#conventional-commits)** for every commit and
