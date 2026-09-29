@@ -11,6 +11,9 @@
     /// the suggestion is answered, records nothing over the answer. Show Last Suggestion brings
     /// it back, Not Now answers it and snoozes the kind of suggestion in that app, Never for This
     /// answers it and stops that kind there, and a click outside Athina's windows takes it down.
+    /// After Not Now and Never for This a note in the toast's place says what the answer did.
+    /// VoiceOver hears the suggestion that came unasked after what it is saying, with its kind
+    /// and app and, once, where its answers are, and the one brought back on request at once.
     /// Each button is clicked through AppKit's own event path in the toast's panel, parked below
     /// the desktop picture, so a click that lands proves the button can be hit and is wired. The
     /// toast comes from scripted sensing (docs/e2e.md "Scripted sensing"); that a real click in
@@ -45,8 +48,34 @@
           )?
           .event["feedback"]
         }
+        // Everything the note panel shows, once it is up.
+        let note = "Athina note"
+        let noteText = {
+          guard try await control.waitWindow(note, timeout: 5) else { return "" }
+          return try await control.find(.everything(in: note)).flatMap(\.texts)
+            .joined(separator: "\n")
+        }
+        let announced = { (after: Int?, priority: String) in
+          try await control.waitEvent(
+            "announcement",
+            after: after,
+            matching: ["priority": priority]
+          )?
+          .event["text"] ?? ""
+        }
 
         let suggestion = try await run.scriptedToast()
+        let unasked = try await announced(nil, "medium")
+        run.check(
+          "VoiceOver hears the unasked suggestion's kind and app, after what it is saying",
+          true,
+          unasked.hasPrefix("Athina, ") && unasked.contains(" in TextEdit: ")
+        )
+        run.check(
+          "VoiceOver hears once where the suggestion's answers are",
+          true,
+          unasked.hasSuffix("Answer it from the Athina menu.")
+        )
         // Pictures kept as evidence: the toast shows what changes from run to run and moves on
         // its own, so it is no checkpoint (docs/ci.md "Checkpoints").
         try await run.picture(toast, "toast")
@@ -99,8 +128,23 @@
           1,
           try await rulesForTextEdit("mentor.snoozes")
         )
+        run.check(
+          "a note in the toast's place says how long that kind is quiet",
+          true,
+          try await noteText().contains("suggestions in TextEdit are quiet until")
+        )
 
+        let beforeShowLast = try await control.waitEvent(
+          "feedback",
+          matching: ["feedback": "notNow"]
+        )
         try await showLast()
+        let asked = try await announced(beforeShowLast?.sequence, "high")
+        run.check(
+          "VoiceOver hears the suggestion brought back on request at once",
+          true,
+          asked.hasPrefix("Athina, ") && !asked.contains("Answer it from the Athina menu.")
+        )
         run.check("a click on Never for This lands", true, try await press("toast.never"))
         run.check("Never for This is recorded", "never", try await recorded(suggestion, "never"))
         run.check("Never for This takes the toast down", true, try await toastUp(false))
@@ -108,6 +152,13 @@
           "Never for This stops this kind of suggestion in TextEdit",
           1,
           try await rulesForTextEdit("mentor.neverRules")
+        )
+        run.check(
+          "a note in the toast's place says that kind is off, and where to turn it back on",
+          true,
+          try await noteText().contains(
+            "suggestions in TextEdit are off. Turn them back on in General settings."
+          )
         )
 
         // Well away from the toast, at the top right of the main display, and from the menu bar

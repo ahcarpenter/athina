@@ -10,10 +10,12 @@ import SwiftUI
 /// user is working on.
 ///
 /// With no suggestion up it can show a short note instead, for a talk-back key
-/// press that has nothing to reply to.
+/// press that has nothing to reply to or an answer's consequence.
 ///
 /// Because the panel never becomes key, VoiceOver hears about it through
 /// announcements, and the menu bar menu offers its answers to the keyboard.
+/// A person may drag it off what it covers, and it stays where they put it
+/// until the next suggestion (`ToastPlacement`).
 @MainActor
 final class ToastController {
   static let width: CGFloat = 380
@@ -21,16 +23,35 @@ final class ToastController {
   /// never clipped by the window.
   static let panelWidth: CGFloat = width + 2
   static let margin: CGFloat = 12
-  static let noteDuration: TimeInterval = 4
+  /// The panel's title while it shows a suggestion, which VoiceOver reads and
+  /// the control API finds the toast by.
+  static let suggestionTitle = "Athina suggestion"
+  /// The panel's title while it shows only a note.
+  static let noteTitle = "Athina note"
 
   var onAction: ((Int64, SuggestionFeedback) -> Void)?
   var onHover: ((Bool) -> Void)?
 
   private var panel: NSPanel?
-  private var hosting: NSHostingView<ToastView>?
+  private var hosting: NSHostingView<ToastPanelRoot>?
   private var model = ToastModel()
   private var outsideClickMonitors: [Any] = []
   private var noteTask: Task<Void, Never>?
+  /// The note's time on screen, held while the pointer is over the panel.
+  private var noteCountdown = ToastCountdown()
+  /// Whether the note stays until the next click rather than timing out:
+  /// one that names a next step.
+  private var noteUntilClicked = false
+  private var pointerOverPanel = false
+  /// Where the person dragged the panel to, its top-left corner, until the
+  /// next suggestion.
+  private var movedTopLeft: CGPoint?
+  /// Set when the person starts dragging the panel, so the move that follows
+  /// is told apart from the panel's own placement.
+  private var movedByPerson = false
+  private var moveObservers: [NSObjectProtocol] = []
+  /// Whether the toast has told VoiceOver once where its answers are.
+  private var saidWhereAnswersAre = false
   /// What a note's time on screen is waited out on.
   private let clock: any AthinaClock
   /// Whether clicks outside Athina's own windows reach the toast.
@@ -46,28 +67,49 @@ final class ToastController {
 
   var isShowingSuggestion: Bool { model.suggestion != nil && (panel?.isVisible ?? false) }
 
-  func show(_ suggestion: Suggestion, expanded: Bool, exchange: [FollowUp]) {
-    noteTask?.cancel()
-    model.note = nil
+  /// Shows a suggestion.
+  ///
+  /// - Parameters:
+  ///   - suggestion: The suggestion to show.
+  ///   - expanded: Whether it opens with its explanation showing.
+  ///   - exchange: The talk-back exchange about it so far.
+  ///   - asked: Whether the person asked for it, as Show Last Suggestion
+  ///     does. One they did not ask for arrives while they are busy, so
+  ///     VoiceOver hears it after what it is saying rather than over it.
+  func show(_ suggestion: Suggestion, expanded: Bool, exchange: [FollowUp], asked: Bool = false) {
+    clearNote()
+    if model.suggestion?.id != suggestion.id {
+      movedTopLeft = nil
+    }
     model.suggestion = suggestion
     model.expanded = expanded
     model.exchange = exchange
     model.talkBack = .idle
     present()
     startWatchingForOutsideClicks()
-    ToastController.announce(
-      "Athina suggestion: \(suggestion.title). \(suggestion.body)",
-      priority: .high
-    )
+    var announcement = ToastController.announcement(for: suggestion)
+    if !saidWhereAnswersAre {
+      saidWhereAnswersAre = true
+      announcement += " Answer it from the Athina menu."
+    }
+    Announce.post(announcement, priority: asked ? .high : .medium)
+  }
+
+  /// What VoiceOver hears for a suggestion: what the header, title and body
+  /// show.
+  static func announcement(for suggestion: Suggestion) -> String {
+    """
+    Athina, \(suggestion.category.label) in \(suggestion.appName): \(suggestion.title). \
+    \(suggestion.body)
+    """
   }
 
   func dismiss() {
     stopWatchingForOutsideClicks()
-    noteTask?.cancel()
+    clearNote()
     model.suggestion = nil
     model.exchange = []
     model.talkBack = .idle
-    model.note = nil
     panel?.orderOut(nil)
   }
 
@@ -80,7 +122,7 @@ final class ToastController {
   func expand() {
     model.expanded = true
     if let suggestion = model.suggestion {
-      ToastController.announce(suggestion.explanation, priority: .high)
+      Announce.post(suggestion.explanation, priority: .high)
     }
   }
 
@@ -95,9 +137,9 @@ final class ToastController {
     }
     switch state {
     case .listening where !previous.isListening:
-      ToastController.announce("Listening", priority: .medium)
+      Announce.post("Listening")
     case .thinking where !previous.isThinking:
-      ToastController.announce("Asking the mentor", priority: .medium)
+      Announce.post("Asking the mentor")
     case .idle, .listening, .waiting, .thinking:
       break
     }
@@ -107,9 +149,8 @@ final class ToastController {
     if let latest = exchange.last,
       latest.id != model.exchange.last?.id || latest.answer != model.exchange.last?.answer
     {
-      ToastController.announce(
-        latest.answer.map { "Athina answered: \($0)" }
-          ?? "No answer: \(latest.error ?? "unknown error")",
+      Announce.post(
+        latest.answer.map { "Athina answered: \($0)" } ?? ExchangeEntry.failure(latest),
         priority: .high
       )
     }
@@ -123,22 +164,75 @@ final class ToastController {
   /// A short line for the user: inside the toast when a suggestion is up,
   /// otherwise as a small panel of its own.
   ///
-  /// It clears itself.
-  func showNote(_ text: String) {
-    noteTask?.cancel()
+  /// It clears itself once there has been time to read it
+  /// (`ToastPlacement.noteDuration`), a time that stands still while the
+  /// pointer is over it.
+  ///
+  /// - Parameters:
+  ///   - text: What the note says.
+  ///   - untilClicked: For a note that names a next step: it stays until the
+  ///     next click, anywhere, instead of timing out.
+  func showNote(_ text: String, untilClicked: Bool = false) {
+    clearNote()
     model.note = text
+    noteUntilClicked = untilClicked
     if model.suggestion == nil {
       present()
+      if untilClicked { startWatchingForOutsideClicks() }
     }
-    ToastController.announce(text, priority: .medium)
+    Announce.post(text)
+    guard !untilClicked else { return }
+    noteCountdown.run(for: ToastPlacement.noteDuration(for: text), from: clock.date)
+    if pointerOverPanel {
+      noteCountdown.hold(at: clock.date)
+    } else {
+      waitOutNote()
+    }
+  }
+
+  /// The note on screen, if any.
+  var note: String? { model.note }
+
+  /// Clears the note when its countdown runs out, unless the countdown was
+  /// held or run again meanwhile.
+  private func waitOutNote() {
+    guard let deadline = noteCountdown.deadline else { return }
+    noteTask?.cancel()
     let clock = clock
     noteTask = Task { [weak self] in
-      try? await clock.sleep(for: .seconds(ToastController.noteDuration))
-      guard !Task.isCancelled, let self, self.model.note == text else { return }
-      self.model.note = nil
-      if self.model.suggestion == nil {
-        self.panel?.orderOut(nil)
-      }
+      try? await clock.sleep(untilDate: deadline)
+      guard !Task.isCancelled, let self, self.noteCountdown.deadline == deadline else { return }
+      self.takeDownNote()
+    }
+  }
+
+  private func takeDownNote() {
+    clearNote()
+    if model.suggestion == nil {
+      stopWatchingForOutsideClicks()
+      panel?.orderOut(nil)
+    }
+  }
+
+  private func clearNote() {
+    noteTask?.cancel()
+    noteTask = nil
+    noteCountdown.cancel()
+    noteUntilClicked = false
+    model.note = nil
+  }
+
+  /// The pointer came over the panel or left it: a note's time stands still
+  /// while it is over it, and runs on with what it had when it leaves.
+  private func pointerOverPanelChanged(_ over: Bool) {
+    pointerOverPanel = over
+    guard model.note != nil, !noteUntilClicked else { return }
+    if over {
+      noteTask?.cancel()
+      noteCountdown.hold(at: clock.date)
+    } else if let remaining = noteCountdown.held {
+      noteCountdown.run(for: remaining, from: clock.date)
+      waitOutNote()
     }
   }
 
@@ -153,17 +247,12 @@ final class ToastController {
     let screen =
       NSScreen.screens.first { mouse.map($0.frame.contains) ?? false } ?? NSScreen.main
       ?? NSScreen.screens.first
-    place(panel, on: screen)
+    panel.title =
+      model.suggestion == nil ? ToastController.noteTitle : ToastController.suggestionTitle
+    // New content appears at once; only the same toast growing or shrinking
+    // is animated (`relayout`).
+    place(panel, on: movedTopLeft == nil ? screen : panel.screen ?? screen, animated: false)
     panel.orderFrontRegardless()
-  }
-
-  /// Tells VoiceOver what appeared, since the panel never takes focus.
-  private static func announce(_ text: String, priority: NSAccessibilityPriorityLevel) {
-    NSAccessibility.post(
-      element: NSApp as Any,
-      notification: .announcementRequested,
-      userInfo: [.announcement: text, .priority: priority.rawValue]
-    )
   }
 
   // MARK: Outside clicks
@@ -216,7 +305,12 @@ final class ToastController {
   }
 
   private func handleClick(at location: CGPoint, onToast: Bool) {
-    guard let panel, panel.isVisible, let suggestion = model.suggestion else { return }
+    guard let panel, panel.isVisible else { return }
+    guard let suggestion = model.suggestion else {
+      // A note that waits for the next click, wherever it lands.
+      if noteUntilClicked { takeDownNote() }
+      return
+    }
     let click = ToastClick(
       onToast: onToast,
       location: location,
@@ -234,16 +328,37 @@ final class ToastController {
   /// True when the toast was up to hear it, whatever it made of it.
   @discardableResult
   func outsideClick(at location: CGPoint) -> Bool {
-    guard panel?.isVisible == true, model.suggestion != nil else { return false }
+    guard panel?.isVisible == true, model.suggestion != nil || noteUntilClicked else {
+      return false
+    }
     handleClick(at: location, onToast: false)
     return true
   }
 
   /// Re-fits the panel after its content changed size (expand, collapse, a
-  /// transcript growing), keeping its top-right corner where it is.
+  /// transcript growing), keeping its top edge where it is.
   private func relayout() {
     guard let panel, panel.isVisible else { return }
-    place(panel, on: panel.screen ?? NSScreen.main)
+    place(panel, on: panel.screen ?? NSScreen.main, animated: true)
+  }
+
+  /// Tells a move the person made by dragging the panel from the panel's own
+  /// placement: only a drag sends `willMove` first.
+  private func watchForMoves(of panel: NSPanel) {
+    let center = NotificationCenter.default
+    moveObservers = [
+      center.addObserver(forName: NSWindow.willMoveNotification, object: panel, queue: .main) {
+        [weak self] _ in
+        MainActor.assumeIsolated { self?.movedByPerson = true }
+      },
+      center.addObserver(forName: NSWindow.didMoveNotification, object: panel, queue: .main) {
+        [weak self] _ in
+        MainActor.assumeIsolated {
+          guard let self, self.movedByPerson, let panel = self.panel else { return }
+          self.movedTopLeft = CGPoint(x: panel.frame.minX, y: panel.frame.maxY)
+        }
+      },
+    ]
   }
 
   private func makePanel() -> NSPanel {
@@ -267,8 +382,9 @@ final class ToastController {
     panel.isMovableByWindowBackground = true
     // The title a person never sees, since the panel has no title bar;
     // VoiceOver reads it, and the control API finds the panel by it.
-    panel.title = "Athina suggestion"
+    panel.title = ToastController.suggestionTitle
     panel.setAccessibilitySubrole(.floatingWindow)
+    watchForMoves(of: panel)
 
     let view = ToastView(
       model: model,
@@ -277,13 +393,14 @@ final class ToastController {
         self.onAction?(suggestion.id, feedback)
       },
       onHover: { [weak self] hovering in
+        self?.pointerOverPanelChanged(hovering)
         self?.onHover?(hovering)
       },
       onSizeChange: { [weak self] in
         self?.relayout()
       }
     )
-    let hosting = NSHostingView(rootView: view)
+    let hosting = NSHostingView(rootView: ToastPanelRoot(toast: view))
     hosting.sizingOptions = [.intrinsicContentSize]
     panel.contentView = hosting
     self.hosting = hosting
@@ -291,24 +408,41 @@ final class ToastController {
     return panel
   }
 
-  /// Top right of the screen, just under the menu bar.
+  /// Top right of the screen, just under the menu bar, or where the person
+  /// dragged it (`ToastPlacement`).
   ///
   /// The width is the toast's fixed width; only the height comes from the
   /// content, and a degenerate reading mid-update (SwiftUI can report zero
   /// while it re-lays out) keeps the frame it had, so the panel never jumps off
-  /// the edge of the screen while its content changes.
-  private func place(_ panel: NSPanel, on screen: NSScreen?) {
+  /// the edge of the screen while its content changes. Asked to animate, a
+  /// panel already up grows or shrinks in a short animation from its top edge,
+  /// its content pinned there; with Reduce Motion, or in a hermetic run, which
+  /// nobody sees and whose clicks must not land mid-animation, it changes size
+  /// at once.
+  private func place(_ panel: NSPanel, on screen: NSScreen?, animated: Bool) {
     guard let screen else { return }
     panel.contentView?.layoutSubtreeIfNeeded()
     let fitted = panel.contentView?.fittingSize ?? .zero
     guard fitted.height >= 40 else { return }
-    let size = CGSize(width: ToastController.panelWidth, height: fitted.height)
-    let frame = screen.visibleFrame
-    let origin = CGPoint(
-      x: frame.maxX - size.width - ToastController.margin,
-      y: frame.maxY - size.height - ToastController.margin
+    let frame = ToastPlacement.frame(
+      size: CGSize(width: ToastController.panelWidth, height: fitted.height),
+      visible: screen.visibleFrame,
+      margin: ToastController.margin,
+      movedTopLeft: movedTopLeft
     )
-    panel.setFrame(CGRect(origin: origin, size: size), display: true)
+    movedByPerson = false
+    guard frame != panel.frame else { return }
+    if animated, watchesOtherApps, panel.isVisible,
+      !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    {
+      NSAnimationContext.runAnimationGroup { context in
+        context.duration = 0.2
+        context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        panel.animator().setFrame(frame, display: true)
+      }
+    } else {
+      panel.setFrame(frame, display: true)
+    }
   }
 }
 
@@ -352,6 +486,17 @@ final class ToastModel {
   var note: String?
   /// The talk-back hotkey, shown in the button bar once it is set and voice is usable.
   var talkBackKey: String?
+}
+
+/// The toast as the panel holds it: pinned to the panel's top edge, so while
+/// the panel grows or shrinks around it the content stays still under the
+/// pointer.
+struct ToastPanelRoot: View {
+  let toast: ToastView
+
+  var body: some View {
+    toast.frame(maxHeight: .infinity, alignment: .top)
+  }
 }
 
 /// The toast on its Liquid Glass surface.
@@ -452,28 +597,34 @@ struct ToastContent: View {
 
   private let inset = ToastView.inset
 
+  /// What the header line says: who is speaking, and what kind of suggestion
+  /// about which app.
+  private var source: String { "\(suggestion.category.label) in \(suggestion.appName)" }
+
+  /// A warning is drawn as one, in the attention color, not as a tip in the accent.
+  private var discTint: Color {
+    suggestion.category.isWarning ? StatusTint.attention.color : .accentColor
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       VStack(alignment: .leading, spacing: 8) {
         HStack(alignment: .top, spacing: 10) {
           Image(systemName: suggestion.category.symbol)
             .font(.title3)
-            .foregroundStyle(.tint)
+            .foregroundStyle(discTint)
             .frame(width: 28, height: 28)
-            .background(.tint.quaternary, in: Circle())
+            .background(discTint.quaternary, in: Circle())
             .accessibilityHidden(true)
           VStack(alignment: .leading, spacing: 2) {
             // No system notification chrome names the source, so the toast does.
-            Text(
-              """
-              \(Text("Athina").fontWeight(.semibold)) · \(suggestion.category.label) in \
-              \(suggestion.appName)
-              """
-            )
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-            .accessibilityLabel("Athina, \(suggestion.category.label) in \(suggestion.appName)")
+            Text("\(Text("Athina").fontWeight(.semibold)) · \(source)")
+              .font(.caption)
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
+              // A long app name is cut on screen; the whole line is a hover away.
+              .help("Athina · \(source)")
+              .accessibilityLabel("Athina, \(source)")
             Text(suggestion.title)
               .font(.headline)
               .fixedSize(horizontal: false, vertical: true)
@@ -519,7 +670,9 @@ struct ToastContent: View {
         Divider()
           .padding(.horizontal, inset)
         FittedScrollView(maxHeight: ToastContent.exchangeMaxHeight, anchor: .bottom) {
-          VStack(alignment: .leading, spacing: 8) {
+          // One grid for the whole exchange, so the speaker column is as wide
+          // as its widest word rather than a fixed width.
+          Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 8) {
             ForEach(exchange) { entry in
               ExchangeEntry(entry: entry)
             }
@@ -545,29 +698,26 @@ struct ToastContent: View {
 
       if let note {
         Label(note, systemImage: "info.circle")
-          .font(.caption)
-          .foregroundStyle(.secondary)
+          .font(.callout)
           .fixedSize(horizontal: false, vertical: true)
           .padding(.horizontal, inset)
           .padding(.bottom, 8)
       }
 
       HStack(spacing: 8) {
+        // The one prominent button, drawn by its own style: the panel is
+        // never key, and the system's prominent styles draw a button in a
+        // window that is not key in the inactive grey, or faded.
         Button(expanded ? "Show Less" : "Tell Me More", action: onToggle)
-          .buttonStyle(.borderedProminent)
+          .buttonStyle(ToastProminentButtonStyle())
           .accessibilityIdentifier("toast.tellMeMore")
         Button("Not Now") { onAction(.notNow) }
-          .help(
-            """
-            Hide \(suggestion.category.label.lowercased()) suggestions in \
-            \(suggestion.appName) for a while
-            """
-          )
+          .help(notNowConsequence)
+          .accessibilityHint(notNowConsequence)
           .accessibilityIdentifier("toast.notNow")
         Button("Never for This") { onAction(.never) }
-          .help(
-            "Stop \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName)"
-          )
+          .help(neverConsequence)
+          .accessibilityHint(neverConsequence)
           .accessibilityIdentifier("toast.never")
         Spacer(minLength: 4)
         if let talkBackKey {
@@ -584,6 +734,47 @@ struct ToastContent: View {
       .padding([.horizontal, .bottom], inset)
       .padding(.top, expanded || !exchange.isEmpty || talkBack != .idle || note != nil ? 10 : 0)
     }
+  }
+
+  private var notNowConsequence: String {
+    """
+    Hides \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName) \
+    for a while
+    """
+  }
+
+  private var neverConsequence: String {
+    "Stops \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName)"
+  }
+}
+
+/// The toast's prominent button: the accent capsule a small prominent push
+/// button draws in an active window, drawn the same whether or not the panel
+/// is key, beside small bordered buttons of the same height.
+struct ToastProminentButtonStyle: ButtonStyle {
+  @Environment(\.isEnabled)
+  private var isEnabled
+
+  @Environment(\.colorSchemeContrast)
+  private var contrast
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(.subheadline)
+      .foregroundStyle(.white)
+      .lineLimit(1)
+      .padding(.horizontal, 10)
+      .frame(minHeight: 20)
+      .background(
+        Capsule().fill(Color.accentColor.opacity(configuration.isPressed ? 0.75 : 1))
+      )
+      .overlay {
+        if contrast == .increased {
+          Capsule().strokeBorder(.primary.opacity(0.5))
+        }
+      }
+      .opacity(isEnabled ? 1 : 0.5)
+      .contentShape(Capsule())
   }
 }
 
@@ -617,37 +808,42 @@ private struct FittedScrollView<Content: View>: View {
   }
 }
 
-/// One question and its answer in the toast's exchange area.
-private struct ExchangeEntry: View {
+/// One question and its answer in the toast's exchange area, as two rows of
+/// the exchange's grid.
+struct ExchangeEntry: View {
   let entry: FollowUp
 
+  /// What the person reads, and VoiceOver hears, for a question that got no
+  /// answer: why, in Athina's own words (`UserFacing`).
+  static func failure(_ entry: FollowUp) -> String {
+    UserFacing.followUpError(entry.error ?? "unknown error")
+  }
+
   var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      ExchangeLine(speaker: "You", text: entry.question, secondary: true)
-      if let answer = entry.answer {
-        ExchangeLine(speaker: "Athina", text: answer, secondary: false)
-      } else {
-        ExchangeLine(
-          speaker: "Athina",
-          text: "No answer: \(entry.error ?? "unknown error").",
-          secondary: true
-        )
-      }
+    ExchangeLine(speaker: "You", text: entry.question, secondary: true)
+    if let answer = entry.answer {
+      ExchangeLine(speaker: "Athina", text: answer, secondary: false)
+    } else {
+      // The code's own words stay a hover away, for a bug report.
+      ExchangeLine(speaker: "Athina", text: ExchangeEntry.failure(entry), secondary: true)
+        .help(entry.error ?? "")
     }
   }
 }
 
+/// A speaker and what they said, as a row of the exchange's grid, whose first
+/// column sizes to its widest speaker.
 private struct ExchangeLine: View {
   let speaker: String
   let text: String
   let secondary: Bool
 
   var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 8) {
+    GridRow {
       Text(speaker)
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
-        .frame(width: 44, alignment: .trailing)
+        .gridColumnAlignment(.trailing)
       Text(text)
         .font(.callout)
         .foregroundStyle(secondary ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary))
@@ -659,20 +855,26 @@ private struct ExchangeLine: View {
   }
 }
 
-/// The key is held: a pulsing microphone and the transcript so far.
+/// The key is held: a pulsing microphone and the transcript so far, as a row
+/// of the exchange's grid.
 struct ListeningRow: View {
   let partial: String
 
   @Environment(\.drawsStill)
   private var drawsStill
 
+  @Environment(\.accessibilityReduceMotion)
+  private var reduceMotion
+
   var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 8) {
+    GridRow {
       Image(systemName: "mic.fill")
         .font(.callout)
-        .foregroundStyle(.red)
-        .symbolEffect(.pulse, options: .repeating, isActive: !drawsStill)
-        .frame(width: 44, alignment: .trailing)
+        .foregroundStyle(StatusTint.active.color)
+        // With Reduce Motion the microphone holds still; the word beside it
+        // says it is listening.
+        .symbolEffect(.pulse, options: .repeating, isActive: !drawsStill && !reduceMotion)
+        .gridColumnAlignment(.trailing)
         .accessibilityHidden(true)
       VStack(alignment: .leading, spacing: 2) {
         Text("Listening…")
@@ -693,24 +895,22 @@ struct ListeningRow: View {
 }
 
 /// The key was released and the question is with the mentor model, or
-/// waiting for its current call to return.
+/// waiting for its current call to return, as rows of the exchange's grid.
 struct ThinkingRow: View {
   let question: String
   let status: String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      ExchangeLine(speaker: "You", text: question, secondary: true)
-      HStack(alignment: .center, spacing: 8) {
-        ProgressView()
-          .controlSize(.small)
-          .frame(width: 44, alignment: .trailing)
-          .accessibilityHidden(true)
-        Text(status)
-          .font(.callout)
-          .foregroundStyle(.secondary)
-          .fixedSize(horizontal: false, vertical: true)
-      }
+    ExchangeLine(speaker: "You", text: question, secondary: true)
+    GridRow(alignment: .center) {
+      ProgressView()
+        .controlSize(.small)
+        .gridColumnAlignment(.trailing)
+        .accessibilityHidden(true)
+      Text(status)
+        .font(.callout)
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
   }
 }

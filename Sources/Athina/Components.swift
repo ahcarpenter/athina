@@ -1,9 +1,73 @@
+import AppKit
 import Foundation
 import SwiftUI
 
+/// Tells VoiceOver about a change it would otherwise miss: a result that
+/// arrives after the control that asked for it, a warning that appears beside
+/// a field, a window Athina shows without taking focus.
+///
+/// Every announcement goes through here. `.medium` queues behind what
+/// VoiceOver is saying, for news nobody was waiting for; `.high` interrupts,
+/// only for the answer to something the person just asked.
+@MainActor
+enum Announce {
+  /// Where a run serving the control API logs each announcement, so a
+  /// scenario can wait on it (`ControlEventLog`); nil otherwise.
+  static var recorder: ((String, NSAccessibilityPriorityLevel) -> Void)?
+
+  static func post(_ text: String, priority: NSAccessibilityPriorityLevel = .medium) {
+    NSAccessibility.post(
+      element: NSApp as Any,
+      notification: .announcementRequested,
+      userInfo: [.announcement: text, .priority: priority.rawValue]
+    )
+    recorder?(text, priority)
+  }
+}
+
+extension NSAccessibilityPriorityLevel {
+  /// The level as the control API's `announcement` events name it.
+  var name: String {
+    switch self {
+    case .low: "low"
+    case .medium: "medium"
+    case .high: "high"
+    @unknown default: "unknown"
+    }
+  }
+}
+
+/// What a status color means, mapped once to a system color, so one hue never
+/// stands for two unrelated things.
+///
+/// The words beside it always carry the meaning too (`StatusLabel`,
+/// `StatusBadge`); the tint only reinforces it.
+enum StatusTint {
+  /// Working as it should: granted, allowed, watching, ready.
+  case good
+  /// Needs the person: a permission, a key, an answer, time until a limit
+  /// lifts, or a look at something that stopped.
+  case attention
+  /// A state the person chose, or one that is simply quiet: an answer given,
+  /// paused, idle, excluded, off.
+  case neutral
+  /// Live right now: the microphone listening, calls being recorded. Red, as
+  /// a recording light is.
+  case active
+
+  var color: Color {
+    switch self {
+    case .good: .green
+    case .attention: .orange
+    case .neutral: .gray
+    case .active: .red
+    }
+  }
+}
+
 /// A one-line status message: a multicolor system symbol carries the kind,
-/// and the words stay in a label color, so a message reads at full contrast
-/// in both appearances and never depends on color alone.
+/// and the words stay in the primary label color, so a message reads at full
+/// contrast in both appearances and never depends on color alone.
 struct StatusLabel: View {
   enum Kind {
     case success
@@ -33,9 +97,7 @@ struct StatusLabel: View {
     Label(
       title: {
         Text(text)
-          .foregroundStyle(
-            kind == .success || kind == .info ? AnyShapeStyle(.secondary) : AnyShapeStyle(.primary)
-          )
+          .foregroundStyle(.primary)
           .fixedSize(horizontal: false, vertical: true)
       },
       icon: {
@@ -69,6 +131,16 @@ struct StatusBadge: View {
   let text: String
   let tint: Color
   var symbol: String?
+
+  init(text: String, tint: Color, symbol: String? = nil) {
+    self.text = text
+    self.tint = tint
+    self.symbol = symbol
+  }
+
+  init(text: String, status: StatusTint, symbol: String? = nil) {
+    self.init(text: text, tint: status.color, symbol: symbol)
+  }
 
   var body: some View {
     HStack(spacing: 4) {
