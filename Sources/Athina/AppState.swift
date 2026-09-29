@@ -1720,7 +1720,10 @@ final class AppState {
         talkBack == .thinking(question: question) || talkBack == .waiting(question: question)
       else { return }
       setTalkBack(.idle)
-      toast.setExchange(exchange(for: suggestion.id, including: followUp))
+      toast.setExchange(
+        exchange(for: suggestion.id, including: followUp),
+        provider: settings.mentor.provider
+      )
     }
   }
 
@@ -2018,7 +2021,10 @@ final class AppState {
       show(suggestion, autoExpires: true)
     case .followUp(let followUp):
       if activeSuggestion?.id == followUp.suggestionID {
-        toast.setExchange(exchange(for: followUp.suggestionID, including: followUp))
+        toast.setExchange(
+          exchange(for: followUp.suggestionID, including: followUp),
+          provider: settings.mentor.provider
+        )
       }
     case .feedback, .call, .event:
       // The live lists have these from the journal.

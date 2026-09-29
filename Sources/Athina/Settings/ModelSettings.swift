@@ -287,7 +287,7 @@ private struct APIKeySection<Leading: View>: View {
               testing: testing,
               result: testResult,
               replayed: false,
-              host: provider.host
+              provider: provider
             )
           }
         )
@@ -308,7 +308,7 @@ private struct APIKeySection<Leading: View>: View {
     // Only a new key from the provider's account brings it back, so it asks
     // first; the confirming button is plain, since it is what the person chose.
     .confirmationDialog(
-      "Remove the saved API key?",
+      "Remove the saved \(provider.name) API key?",
       isPresented: $confirmRemove,
       titleVisibility: .visible,
       actions: {
@@ -360,7 +360,7 @@ private struct APIKeySection<Leading: View>: View {
       let result = await state.testConnection()
       testResult = result
       testing = false
-      ConnectionResult.announce(result, replayed: false)
+      ConnectionResult.announce(result, replayed: false, provider: provider)
     }
   }
 }
@@ -399,7 +399,12 @@ private struct ReplayConnectionSection<Leading: View>: View {
           },
           label: {
             Text("Connection")
-            ConnectionResult(testing: testing, result: testResult, replayed: true, host: nil)
+            ConnectionResult(
+              testing: testing,
+              result: testResult,
+              replayed: true,
+              provider: state.settings.mentor.provider
+            )
           }
         )
       },
@@ -425,7 +430,11 @@ private struct ReplayConnectionSection<Leading: View>: View {
       let result = await state.testConnection()
       testResult = result
       testing = false
-      ConnectionResult.announce(result, replayed: true)
+      ConnectionResult.announce(
+        result,
+        replayed: true,
+        provider: state.settings.mentor.provider
+      )
     }
   }
 }
@@ -438,8 +447,8 @@ struct ConnectionResult: View {
   let testing: Bool
   let result: Result<String, ClaudeClientError>?
   let replayed: Bool
-  /// The host a live test contacts.
-  let host: String?
+  /// Whose API the test goes to, which a live wait and a failure name.
+  let provider: ModelProvider
 
   var body: some View {
     if testing {
@@ -447,36 +456,50 @@ struct ConnectionResult: View {
         ProgressView()
           .controlSize(.small)
           .accessibilityHidden(true)
-        Text(replayed ? "Replaying the recorded test call…" : "Contacting \(host ?? "the provider")…")
+        Text(replayed ? "Replaying the recorded test call…" : "Contacting \(provider.host)…")
       }
     } else if let result {
       switch result {
       case .success:
-        StatusLabel(Self.sentence(for: result, replayed: replayed), kind: .success)
+        StatusLabel(
+          Self.sentence(for: result, replayed: replayed, provider: provider),
+          kind: .success
+        )
       case .failure(let error):
-        StatusLabel(Self.sentence(for: result, replayed: replayed), kind: .error)
-          .textSelection(.enabled)
-          .help(error.description)
+        StatusLabel(
+          Self.sentence(for: result, replayed: replayed, provider: provider),
+          kind: .error
+        )
+        .textSelection(.enabled)
+        .help(error.description)
       }
     }
   }
 
-  static func sentence(for result: Result<String, ClaudeClientError>, replayed: Bool) -> String {
+  static func sentence(
+    for result: Result<String, ClaudeClientError>,
+    replayed: Bool,
+    provider: ModelProvider
+  ) -> String {
     switch result {
     case .success(let model):
       replayed
         ? "Replayed: \(ModelCatalog.displayName(for: model)) answered when it was recorded."
         : "Connected: \(ModelCatalog.displayName(for: model)) answered."
     case .failure(let error):
-      UserFacing.sentence(for: error)
+      UserFacing.sentence(for: error, provider: provider)
     }
   }
 
   /// Tells VoiceOver what the test found, since it comes after the button
   /// that asked, in a line the person is not on.
   @MainActor
-  static func announce(_ result: Result<String, ClaudeClientError>, replayed: Bool) {
-    Announce.post(sentence(for: result, replayed: replayed))
+  static func announce(
+    _ result: Result<String, ClaudeClientError>,
+    replayed: Bool,
+    provider: ModelProvider
+  ) {
+    Announce.post(sentence(for: result, replayed: replayed, provider: provider))
   }
 }
 

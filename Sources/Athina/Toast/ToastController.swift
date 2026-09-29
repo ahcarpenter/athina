@@ -145,12 +145,16 @@ final class ToastController {
     }
   }
 
-  func setExchange(_ exchange: [FollowUp]) {
+  /// Shows the exchange, naming `provider`, whose API the questions went
+  /// to, in a failure's sentence.
+  func setExchange(_ exchange: [FollowUp], provider: ModelProvider) {
+    model.provider = provider
     if let latest = exchange.last,
       latest.id != model.exchange.last?.id || latest.answer != model.exchange.last?.answer
     {
       Announce.post(
-        latest.answer.map { "Athina answered: \($0)" } ?? ExchangeEntry.failure(latest),
+        latest.answer.map { "Athina answered: \($0)" }
+          ?? ExchangeEntry.failure(latest, provider: provider),
         priority: .high
       )
     }
@@ -481,6 +485,8 @@ final class ToastModel {
   var expanded = false
   /// The talk-back exchange about the suggestion, oldest first.
   var exchange: [FollowUp] = []
+  /// Whose API the exchange's questions went to.
+  var provider: ModelProvider = .anthropic
   var talkBack: TalkBackState = .idle
   /// A short line for the user, inside the toast or on its own.
   var note: String?
@@ -523,6 +529,7 @@ struct ToastView: View {
           suggestion: suggestion,
           expanded: model.expanded,
           exchange: model.exchange,
+          provider: model.provider,
           talkBack: model.talkBack,
           note: model.note,
           talkBackKey: model.talkBackKey,
@@ -589,6 +596,7 @@ struct ToastContent: View {
   let suggestion: Suggestion
   let expanded: Bool
   var exchange: [FollowUp] = []
+  var provider: ModelProvider = .anthropic
   var talkBack: TalkBackState = .idle
   var note: String?
   var talkBackKey: String?
@@ -674,7 +682,7 @@ struct ToastContent: View {
           // as its widest word rather than a fixed width.
           Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 8) {
             ForEach(exchange) { entry in
-              ExchangeEntry(entry: entry)
+              ExchangeEntry(entry: entry, provider: provider)
             }
             switch talkBack {
             case .idle:
@@ -812,11 +820,13 @@ private struct FittedScrollView<Content: View>: View {
 /// the exchange's grid.
 struct ExchangeEntry: View {
   let entry: FollowUp
+  /// Whose API the question went to.
+  let provider: ModelProvider
 
   /// What the person reads, and VoiceOver hears, for a question that got no
   /// answer: why, in Athina's own words (`UserFacing`).
-  static func failure(_ entry: FollowUp) -> String {
-    UserFacing.followUpError(entry.error ?? "unknown error")
+  static func failure(_ entry: FollowUp, provider: ModelProvider) -> String {
+    UserFacing.followUpError(entry.error ?? "unknown error", provider: provider)
   }
 
   var body: some View {
@@ -825,8 +835,12 @@ struct ExchangeEntry: View {
       ExchangeLine(speaker: "Athina", text: answer, secondary: false)
     } else {
       // The code's own words stay a hover away, for a bug report.
-      ExchangeLine(speaker: "Athina", text: ExchangeEntry.failure(entry), secondary: true)
-        .help(entry.error ?? "")
+      ExchangeLine(
+        speaker: "Athina",
+        text: ExchangeEntry.failure(entry, provider: provider),
+        secondary: true
+      )
+      .help(entry.error ?? "")
     }
   }
 }

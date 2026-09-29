@@ -11,18 +11,24 @@ import Foundation
 /// every mapping is proven on values.
 public enum UserFacing {
   /// What a failed call means for the person, and what they can do about it.
-  public static func sentence(for error: ClaudeClientError) -> String {
+  ///
+  /// - Parameters:
+  ///   - error: The call's failure.
+  ///   - provider: Whose API the call went to, which the sentence names.
+  /// - Returns: The sentence Test Connection, the toast and VoiceOver give.
+  public static func sentence(for error: ClaudeClientError, provider: ModelProvider) -> String {
+    let name = provider.name
     switch error {
     case .api(let status, let type, let message):
-      apiSentence(status: status, type: type, message: message)
+      return apiSentence(status: status, type: type, message: message, provider: name)
     case .transport:
-      "Athina could not reach Anthropic. Check the internet connection and try again."
+      return "Athina could not reach \(name). Check the internet connection and try again."
     case .badResponse:
-      "Anthropic's answer could not be read. Try again."
+      return "\(name)'s answer could not be read. Try again."
     case .replay:
-      "There is no recorded answer to replay for this call."
+      return "There is no recorded answer to replay for this call."
     case .notSent(let reason):
-      "Athina did not send the call, since \(reason)."
+      return "Athina did not send the call, since \(reason)."
     }
   }
 
@@ -66,16 +72,21 @@ public enum UserFacing {
   /// error text (`MentorLoop`), as the person reads it.
   ///
   /// Text this cannot place is shown as it is.
-  public static func followUpError(_ raw: String) -> String {
+  ///
+  /// - Parameters:
+  ///   - raw: The journaled error.
+  ///   - provider: Whose API the question went to, which the sentence names.
+  /// - Returns: The sentence the toast and the Suggestions window show.
+  public static func followUpError(_ raw: String, provider: ModelProvider) -> String {
     if let hold = holdsByLabel[raw] { return sentence(for: hold) }
     if raw.hasPrefix(spendCapPrefix) {
       return "Athina did not ask: this hour's spend limit is reached. It can ask again at "
         + String(raw.dropFirst(spendCapPrefix.count)) + "."
     }
-    if let error = clientError(from: raw) { return sentence(for: error) }
+    if let error = clientError(from: raw) { return sentence(for: error, provider: provider) }
     switch raw {
     case "the API declined this request":
-      return "Anthropic declined to answer this question."
+      return "\(provider.name) declined to answer this question."
     case "the follow-up reply had an empty answer", "could not parse the follow-up reply":
       return "Athina could not read the answer. Try asking again."
     default:
@@ -143,35 +154,40 @@ public enum UserFacing {
     )
   }
 
-  private static func apiSentence(status: Int, type: String, message: String) -> String {
+  private static func apiSentence(
+    status: Int,
+    type: String,
+    message: String,
+    provider name: String
+  ) -> String {
     switch (status, type) {
     case (401, _), (_, "authentication_error"):
       return
         """
-        Anthropic did not accept this API key. Check it in the Anthropic Console and paste it \
+        \(name) did not accept this API key. Check it in your \(name) account and paste it \
         again.
         """
     case (403, _), (_, "permission_error"):
       return
-        "This API key is not allowed to do that. Check its permissions in the Anthropic Console."
+        "This API key is not allowed to do that. Check its permissions in your \(name) account."
     case (404, _), (_, "not_found_error"):
       return
         """
-        Anthropic does not offer the chosen model to this API key. Choose another in Models \
+        \(name) does not offer the chosen model to this API key. Choose another in Models \
         settings.
         """
     case (413, _), (_, "request_too_large"):
-      return "The request was too large for Anthropic to accept."
+      return "The request was too large for \(name) to accept."
     case (429, _), (_, "rate_limit_error"):
-      return "Anthropic is limiting requests from this API key. Try again in a minute."
+      return "\(name) is limiting requests from this API key. Try again in a minute."
     case (529, _), (_, "overloaded_error"):
-      return "Anthropic is busy right now. Try again in a minute."
+      return "\(name) is busy right now. Try again in a minute."
     case (400, _) where message.localizedCaseInsensitiveContains("credit balance"):
-      return "The Anthropic account has run out of credit. Add credit in the Anthropic Console."
+      return "The \(name) account has run out of credit. Add credit in your \(name) account."
     case (500..., _):
-      return "Anthropic had a problem answering. Try again in a minute."
+      return "\(name) had a problem answering. Try again in a minute."
     default:
-      return "Anthropic refused the request."
+      return "\(name) refused the request."
     }
   }
 }

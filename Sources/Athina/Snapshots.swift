@@ -1223,7 +1223,7 @@ struct StatusMessagesPreview: View {
             testing: true,
             result: nil,
             replayed: false,
-            host: "api.anthropic.com"
+            provider: .anthropic
           )
         }
         LabeledContent("Connected") {
@@ -1231,7 +1231,7 @@ struct StatusMessagesPreview: View {
             testing: false,
             result: .success("claude-haiku-4-5-20251001"),
             replayed: false,
-            host: "api.anthropic.com"
+            provider: .anthropic
           )
         }
         LabeledContent("Replayed") {
@@ -1239,7 +1239,7 @@ struct StatusMessagesPreview: View {
             testing: false,
             result: .success("claude-haiku-4-5-20251001"),
             replayed: true,
-            host: "api.anthropic.com"
+            provider: .anthropic
           )
         }
         LabeledContent("Failed") {
@@ -1249,7 +1249,7 @@ struct StatusMessagesPreview: View {
               .api(status: 401, type: "authentication_error", message: "invalid x-api-key")
             ),
             replayed: false,
-            host: "api.anthropic.com"
+            provider: .anthropic
           )
         }
         StatusLabel(APIKeyEntry.saveFailure, kind: .error)

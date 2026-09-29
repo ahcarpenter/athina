@@ -93,7 +93,7 @@ private struct EmptyHistory: View {
     case .noAPIKey:
       unavailable(
         "Athina Needs an API Key",
-        "Athina makes suggestions once an Anthropic API key is saved in Models settings.",
+        "Athina makes suggestions once an \(state.settings.mentor.provider.name) API key is saved in Models settings.",
         action: "Add API Key…",
         command: .openSettings(pane: SettingsPane.models.rawValue)
       )
@@ -357,8 +357,12 @@ struct SuggestionDetail: View {
                 if let answer = entry.answer {
                   exchangeLine("Athina", answer, at: nil)
                 } else {
-                  exchangeLine("Athina", ExchangeEntry.failure(entry), at: nil)
-                    .help(entry.error ?? "")
+                  exchangeLine(
+                    "Athina",
+                    ExchangeEntry.failure(entry, provider: state.settings.mentor.provider),
+                    at: nil
+                  )
+                  .help(entry.error ?? "")
                 }
               }
             }
