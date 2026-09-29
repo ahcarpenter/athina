@@ -187,4 +187,8 @@ for them only when you press Request Access (Open System Settings once the
 system has asked) or first hold the talk-back shortcut.
 
 Idle detection uses `CGEventSource.secondsSinceLastEventType`, which needs no
-permission. Input Monitoring is never requested.
+permission. While a note that names a next step is up, Athina notices that a
+key went down, never which, to take the note down; presses in other apps are
+noticed only with the Accessibility access it already has
+([mentor-loop.md](mentor-loop.md#talking-back)). Input Monitoring is never
+requested.
