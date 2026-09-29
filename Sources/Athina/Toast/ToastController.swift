@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import AthinaCore
 import CoreGraphics
 import Foundation
@@ -36,6 +37,9 @@ final class ToastController {
   private var hosting: NSHostingView<ToastPanelRoot>?
   private var model = ToastModel()
   private var outsideClickMonitors: [Any] = []
+  /// Watch for any key going down while a note that names a next step is up
+  /// (`showNote(_:untilClicked:)`), and only then.
+  private var keyPressMonitors: [Any] = []
   private var noteTask: Task<Void, Never>?
   /// The note's time on screen, held while the pointer is over the panel.
   private var noteCountdown = ToastCountdown()
@@ -175,7 +179,7 @@ final class ToastController {
   /// - Parameters:
   ///   - text: What the note says.
   ///   - untilClicked: For a note that names a next step: it stays until the
-  ///     next click, anywhere, instead of timing out.
+  ///     next click or key press, anywhere, instead of timing out.
   func showNote(_ text: String, untilClicked: Bool = false) {
     clearNote()
     model.note = text
@@ -184,6 +188,7 @@ final class ToastController {
       present()
       if untilClicked { startWatchingForOutsideClicks() }
     }
+    if untilClicked { startWatchingForKeyPresses() }
     Announce.post(text)
     guard !untilClicked else { return }
     noteCountdown.run(for: ToastPlacement.noteDuration(for: text), from: clock.date)
@@ -232,7 +237,56 @@ final class ToastController {
     noteTask = nil
     noteCountdown.cancel()
     noteUntilClicked = false
+    stopWatchingForKeyPresses()
     model.note = nil
+  }
+
+  // MARK: Key presses
+
+  /// The next key press anywhere takes down a note that waits for one.
+  ///
+  /// Only that a key went down, and not by auto-repeat, is used, never which
+  /// key: the event is not otherwise read, and nothing of it is logged or kept. Key presses in other apps reach Athina only with
+  /// the Accessibility access it already asks for, which a global key-down
+  /// monitor needs and which asks for nothing more, never Input Monitoring;
+  /// without it, or in a hermetic run, which listens to nothing outside
+  /// itself, only presses in Athina's own windows count, and a click still
+  /// takes the note down. The monitors exist only while such a note is up.
+  private func startWatchingForKeyPresses() {
+    guard keyPressMonitors.isEmpty else { return }
+    if watchesOtherApps, AXIsProcessTrusted(),
+      let global = NSEvent.addGlobalMonitorForEvents(
+        matching: .keyDown,
+        handler: { [weak self] event in
+          let repeated = event.isARepeat
+          MainActor.assumeIsolated { self?.keyWentDown(repeated: repeated) }
+        }
+      )
+    {
+      keyPressMonitors.append(global)
+    }
+    if let local = NSEvent.addLocalMonitorForEvents(
+      matching: .keyDown,
+      handler: { [weak self] event in
+        MainActor.assumeIsolated { self?.keyWentDown(repeated: event.isARepeat) }
+        return event
+      }
+    ) {
+      keyPressMonitors.append(local)
+    }
+  }
+
+  private func stopWatchingForKeyPresses() {
+    for monitor in keyPressMonitors { NSEvent.removeMonitor(monitor) }
+    keyPressMonitors.removeAll()
+  }
+
+  /// A key went down; a key held since before the note came up, such as the
+  /// talk-back shortcut that brought it, repeats rather than going down again,
+  /// and does not count.
+  private func keyWentDown(repeated: Bool) {
+    guard noteUntilClicked, !repeated else { return }
+    takeDownNote()
   }
 
   /// The pointer came over the panel or left it: a note's time stands still

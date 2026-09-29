@@ -285,7 +285,9 @@ pausing withdraws it too, in neither case journaling anything. The key does
 nothing with no suggestion to talk back to except a brief note in the toast
 area, which stays long enough to read (`ToastPlacement.noteDuration`), holds
 while the pointer is over it, and, when it names a next step such as granting
-a permission, stays until the next click; with no toast up the key brings the
+a permission, stays until the next click or key press (only that a key went
+down is used, never which; presses in other apps count only with the
+Accessibility access Athina already has, never Input Monitoring); with no toast up the key brings the
 most recent suggestion back to talk
 to. A question that got no answer says why in Athina's words (`UserFacing`),
 with the journaled error as its tooltip. The history window shows the full exchange under each suggestion, and the
