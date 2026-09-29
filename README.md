@@ -13,11 +13,9 @@
 <h3 align="center"><strong>A live mentor for your Mac.</strong> It watches how you work and shows you a better way when there is one.</h3>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="Tests/Snapshots/toast-dark.png">
-    <img src="Tests/Snapshots/toast-light.png" width="382" alt="An Athina note under the menu bar: its kind tile and the app, a short title, a sentence saying why, and the buttons Tell Me More, Not Now and Never for This">
-  </picture>
+  <img src="docs/images/demo.gif" width="800" alt="Athina's demo. Someone reading notes in TextEdit switches to a cleanup script they are about to run. A callout with a Risk tile outlines the line rm -rf $BUILD_ROOT/* in the script. Under the menu bar, a note headed Risk, TextEdit reads: Unset BUILD_ROOT could rm -rf your whole disk. If ~/.config/nightly/build-root is missing or empty, BUILD_ROOT is blank and rm -rf $BUILD_ROOT/* becomes rm -rf /*, wiping the root filesystem. Add a check before deleting. Tell Me More opens the full explanation with a guard to add.">
 </p>
+<p align="center"><sub>The real screen, replaying the <a href="docs/replay.md#the-committed-fixtures">committed fixtures</a>: the script and its callout, then the note under the menu bar.</sub></p>
 
 **Status:** early. Athina runs on macOS 26 or later, and feedback is wanted:
 [issues](https://github.com/getathina/athina/issues) are welcome. It is
@@ -98,8 +96,8 @@ Change it in [Settings > Models > Spend at most](docs/mentor-loop.md#spend-contr
 
 ## Privacy
 
-- Nothing is captured or sent until you choose Allow in the consent window
-  that opens first, and Settings > Privacy withdraws it at once.
+- Nothing is captured or sent until you choose Allow on the Setup window's
+  consent page, which opens first, and Settings > Privacy withdraws it at once.
 - The journal, settings and audio stay on this Mac; the only network peer is
   the host of the provider chosen in Settings > Models (`api.anthropic.com`,
   `api.openai.com` or `opencode.ai`), and only the mentor loop reaches it.
