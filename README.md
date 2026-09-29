@@ -98,8 +98,8 @@ Change it in [Settings > Models > Spend at most](docs/mentor-loop.md#spend-contr
 
 ## Privacy
 
-- Nothing is captured or sent until you choose Allow in the consent window
-  that opens first, and Settings > Privacy withdraws it at once.
+- Nothing is captured or sent until you choose Allow on the Setup window's
+  consent page that opens first, and Settings > Privacy withdraws it at once.
 - The journal, settings and audio stay on this Mac; the only network peer is
   the host of the provider chosen in Settings > Models (`api.anthropic.com`,
   `api.openai.com` or `opencode.ai`), and only the mentor loop reaches it.
