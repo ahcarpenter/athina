@@ -79,8 +79,9 @@ particular to this app:
   tile in the kind's own colour beside the kind's name in words, then the
   app; the model's own category is a hover away. While a callout is up, a
   line under the body says what it outlines, since the callout draws no words.
-  Never for This in Settings > Mentoring marks each category with its kind's
-  tile and names the kind in words.
+  The history window and Never for This in Settings > Mentoring mark each
+  suggestion with the same tile and name its kind in words, and the history
+  window lists suggestions under the day they were made.
 - **The callout is a click-through overlay** that draws its own frame, since
   nothing in the system frames a spot in another app's window: a halo, then a
   pointer stroke over a faint fill, in a colour of its own rather than the
