@@ -45,8 +45,36 @@ import Testing
     #expect(SetupFlow.page(after: .permissions, needsKey: true) == .model)
     #expect(SetupFlow.page(after: .model, needsKey: true) == .ready)
     #expect(SetupFlow.page(after: .ready, needsKey: true) == nil)
-    #expect(SetupFlow.page(before: .consent) == nil)
-    #expect(SetupFlow.page(before: .ready) == .model)
+    #expect(SetupFlow.page(before: .consent, needsKey: true) == nil)
+    #expect(SetupFlow.page(before: .ready, needsKey: true) == .model)
+    #expect(SetupFlow.page(before: .model, needsKey: true) == .permissions)
+  }
+
+  /// Back mirrors Continue: with no key needed, it skips the model page too,
+  /// and the dots count only the pages the walk through shows.
+  @Test func backAndTheDotsSkipTheModelPageAsContinueDoes() {
+    #expect(SetupFlow.pages(needsKey: true) == [.consent, .permissions, .model, .ready])
+    #expect(SetupFlow.pages(needsKey: false) == [.consent, .permissions, .ready])
+    for needsKey in [true, false] {
+      let pages = SetupFlow.pages(needsKey: needsKey)
+      for (index, page) in pages.enumerated() {
+        #expect(SetupFlow.page(after: page, needsKey: needsKey) == pages[safe: index + 1])
+        #expect(SetupFlow.page(before: page, needsKey: needsKey) == pages[safe: index - 1])
+        let step = SetupFlow.step(of: page, needsKey: needsKey)
+        #expect(step.number == index + 1)
+        #expect(step.count == pages.count)
+      }
+    }
+    #expect(SetupFlow.page(before: .ready, needsKey: false) == .permissions)
+  }
+
+  /// A key saved on the model page leaves it counted while it shows, and
+  /// Continue then goes on to the last page.
+  @Test func theModelPageStaysCountedOnceItsKeyIsSaved() {
+    let step = SetupFlow.step(of: .model, needsKey: false)
+    #expect(step.number == 3 && step.count == 4)
+    #expect(SetupFlow.page(after: .model, needsKey: false) == .ready)
+    #expect(SetupFlow.page(before: .model, needsKey: false) == .permissions)
   }
 
   /// Continue skips the model page exactly when Allow does: when no key is
@@ -209,5 +237,11 @@ import Testing
   @Test func eachPageHasItsOwnTitle() {
     #expect(SetupPage.consent.title == "Athina and Your Privacy")
     #expect(Set(SetupPage.allCases.map(\.title)).count == SetupPage.allCases.count)
+  }
+}
+
+extension Array {
+  fileprivate subscript(safe index: Int) -> Element? {
+    indices.contains(index) ? self[index] : nil
   }
 }

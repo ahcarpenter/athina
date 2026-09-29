@@ -58,7 +58,7 @@ struct SetupView: View {
     }
     .overlay {
       if state.setup.walksThrough {
-        PageDots(page: state.setup.page)
+        PageDots(step: SetupFlow.step(of: state.setup.page, needsKey: state.needsAPIKey))
       }
     }
   }
@@ -66,7 +66,9 @@ struct SetupView: View {
   @ViewBuilder private var leading: some View {
     if state.setup.page == .consent {
       Link("Privacy Policy", destination: Consent.privacyPolicyURL)
-    } else if state.setup.walksThrough, let previous = SetupFlow.page(before: state.setup.page) {
+    } else if state.setup.walksThrough,
+      let previous = SetupFlow.page(before: state.setup.page, needsKey: state.needsAPIKey)
+    {
       Button("Back") { state.setup.page = previous }
         .accessibilityIdentifier("setup.back")
     }
@@ -129,20 +131,18 @@ struct SetupView: View {
 
 /// A dot for each page of a walk through, the current one filled.
 private struct PageDots: View {
-  let page: SetupPage
+  let step: (number: Int, count: Int)
 
   var body: some View {
     HStack(spacing: 7) {
-      ForEach(SetupPage.allCases, id: \.self) { each in
+      ForEach(1...step.count, id: \.self) { each in
         Circle()
-          .fill(each == page ? Color.primary.opacity(0.7) : Color.primary.opacity(0.2))
+          .fill(each == step.number ? Color.primary.opacity(0.7) : Color.primary.opacity(0.2))
           .frame(width: 6, height: 6)
       }
     }
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel(
-      "Step \((SetupPage.allCases.firstIndex(of: page) ?? 0) + 1) of \(SetupPage.allCases.count)"
-    )
+    .accessibilityLabel("Step \(step.number) of \(step.count)")
   }
 }
 

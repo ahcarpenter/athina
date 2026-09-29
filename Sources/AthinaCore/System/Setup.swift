@@ -76,14 +76,32 @@ public enum SetupFlow {
     return nil
   }
 
+  /// The pages a walk through steps through: the model page only while a
+  /// key is still needed, as after Allow.
+  public static func pages(needsKey: Bool) -> [SetupPage] {
+    SetupPage.allCases.filter { $0 != .model || needsKey }
+  }
+
   /// The page Continue shows in a walk through, or nil at the last page.
-  ///
-  /// The model page comes only while a key is still needed, as after Allow.
   public static func page(after page: SetupPage, needsKey: Bool) -> SetupPage? {
-    let pages = SetupPage.allCases
-    guard let index = pages.firstIndex(of: page), index + 1 < pages.count else { return nil }
-    let next = pages[index + 1]
-    return next == .model && !needsKey ? self.page(after: next, needsKey: needsKey) : next
+    pages(needsKey: needsKey).first { order(of: $0) > order(of: page) }
+  }
+
+  /// The page Back shows in a walk through, or nil at the first page.
+  public static func page(before page: SetupPage, needsKey: Bool) -> SetupPage? {
+    pages(needsKey: needsKey).last { order(of: $0) < order(of: page) }
+  }
+
+  /// Which step of the walk through `page` is, counting from one, and how
+  /// many there are, as the page dots show; the model page counts while it
+  /// is shown, even once its key is saved.
+  public static func step(of page: SetupPage, needsKey: Bool) -> (number: Int, count: Int) {
+    let steps = pages(needsKey: needsKey || page == .model)
+    return ((steps.firstIndex(of: page) ?? 0) + 1, steps.count)
+  }
+
+  private static func order(of page: SetupPage) -> Int {
+    SetupPage.allCases.firstIndex(of: page) ?? 0
   }
 
   /// The footer's buttons: a consent page is answered only while there is no
@@ -120,13 +138,6 @@ public enum SetupFlow {
   ) -> SetupState {
     if isOpen && current.page == .consent && !hasConsent { return current }
     return SetupState(page: page, walksThrough: isOpen && current.walksThrough)
-  }
-
-  /// The page Back shows in a walk through, or nil at the first page.
-  public static func page(before page: SetupPage) -> SetupPage? {
-    let pages = SetupPage.allCases
-    guard let index = pages.firstIndex(of: page), index > 0 else { return nil }
-    return pages[index - 1]
   }
 }
 
