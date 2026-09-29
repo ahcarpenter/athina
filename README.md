@@ -24,34 +24,60 @@ It asks a model with your own API key, and nothing but those calls leaves your M
 ## How it works
 
 ```
-        what you are doing on your Mac
-            │  the app in front, its window, the text on screen
-            ▼
-   ┌───────────────────────────────────────────────────┐
-   │  sensing → journal → triage → mentor              │
-   │  the first two on your Mac, the last two with     │
-   │  your provider, on your key, under the hourly cap │
-   └───────────────────────────────────────────────────┘
-            │  a better way, when there is one
-            ▼
-        a note under the menu bar, which can outline the spot it is about
+ ON YOUR MAC                          ┆  AT YOUR MODEL PROVIDER, ON YOUR KEY
+                                      ┆
+   what you are doing: the app in     ┆
+   front, its window, the screen text ┆
+                   │                  ┆
+                   ▼                  ┆
+ ┌──────────────────────────────────┐ ┆
+ │ sensing                          │ ┆
+ │ nothing before Allow, while      │ ┆
+ │ paused, or on an excluded app    │ ┆
+ └─────────────────┬────────────────┘ ┆
+                   ▼                  ┆
+ ┌──────────────────────────────────┐ ┆
+ │ journal                          │ ┆
+ │ what was read, kept on this Mac  │ ┆
+ └─────────────────┬────────────────┘ ┆
+                   │ you switch apps  ┆
+                   │ or stop typing   ┆
+                   ▼                  ┆
+ ┌──────────────────────────────────┐ ┆  ┌────────────────────────────────┐
+ │ triage                           │ ┆  │ the cheap model                │
+ │ at most once every 20 s, and     ├──┼──▶ is the latest screen's         │
+ │ only when the screen changed     ◀──┼──┤ text worth a look?             │
+ └─────────────────┬────────────────┘ ┆  └────────────────────────────────┘
+   no: back to     │ yes              ┆
+   watching        ▼                  ┆
+ ┌──────────────────────────────────┐ ┆  ┌────────────────────────────────┐
+ │ mentor                           │ ┆  │ the strong model               │
+ │ 2 min since the last mentor      ├──┼──▶ reads the recent screens'      │
+ │ call, and under the hourly       │ ┆  │ text, a thumbnail and what     │
+ │ spend cap                        ◀──┼──┤ you seem to be after           │
+ └─────────────────┬────────────────┘ ┆  └────────────────────────────────┘
+   most often      │ a suggestion     ┆
+   nothing         ▼                  ┆
+ ┌──────────────────────────────────┐ ┆
+ │ a note under the menu bar, and   │ ┆
+ │ a callout on the spot it means,  │ ┆
+ │ when it means one                │ ┆
+ └─────────────────┬────────────────┘ ┆
+                   ▼                  ┆
+   your answer, kept in the journal:  ┆
+   Tell Me More, Not Now (that kind   ┆
+   of note waits an hour) or Never    ┆
+   for This (it stops for this app)   ┆
 ```
 
-**Sensing** reads the screen on your Mac and keeps what it reads in a local **journal**.
-Nothing is sensed before you choose **Allow**, while you **pause**, or while an **excluded app** is in front.
+By default the cheap model is Claude Haiku 4.5 and the strong one Claude Opus 5, or GPT-6 Luna and GPT-6 Sol on OpenAI.
+The thumbnail can be turned off in Settings > Models, and a **callout** comes down as soon as its window moves or changes.
 
-**Triage** runs when you switch apps or windows or stop typing or clicking, and asks the cheap model whether the moment is **worth a look**.
-It sends the latest screen's text, runs at most once every 20 seconds, and skips a screen that has barely changed.
+What you seem to be after is the **standing understanding**, a short note each mentor call rewrites.
+After 15 minutes of use with no mentor call, a refresh rewrites it on its own.
 
-**Mentor** runs only when triage says yes and 2 minutes have passed since its last call.
-It sends the strong model the recent screens' text and, by default, a thumbnail of the latest one, and most of the time the answer is nothing.
-When there is something, a **note** appears under the menu bar and learns from your answer: **Tell Me More**, **Not Now** or **Never for This**.
-A note about one spot on screen can outline it with a **callout**, which comes down as soon as that window moves or changes.
-
-Each mentor call also rewrites the **standing understanding**, a short note of what you appear to be working toward, and after 15 minutes of use with no mentor call a refresh rewrites it on its own.
-By default Claude Haiku 4.5 triages and Claude Opus 5 does the rest, or GPT-6 Luna and GPT-6 Sol on OpenAI.
-Every call counts against one hourly cap, $1 by default: calls slow down as the hour's spend nears it and stop at it until the next hour.
-Change it in [Settings > Models > Spend at most](docs/mentor-loop.md#spend-control).
+Every call counts against one **hourly cap**, $1 by default: calls slow down as the hour's spend nears it and stop at it until the next hour.
+Change it in [Settings > Models > Spend at most](docs/mentor-loop.md#spend-control), and see [the mentor loop](docs/mentor-loop.md) for every gate.
 
 ## Install
 
@@ -64,8 +90,6 @@ Releases are not notarized yet, so allow the first launch in System Settings > P
 1. Open Athina and choose **Allow** in the consent window; nothing is sensed or sent before it.
 2. Grant **Screen Recording** and **Accessibility** from its permissions window ([Permissions](docs/setup.md#permissions)).
 3. Paste an API key in Settings > Models, press Save, then Test Connection ([An API key](docs/setup.md#an-api-key)).
-
-No key yet? From a source checkout, `make run` starts a replay that answers from recorded calls and spends nothing.
 
 ## Development
 
