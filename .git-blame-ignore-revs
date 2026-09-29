@@ -3,13 +3,13 @@
 # .git-blame-ignore-revs` turns it on (docs/code-style.md). The reformat stays
 # first: the rebase recipe in docs/code-style.md takes the first commit named here.
 
-# style(athina): format all Swift to Google's Swift style
-1f4c77892bfffc154599a136a59f412eeb34c951
-# style(athina): put each parameterized attribute on its own line
-2cfa232af28e2bc989d5d2ad534b67e3893823cb
-# style(athina): lay out each wrapped list one element to a line
-920e73b8d4e2070a0a1ec087232664c7c51d39e0
-# style(athina): wrap every line at 100 columns
-b52d7a6acc58bbadd660996452f81a3b652a99e3
-# style(athina): pass closure arguments the way Google's Swift style asks
-b580b4347287f557723162f8163dc8dfd601ff3f
+# style: format all Swift to Google's Swift style
+8af8a500f174650b28e02f9bd6bed292957771a0
+# style: put each parameterized attribute on its own line
+2fc662f8d7563f56ffbdd542395f91acc90b1aeb
+# style: lay out each wrapped list one element to a line
+793ff7ed2cfd8cdb857d002915ff1d6592d49d75
+# style: wrap every line at 100 columns
+61c40be8fa83eed2572a35ddc7883940fb86a30e
+# style: pass closure arguments the way Google's Swift style asks
+5b21bbeca31f6dae2f233e572ed346351745830b
