@@ -27,8 +27,39 @@ with your own API key for Anthropic, OpenAI or OpenCode, so you pay for those
 calls, capped at $1 an hour by default (see [What it costs](#setup-an-api-key)),
 and nothing else leaves your Mac.
 
-How it works, and the words the rest of the docs use for it, is in
-[the mentor loop](docs/mentor-loop.md).
+## How it works
+
+```
+      what you are doing on your Mac
+          │  the app, its window and the text on screen
+          ▼
+   ┌──────────────────────────────────────────────────┐
+   │  read on this Mac; only the model calls leave it │
+   │  sensing → triage → mentor → note                │
+   └──────────────────────────────────────────────────┘
+          │  a faster way, a missed risk, or a wrong turn
+          ▼
+      a note under the menu bar, maybe pointing at the spot
+```
+
+**Sensing** reads the screen on your Mac and keeps it in a local journal.
+Nothing is sensed before you choose **Allow**, while you **pause**, or while an **excluded app** is in front.
+
+**Triage** asks the cheap model, Claude Haiku 4.5 by default, whether a moment of change is **worth a look**.
+It runs at most once every 20 seconds and skips a screen that has barely changed.
+
+**Mentor** runs only when triage says yes and 2 minutes have passed since its last call, on the strong model, Claude Opus 5 by default.
+It sees the recent screen text and, by default, the latest screenshot thumbnail, and most of the time it has nothing to say.
+When it does, the **note** appears under the menu bar and learns from your answer: **Tell Me More**, **Not Now** or **Never for This**.
+A note about one spot on screen can outline it with a **callout**, which comes down as soon as that window moves or changes.
+
+Each mentor call also rewrites the **standing understanding**, a short note of what you appear to be working toward, so Athina can tell you when an approach will not get you there.
+Every call counts against one hourly cap, $1 by default: calls slow down as the hour's spend nears it and stop at it until the next hour begins.
+Change it in [Settings > Models > Spend at most](#setup-the-anthropic-api-key).
+
+The [mentor loop](docs/mentor-loop.md) has every gate and the words the rest of
+the docs use, and the [privacy model](docs/privacy.md) says what each call
+carries.
 
 ## Privacy
 
