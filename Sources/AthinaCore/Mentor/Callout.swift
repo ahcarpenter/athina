@@ -2,14 +2,15 @@ import CoreGraphics
 import Foundation
 
 /// A spot on the screen the mentor tier pointed at, in the pixel coordinates
-/// of the frame it saw (origin top-left), with a few words to show beside it.
+/// of the frame it saw (origin top-left), with a few words the toast shows
+/// about it while it is outlined.
 public struct CalloutRegion: Codable, Equatable, Sendable {
   /// The longest note kept, in characters; a longer one is cut off.
   public static let maxNoteLength = 80
 
   /// The spot, in pixels of the frame the model saw, origin top-left.
   public var rect: CGRect
-  /// The few words the model gave to show beside the spot.
+  /// The few words the model gave to say what the spot is.
   public var note: String
 
   /// Creates a region, cutting the note to `maxNoteLength` characters.
