@@ -146,13 +146,14 @@ fails unless a pull request's title follows Conventional Commits 1.0.0 as
 CONTRIBUTING.md's [rules](../CONTRIBUTING.md#conventional-commits) apply it,
 `type(scope)!: description` with the scope and the `!` optional, and fails a
 title scoped with the app's name, `athina` or `mentor`, since the title
-becomes the squash commit's subject on main. It runs again when the title is
-edited, in a workflow of its own so an edit never restarts the fast lane. The
+becomes the squash commit's subject on main: the repository's squash commit
+title setting, which the owner keeps in the repository's settings rather than
+a file, is the pull request title. It runs again when the title is edited,
+in a workflow of its own so an edit never restarts the fast lane. The
 `main` ruleset requires it, so it also runs on every merge queue group, where
 it checks the first line of the group's head commit, the squash commit that
-lands on main, so a title edited after the pull request entered the queue, or
-a one-commit pull request squashed under its commit's title, fails there. It
-runs on GitHub's Ubuntu runner, in seconds.
+lands on main, so a title edited after the pull request entered the queue
+fails there. It runs on GitHub's Ubuntu runner, in seconds.
 
 **Dependency updates.** Renovate (`.github/renovate.json5`) opens the update
 pull requests, weekly on Monday morning: one for the GitHub Actions the

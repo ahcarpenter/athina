@@ -163,11 +163,13 @@ strictly:
   footer saying what breaks.
 - **A revert** is `revert: ...` and names the commits it reverts in a
   `Refs: <sha>, ...` footer.
-- **The pull request title** becomes the squash commit's subject on main, so
-  it follows the same rules, and `pr-title`, a required check, fails a title
-  that does not or that uses the scope `athina` or `mentor`. The squash
-  commit's body is free-form under the spec, whatever GitHub fills it with;
-  a breaking change's footer goes at its end.
+- **The pull request title** becomes the squash commit's subject on main,
+  since the repository squashes under the pull request title (a repository
+  setting the owner keeps, not a file), so it follows the same rules, and
+  `pr-title`, a required check, fails a title that does not or that uses the
+  scope `athina` or `mentor`. The squash commit's body is free-form under the
+  spec, whatever GitHub fills it with; a breaking change's footer goes at its
+  end.
 
 For example `feat(history): search past suggestions`,
 `fix(consent): keep Allow enabled after a relaunch`,

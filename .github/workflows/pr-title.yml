@@ -8,8 +8,8 @@ name: PR title
 # title is edited, which must not rerun or cancel ci.yml's fast lane. The main
 # ruleset requires it, so it also runs on every group the merge queue builds,
 # where it checks the subject of the group's head commit, the squash commit
-# that lands on main: GitHub builds it from the repository's squash commit
-# message setting, the pull request's title, or its one commit's title, with
+# that lands on main: GitHub titles it from the repository's squash commit
+# title setting, which the owner sets to the pull request's title, with
 # " (#n)" appended (docs.github.com/en/pull-requests/reference/pull-request-merges
 # and docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/configuring-commit-squashing-for-pull-requests),
 # so a title edited after the pull request entered the queue is caught too.
