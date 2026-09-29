@@ -1403,7 +1403,7 @@ struct SampleCallout: View {
             CGAffineTransform(scaleX: scale, y: scale)
           )
           let layout = CalloutLayout(screenRect: spot, display: CGRect(origin: .zero, size: fitted))
-          CalloutView(layout: layout, note: "this capture call")
+          CalloutView(layout: layout, kind: .fasterWay, note: "this capture call")
             .offset(x: layout.windowRect.minX, y: layout.windowRect.minY)
         }
       }

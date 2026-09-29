@@ -4,8 +4,8 @@ import CoreGraphics
 import SwiftUI
 
 /// Owns the callout overlay: a transparent, click-through, non-activating panel
-/// above normal windows that frames the spot a suggestion is about and shows
-/// its note beside it.
+/// above normal windows that frames the spot a suggestion is about, marked
+/// with its note's kind; the note under the menu bar says what it points at.
 ///
 /// It never takes focus and never sees a click, key, or scroll;
 /// `ignoresMouseEvents` passes everything to whatever is under it, so VoiceOver
@@ -20,15 +20,16 @@ final class CalloutController {
 
   var isVisible: Bool { panel?.isVisible ?? false }
 
-  /// Draws the callout for the placement on the display it names.
-  func show(_ placement: CalloutPlacement) {
+  /// Draws the callout for the placement on the display it names, marked as a
+  /// note of `kind`.
+  func show(_ placement: CalloutPlacement, kind: NoteKind) {
     guard let display = NSScreen.screens.first(where: { $0.displayID == placement.displayID })
     else { return }
     let layout = CalloutLayout(
       screenRect: placement.screenRect,
       display: NSScreen.displayBounds(of: display)
     )
-    let view = CalloutView(layout: layout, note: placement.note)
+    let view = CalloutView(layout: layout, kind: kind, note: placement.note)
     let panel = panel ?? makePanel()
     if let hosting {
       hosting.rootView = view
@@ -84,75 +85,48 @@ final class CalloutController {
   }
 }
 
-/// The highlight box and its note, styled like the toast: an accent-colored
-/// rounded stroke with a soft glow around the spot, and the note on the same
-/// Liquid Glass as the toast.
+/// The frame around the spot: a halo, then the pointer's stroke over a faint
+/// fill, with the note's own kind tile on the top-left corner, which pairs the
+/// spot with its note without covering a word of what is around it.
 ///
-/// Increase Contrast thickens the stroke and drops the glow for a crisp edge.
+/// The stroke is the pointer colour, never the accent, so it can never read as
+/// the other app's keyboard focus ring. Increase Contrast thickens the stroke
+/// and makes the halo solid.
 struct CalloutView: View {
-  static let cornerRadius: CGFloat = 8
+  static let cornerRadius: CGFloat = 6
+  /// The tile's size on the corner, smaller than the note's own.
+  static let tileSize: CGFloat = 16
 
   @Environment(\.colorSchemeContrast)
   private var contrast
 
   let layout: CalloutLayout
+  let kind: NoteKind
+  /// What the note calls the spot, which VoiceOver reads for the callout.
   let note: String
 
   private var box: CGRect { layout.box }
 
-  /// Beside the box the pill is centred on it; below or above, it hugs the box.
-  private var noteAlignment: Alignment {
-    switch layout.notePlacement {
-    case .trailing: .leading
-    case .below: .topLeading
-    case .above: .bottomLeading
-    }
-  }
-
   var body: some View {
+    let shape = RoundedRectangle(cornerRadius: CalloutView.cornerRadius, style: .continuous)
+    let stroke: CGFloat = contrast == .increased ? 3 : 2
     ZStack(alignment: .topLeading) {
       Color.clear
-      RoundedRectangle(cornerRadius: CalloutView.cornerRadius, style: .continuous)
-        .strokeBorder(.tint, lineWidth: contrast == .increased ? 3.5 : 2.5)
-        .background(
-          RoundedRectangle(cornerRadius: CalloutView.cornerRadius, style: .continuous)
-            .fill(.tint.opacity(0.06))
-        )
-        .shadow(color: Color.accentColor.opacity(contrast == .increased ? 0 : 0.55), radius: 6)
+      shape.fill(AthinaColor.pointerFill)
+        .overlay(shape.strokeBorder(AthinaColor.pointerHalo, lineWidth: stroke + 3))
+        .overlay(shape.inset(by: 1.5).strokeBorder(AthinaColor.pointer, lineWidth: stroke))
         .frame(width: box.width, height: box.height)
         .offset(x: box.minX, y: box.minY)
-      notePill
-        .fixedSize(horizontal: false, vertical: true)
-        .frame(maxWidth: layout.noteRect.width, alignment: .leading)
-        .frame(
-          width: layout.noteRect.width,
-          height: layout.noteRect.height,
-          alignment: noteAlignment
+      KindTile(kind: kind, size: CalloutView.tileSize)
+        .shadow(color: .black.opacity(0.25), radius: 1.5, y: 0.5)
+        .offset(
+          x: box.minX - CalloutView.tileSize / 2,
+          y: box.minY - CalloutView.tileSize / 2
         )
-        .offset(x: layout.noteRect.minX, y: layout.noteRect.minY)
     }
     .frame(width: layout.windowRect.width, height: layout.windowRect.height, alignment: .topLeading)
     .accessibilityElement(children: .ignore)
-    .accessibilityLabel("Athina callout: \(note)")
-  }
-
-  private var notePill: some View {
-    Label(
-      title: {
-        // Never cut: the note is at most `CalloutRegion.maxNoteLength`
-        // characters, and the layout leaves room for all of them.
-        Text(note)
-          .fixedSize(horizontal: false, vertical: true)
-      },
-      icon: {
-        Image(systemName: "lightbulb.fill")
-          .foregroundStyle(.tint)
-      }
-    )
-    .font(.callout.weight(.medium))
-    .padding(.horizontal, 10)
-    .padding(.vertical, 6)
-    .glassEffect(.regular, in: .rect(cornerRadius: CalloutView.cornerRadius + 6))
+    .accessibilityLabel("Athina callout, \(kind.label.lowercased()): \(note)")
   }
 }
 

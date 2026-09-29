@@ -1245,7 +1245,7 @@ final class AppState {
         switch result {
         case .success(let placement):
           if !shown || self.callouts.placement != placement {
-            self.callouts.show(placement)
+            self.callouts.show(placement, kind: NoteKind(suggestion.category))
             self.toast.bringToFront()
           }
           if self.lastCallout?.status != .shown || self.lastCallout?.suggestionID != suggestion.id

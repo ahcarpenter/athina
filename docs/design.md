@@ -73,11 +73,15 @@ particular to this app:
   suggestion; it grows and shrinks in a short animation, at once with Reduce
   Motion. A kind of suggestion that warns of something going wrong draws its
   symbol in the attention tint, a tip in the accent.
-- **The callout is a click-through overlay** that draws its own accent stroke,
-  since nothing in the system frames a spot in another app's window; its note
-  sits on the toast's glass, whole, never cut short. It only fades in, and
-  Increase Contrast thickens the stroke and drops the glow. VoiceOver never
-  visits it, so it is announced as it appears.
+- **The callout is a click-through overlay** that draws its own frame, since
+  nothing in the system frames a spot in another app's window: a halo, then a
+  pointer stroke over a faint fill, in a colour of its own rather than the
+  accent (`AthinaColor.pointer`), so it can never read as the other app's
+  keyboard focus ring whatever accent the person picked. The note's kind tile
+  sits on its top-left corner and the words stay in the note, so it covers
+  nothing around the spot. It only fades in, and Increase Contrast thickens
+  the stroke and makes the halo solid. VoiceOver never visits it, so it is
+  announced as it appears.
 - **Settings is the SwiftUI `Settings` scene**: a toolbar of panes, the window
   titled by its pane, the last pane remembered, each pane a fixed-size grouped
   form that scrolls. Rows use the form's own label and subtitle styling, and a

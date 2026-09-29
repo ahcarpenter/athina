@@ -314,44 +314,29 @@ import Testing
     )
   }
 
-  @Test func theNoteGoesBesideTheBoxWhenThereIsRoom() {
+  @Test func theWindowIsTheBoxWithRoomForItsHaloAndTile() {
     // The rm -rf line the recorded region frames, at the recording's 1.35 points per pixel.
     let spot = CGRect(x: 5.4, y: 276.75, width: 351, height: 40.5)
     let layout = CalloutLayout(screenRect: spot, display: display)
-    #expect(layout.notePlacement == .trailing)
-    // The note's three lines, centred on the box, reach above it: its top at
-    // 297 - 32 = 265, less the glow's 12.
-    #expect(layout.windowRect.origin == CGPoint(x: 0, y: 253))
+    #expect(layout.windowRect.origin == CGPoint(x: 0, y: 264))
     #expect(layout.windowRect.origin.x.rounded() == layout.windowRect.origin.x)
     #expect(layout.windowRect.size.width.rounded() == layout.windowRect.size.width)
     #expect(abs(boxOrigin(layout).x - spot.minX) < 0.001)
     #expect(abs(boxOrigin(layout).y - spot.minY) < 0.001)
     #expect(layout.box.size == spot.size)
-    // The note starts past the box, is centred on it, and fits in the window.
-    #expect(layout.noteRect.minX == layout.box.maxX + CalloutLayout.gap)
-    #expect(abs(layout.noteRect.midY - layout.box.midY) < 0.001)
-    #expect(layout.noteRect.maxX <= layout.windowRect.width)
-    #expect(layout.noteRect.minY >= 0 && layout.noteRect.maxY <= layout.windowRect.height)
+    // Past the display's left edge there is no room; elsewhere the margin is whole.
+    #expect(layout.box.maxX + CalloutLayout.margin <= layout.windowRect.width)
+    #expect(layout.box.minY >= CalloutLayout.margin)
+    #expect(layout.box.maxY + CalloutLayout.margin <= layout.windowRect.height)
   }
 
-  @Test func theNoteGoesBelowWhenTheBoxReachesTheRightEdge() {
+  @Test func theWindowIsNoLargerThanTheBoxNeeds() {
     let spot = CGRect(x: 1500.5, y: 400.25, width: 200, height: 30)
     let layout = CalloutLayout(screenRect: spot, display: display)
-    #expect(layout.notePlacement == .below)
+    #expect(layout.windowRect.width <= spot.width + CalloutLayout.margin * 2 + 1)
+    #expect(layout.windowRect.height <= spot.height + CalloutLayout.margin * 2 + 1)
     #expect(layout.windowRect.maxX <= display.maxX)
     #expect(abs(boxOrigin(layout).x - spot.minX) < 0.001)
-    #expect(abs(boxOrigin(layout).y - spot.minY) < 0.001)
-    #expect(layout.noteRect.minY == layout.box.maxY + CalloutLayout.gap)
-    #expect(layout.noteRect.maxY <= layout.windowRect.height)
-  }
-
-  @Test func theNoteGoesAboveAtTheBottomRightCorner() {
-    let spot = CGRect(x: 1500, y: 1080, width: 200, height: 20)
-    let layout = CalloutLayout(screenRect: spot, display: display)
-    #expect(layout.notePlacement == .above)
-    #expect(layout.windowRect.maxY <= display.maxY)
-    #expect(layout.noteRect.maxY == layout.box.minY - CalloutLayout.gap)
-    #expect(layout.noteRect.minY >= 0)
     #expect(abs(boxOrigin(layout).y - spot.minY) < 0.001)
   }
 
