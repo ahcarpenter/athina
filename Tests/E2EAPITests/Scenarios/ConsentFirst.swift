@@ -3,15 +3,17 @@
   import Testing
 
   extension Scenarios {
-    /// With no consent recorded, the consent window comes first and nothing is sensed or sent
+    /// With no consent recorded, the consent page comes first and nothing is sensed or sent
     /// until Allow; withdrawing in Settings > Privacy stops both at once.
     ///
     /// A first launch, and every install from before the consent window existed, starts with no
-    /// Allow on record (docs/privacy.md "Consent"). The consent window is then the first window,
-    /// ahead of Permissions, and while it waits a window scripted in front is neither journaled
-    /// nor sent, and the menu says Athina is not watching and offers Allow Watching…. Allow,
-    /// clicked in the window, starts sensing and the mentor loop, shown by the replay's first
-    /// suggestion coming up; Withdraw Consent in Settings > Privacy then stops both at once, and
+    /// Allow on record (docs/privacy.md "Consent"). The Setup window then opens on its consent
+    /// page, titled "Athina and Your Privacy", ahead of the permissions page, and while it waits
+    /// a window scripted in front is neither journaled nor sent, and the menu says Athina is not
+    /// watching and offers Allow Watching…. Allow, clicked in the window, starts sensing and the
+    /// mentor loop and, with every permission granted and no key needed in a replay, closes the
+    /// window (`SetupFlow.afterAllow`), shown by the replay's first suggestion coming up;
+    /// Withdraw Consent in Settings > Privacy then stops both at once, and
     /// the pane offers Review and Allow…. Every click is simulated inside Athina on the control
     /// its own accessibility tree names, and the journal is read through the app's named
     /// queries.
@@ -45,23 +47,23 @@
         let notWatching = "Not watching until you allow it"
 
         guard try await control.waitWindow(consentWindow, timeout: 20) else {
-          throw AppProcess.Failure("the consent window never opened")
+          throw AppProcess.Failure("the consent page never opened")
         }
-        run.check("the consent window is open at launch", true, true)
+        run.check("the consent page is open at launch", true, true)
         run.check(
-          "no Permissions window opens ahead of consent",
+          "no permissions page opens ahead of consent",
           true,
           try await control.waitWindow("Permissions", present: false, timeout: 0)
         )
         try await run.picture(consentWindow, "consent-window")
         run.check(
-          "the consent window names Anthropic",
+          "the consent page names Anthropic",
           true,
           try await control.find(.everything(in: consentWindow)).flatMap(\.texts)
             .contains { $0.contains("Anthropic") }
         )
 
-        // Windows in front while the consent window waits unanswered.
+        // Windows in front while the consent page waits unanswered.
         for document in ["reading-notes.txt", "cleanup-script.txt"] {
           let observed = try await run.observeDocument(document)
           run.check("\(document) in front before Allow is not kept", false, observed?.kept)
@@ -96,7 +98,7 @@
           try await control.waitSetting("consent.answer", equals: .string("allowed")).ok
         )
         run.check(
-          "Allow closes the consent window",
+          "Allow closes the consent page",
           true,
           try await control.waitWindow(consentWindow, present: false, timeout: 5)
         )
@@ -165,7 +167,7 @@
           withdrawn.contains(notWatching)
         )
         run.check(
-          "the consent window does not reopen on its own",
+          "the consent page does not reopen on its own",
           true,
           try await control.waitWindow(consentWindow, present: false, timeout: 0)
         )

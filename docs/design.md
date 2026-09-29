@@ -109,8 +109,8 @@ particular to this app:
   own text colour in both appearances and while highlighted, as the HIG
   (Images) asks of template images. The section's footer says whose account a
   call is billed to and that choosing a provider that sends to another company
-  asks for consent again, which the consent window then does (HIG Privacy: ask
-  in context, and say why).
+  asks for consent again, which the Setup window's consent page then does (HIG
+  Privacy: ask in context, and say why).
 - **Tools for looking inside Athina are opted into in the Advanced pane.** The
   debug panel is offered only once Settings > Advanced > Enable debug panel
   is on, the pane last in the toolbar as Safari's is, whose Advanced pane holds
@@ -136,8 +136,8 @@ particular to this app:
   call tiers' and replay's colors in the debug panel name a kind, not a status.
   Text uses system text styles and label colors, never fixed point sizes or
   tertiary text for anything that must be read, and secondary text only for
-  hints: what a person must read to decide, such as the consent window's
-  words or a permission's purpose, is primary.
+  hints: what a person must read to decide, such as the consent page's words
+  or a permission's purpose, is primary.
 - **Changes VoiceOver cannot see are announced.** A result that arrives after
   the control that asked for it (Test Connection, a failed key save), a
   warning that appears beside a field, a permission turning Granted, a
@@ -154,16 +154,24 @@ particular to this app:
   a context or an excluded app, acts at once instead, as the HIG asks, and a
   row under its list offers Undo for a while, as Edit > Undo does while
   Settings is in front.
-- **Consent comes first and asks plainly.** The consent window is the first
+- **Setup is one window, a page at a time.** A first launch walks through
+  consent, the permissions, the model and what to expect in one Setup window,
+  with Back, Continue and a dot for each page, as the HIG (Onboarding) asks of
+  a short, skippable start; each page is skipped once it is done
+  (`SetupFlow`), and closing the window at any page is fine. The window is
+  titled by its page, as Settings is by its pane, and the menu's Allow
+  Watching… and Permissions… open one page of it on its own, which closes once
+  it is done with.
+- **Consent comes first and asks plainly.** The consent page is the first
   thing a launch shows until there is an Allow, as the HIG (Privacy) asks
   for data collection to be explained before it starts; it says who receives
   what in short rows, leads with its answer as the default button (Allow)
   beside Not Now as the cancel button, and shows the menu bar's Gaze itself as
   the sign that Athina is watching. Withdrawing is a button beside the
   answer in Settings > Privacy with no confirmation, since Allow undoes it.
-- **Permissions explain before they ask.** The window never prompts on its own,
-  each permission has one button, and the purpose strings in
-  `Resources/Info.plist` say the same as the window in one sentence.
+- **Permissions explain before they ask.** The permissions page never prompts
+  on its own, each permission has one button, and the purpose strings in
+  `Resources/Info.plist` say the same as the page in one sentence.
 - **Words.** Buttons, menu items, window titles, and column headings use title
   case; labels, section headers, and status words use sentence case. The
   interface says keyboard shortcut rather than hotkey, names panes and places

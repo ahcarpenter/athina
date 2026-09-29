@@ -3,17 +3,14 @@ import AthinaCore
 import Foundation
 import SwiftUI
 
-/// The first-run and permissions window.
+/// The Setup window's permissions page.
 ///
 /// It explains each permission before anything is asked: no system prompt
 /// appears until the person chooses a permission's button, which then asks or
 /// opens its System Settings pane.
-struct PermissionsView: View {
+struct PermissionsPage: View {
   @Environment(AppState.self)
   private var state
-
-  @Environment(\.dismiss)
-  private var dismiss
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -22,6 +19,7 @@ struct PermissionsView: View {
           .font(.largeTitle)
           .imageScale(.large)
           .foregroundStyle(.tint)
+          .frame(width: 64)
           .accessibilityHidden(true)
         VStack(alignment: .leading, spacing: 4) {
           Text("Athina needs two permissions")
@@ -31,7 +29,7 @@ struct PermissionsView: View {
             """
             Athina watches what you are doing so it can understand your work. What it senses \
             stays on this Mac, in a journal you control. It connects only to \
-            api.anthropic.com, and only after you save an API key.
+            \(state.settings.mentor.provider.host), and only after you save an API key.
             """
           )
           .fixedSize(horizontal: false, vertical: true)
@@ -77,22 +75,12 @@ struct PermissionsView: View {
       .font(.callout)
       .foregroundStyle(.secondary)
       .fixedSize(horizontal: false, vertical: true)
-
-      HStack {
-        Spacer()
-        Button(state.permissions.allGranted ? "Done" : "Not Now") {
-          dismiss()
-        }
-        .keyboardShortcut(.defaultAction)
-      }
     }
-    .padding(20)
-    .frame(width: 580)
     .task {
       guard !Snapshots.isActive else { return }
       AppState.log.notice(
         """
-        permissions window opened, granted: screen \(state.permissions.screenRecording) \
+        permissions page shown, granted: screen \(state.permissions.screenRecording) \
         accessibility \(state.permissions.accessibility) microphone \
         \(state.permissions.microphone) speech \(state.permissions.speechRecognition)
         """

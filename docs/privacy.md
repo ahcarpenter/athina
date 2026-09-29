@@ -1,6 +1,6 @@
 # Privacy model
 
-- **Nothing is sensed or sent before Allow** in the consent window, and
+- **Nothing is sensed or sent before Allow** on the Setup window's consent page, and
   withdrawing in Settings > Privacy stops both at once (see Consent below).
 - Sensing stays on this Mac: the journal, thumbnails, and settings never leave
   it. The only network peer is the host of the model provider chosen in
@@ -120,11 +120,13 @@
 ## Consent
 
 Nothing is sensed and nothing is sent until the person allows it. The consent
-window, "Athina and Your Privacy", is the first thing a launch shows while
-there is no Allow on record: a first launch, an install from before the window
-existed, and a launch after Not Now or a withdrawal. It comes before the
-Permissions window, which opens only after Allow and only when a permission is
-missing, so no permission is asked about first. It names the company that
+page of the Setup window, titled "Athina and Your Privacy", is the first thing
+a launch shows while there is no Allow on record: a first launch, an install
+from before the window existed, and a launch after Not Now or a withdrawal. It
+comes before the permissions page, which Allow moves on to only when a
+permission is missing, so no permission is asked about first; a first launch
+then walks on through the model and what to expect (`SetupFlow`). It names the
+company that
 receives what is sent, for the provider chosen in Settings > Models
 (`ConsentDisclosure`): Anthropic, under the person's Anthropic API account;
 OpenAI, under their OpenAI API account; or OpenCode, run by Anomaly,
@@ -137,15 +139,15 @@ closing it answers nothing.
 
 Each provider needs its own Allow, since each sends to a different company:
 choosing one in Settings > Models that has none holds every call and opens
-the window again, and switching back to one already allowed needs no new
+the consent page again, and switching back to one already allowed needs no new
 answer. The answer for Anthropic is kept in `settings.json` under `consent`,
 where every earlier build reads it, and every other provider's under
 `providerConsents` (`Consent`): Allow or Not Now, when, and the version of the
 disclosure it answered. An Allow counts
 only for `Consent.disclosureVersion` or later, so a change to what is sent
-that the person would want to hear about bumps the version and the window
-asks again. A settings file that cannot be read loads as the defaults, which
-hold no answer, so the window asks again then too.
+that the person would want to hear about bumps the version and the consent
+page asks again. A settings file that cannot be read loads as the defaults,
+which hold no answer, so it asks again then too.
 
 Without an Allow the sensing pipeline stays in the `waitingForConsent` mode
 (`SensingMode.resolve`, which checks consent before anything else): focus
@@ -163,8 +165,8 @@ resumes under an earlier Allow, and stops capturing and calling at once: the pip
 drops a capture in flight before it is journaled, the loop drops a waiting
 question and takes down the toast and callout, and a call already on the
 network finishes but its suggestion is never shown. What the journal already
-holds stays until it expires or is cleared. Review and Allow… opens the window
-again. Both the consent window and Settings > Privacy link to the privacy
+holds stays until it expires or is cleared. Review and Allow… opens the consent
+page again. Both the consent page and Settings > Privacy link to the privacy
 policy, this document on the repository's main branch
 (`Consent.privacyPolicyURL`).
 
@@ -174,15 +176,16 @@ so its scenarios start sensing as the owner's own Athina does.
 ## Permissions
 
 [Setup](setup.md#permissions) lists each permission, what it is used
-for, and how Athina works without it. Athina explains each in a window that
-opens at launch whenever one is missing, once the person has allowed it (see
-[Consent](#consent)). The window explains before it asks: no
+for, and how Athina works without it. Athina explains each on the Setup
+window's permissions page, which opens at launch whenever one is missing, once
+the person has allowed it (see [Consent](#consent)), and from the menu's
+Permissions… at any time. The page explains before it asks: no
 system prompt appears when it opens. Each missing permission has one button. For
 the sensing pair it is Open System Settings, which registers Athina in that
 permission's System Settings list (macOS may show its own note pointing there)
-and opens the matching pane; the window shows live status and re-checks every
+and opens the matching pane; the page shows live status and re-checks every
 second while open and when the app regains focus. The two optional permissions
-serve only talking back; the window lists them below the required pair and asks
+serve only talking back; the page lists them below the required pair and asks
 for them only when you press Request Access (Open System Settings once the
 system has asked) or first hold the talk-back shortcut.
 

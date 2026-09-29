@@ -17,11 +17,12 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
   ///
   /// Fixed rather than hashed so the shards stay even: every render costs about
   /// the same, the few large windows (the debug panel, the Models pane, the
-  /// callout) are spread out, and each shard gets eleven. A snapshot with
+  /// callout) are spread out, and each shard gets eleven or twelve. A snapshot with
   /// no entry fails the render and an entry with no snapshot fails it too, so
   /// the table always names exactly the snapshots there are.
   public static let assignment: [String: Int] = [
     "permissions": 1,
+    "setup-model": 1,
     "debug-panel": 1,
     "debug-panel-replay": 1,
     "understanding-card": 1,
@@ -40,6 +41,7 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
     "settings-context-editor-duplicate": 2,
     "settings-models": 2,
     "consent-openai": 2,
+    "setup-ready": 2,
     "settings-understanding-empty": 2,
     "settings-advanced-on": 2,
     "toast-expanded": 2,

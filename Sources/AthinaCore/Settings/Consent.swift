@@ -1,6 +1,6 @@
 import Foundation
 
-/// The person's answer to the consent window: whether Athina may watch the
+/// The person's answer to the consent page: whether Athina may watch the
 /// screen and send what it reads to one provider (docs/privacy.md "Consent").
 ///
 /// Each provider has its own answer (`SensingSettings.consent(for:)`), since
@@ -13,7 +13,7 @@ import Foundation
 /// kept in `settings.json`, so it is the person's own record, withdrawn in
 /// Settings > Privacy as easily as it was given.
 public struct Consent: Codable, Equatable, Sendable {
-  /// What the person chose in the consent window.
+  /// What the person chose on the consent page.
   public enum Answer: String, Codable, Sendable {
     /// Allow: Athina may watch and send.
     case allowed
@@ -36,7 +36,7 @@ public struct Consent: Codable, Equatable, Sendable {
     self.disclosureVersion = disclosureVersion
   }
 
-  /// The version of what the consent window discloses.
+  /// The version of what the consent page discloses.
   ///
   /// Bump it when what leaves the Mac, who receives it, or what the journal
   /// keeps changes in a way the person would want to hear about: an Allow
@@ -44,7 +44,7 @@ public struct Consent: Codable, Equatable, Sendable {
   /// again.
   public static let disclosureVersion = 1
 
-  /// The privacy policy the consent window and Settings > Privacy both link
+  /// The privacy policy the consent page and Settings > Privacy both link
   /// to: docs/privacy.md on the repository's main branch.
   public static let privacyPolicyURL = URL(
     string: "https://github.com/getathina/athina/blob/main/docs/privacy.md"
@@ -63,7 +63,7 @@ public struct Consent: Codable, Equatable, Sendable {
   }
 }
 
-/// What the consent window says about where screen content goes, for the
+/// What the consent page says about where screen content goes, for the
 /// provider it asks about.
 ///
 /// The rest of the window is the same for every provider: what is sent, what

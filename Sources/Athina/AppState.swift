@@ -155,7 +155,7 @@ final class AppState {
   /// Whether the system recognizer can transcribe the current locale on this Mac.
   let speechAvailability: SpeechListener.Availability
 
-  /// Whether the permissions window should open at launch.
+  /// Whether the Setup window's permissions page should open at launch.
   let needsPermissionsOnboarding: Bool
   /// The live files, or a replay's own (`LaunchFiles`).
   let journalURL: URL
@@ -297,6 +297,16 @@ final class AppState {
       ? [] : Set(Permission.allCases.filter(PermissionProbe.isUndetermined))
     needsPermissionsOnboarding = !status.allGranted
     speechAvailability = SpeechListener.availability()
+    // A page named on the command line opens on its own; a launch with no
+    // consent walks through every page from the first.
+    if let requested = LaunchArguments.windowToOpen.flatMap(SetupPage.init(rawValue:)) {
+      setup = SetupState(page: requested, walksThrough: false)
+    } else {
+      setup = SetupState(
+        page: settings.hasConsent ? .permissions : .consent,
+        walksThrough: !settings.hasConsent
+      )
+    }
   }
 
   /// A detached state for snapshots and previews: never starts the pipeline.
@@ -678,31 +688,52 @@ final class AppState {
     Task { await pipeline?.captureNow() }
   }
 
+  // MARK: Setup
+
+  /// The Setup window's page, and whether it walks through the pages after it.
+  var setup = SetupState(page: .consent, walksThrough: false)
+
+  /// Whether the Setup window is open, so a page opened into it keeps a first
+  /// launch's walk through going: choosing another provider on the model page
+  /// asks for consent to it without leaving the walk.
+  var setupIsOpen = false
+
+  /// Whether the model page is still needed: a live run with no key saved.
+  var needsAPIKey: Bool { !clientMode.isOffline && !hasAPIKey }
+
+  /// Opens the Setup window on a page, on its own unless a walk through is
+  /// already open.
+  func openSetup(on page: SetupPage) {
+    setup = SetupState(page: page, walksThrough: setupIsOpen && setup.walksThrough)
+    windows.open(WindowID.setup)
+  }
+
   // MARK: Consent
 
-  /// Whether the consent window opens at launch: whenever the person has
-  /// not allowed Athina to watch and send to the current disclosure.
+  /// Whether the Setup window opens at launch on its consent page: whenever
+  /// the person has not allowed Athina to watch and send to the current
+  /// disclosure.
   ///
-  /// It is the first thing a launch shows, ahead of the Permissions window
+  /// It is the first thing a launch shows, ahead of any permission
   /// (`opensPermissionsAtLaunch`).
   var needsConsentAtLaunch: Bool { !settings.hasConsent }
 
-  /// Whether the Permissions window opens at launch: only once consent is
-  /// given, so no permission is asked about before it.
+  /// Whether the Setup window opens at launch on its permissions page: only
+  /// once consent is given, so no permission is asked about before it.
   ///
-  /// The consent window opens it after Allow when a permission is missing.
+  /// Allow moves on to that page when a permission is missing.
   var opensPermissionsAtLaunch: Bool { settings.hasConsent && needsPermissionsOnboarding }
 
-  /// The consent window's Allow: Athina may watch and send to the provider
-  /// in force from now on.
+  /// The consent page's Allow: Athina may watch and send to the provider in
+  /// force from now on.
   func allowConsent() {
     let provider = settings.mentor.provider
     AppState.log.notice("consent allowed for \(provider.rawValue, privacy: .public)")
     settings.setConsent(Consent(answer: .allowed, at: clock.date), for: provider)
   }
 
-  /// The consent window's Not Now: nothing is sensed or sent to the provider
-  /// in force.
+  /// The consent page's Not Now: nothing is sensed or sent to the provider in
+  /// force.
   func declineConsent() {
     let provider = settings.mentor.provider
     AppState.log.notice("consent declined for \(provider.rawValue, privacy: .public)")
@@ -749,7 +780,7 @@ final class AppState {
     }
   }
 
-  /// What the Permissions window offers for a permission right now.
+  /// What the permissions page offers for a permission right now.
   func permissionAction(for permission: Permission) -> PermissionAction {
     PermissionAction.for(
       permission,
@@ -758,7 +789,7 @@ final class AppState {
     )
   }
 
-  /// The Permissions window's button: the system's request when it has not
+  /// The permissions page's button: the system's request when it has not
   /// asked yet, otherwise the matching System Settings pane.
   ///
   /// For the two permissions granted there, Athina is registered in the pane's
@@ -793,8 +824,8 @@ final class AppState {
     case .showLastSuggestion: showLastSuggestion()
     case .answer(let feedback): answerActiveSuggestion(feedback)
     case .openSuggestions: windows.open(WindowID.history)
-    case .openPermissions: windows.open(WindowID.permissions)
-    case .openConsent: windows.open(WindowID.consent)
+    case .openPermissions: openSetup(on: .permissions)
+    case .openConsent: openSetup(on: .consent)
     case .openSettings(let pane):
       pane.flatMap(SettingsPane.init(rawValue:))?.select()
       windows.openSettings()

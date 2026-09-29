@@ -27,7 +27,8 @@ To build Athina from source instead, see [CONTRIBUTING.md](../CONTRIBUTING.md).
 **Try it without a key.** From a source checkout, `make run` starts a replay:
 Athina watches your real screen but answers from model calls recorded in the
 repository, so it needs no API key and spends nothing. It takes Xcode 26 or
-later, your Allow in the consent window and the two permissions below;
+later, your Allow on the Setup window's first page and the two permissions
+below;
 [CONTRIBUTING.md](../CONTRIBUTING.md) has the setup.
 
 ## An API key
@@ -76,12 +77,13 @@ it.
 
 ## Permissions
 
-A first launch asks before anything else whether Athina may watch the screen
-and send what it reads to the chosen provider, Anthropic by default; nothing is
-sensed or sent until you choose
-Allow ([Consent](privacy.md#consent)). Athina then needs two permissions
-and asks for neither until you press its button in the permissions window; the
-other two are optional and serve only talking back
+A first launch opens the Setup window, which asks before anything else whether
+Athina may watch the screen and send what it reads to the chosen provider,
+Anthropic by default; nothing is sensed or sent until you choose
+Allow ([Consent](privacy.md#consent)). It then walks on through the two
+permissions Athina needs, asking for neither until you press its button on the
+permissions page, the model and its key, and what to expect; the other two
+permissions are optional and serve only talking back
 ([how it asks](privacy.md#permissions)).
 
 | Permission | Used for | Without it |

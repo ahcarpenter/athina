@@ -137,8 +137,9 @@ struct ModelSettings: View {
 /// replayed from.
 ///
 /// The picker stays in a replay, since the provider still decides the models,
-/// the consent window and the menu; only the key has nothing to do there.
-private struct ProviderSection: View {
+/// the consent page and the menu; only the key has nothing to do there. The
+/// Setup window's model page shows it too (`ModelPage`).
+struct ProviderSection: View {
   @Environment(AppState.self)
   private var state
 
@@ -505,9 +506,15 @@ struct ConnectionResult: View {
 
 // MARK: - Spend
 
-private struct SpendSection: View {
+/// What the provider may spend each hour, and what this hour has spent; the
+/// Setup window's model page shows only the limit (`ModelPage`).
+struct SpendSection: View {
   @Environment(AppState.self)
   private var state
+
+  /// Only the limit, for the Setup window: what this hour spent and the price
+  /// table are for a person tuning Athina, not one setting it up.
+  var limitOnly = false
 
   var body: some View {
     @Bindable var state = state
@@ -525,46 +532,63 @@ private struct SpendSection: View {
             """,
           identifier: "models.spendCap"
         )
-        LabeledContent("This hour") {
-          if state.clientMode.isOffline {
-            Text("Nothing billed, calls are replayed")
-          } else {
-            let status = state.mentorStatus
-            let spend =
-              """
-              \(Formatting.dollars(status.spendThisHour)) over \
-              \(Plural.count(status.callsThisHour, "call", "calls"))
-              """
-            Text(
-              status.isCadenceSlowed
-                ? "\(spend), calls slowed \(Formatting.multiplier(status.cadenceMultiplier))"
-                : spend
-            )
-            .monospacedDigit()
-          }
+        if !limitOnly {
+          SpendDetailRows()
         }
-        // Twenty prices a person rarely changes, folded away until wanted.
-        DisclosureGroup("Prices per million tokens") {
-          PriceTableEditor(
-            table: $state.settings.mentor.prices,
-            models: ModelCatalog.models(for: state.settings.mentor.provider)
-          )
-        }
-        .accessibilityIdentifier("models.prices")
       },
       header: {
         Text("Spend per hour")
       },
       footer: {
-        Text(
-          """
-          Cost is estimated from the tokens each response reports and these prices, in dollars \
-          per million tokens, across every provider. Update them when \
-          \(state.settings.mentor.provider.name)'s pricing changes.
-          """
-        )
+        if !limitOnly {
+          Text(
+            """
+            Cost is estimated from the tokens each response reports and these prices, in \
+            dollars per million tokens, across every provider. Update them when \
+            \(state.settings.mentor.provider.name)'s pricing changes.
+            """
+          )
+        }
       }
     )
+  }
+}
+
+/// What this hour has spent, and the prices it is estimated from.
+private struct SpendDetailRows: View {
+  @Environment(AppState.self)
+  private var state
+
+  var body: some View {
+    @Bindable var state = state
+    Group {
+      LabeledContent("This hour") {
+        if state.clientMode.isOffline {
+          Text("Nothing billed, calls are replayed")
+        } else {
+          let status = state.mentorStatus
+          let spend =
+            """
+            \(Formatting.dollars(status.spendThisHour)) over \
+            \(Plural.count(status.callsThisHour, "call", "calls"))
+            """
+          Text(
+            status.isCadenceSlowed
+              ? "\(spend), calls slowed \(Formatting.multiplier(status.cadenceMultiplier))"
+              : spend
+          )
+          .monospacedDigit()
+        }
+      }
+      // Twenty prices a person rarely changes, folded away until wanted.
+      DisclosureGroup("Prices per million tokens") {
+        PriceTableEditor(
+          table: $state.settings.mentor.prices,
+          models: ModelCatalog.models(for: state.settings.mentor.provider)
+        )
+      }
+      .accessibilityIdentifier("models.prices")
+    }
   }
 }
 
