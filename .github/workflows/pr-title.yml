@@ -1,13 +1,22 @@
 name: PR title
 
 # A pull request's title becomes its squash commit's subject on main, so it
-# follows Conventional Commits, as every commit does (CONTRIBUTING.md): a type,
-# an optional scope, then a summary, such as `fix(e2e): wait for the window`.
-# Its own workflow, since it reruns when the title is edited, which must not
-# rerun or cancel ci.yml's fast lane. Not required by the main ruleset.
+# follows Conventional Commits 1.0.0 as CONTRIBUTING.md's rules apply it: a
+# type, an optional scope naming a section of the codebase, never the app's
+# name, an optional ! for a breaking change, then the description, such as
+# `fix(e2e): wait for the window`. Its own workflow, since it reruns when the
+# title is edited, which must not rerun or cancel ci.yml's fast lane. The main
+# ruleset requires it, so it also runs on every group the merge queue builds,
+# where it checks the subject of the group's head commit, the squash commit
+# that lands on main: GitHub titles it from the repository's squash commit
+# title setting, which the owner sets to the pull request's title, with
+# " (#n)" appended (docs.github.com/en/pull-requests/reference/pull-request-merges
+# and docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/configuring-commit-squashing-for-pull-requests),
+# so a title edited after the pull request entered the queue is caught too.
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
+  merge_group:
 
 jobs:
   pr-title:
@@ -16,10 +25,19 @@ jobs:
       - name: The title follows Conventional Commits
         env:
           TITLE: ${{ github.event.pull_request.title }}
+          MESSAGE: ${{ github.event.merge_group.head_commit.message }}
         run: |
-          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9][a-z0-9._/-]*\))?!?: [^ ]'
+          if [[ "$GITHUB_EVENT_NAME" == merge_group ]]; then
+            TITLE="${MESSAGE%%$'\n'*}"
+          fi
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\(([a-z0-9][a-z0-9._/-]*)\))?!?: [^ ]'
           if [[ ! "$TITLE" =~ $pattern ]]; then
-            echo "::error::The title \"$TITLE\" is not Conventional Commits: type(scope): summary, where type is one of build, chore, ci, docs, feat, fix, perf, refactor, revert, style or test, the scope is optional, and a ! before the colon marks a breaking change."
+            echo "::error::The title \"$TITLE\" is not Conventional Commits 1.0.0: type(scope)!: description, where type is one of build, chore, ci, docs, feat, fix, perf, refactor, revert, style or test, the scope is optional, a ! before the colon marks a breaking change, and one space follows the colon (CONTRIBUTING.md \"Conventional Commits\")."
+            exit 1
+          fi
+          scope="${BASH_REMATCH[3]}"
+          if [[ "$scope" == athina || "$scope" == mentor ]]; then
+            echo "::error::The title \"$TITLE\" is scoped ($scope), the app's name. A scope names one section of the codebase, such as e2e, ci, settings, debug-panel, consent, replay, history, menu, snapshots or release; drop it when the change spans the app (CONTRIBUTING.md \"Conventional Commits\")."
             exit 1
           fi
           echo "The title follows Conventional Commits."
