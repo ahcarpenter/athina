@@ -31,7 +31,7 @@ a faster way to do what you are doing, a risk you may have missed, or a step
 that will not get you where you are going, it tells you in a small note under
 the menu bar and can outline the spot on screen it means. It asks a model
 with your own API key for Anthropic, OpenAI or OpenCode, so you pay for those
-calls under an hourly cap (see [What it costs](#setup-an-api-key)), and nothing
+calls under an hourly cap (see [spend control](docs/mentor-loop.md#spend-control)), and nothing
 else leaves your Mac (see [Privacy](#privacy)).
 
 ## How it works
@@ -165,30 +165,6 @@ another tool's setup, such as Claude Code's, Codex's or OpenCode's. Without a
 key for the chosen provider the loop stays idle and the menu says so. Remove
 asks first, then deletes the keychain item. A replay needs no key, and the app never reads the
 keychain while replaying.
-
-**What it costs.** Every call is billed to your own account with the chosen
-provider at the prices in Settings > Models. Settings > Models > Spend at most caps each clock
-hour, $1 by default: calls slow down as the hour's spend nears the cap and stop
-at it until the next hour begins ([spend control](docs/mentor-loop.md#spend-control)).
-The menu shows the spend so far this hour against the cap. For a receipt,
-these are the calls of one short session, made live on 2026-09-15 and
-committed as the [replay fixtures](Tests/AthinaCoreTests/Fixtures/Replay/README.md):
-
-| Call | Model | Tokens in / out | Cost |
-| --- | --- | --- | --- |
-| Quick look at a screen, 3 calls | Claude Haiku 4.5 | 1,036 to 1,303 / 40 to 45 | $0.0013 to $0.0015 each |
-| The suggestion, with a screenshot | Claude Sonnet 5, medium effort | 5,238 / 1,212 | $0.0240 |
-| A question asked back about it | Claude Sonnet 5, medium effort | 1,231 / 225 | $0.0047 |
-| Rewriting its notes on your goal | Claude Haiku 4.5 | 1,800 / 373 | $0.0037 |
-| Test Connection | Claude Haiku 4.5 | 14 / 4 | under $0.0001 |
-| **Session total** | | | **$0.0365** |
-
-Out of the box, with Anthropic, the suggestion and the notes rewrite run on Claude Opus 5, at
-2.5 times Sonnet 5's price per token. A rewrite on Opus 5 was measured at
-$0.09, so an hour of reading with no suggestion in it costs about $0.38 in
-rewrites (see [What it costs](docs/mentor-loop.md#standing-understanding)).
-What a typical hour of everyday use costs is not measured yet; the cap bounds
-it.
 
 ## Permissions
 
