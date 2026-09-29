@@ -200,7 +200,7 @@ For example `feat(history): search past suggestions`,
    Approve only a drift the change meant.
 5. **The merge queue** lands it: once the pull request is green,
    `gh pr merge --auto --squash <number>`, or the Merge when ready button,
-   queues it. The queue runs all five checks again on it merged with main and
+   queues it. The queue runs every required check again on it merged with main and
    everything queued ahead of it, one run at a time, then squashes it onto
    main in turn. A failure removes only that pull request; the others stay
    queued.

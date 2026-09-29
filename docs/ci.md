@@ -65,7 +65,7 @@ goes through it in these steps, whoever opens it:
 5. Add it to the merge queue: `gh pr merge --auto --squash <number>` (or
    `gh-axi pr merge <number> --auto --squash`), which queues it as soon as it
    is green, or the Merge when ready button once it is. The
-   queue runs all five checks once more on it merged with main and everything
+   queue runs every required check once more on it merged with main and everything
    queued ahead of it, then squashes it onto main; nobody merges by hand.
 
 Only the pull request's draft state decides: editing it, labelling it or
