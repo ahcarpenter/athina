@@ -1,0 +1,93 @@
+name: Release Please
+
+# Keeps the release pull request and turns it into a release
+# (docs/releasing.md "Each release"). On every push to main, release-please
+# reads the Conventional Commit titles since the last release and opens or
+# updates one pull request, `chore(release): <version>`, that writes
+# CHANGELOG.md, raises CFBundleShortVersionString in Resources/Info.plist and
+# the version in .release-please-manifest.json, by release-please-config.json.
+# The job then raises CFBundleVersion on that pull request's branch, to one more
+# than main's, since release-please can only write a semantic version.
+#
+# Once the pull request lands, the next run tags its commit vX.Y.Z and makes
+# the GitHub Release, whose notes are its changelog entry. It does both with
+# this workflow's own GITHUB_TOKEN, and a tag pushed with that token starts no
+# workflow, so release.yml's tag trigger never sees it: the release job below
+# calls release.yml for the tag instead, which builds, verifies and adds the
+# download's files to that release. The same token also means GitHub runs no
+# checks on the release pull request, so it is closed and reopened by hand
+# right before merging, which runs them on its head.
+on:
+  push:
+    branches: [main]
+
+# One run at a time, in order: a run tags what an earlier one proposed. A run
+# waiting behind another is replaced by a newer one, which sees everything the
+# older would have.
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+      - uses: actions/checkout@v7
+        # Only when this run opened or rewrote the release pull request, which
+        # release-please does from main each time, so it never keeps an
+        # earlier run's build number.
+        if: steps.release.outputs.pr
+        with:
+          ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+      - name: Raise the build number
+        if: steps.release.outputs.pr
+        env:
+          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+        run: |
+          git fetch --depth=1 origin main
+          build() { python3 -c 'import plistlib, sys; print(plistlib.load(sys.stdin.buffer)["CFBundleVersion"])'; }
+          main_build="$(git show origin/main:Resources/Info.plist | build)"
+          want=$((main_build + 1))
+          if [ "$(build < Resources/Info.plist)" = "$want" ]; then
+            echo "The release pull request already has build $want."
+            exit 0
+          fi
+          # Only the line after CFBundleVersion's key, so the rest of the file
+          # stays exactly as it is.
+          sed -i "/<key>CFBundleVersion<\/key>/{n;s|<string>[0-9]*</string>|<string>$want</string>|;}" Resources/Info.plist
+          if [ "$(build < Resources/Info.plist)" != "$want" ]; then
+            echo "::error::Could not set CFBundleVersion to $want in Resources/Info.plist."
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit --quiet -m "chore(release): raise the build number to $want" Resources/Info.plist
+          git push origin "HEAD:$BRANCH"
+          echo "The release pull request now has build $want."
+
+  release:
+    # The release release-please just made: built, verified and given its files
+    # by release.yml, as a pushed tag would be.
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag_name }}
+    secrets: inherit

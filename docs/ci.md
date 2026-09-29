@@ -41,7 +41,7 @@ All five run on every push to main and on every run the merge queue
 starts (see "The merge queue", below), and every push to main also runs
 `release-build` (`.github/workflows/release.yml`), which builds the direct-download release
 with `make release`, signed and notarized when the Apple secrets exist, and
-which a pushed version tag turns into a GitHub Release (see
+which a version tag, one release-please makes, turns into a GitHub Release (see
 [Releasing](releasing.md#ci)); no pull request runs it or waits for it. On a
 pull request, the fast lane, `test`, `lint`, `test-e2e` and
 `snapshots-smoke` (`.github/workflows/ci.yml`), runs on every push, draft
