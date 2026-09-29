@@ -87,7 +87,7 @@ Thumbnails expire after 6 hours and text after 7 days by default, and the journa
 **Triage** asks the cheap model the first question: is this moment **worth a look**?
 It runs only when you switch apps or windows or your input settles, at most once every 20 seconds, and skips a screen whose text is nearly the same as the last one it triaged in that window.
 It sends text only: the app and window title, the focused element, the latest screen's recognized text and a short summary of recent events.
-Most moments end here with **no**, and Athina goes back to watching.
+When the answer is **no**, Athina goes back to watching.
 
 The **mentor gate** is the one yes-or-no before the strong model: triage said yes, 2 minutes have passed since the last mentor call, and the hour's spend is under the cap.
 While **mentorship contexts** are set, triage also places the moment in one of them, and only a moment inside one reaches the mentor tier.
@@ -170,7 +170,7 @@ key goes into your login keychain (`com.ahcarpenter.athina` /
 the app only ever shows its last four characters, and never reads or changes
 another tool's setup, such as Claude Code's, Codex's or OpenCode's. Without a
 key for the chosen provider the loop stays idle and the menu says so. Remove
-deletes the keychain item. A replay needs no key, and the app never reads the
+asks first, then deletes the keychain item. A replay needs no key, and the app never reads the
 keychain while replaying.
 
 **What it costs.** Every call is billed to your own account with the chosen
