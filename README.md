@@ -24,8 +24,8 @@ a faster way to do what you are doing, a risk you may have missed, or a step
 that will not get you where you are going, it tells you in a small note under
 the menu bar and can outline the spot on screen it means. It asks a model
 with your own API key for Anthropic, OpenAI or OpenCode, so you pay for those
-calls, capped at $1 an hour by default (see [What it costs](#setup-an-api-key)),
-and nothing else leaves your Mac.
+calls under an hourly cap (see [What it costs](#setup-an-api-key)), and nothing
+else leaves your Mac (see [Privacy](#privacy)).
 
 ## How it works
 
@@ -77,35 +77,17 @@ and nothing else leaves your Mac.
    for this app)                      ┆
 ```
 
-**Sensing** reads what is in front of you on your Mac: the app, its window title and the focused element through Accessibility, and the text on screen through Screen Recording and on-device OCR.
-It captures when you switch apps or windows, when a burst of typing or clicking settles, and on a slow floor cadence while you are active.
-Nothing is sensed before you choose **Allow** in the consent window, while you **pause**, while you are idle, or while an **excluded app** is in front (Keychain Access, Passwords and common password managers by default), and secure text fields are never read.
+By default Claude Haiku 4.5 triages and Claude Opus 5 mentors, on Anthropic and on OpenCode; on OpenAI they are GPT-6 Luna and GPT-6 Sol.
+Each tier's model and effort can be changed in Settings > Models.
 
-Everything sensing reads goes into the **journal**, a database that stays on your Mac.
-Thumbnails expire after 6 hours and text after 7 days by default, and the journal can be cleared at any time.
+What you seem to be after is the **standing understanding**, a short note the model writes and every triage and mentor call carries, so Athina can tell you when an approach will not get you where you are going.
+Each mentor call rewrites it, and after 15 minutes of active use with no mentor call a **refresh** rewrites it on its own, by default on Claude Opus 5 or GPT-6 Sol.
+It expires after 4 hours without activity and at the start of a new day.
 
-**Triage** asks the cheap model the first question: is this moment **worth a look**?
-It runs only when you switch apps or windows or your input settles, at most once every 20 seconds, and skips a screen whose text is nearly the same as the last one it triaged in that window.
-It sends text only: the app and window title, the focused element, the latest screen's recognized text and a short summary of recent events.
-When the answer is **no**, Athina goes back to watching.
-
-The **mentor gate** is the one yes-or-no before the strong model: triage said yes, 2 minutes have passed since the last mentor call, and the hour's spend is under the cap.
-While **mentorship contexts** are set, triage also places the moment in one of them, and only a moment inside one reaches the mentor tier.
-**Mentor** then asks the strong model whether there is a better way, sending the recent screens' text, the event summary and, by default, a thumbnail of the latest screen.
-Most of the time the answer is **nothing**, which is the normal outcome, and Athina goes back to watching.
-
-A suggestion appears as a **note** under the menu bar that never takes keyboard focus and goes away after a minute, a countdown that waits while the pointer is over it.
-When the note is about one spot on screen, a **callout** outlines it and comes down as soon as that window moves or changes.
-Your answer steers what comes next: **Tell Me More** opens the full explanation, **Not Now** holds that kind of note back in that app for an hour, and **Never for This** stops it in that app for good.
-You can also hold the talk-back key and answer aloud, or ask the strong model a follow-up question about the note.
-
-Each mentor call also rewrites the **standing understanding**, a short model-written note of what you appear to be working toward, which every triage and mentor call carries so Athina can tell you when an approach will not get you there.
-After 15 minutes of active use with no mentor call, a **refresh** rewrites it on its own, and it expires after 4 hours without activity and at the start of a new day.
-By default Claude Haiku 4.5 triages and Claude Opus 5 mentors and refreshes; OpenCode uses the same Claude models, and OpenAI uses GPT-6 Luna and GPT-6 Sol.
-Every call counts against one **hourly cap**, $1 by default: the gaps between calls stretch as the hour's spend nears it, and no call is made at the cap until the next hour.
+Every call counts against one **hourly cap**, $1 by default: the gaps between calls stretch as the hour's spend nears it, and at the cap no call is made until the next hour.
 Change it in [Settings > Models > Spend at most](docs/mentor-loop.md#spend-control).
 
-The [mentor loop](docs/mentor-loop.md) has every gate, tier and setting and the words the rest of the docs use, and the [privacy model](docs/privacy.md) says exactly what each call carries and what is kept.
+[Privacy](#privacy) says what each call carries and what stays on your Mac, and the [mentor loop](docs/mentor-loop.md) has every gate, tier and setting.
 
 ## Privacy
 
@@ -135,13 +117,16 @@ what is kept.
 
 ## Install
 
-A release is a download from the repository's
-[GitHub Releases](https://github.com/getathina/athina/releases): open
-`Athina-<version>.dmg` and drag Athina onto Applications, or unzip
-`Athina-<version>.zip` into Applications. Releases are not notarized yet, so
-macOS refuses the first launch: choose Done, then Open Anyway next to Athina in
-System Settings > Privacy & Security, and confirm; each update asks again, and
-asks once to read the saved key (see
+1. Download `Athina-<version>.dmg` or `Athina-<version>.zip` from the
+   repository's [GitHub Releases](https://github.com/getathina/athina/releases).
+2. Open the `.dmg` and drag Athina onto Applications, or unzip the `.zip` into
+   Applications.
+3. Open Athina. Releases are not notarized yet, so macOS refuses the first
+   launch: choose **Done**.
+4. In System Settings > Privacy & Security, choose **Open Anyway** next to
+   Athina, and confirm.
+
+Each update asks again, and asks once to read the saved key (see
 [Unsigned releases](docs/releasing.md#unsigned-releases)). There are no
 automatic updates yet: a new version is downloaded and dragged over the old
 one. A released copy uses the same journal, settings and keychain item as a
