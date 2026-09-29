@@ -27,18 +27,18 @@ struct HistoryView: View {
       }
       .listStyle(.inset)
       .accessibilityLabel("Suggestions")
+      // The answers, from the keyboard and the pointer alike: a Suggestions
+      // window has no menu bar of its own to carry them.
+      .contextMenu(forSelectionType: Int64.self) { ids in
+        if let id = ids.first, ids.count == 1,
+          let suggestion = state.suggestionHistory.first(where: { $0.id == id })
+        {
+          SuggestionActions(suggestion: suggestion)
+        }
+      }
       .overlay {
         if state.suggestionHistory.isEmpty {
-          ContentUnavailableView(
-            "No Suggestions Yet",
-            systemImage: "lightbulb",
-            description: Text(
-              """
-              When Athina notices a more helpful way to do something, the suggestion appears \
-              here with your answer to it.
-              """
-            )
-          )
+          EmptyHistory()
         }
       }
       .frame(minWidth: 320, idealWidth: 360)
@@ -57,6 +57,106 @@ struct HistoryView: View {
   }
 }
 
+/// The empty list, saying why nothing is here yet and offering what would
+/// change that.
+private struct EmptyHistory: View {
+  @Environment(AppState.self)
+  private var state
+
+  var body: some View {
+    switch state.mentorStatus.availability {
+    case .ready:
+      ContentUnavailableView(
+        "No Suggestions Yet",
+        systemImage: "lightbulb",
+        description: Text(
+          """
+          When Athina notices a more helpful way to do something, the suggestion appears \
+          here with your answer to it.
+          """
+        )
+      )
+    case .noConsent:
+      unavailable(
+        "Athina Is Not Watching",
+        "Athina makes no suggestions until you allow it to watch the screen.",
+        action: "Allow Watching…",
+        command: .openConsent
+      )
+    case .disabled:
+      unavailable(
+        "Suggestions Are Off",
+        "Offer suggestions is turned off in General settings.",
+        action: "Open General Settings…",
+        command: .openSettings(pane: SettingsPane.general.rawValue)
+      )
+    case .noAPIKey:
+      unavailable(
+        "Athina Needs an API Key",
+        "Athina makes suggestions once an Anthropic API key is saved in Models settings.",
+        action: "Add API Key…",
+        command: .openSettings(pane: SettingsPane.models.rawValue)
+      )
+    case .capReached(let until):
+      unavailable(
+        "Spend Limit Reached",
+        """
+        This hour's spend limit is reached, so Athina makes no suggestions until \
+        \(until.formatted(date: .omitted, time: .shortened)).
+        """,
+        action: "Open Models Settings…",
+        command: .openSettings(pane: SettingsPane.models.rawValue)
+      )
+    }
+  }
+
+  private func unavailable(
+    _ title: String,
+    _ description: String,
+    action: String,
+    command: MenuModel.Command
+  ) -> some View {
+    ContentUnavailableView(
+      label: {
+        Label(title, systemImage: "lightbulb.slash")
+      },
+      description: {
+        Text(description)
+      },
+      actions: {
+        Button(action) { state.perform(command) }
+          .accessibilityIdentifier("history.emptyAction")
+      }
+    )
+  }
+}
+
+/// Not Now, Never for This and Copy Suggestion for one suggestion, in the
+/// list's context menu.
+private struct SuggestionActions: View {
+  @Environment(AppState.self)
+  private var state
+
+  let suggestion: Suggestion
+
+  private var answerable: Bool { SuggestionDetail.isAnswerable(suggestion) }
+
+  var body: some View {
+    Button("Not Now") { state.respond(to: suggestion.id, with: .notNow) }
+      .disabled(!answerable)
+    Button("Never for This") { state.respond(to: suggestion.id, with: .never) }
+      .disabled(!answerable)
+    Divider()
+    Button("Copy Suggestion") {
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(
+        [suggestion.title, suggestion.body, suggestion.explanation].joined(separator: "\n\n"),
+        forType: .string
+      )
+    }
+  }
+}
+
 private struct HistoryRow: View {
   @Environment(AppState.self)
   private var state
@@ -66,7 +166,7 @@ private struct HistoryRow: View {
   var body: some View {
     HStack(alignment: .top, spacing: 10) {
       Image(systemName: suggestion.category.symbol)
-        .foregroundStyle(.tint)
+        .foregroundStyle(suggestion.category.tint)
         .frame(width: 18)
         .padding(.top, 2)
         .accessibilityHidden(true)
@@ -128,29 +228,31 @@ private struct DeliveryMarks: View {
 /// The feedback recorded for a suggestion, or "Showing" while its toast is up
 /// and nothing has been recorded yet.
 ///
-/// A suggestion with neither gets no pill.
+/// An answer is the person's own choice, not a fault, so every answer shares
+/// the neutral tint and its word says which it was. A suggestion with neither
+/// gets no pill.
 struct FeedbackPill: View {
   let feedback: SuggestionFeedback?
   let isShowing: Bool
 
   var body: some View {
-    if let label = feedback?.label ?? (isShowing ? "Showing" : nil) {
-      StatusBadge(text: label, tint: color)
-    }
-  }
-
-  private var color: Color {
-    switch feedback {
-    case .tellMeMore: .green
-    case .notNow: .orange
-    case .never: .red
-    case .expired, .expiredUnseen, .dismissed: .gray
-    case nil: .accentColor
+    if let feedback {
+      StatusBadge(text: feedback.label, status: .neutral)
+    } else if isShowing {
+      StatusBadge(text: "Showing", tint: .accentColor)
     }
   }
 }
 
-private struct SuggestionDetail: View {
+extension SuggestionCategory {
+  /// The color the category's symbol is drawn in: a warning in the attention
+  /// tint, a tip in the accent.
+  var tint: Color {
+    isWarning ? StatusTint.attention.color : .accentColor
+  }
+}
+
+struct SuggestionDetail: View {
   @Environment(AppState.self)
   private var state
 
@@ -161,9 +263,17 @@ private struct SuggestionDetail: View {
       VStack(alignment: .leading, spacing: 16) {
         VStack(alignment: .leading, spacing: 6) {
           HStack(spacing: 8) {
-            Label(suggestion.category.label, systemImage: suggestion.category.symbol)
-              .font(.callout.weight(.semibold))
-              .foregroundStyle(.secondary)
+            Label(
+              title: {
+                Text(suggestion.category.label)
+                  .foregroundStyle(.secondary)
+              },
+              icon: {
+                Image(systemName: suggestion.category.symbol)
+                  .foregroundStyle(suggestion.category.tint)
+              }
+            )
+            .font(.callout.weight(.semibold))
             FeedbackPill(
               feedback: suggestion.feedback,
               isShowing: state.activeSuggestion?.id == suggestion.id
@@ -180,9 +290,11 @@ private struct SuggestionDetail: View {
             .textSelection(.enabled)
             .fixedSize(horizontal: false, vertical: true)
           if let goal = suggestion.judgedGoal, !goal.isEmpty {
+            // Athina's reading of the person's goal, which they must be able
+            // to read to judge the suggestion: primary and callout, not a
+            // caption hint.
             Label("Judged against: \(goal)", systemImage: "target")
-              .font(.caption)
-              .foregroundStyle(.secondary)
+              .font(.callout)
               .textSelection(.enabled)
               .fixedSize(horizontal: false, vertical: true)
               .padding(.top, 2)
@@ -238,37 +350,37 @@ private struct SuggestionDetail: View {
             Text("Talk back")
               .font(.headline)
               .accessibilityAddTraits(.isHeader)
-            ForEach(exchange) { entry in
-              VStack(alignment: .leading, spacing: 4) {
+            // One grid, so the speaker column is as wide as its widest word.
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 4) {
+              ForEach(exchange) { entry in
                 exchangeLine("You", entry.question, at: entry.timestamp)
                 if let answer = entry.answer {
                   exchangeLine("Athina", answer, at: nil)
                 } else {
-                  exchangeLine("Athina", "No answer: \(entry.error ?? "unknown error").", at: nil)
+                  exchangeLine("Athina", ExchangeEntry.failure(entry), at: nil)
+                    .help(entry.error ?? "")
                 }
               }
             }
           }
         }
-        if suggestion.feedback == nil || suggestion.feedback?.isNonAnswer == true
-          || suggestion.feedback == .tellMeMore
-        {
+        if SuggestionDetail.isAnswerable(suggestion) {
           HStack(spacing: 8) {
             Button("Not Now") { state.respond(to: suggestion.id, with: .notNow) }
-              .help(
-                """
-                Hide \(suggestion.category.label.lowercased()) suggestions in \
-                \(suggestion.appName) for a while
-                """
-              )
+              .help(notNowConsequence)
+              .accessibilityHint(notNowConsequence)
+              .accessibilityIdentifier("history.notNow")
             Button("Never for This") { state.respond(to: suggestion.id, with: .never) }
-              .help(
-                """
-                Stop \(suggestion.category.label.lowercased()) suggestions in \
-                \(suggestion.appName)
-                """
-              )
+              .help(neverConsequence)
+              .accessibilityHint(neverConsequence)
+              .accessibilityIdentifier("history.never")
           }
+        } else if let feedback = suggestion.feedback,
+          let line = state.consequence(of: feedback, for: suggestion)
+        {
+          // What the answer did, in words rather than only in a tooltip.
+          StatusLabel(line, kind: .success)
+            .accessibilityIdentifier("history.consequence")
         }
       }
       .padding(20)
@@ -276,22 +388,43 @@ private struct SuggestionDetail: View {
     }
   }
 
+  /// Whether the detail still offers Not Now and Never for This: while
+  /// nothing but Tell Me More or a non-answer is recorded.
+  static func isAnswerable(_ suggestion: Suggestion) -> Bool {
+    suggestion.feedback == nil || suggestion.feedback?.isNonAnswer == true
+      || suggestion.feedback == .tellMeMore
+  }
+
+  private var notNowConsequence: String {
+    """
+    Hides \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName) \
+    for a while
+    """
+  }
+
+  private var neverConsequence: String {
+    "Stops \(suggestion.category.label.lowercased()) suggestions in \(suggestion.appName)"
+  }
+
+  /// A speaker and what they said, as a row of the exchange's grid.
   private func exchangeLine(_ speaker: String, _ text: String, at time: Date?) -> some View {
-    HStack(alignment: .firstTextBaseline, spacing: 10) {
+    GridRow {
       Text(speaker)
         .font(.caption.weight(.semibold))
         .foregroundStyle(.secondary)
-        .frame(width: 48, alignment: .trailing)
-      Text(text)
-        .font(.callout)
-        .textSelection(.enabled)
-        .fixedSize(horizontal: false, vertical: true)
-      if let time {
-        Spacer(minLength: 8)
-        Text(Formatting.dayAndTime(time))
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .monospacedDigit()
+        .gridColumnAlignment(.trailing)
+      HStack(alignment: .firstTextBaseline, spacing: 8) {
+        Text(text)
+          .font(.callout)
+          .textSelection(.enabled)
+          .fixedSize(horizontal: false, vertical: true)
+        if let time {
+          Spacer(minLength: 8)
+          Text(Formatting.dayAndTime(time))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+        }
       }
     }
   }
