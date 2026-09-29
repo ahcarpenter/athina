@@ -111,7 +111,7 @@ Such a branch takes the short way instead, resolving conflicts as usual:
 ```sh
 git rebase origin/main
 make format
-git commit -a -m "style(athina): format the branch to Google's Swift style"
+git commit -a -m "style: format the branch to Google's Swift style"
 make lint
 ```
 

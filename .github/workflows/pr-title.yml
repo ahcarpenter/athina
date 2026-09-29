@@ -1,25 +1,39 @@
 name: PR title
 
 # A pull request's title becomes its squash commit's subject on main, so it
-# follows Conventional Commits, as every commit does (CONTRIBUTING.md): a type,
-# an optional scope, then a summary, such as `fix(e2e): wait for the window`.
-# Its own workflow, since it reruns when the title is edited, which must not
-# rerun or cancel ci.yml's fast lane. Not required by the main ruleset.
+# follows Conventional Commits 1.0.0 as CONTRIBUTING.md's rules apply it: a
+# type, an optional scope naming a section of the codebase, never the app's
+# name, an optional ! for a breaking change, then the description, such as
+# `fix(e2e): wait for the window`. Its own workflow, since it reruns when the
+# title is edited, which must not rerun or cancel ci.yml's fast lane. The main
+# ruleset requires it, so it also reports on every group the merge queue
+# builds, where it passes: a group has no title of its own, and the queued
+# pull request's title was checked at its head before it could enter.
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
+  merge_group:
 
 jobs:
   pr-title:
     runs-on: ubuntu-latest
     steps:
       - name: The title follows Conventional Commits
+        if: github.event_name == 'pull_request'
         env:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
-          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9][a-z0-9._/-]*\))?!?: [^ ]'
+          pattern='^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\(([a-z0-9][a-z0-9._/-]*)\))?!?: [^ ]'
           if [[ ! "$TITLE" =~ $pattern ]]; then
-            echo "::error::The title \"$TITLE\" is not Conventional Commits: type(scope): summary, where type is one of build, chore, ci, docs, feat, fix, perf, refactor, revert, style or test, the scope is optional, and a ! before the colon marks a breaking change."
+            echo "::error::The title \"$TITLE\" is not Conventional Commits 1.0.0: type(scope)!: description, where type is one of build, chore, ci, docs, feat, fix, perf, refactor, revert, style or test, the scope is optional, a ! before the colon marks a breaking change, and one space follows the colon (CONTRIBUTING.md \"Conventional Commits\")."
+            exit 1
+          fi
+          scope="${BASH_REMATCH[3]}"
+          if [[ "$scope" == athina || "$scope" == mentor ]]; then
+            echo "::error::The title \"$TITLE\" is scoped ($scope), the app's name. A scope names one section of the codebase, such as e2e, ci, settings, debug-panel, consent, replay, history, menu, snapshots or release; drop it when the change spans the app (CONTRIBUTING.md \"Conventional Commits\")."
             exit 1
           fi
           echo "The title follows Conventional Commits."
+      - name: A merge queue group passes
+        if: github.event_name == 'merge_group'
+        run: echo "The queued pull request's title was checked at its head."

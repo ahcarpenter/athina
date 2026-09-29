@@ -71,9 +71,10 @@ goes through it in these steps, whoever opens it:
 Only the pull request's draft state decides: editing it, labelling it or
 changing its title starts and cancels nothing.
 
-All five must pass at a pull request's head before it can enter the merge
-queue, and again in its merge queue run before it lands: the `main` ruleset
-requires them, with no bypass, and until `ui-snapshots` has run there,
+All five, and `pr-title` (see "The pull request title", below), must pass at
+a pull request's head before it can enter the merge queue, and again in its
+merge queue run before it lands: the `main` ruleset requires them, with no
+bypass, and until `ui-snapshots` has run there,
 the pull request lists it as expected and cannot merge. Two traps shape this.
 A job that an `if` skips still reports a check run, and a skipped check counts
 as passed for a required one, so the skipped job takes another name: GitHub
@@ -81,7 +82,7 @@ names a skipped job after its unevaluated `name:` expression, which is not
 `ui-snapshots`, and the expression's own answer for a skip is not either. And
 a `workflow_dispatch` run of the same job does not count: its checks are on
 the commit, but a pull request's required checks ignore them. A pull request
-that touches only documentation runs `lint` alone and skips the other four on
+that touches only documentation runs `lint` and `pr-title` alone and skips the other four on
 purpose, with the names they are required under (see [Docs-only pull
 requests](#docs-only-pull-requests)).
 
@@ -111,11 +112,12 @@ order it goes in: apply, then run the job again, then merge.
 
 **The merge queue.** The `main` ruleset's `merge_queue` rule makes every pull request land through
 GitHub's merge queue, so a merge to main never knocks the other open pull
-requests out of date. A pull request enters it once its five checks
+requests out of date. A pull request enters it once its required checks
 pass at its head (step 5 above); the queue then tests it on top of main plus
 every pull request queued ahead of it, on a temporary
-`gh-readonly-queue/main/...` branch, and runs both workflows there as a
-`merge_group` event. There is no draft there, so `ui-snapshots` always runs in
+`gh-readonly-queue/main/...` branch, and runs the three workflows there as a
+`merge_group` event, where `pr-title` passes at once, since a group has no
+title of its own. There is no draft there, so `ui-snapshots` always runs in
 full, and no pull request, so no drift comment is posted and no image is
 approved from it: approval stays with the ready pull request's own runs. Each
 queue run keeps its own concurrency group, so a push to a pull request never
@@ -140,12 +142,15 @@ ran for. Athina lands a handful of pull requests a day, so a run of roughly ten
 minutes each is fine.
 
 **The pull request title.** `pr-title` (`.github/workflows/pr-title.yml`)
-fails unless a pull request's title is Conventional Commits, `type(scope):
-summary` with the scope optional, since the title becomes the squash commit's
-subject on main. It runs again when the title is edited, in a workflow of its
-own so an edit never restarts the fast lane. The `main` ruleset does not
-require it; making it required is a change to `.github/rulesets/main.json`,
-applied as above.
+fails unless a pull request's title follows Conventional Commits 1.0.0 as
+CONTRIBUTING.md's [rules](../CONTRIBUTING.md#conventional-commits) apply it,
+`type(scope)!: description` with the scope and the `!` optional, and fails a
+title scoped with the app's name, `athina` or `mentor`, since the title
+becomes the squash commit's subject on main. It runs again when the title is
+edited, in a workflow of its own so an edit never restarts the fast lane. The
+`main` ruleset requires it, so it also runs on every merge queue group, where
+it passes: the queued pull request's title was checked at its head, and the
+group has none of its own. It runs on GitHub's Ubuntu runner, in seconds.
 
 **Dependency updates.** Renovate (`.github/renovate.json5`) opens the update
 pull requests, weekly on Monday morning: one for the GitHub Actions the

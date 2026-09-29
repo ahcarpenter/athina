@@ -138,9 +138,42 @@ itself and says which on the line it writes as it starts.
   bar mark and the README icon come from `make icons`.
 - **A make recipe stays one line**; logic beyond one command goes in a script
   in `scripts/`.
-- **Conventional Commits**: `feat(athina): ...`, `fix(e2e): ...`,
-  `docs(athina): ...`, `ci: ...`.
+- **[Conventional Commits](#conventional-commits)** for every commit and
+  pull request title.
 - **No em dash** anywhere in the repository; use a plain dash.
+
+## Conventional Commits
+
+Every commit and every pull request title follows
+[Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification),
+strictly:
+
+- **The header** is `type(scope)!: description`, all lowercase up to the
+  colon, with one space after it; the scope and the `!` are optional.
+- **`feat`** is only a new feature of the Athina app, and **`fix`** only a
+  bug fix in the app. Everything else takes `build`, `chore`, `ci`, `docs`,
+  `perf`, `refactor`, `revert`, `style` or `test`: a new test harness or
+  scenario is `test`, developer tooling is `build` or `chore`.
+- **A scope**, when given, is a noun naming one section of the codebase,
+  such as `e2e`, `ci`, `settings`, `debug-panel`, `consent`, `replay`,
+  `history`, `menu`, `snapshots` or `release`; never the app's name,
+  `athina` or `mentor`. A change that spans the app has no scope.
+- **A breaking change**, such as removing or changing behaviour a person
+  relies on, carries `!` before the colon and a `BREAKING CHANGE: ...`
+  footer saying what breaks.
+- **A revert** is `revert: ...` and names the commits it reverts in a
+  `Refs: <sha>, ...` footer.
+- **The pull request title** becomes the squash commit's subject on main, so
+  it follows the same rules, and `pr-title`, a required check, fails a title
+  that does not or that uses the scope `athina` or `mentor`. The squash
+  commit's body is free-form under the spec, whatever GitHub fills it with;
+  a breaking change's footer goes at its end.
+
+For example `feat(history): search past suggestions`,
+`fix(consent): keep Allow enabled after a relaunch`,
+`test(e2e): cover the Talk back field`, `ci: cache the Swift build`, and
+`refactor!: drop the Mentor data move`, whose body ends with
+`BREAKING CHANGE: a journal from before the rename is no longer moved`.
 
 ## How a change reaches main
 
@@ -155,9 +188,10 @@ itself and says which on the line it writes as it starts.
 3. **Ready for review**: once the fast lane passes, mark the pull request
    ready (`gh pr ready <number>`), which runs `ui-snapshots`, the
    full-fidelity gate, on four runners, and runs it on every push after. The
-   `main` ruleset requires all five checks at the pull request's head. A
-   pull request that changes only documentation runs `lint` alone and
-   reports the other four as skipped, which passes them (see [Docs-only pull
+   `main` ruleset requires all five checks at the pull request's head, and
+   `pr-title`, which checks the title on every push and every edit of it. A
+   pull request that changes only documentation runs `lint` and `pr-title`
+   alone and reports the other four as skipped, which passes them (see [Docs-only pull
    requests](docs/ci.md#docs-only-pull-requests)).
 4. **An intended UI change** fails the image gates until it is approved: read
    each report, then `make approve` takes the `ui-snapshots` baselines, the
