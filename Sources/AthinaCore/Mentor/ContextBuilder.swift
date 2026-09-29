@@ -12,6 +12,13 @@ public enum ClockFormat {
     return formatter
   }()
 
+  private static let hourAndMinuteFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "HH:mm"
+    return formatter
+  }()
+
   private static let dayAndTimeFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -22,6 +29,11 @@ public enum ClockFormat {
   /// "15:23:06", in the local time zone.
   public static func time(_ date: Date) -> String {
     timeFormatter.string(from: date)
+  }
+
+  /// "15:23", in the local time zone.
+  public static func hourAndMinute(_ date: Date) -> String {
+    hourAndMinuteFormatter.string(from: date)
   }
 
   /// "Sep 14 at 15:23", in the local time zone.

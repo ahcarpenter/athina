@@ -26,8 +26,8 @@
 #     is the one the real bar gave the item, read through accessibility, so a
 #     mark variant drawn at another size fails it; the bar-*.png strips are the
 #     evidence of what is drawn.
-#   8 A real click on each Settings footer link, Contexts to Privacy and Models
-#     to Journal, changes the pane in place rather than handing the link to the
+#   8 A real click on each Settings footer link, Mentoring to Privacy and Models
+#     to Privacy, changes the pane in place rather than handing the link to the
 #     system. A link inside a Text follows neither accessibility's press nor a
 #     click the app simulates in its own window, so only a real click proves it;
 #     that each shows as a link is settings-pane-text's, on the API tier.
@@ -245,7 +245,7 @@ locate_link() {
 
 # The title of the Settings window now open, whichever pane it shows, or
 # nothing: the window takes its title from its pane.
-SETTINGS_PANES="General Contexts Models Capture Journal Privacy Advanced"
+SETTINGS_PANES="General Mentoring Privacy Models Advanced"
 settings_window() {
 	local pane
 	for pane in $SETTINGS_PANES; do
@@ -395,9 +395,9 @@ scenario_run() {
 	log "item $watching pt watching, $excluded excluded, $again watching again, $paused paused, $resumed resumed"
 
 	step "8 a real click on each Settings footer link changes the pane in place"
-	open_settings_on Contexts contexts || return 1
-	follow_link Contexts "Privacy settings" Privacy contexts || return 1
+	open_settings_on Mentoring mentoring || return 1
+	follow_link Mentoring "Privacy settings" Privacy mentoring || return 1
 	open_settings_on Models models || return 1
-	follow_link Models "Journal settings" Journal models || return 1
+	follow_link Models "Privacy settings" Privacy models || return 1
 	return 0
 }

@@ -11,7 +11,7 @@
     /// and then through Reset Understanding, which asks before it forgets every revision. The
     /// suggestion comes from scripted sensing (docs/e2e.md "Scripted sensing"), every control is
     /// clicked or typed into through Athina's own event path, and the journal is read through the
-    /// app. The footer's link to the Journal pane is followed through the handler a click on it
+    /// app. The footer's link to the Privacy pane is followed through the handler a click on it
     /// runs (`open-link`); that a real click on it reaches that handler is the real-screen tier's
     /// to prove.
     @Test func `understanding-surfaces`() async {
@@ -172,22 +172,23 @@
           try await run.settled(.number(1200), refreshInterval)
         )
 
-        // The footer names the Journal pane by linking to it, and the link opens it here rather
+        // The footer names the Privacy pane, where the journal is, by linking to it, and the link
+        // opens it here rather
         // than in a browser, so the Settings window itself changes pane.
         run.check(
-          "the footer's link to Journal is followed",
-          "athina-settings:journal",
-          try await control.openLink(.identifier("athina-settings:journal", in: "Models"))["url"]?
+          "the footer's link to Privacy is followed",
+          "athina-settings:privacy",
+          try await control.openLink(.identifier("athina-settings:privacy", in: "Models"))["url"]?
             .string
         )
         run.check(
-          "the footer link opens the Journal pane in place",
+          "the footer link opens the Privacy pane in place",
           true,
-          try await control.waitWindow("Journal", timeout: 5)
+          try await control.waitWindow("Privacy", timeout: 5)
         )
-        try await run.picture("Journal", "journal-pane")
-        _ = try await control.click(.subrole("AXCloseButton", in: "Journal"))
-        if try await !control.waitWindow("Journal", present: false, timeout: 5) {
+        try await run.picture("Privacy", "privacy-pane")
+        _ = try await control.click(.subrole("AXCloseButton", in: "Privacy"))
+        if try await !control.waitWindow("Privacy", present: false, timeout: 5) {
           run.log("Settings would not close")
         }
 

@@ -122,7 +122,7 @@ struct ConsentPage: View {
   private var retentionText: String {
     let settings = state.settings
     return
-      "A journal of what Athina sees: screenshots for \(Formatting.spelledDuration(settings.thumbnailRetention)), text and events for \(Formatting.spelledDuration(settings.textRetention)), up to \(Formatting.bytes(settings.journalSizeCapBytes)) in all. Change this or clear the journal at any time in Journal settings."
+      "A journal of what Athina sees: screenshots for \(Formatting.spelledDuration(settings.thumbnailRetention)), text and events for \(Formatting.spelledDuration(settings.textRetention)), up to \(Formatting.bytes(settings.journalSizeCapBytes)) in all. Change this or clear the journal at any time in Privacy settings."
   }
 }
 

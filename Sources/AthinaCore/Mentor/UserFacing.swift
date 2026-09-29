@@ -110,7 +110,7 @@ public enum UserFacing {
     case .notNow:
       return until.map { "\(kind) are quiet until \($0)." } ?? "\(kind) are quiet for a while."
     case .never:
-      return "\(kind) are off. Turn them back on in General settings."
+      return "\(kind) are off. Turn them back on in Mentoring settings."
     case .tellMeMore, .expired, .expiredUnseen, .dismissed:
       return nil
     }

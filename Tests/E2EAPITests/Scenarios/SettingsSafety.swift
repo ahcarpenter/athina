@@ -7,7 +7,7 @@
     /// A context or an excluded app removed in Settings comes back with Undo, and VoiceOver
     /// hears both.
     ///
-    /// Settings > Contexts: a context is added through the New Context sheet, its Remove button
+    /// Settings > Mentoring: a context is added through the New Context sheet, its Remove button
     /// removes it, a row under the list offers Undo, and Undo puts it back as it was. Settings >
     /// Privacy: Keychain Access's Remove button takes it off the excluded apps, and Undo puts it
     /// back at its own place in the list, ahead of the rest. Each removal and each Undo is
@@ -15,9 +15,9 @@
     /// than clicked, as AppKit keeps a click into a window that is not in front from destroying
     /// anything (docs/e2e.md "The control API").
     @Test func `settings-undo`() async {
-      await Run.scenario("settings-undo", arguments: ["--open", "settings:contexts"]) { run in
+      await Run.scenario("settings-undo", arguments: ["--open", "settings:mentoring"]) { run in
         let control = run.control
-        let name = Target.identifier("contextEditor.name", in: "Contexts")
+        let name = Target.identifier("contextEditor.name", in: "Mentoring")
         let contextNames = {
           try await control.setting("mentor.contexts").array?.compactMap {
             $0[path: "name"]?.string
@@ -31,12 +31,12 @@
           try await control.waitEvent("announcement", matching: ["text": text]) != nil
         }
 
-        guard try await control.waitWindow("Contexts", timeout: 20) else {
-          throw AppProcess.Failure("Settings never opened on the Contexts pane")
+        guard try await control.waitWindow("Mentoring", timeout: 20) else {
+          throw AppProcess.Failure("Settings never opened on the Mentoring pane")
         }
-        guard try await control.click(.identifier("contexts.addContext", in: "Contexts")).ok,
+        guard try await control.click(.identifier("contexts.addContext", in: "Mentoring")).ok,
           try await control.click(name).ok,
-          try await control.type("deep work\r", in: "Contexts").ok
+          try await control.type("deep work\r", in: "Mentoring").ok
         else { throw AppProcess.Failure("no context could be added") }
         run.check(
           "a context is added to remove",
@@ -47,12 +47,12 @@
         run.check(
           "the context's Remove button is pressed",
           true,
-          try await control.press(.label("Remove deep work", in: "Contexts")).ok
+          try await control.press(.label("Remove deep work", in: "Mentoring")).ok
         )
         run.check("the context is removed", [], try await run.settled([], contextNames))
         run.check("VoiceOver hears the removal", true, try await announced("Removed deep work"))
-        try await run.picture("Contexts", "context-removed")
-        let undoContext = Target.identifier("contexts.undoRemove", in: "Contexts")
+        try await run.picture("Mentoring", "context-removed")
+        let undoContext = Target.identifier("contexts.undoRemove", in: "Mentoring")
         run.check("a row offers Undo", true, try await control.first(undoContext) != nil)
         run.check("a click on Undo lands", true, try await control.click(undoContext).ok)
         run.check(
@@ -67,7 +67,7 @@
           try await run.settled(true) { try await control.first(undoContext) == nil }
         )
 
-        guard try await control.click(.label("Privacy", in: "Contexts")).ok,
+        guard try await control.click(.label("Privacy", in: "Mentoring")).ok,
           try await control.waitWindow("Privacy", timeout: 5)
         else { throw AppProcess.Failure("the Privacy pane never showed") }
         let before = try await excluded()

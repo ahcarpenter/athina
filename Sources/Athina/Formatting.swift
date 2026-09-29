@@ -20,6 +20,10 @@ enum Formatting {
     ClockFormat.time(date)
   }
 
+  static func hourAndMinute(_ date: Date) -> String {
+    ClockFormat.hourAndMinute(date)
+  }
+
   static func age(_ date: Date, now: Date) -> String {
     let seconds = now.timeIntervalSince(date)
     if seconds < 60 { return "\(Int(max(0, seconds)))s ago" }

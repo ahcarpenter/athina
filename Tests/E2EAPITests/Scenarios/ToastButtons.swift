@@ -157,7 +157,7 @@
           "a note in the toast's place says that kind is off, and where to turn it back on",
           true,
           try await noteText().contains(
-            "suggestions in TextEdit are off. Turn them back on in General settings."
+            "suggestions in TextEdit are off. Turn them back on in Mentoring settings."
           )
         )
 

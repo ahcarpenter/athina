@@ -176,7 +176,7 @@
 
     /// The Settings pane that is open, found by its window title.
     private static func firstSettingsPane(_ control: Control) async throws -> String? {
-      let panes = ["General", "Contexts", "Models", "Capture", "Journal", "Privacy", "Advanced"]
+      let panes = ["General", "Mentoring", "Privacy", "Models", "Advanced"]
       for _ in 0..<50 {
         let titles = Set(try await control.windows().map(\.title))
         if let open = panes.first(where: titles.contains) { return open }

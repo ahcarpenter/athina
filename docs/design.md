@@ -79,6 +79,9 @@ particular to this app:
   tile in the kind's own colour beside the kind's name in words, then the
   app; the model's own category is a hover away. While a callout is up, a
   line under the body says what it outlines, since the callout draws no words.
+  The history window and Never for This in Settings > Mentoring mark each
+  suggestion with the same tile and name its kind in words, and the history
+  window lists suggestions under the day they were made.
 - **The callout is a click-through overlay** that draws its own frame, since
   nothing in the system frames a spot in another app's window: a halo, then a
   pointer stroke over a faint fill, in a colour of its own rather than the
@@ -88,10 +91,15 @@ particular to this app:
   nothing around the spot. It only fades in, and Increase Contrast thickens
   the stroke and makes the halo solid. VoiceOver never visits it, so it is
   announced as it appears.
-- **Settings is the SwiftUI `Settings` scene**: a toolbar of panes, the window
-  titled by its pane, the last pane remembered, each pane a fixed-size grouped
-  form that scrolls. Rows use the form's own label and subtitle styling, and a
-  place elsewhere in Settings is a link, not a description. A duration row given
+- **Settings is the SwiftUI `Settings` scene**: a toolbar of five panes, the
+  window titled by its pane, the last pane remembered, each pane a fixed-size
+  grouped form that scrolls. General holds whether Athina offers suggestions
+  and talking back; Mentoring what it mentors in, how its suggestions show and
+  what Never for This turned off; Privacy consent, the pause shortcut, excluded
+  apps, the journal and the two permissions it needs to watch; Models the
+  provider, spend and models; Advanced the debug panel, then capture timing.
+  Rows use the form's own label and subtitle styling, and a place elsewhere in
+  Settings is a link, not a description. A duration row given
   its setting's range offers only what that setting accepts: its unit pop-up
   lists the units the range holds a whole amount of. In every number row an
   amount typed outside the range settles at the nearest allowed one as the

@@ -3,12 +3,16 @@ import AthinaCore
 import Foundation
 import SwiftUI
 
-/// Past suggestions with their feedback, and the full text of the selected one.
+/// Past suggestions with their feedback, listed under the day each was made,
+/// and the full text of the selected one.
 struct HistoryView: View {
   @Environment(AppState.self)
   private var state
 
   @State private var selectedID: Int64?
+  /// The present as the day headings last read it, moved on each time a new
+  /// day begins on the injected clock.
+  @State private var now: Date?
 
   init(initialSelection: Int64? = nil) {
     _selectedID = State(initialValue: initialSelection)
@@ -19,11 +23,28 @@ struct HistoryView: View {
     return state.suggestionHistory.first { $0.id == selectedID }
   }
 
+  /// The suggestions under their days, newest first, counted in the
+  /// person's own calendar from the injected clock.
+  private var days: [HistoryDays.Day<Suggestion>] {
+    HistoryDays.group(
+      state.suggestionHistory,
+      date: \.timestamp,
+      now: now ?? state.clock.date,
+      calendar: .current
+    )
+  }
+
   var body: some View {
     HSplitView {
-      List(state.suggestionHistory, selection: $selectedID) { suggestion in
-        HistoryRow(suggestion: suggestion)
-          .tag(suggestion.id)
+      List(selection: $selectedID) {
+        ForEach(days) { day in
+          Section(day.title) {
+            ForEach(day.items) { suggestion in
+              HistoryRow(suggestion: suggestion)
+                .tag(suggestion.id)
+            }
+          }
+        }
       }
       .listStyle(.inset)
       .accessibilityLabel("Suggestions")
@@ -53,6 +74,11 @@ struct HistoryView: View {
       .background(Color(nsColor: .windowBackgroundColor))
     }
     .frame(minWidth: 760, minHeight: 440)
+    .task {
+      while let next = try? await HistoryDays.nextDay(on: state.clock, calendar: .current) {
+        now = next
+      }
+    }
     .navigationSubtitle(Plural.count(state.suggestionHistory.count, "suggestion", "suggestions"))
   }
 }
@@ -157,6 +183,8 @@ private struct SuggestionActions: View {
   }
 }
 
+/// One suggestion in the list: its kind's tile, its title, then its kind in
+/// words, the app and the time, under the heading of its day.
 private struct HistoryRow: View {
   @Environment(AppState.self)
   private var state
@@ -164,23 +192,21 @@ private struct HistoryRow: View {
   let suggestion: Suggestion
 
   var body: some View {
+    let kind = NoteKind(suggestion.category)
     HStack(alignment: .top, spacing: 10) {
-      Image(systemName: suggestion.category.symbol)
-        .foregroundStyle(suggestion.category.tint)
-        .frame(width: 18)
-        .padding(.top, 2)
-        .accessibilityHidden(true)
+      KindTile(kind: kind, size: 18)
+        .padding(.top, 1)
       VStack(alignment: .leading, spacing: 2) {
         Text(suggestion.title)
           .lineLimit(2)
         HStack(spacing: 6) {
-          Text(Formatting.dayAndTime(suggestion.timestamp))
-            .monospacedDigit()
+          Text(kind.label)
           Text("·").accessibilityHidden(true)
           Text(suggestion.appName)
             .lineLimit(1)
           Text("·").accessibilityHidden(true)
-          Text(suggestion.category.label)
+          Text(Formatting.hourAndMinute(suggestion.timestamp))
+            .monospacedDigit()
           DeliveryMarks(
             suggestion: suggestion,
             talkedBack: state.followUps.contains { $0.suggestionID == suggestion.id }
@@ -244,14 +270,6 @@ struct FeedbackPill: View {
   }
 }
 
-extension SuggestionCategory {
-  /// The color the category's symbol is drawn in: a warning in the attention
-  /// tint, a tip in the accent.
-  var tint: Color {
-    isWarning ? StatusTint.attention.color : .accentColor
-  }
-}
-
 struct SuggestionDetail: View {
   @Environment(AppState.self)
   private var state
@@ -263,17 +281,12 @@ struct SuggestionDetail: View {
       VStack(alignment: .leading, spacing: 16) {
         VStack(alignment: .leading, spacing: 6) {
           HStack(spacing: 8) {
-            Label(
-              title: {
-                Text(suggestion.category.label)
-                  .foregroundStyle(.secondary)
-              },
-              icon: {
-                Image(systemName: suggestion.category.symbol)
-                  .foregroundStyle(suggestion.category.tint)
-              }
-            )
-            .font(.callout.weight(.semibold))
+            let kind = NoteKind(suggestion.category)
+            KindTile(kind: kind)
+            Text("\(kind.label) · \(suggestion.appName)")
+              .font(.callout.weight(.semibold))
+              .foregroundStyle(.secondary)
+              .lineLimit(1)
             FeedbackPill(
               feedback: suggestion.feedback,
               isShowing: state.activeSuggestion?.id == suggestion.id
@@ -301,10 +314,15 @@ struct SuggestionDetail: View {
           }
         }
         Divider()
-        Text(suggestion.explanation)
-          .font(.body)
-          .textSelection(.enabled)
-          .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 6) {
+          Text("More")
+            .font(.headline)
+            .accessibilityAddTraits(.isHeader)
+          Text(suggestion.explanation)
+            .font(.body)
+            .textSelection(.enabled)
+            .fixedSize(horizontal: false, vertical: true)
+        }
         Divider()
         Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 6) {
           detailRow("When", Formatting.dayAndTime(suggestion.timestamp))
@@ -315,6 +333,7 @@ struct SuggestionDetail: View {
           if let title = suggestion.windowTitle, !title.isEmpty {
             detailRow("Window", title)
           }
+          detailRow("Category", suggestion.category.label)
           detailRow("Confidence", String(format: "%.0f%%", suggestion.confidence * 100))
           detailRow(
             "Model",
