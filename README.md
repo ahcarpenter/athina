@@ -88,8 +88,8 @@ Releases are not notarized yet, so allow the first launch in System Settings > P
 
 ## Quick start
 
-1. Open Athina and choose **Allow** in the consent window; nothing is sensed or sent before it.
-2. Grant **Screen Recording** and **Accessibility** from its permissions window ([Permissions](docs/setup.md#permissions)).
+1. Open Athina and choose **Allow** in the Setup window; nothing is sensed or sent before it.
+2. Grant **Screen Recording** and **Accessibility** on its permissions page ([Permissions](docs/setup.md#permissions)).
 3. Paste an API key in Settings > Models, press Save, then Test Connection ([An API key](docs/setup.md#an-api-key)).
 
 ## Development
