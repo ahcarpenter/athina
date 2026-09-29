@@ -51,14 +51,20 @@ jobs:
         # Only when this run opened or rewrote the release pull request, which
         # release-please does from main each time, so it never keeps an
         # earlier run's build number.
+        # A step's with is read only once its if holds, so the pull request
+        # is always there to parse.
         if: steps.release.outputs.pr
         with:
           ref: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
       - name: Raise the build number
         if: steps.release.outputs.pr
         env:
-          BRANCH: ${{ fromJSON(steps.release.outputs.pr).headBranchName }}
+          # The runner reads a step's env before its if, even when the if
+          # fails, so env takes the pull request as it is and the script
+          # parses it: a run that makes a release has none.
+          PR: ${{ steps.release.outputs.pr }}
         run: |
+          branch="$(jq -r .headBranchName <<<"$PR")"
           git fetch --depth=1 origin main
           build() { python3 -c 'import plistlib, sys; print(plistlib.loads(sys.stdin.buffer.read())["CFBundleVersion"])'; }
           main_build="$(git show origin/main:Resources/Info.plist | build)"
@@ -77,7 +83,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit --quiet -m "chore(release): raise the build number to $want" Resources/Info.plist
-          git push origin "HEAD:$BRANCH"
+          git push origin "HEAD:$branch"
           echo "The release pull request now has build $want."
 
   release:

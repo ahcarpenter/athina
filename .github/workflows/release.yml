@@ -21,12 +21,21 @@ name: Release
 # of release.sh's list of titles, takes the rest of release.sh's notes around
 # it, and is published. The tag is one pushed by hand, or one release-please
 # made, for which release-please.yml calls this workflow with it: a tag pushed
-# with a workflow's own token starts no workflow.
+# with a workflow's own token starts no workflow. Run by hand for a tag, it
+# does the same as that call.
 on:
   push:
     branches: [main]
     tags: ['v[0-9]+.[0-9]+.[0-9]+']
   workflow_call:
+    inputs:
+      tag:
+        description: The version tag to build and publish, such as v1.2.3
+        required: true
+        type: string
+  # A tag release-please made whose run failed before calling this, so it has
+  # only its draft (docs/releasing.md "Each release"); run for that tag.
+  workflow_dispatch:
     inputs:
       tag:
         description: The version tag to build and publish, such as v1.2.3
@@ -52,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # The called tag; otherwise the pushed ref, as always.
+          # The called or dispatched tag; otherwise the pushed ref, as always.
           ref: ${{ inputs.tag }}
           # Every commit and tag: release.sh finds the previous release by its
           # tag and lists the commits since it.
@@ -176,7 +185,8 @@ jobs:
       - name: Publish the GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          # Set when release-please.yml calls this for the release it made.
+          # Set when release-please.yml calls this for the release it made, or
+          # when it is run by hand for one.
           FROM_RELEASE_PLEASE: ${{ inputs.tag }}
         run: |
           cd release
