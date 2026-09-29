@@ -47,7 +47,7 @@ A note about one spot on screen can outline it with a **callout**, which comes d
 
 Each mentor call also rewrites the **standing understanding**, a short note of what you appear to be working toward, so Athina can tell you when an approach will not get you there.
 Every call counts against one hourly cap, $1 by default: calls slow down as the hour's spend nears it and stop at it until the next hour begins.
-Change it in [Settings > Models > Spend at most](#setup-the-anthropic-api-key).
+Change it in [Settings > Models > Spend at most](docs/mentor-loop.md#spend-control).
 
 The [mentor loop](docs/mentor-loop.md) has every gate and the words the rest of
 the docs use, and the [privacy model](docs/privacy.md) says what each call
