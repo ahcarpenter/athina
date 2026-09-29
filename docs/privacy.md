@@ -90,10 +90,10 @@
   for the purpose, never the captain's or any user's real work. Every recording
   is read, text and screenshot, before it is committed.
 - **Pause** from the menu or with the global hotkey (⌃⌥⌘P unless changed or
-  cleared) stops all sensing; the menu bar owl drops a lid over its eyes. Idle
-  closes them and two z's drift off it, an excluded app looks away, missing
-  permissions is a wide stare, and a held mentor tier winks (see [Design
-  conventions](design.md)).
+  cleared) stops all sensing; the eyes in the menu bar shut to a line. Idle
+  closes them in a curve, asleep, an excluded app makes them look away,
+  missing permissions leaves them open and empty, and a held mentor tier
+  half-lids them (see [Design conventions](design.md)).
 - Thumbnails expire after 6 hours and text after 7 days by default; the journal
   is capped at 500 MB; all three are adjustable, and the journal can be cleared
   at any time. A replay senses the real screen too, and a finished replay's
@@ -131,8 +131,8 @@ OpenAI, under their OpenAI API account; or OpenCode, run by Anomaly,
 which passes each call to Anthropic or OpenAI, and that company keeps it for
 30 days under its own data policy. It lists what leaves the Mac (see above),
 says what the journal keeps and for how long from the settings in force, and
-shows the menu bar owl with its eyes open, the sign that Athina is watching,
-and lidded, the sign that it is not. Allow and Not Now are its only answers;
+shows the menu bar's eyes open, the sign that Athina is watching, and shut,
+the sign that it is not. Allow and Not Now are its only answers;
 closing it answers nothing.
 
 Each provider needs its own Allow, since each sends to a different company:
@@ -153,7 +153,7 @@ tracking is not started, and no input, idle, permission, focus, window, or
 frame is read or journaled; only retention runs, so what an earlier Allow let
 in still ages out. The mentor loop holds every call: `MentorScheduler.callGate`
 is asked by every gate and once more on the one path to the network, Test
-Connection included. The owl shows its lidded, paused eyes, the menu reads
+Connection included. The Gaze shows its shut, paused eyes, the menu reads
 "Not watching until you allow it" with Allow Watching… as its command, and
 talking back says it is not listening.
 

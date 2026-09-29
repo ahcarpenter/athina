@@ -9,7 +9,7 @@ import Testing
 /// The committed assets against the mark they are built from.
 ///
 /// The app icon is generated from `Resources/Mark/AthinaMark.svg` and the menu
-/// bar mark from `Resources/Mark/AthinaOwl.svg`, both by
+/// bar mark from `Resources/Mark/AthinaGaze.svg`, both by
 /// `scripts/mark-assets.swift` and both committed, so a plain build needs
 /// nothing but the repository. That makes them the one thing in the build that
 /// can silently fall out of step with the code: a variant added to
@@ -88,13 +88,12 @@ import Testing
       contentsOf: markDirectory.appendingPathComponent("built-from.txt"),
       encoding: .utf8
     )
-    // The Athena drawing behind the app icon, the owl behind the menu bar,
-    // and the script that carries the rest of the drawing: the inset, the
-    // eye treatments, the z's and the per-size thickening are constants
-    // there, not in either master.
+    // The icon's master, the Gaze behind the menu bar, and the script that
+    // decides how they are drawn: the icon's per-size scale and shadow and
+    // the menu bar's box and inset are constants there, not in either master.
     let sources = [
       markDirectory.appendingPathComponent("AthinaMark.svg"),
-      markDirectory.appendingPathComponent("AthinaOwl.svg"),
+      markDirectory.appendingPathComponent("AthinaGaze.svg"),
       root.appendingPathComponent("scripts/mark-assets.swift"),
     ]
     for url in sources {
@@ -118,48 +117,67 @@ import Testing
     )
   }
 
-  /// The cream layer and the drawing are two independent groups, which is
-  /// what lets the icon take the whole artwork while the thickening that
-  /// keeps it legible at 16 and 32 px touches the line art alone.
-  @Test func theIconMasterCarriesBothGroupsSoEitherCanBeUsedAlone() throws {
+  /// The icon master is two parts, the field and the Gaze, which is what lets
+  /// the script lift the Gaze off the field with its shadow and draw it a
+  /// little larger at 16 and 32 px.
+  @Test func theIconMasterIsTheFieldAndTheGaze() throws {
     let drawing = try MasterDrawing(
       contentsOf: markDirectory.appendingPathComponent("AthinaMark.svg")
     )
-    #expect(drawing.groups == ["shapes", "lineart"])
-    // The cream layer is carried as primitives, not as a traced outline,
-    // so its edges stay exact at every size the icon is drawn at.
-    #expect(Set(drawing.layer("shapes").map(\.kind)) == ["circle", "rect", "polygon"])
-    let lineart = drawing.layer("lineart")
-    #expect(!lineart.isEmpty)
-    #expect(lineart.allSatisfy { $0.kind == "path" })
-    // Nothing is drawn outside the two groups, so taking either one really
-    // does take the whole of that layer.
+    #expect(drawing.parts == ["field", "gaze"])
+    #expect(!drawing.layer("field").isEmpty)
+    #expect(!drawing.layer("gaze").isEmpty)
+    // Nothing is drawn outside the two parts, so drawing either one really
+    // does draw the whole of it.
     #expect(drawing.shapes.allSatisfy { $0.group != nil })
   }
 
-  /// The owl's states are made out of its own parts, so the menu bar asset
-  /// depends on the drawing still being four closed subpaths: the body, the
-  /// cutout holding both eyes, and a pupil in each.
+  /// The menu bar's states are the Gaze's outline with one group of eyes each.
   ///
-  /// A re-export that merged or split them would change what the states mean.
-  ///
-  /// Counted the way the generator counts them, over every path element in
-  /// the drawing rather than over whichever one comes first, so a re-export
-  /// that split the owl across several paths is measured whole.
-  @Test func theOwlMasterStillHasTheFourPartsTheStatesAreMadeFrom() throws {
+  /// The groups are named for the cases of `MenuBarMark`, so the script draws
+  /// exactly the set the code can ask for. A group missing or left over would
+  /// be a state drawn as nothing, or drawn for no one.
+  @Test func theGazeMasterIsTheOutlineAndOneGroupPerState() throws {
     let drawing = try MasterDrawing(
-      contentsOf: markDirectory.appendingPathComponent("AthinaOwl.svg")
+      contentsOf: markDirectory.appendingPathComponent("AthinaGaze.svg")
     )
-    #expect(drawing.shapes.allSatisfy { $0.kind == "path" }, "the owl is path data alone")
-    let commands = drawing.shapes.flatMap(\.commandLetters)
-    let starts = commands.filter { $0 == "M" || $0 == "m" }.count
-    let closes = commands.filter { $0 == "Z" || $0 == "z" }.count
-    #expect(starts == 4, "the owl should be four subpaths, found \(starts)")
-    #expect(closes == starts, "every subpath should be closed; \(starts) start, \(closes) close")
+    #expect(drawing.parts == ["outline"] + MenuBarMark.allCases.map(\.rawValue))
+    // The outline is one closed path, the union of the two eyes.
+    let outline = drawing.shapes.filter { $0.id == "outline" }
+    #expect(outline.count == 1)
+    #expect(outline.first?.commandLetters.filter { $0 == "Z" || $0 == "z" }.count == 1)
     // Content credentials belong with the artwork, not in a built asset.
     #expect(!drawing.elementNames.contains("metadata"))
     #expect(drawing.elementNames.allSatisfy { !$0.localizedCaseInsensitiveContains("c2pa") })
     #expect(drawing.attributeNames.allSatisfy { !$0.localizedCaseInsensitiveContains("c2pa") })
+  }
+
+  /// The accent the bundle names is in the catalog it compiles, with a dark
+  /// and a high-contrast form: an Info.plist naming a colour the catalog does
+  /// not hold leaves the system accent in place with no error anywhere.
+  @Test func theAccentColourTheBundleNamesIsInItsCatalog() throws {
+    let info =
+      try PropertyListSerialization.propertyList(
+        from: Data(contentsOf: root.appendingPathComponent("Resources/Info.plist")),
+        format: nil
+      ) as? [String: Any]
+    let name = try #require(info?["NSAccentColorName"] as? String)
+    let set = root.appendingPathComponent(
+      "Resources/Assets.xcassets/\(name).colorset/Contents.json"
+    )
+    let json = try JSONSerialization.jsonObject(with: Data(contentsOf: set)) as? [String: Any]
+    let colors = try #require(json?["colors"] as? [[String: Any]])
+    let appearances = Set(
+      colors.map { color in
+        ((color["appearances"] as? [[String: String]]) ?? [])
+          .map { "\($0["appearance"] ?? "")=\($0["value"] ?? "")" }
+          .sorted()
+          .joined(separator: ",")
+      }
+    )
+    #expect(
+      appearances == ["", "luminosity=dark", "contrast=high", "contrast=high,luminosity=dark"]
+    )
   }
 
   /// The README's pictures, today the icon at its top, are drawn by the same
@@ -262,6 +280,7 @@ import Testing
 private struct MasterDrawing {
   struct Shape {
     var group: String?
+    var id: String?
     var kind: String
     /// The SVG path commands, in order.
     ///
@@ -274,6 +293,9 @@ private struct MasterDrawing {
   ]
 
   var shapes: [Shape] = []
+  /// The ids of the root's own children, in document order: the parts the
+  /// script draws alone.
+  var parts: [String] = []
   /// Every element and attribute name in the file, so what the drawing does
   /// not carry can be asserted as well as what it does.
   var elementNames: [String] = []
@@ -287,6 +309,9 @@ private struct MasterDrawing {
   init(contentsOf url: URL) throws {
     let document = try XMLDocument(contentsOf: url)
     guard let root = document.rootElement() else { return }
+    parts = (root.children ?? []).compactMap {
+      ($0 as? XMLElement)?.attribute(forName: "id")?.stringValue
+    }
     walk(root, group: nil)
   }
 
@@ -297,7 +322,14 @@ private struct MasterDrawing {
     let group = name == "g" ? (element.attribute(forName: "id")?.stringValue ?? group) : group
     if Self.drawable.contains(name) {
       let data = name == "path" ? element.attribute(forName: "d")?.stringValue ?? "" : ""
-      shapes.append(Shape(group: group, kind: name, commandLetters: Array(data.filter(\.isLetter))))
+      shapes.append(
+        Shape(
+          group: group,
+          id: element.attribute(forName: "id")?.stringValue,
+          kind: name,
+          commandLetters: Array(data.filter(\.isLetter))
+        )
+      )
     }
     for child in element.children ?? [] {
       guard let child = child as? XMLElement else { continue }

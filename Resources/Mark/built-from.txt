@@ -2,7 +2,7 @@
 # were built from: both masters and the script that drew them. Written by
 # scripts/mark-assets.swift; run `make icons` after changing a master, the
 # script or the variant set, never edit this by hand.
-AthinaMark.svg 02dc7f7b960525ffe50cce980c37640aa7311ee36da5e9c025451d904706fb79
-AthinaOwl.svg e227bce988b0923c2caffc967581fd748de147d9258106d52ae7ae3808de9aa5
-mark-assets.swift 2f2746ad2169f279f74d1fe0b349c6e2abd8800ed53cd520181edb3ec1fde335
+AthinaMark.svg 4ec7f7ab7330ba73b3a6c0b8e586f0db94169bdb4b1d5587f61f662c7b9f7c2a
+AthinaGaze.svg b934636f022192b52dc8a60adfd60871565bac6bc54d9a6233e0566cd3859e7a
+mark-assets.swift 73121e922eba8321b56372841feb3741220f65b387f4814c1334341b93949d7d
 variants watching idle paused excluded needsSomething held
