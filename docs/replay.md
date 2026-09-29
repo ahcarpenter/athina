@@ -106,7 +106,7 @@ open -n build/Athina.app --args --replay <dir> --time-scale 60 --advance-clock 1
 - `--time-scale <n>` runs the replay's clock n times faster than real time,
   from 1 to 100. Everything above shrinks with it: at 60x the fifteen-minute
   refresh comes due after fifteen seconds of use and a toast expires after one.
-  So does the idle threshold, so raise Settings > Capture > Idle after for the
+  So does the idle threshold, so raise Settings > Advanced > Idle after for the
   session, or keep input arriving, or sensing goes idle after a second. Timers
   paced for a person shrink too: at 60x a held talk-back key is cut off after
   half a second, so talk back to a scaled replay through the Talk back field.
@@ -332,7 +332,7 @@ scenario and an empty journal:
    threshold for the session so sensing does not stop behind it. For the
    `understanding` kind, set Settings > Models > Refresh at most every to its
    lowest value before recording and leave the scenario in front for that whole
-   interval after the last mentor call; setting Settings > Capture > Idle after
+   interval after the last mentor call; setting Settings > Advanced > Idle after
    above the interval keeps the loop watching with no input. Add Athina itself
    to the excluded apps, so opening Settings for Test Connection is never
    captured.

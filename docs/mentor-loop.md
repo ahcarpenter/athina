@@ -77,7 +77,7 @@ each kept observation it runs, in order:
    toast stays until closed. *Not Now* dismisses and snoozes that category for
    that app for `notNowSnooze` (1 h). *Never for This* records that the
    category must never be raised for that app again (the rule is listed and
-   removable in Settings > General). Either answer, from the toast, the menu or
+   removable in Settings > Mentoring). Either answer, from the toast, the menu or
    a spoken reply, leaves a note in the toast's place saying what it did
    (`UserFacing.confirmation`), and the history window says it beside the
    suggestion. The toast never takes keyboard focus, so
@@ -191,7 +191,7 @@ stroke over a faint fill with a halo outside it, and the note's kind tile on
 its top-left corner, so the spot and the note it belongs to read as a pair.
 It draws no words: what it points at is the toast's to say, so nothing covers
 the lines around the spot. Athina's own windows are excluded from
-capture, so the overlay never appears in a frame. Settings > General > "Show
+capture, so the overlay never appears in a frame. Settings > Mentoring > "Show
 callouts on screen" (on by default) turns callouts off; the history window
 records for each suggestion whether one was drawn, and the debug panel's
 Mentor card shows the last callout decision with the region in frame pixels
@@ -327,7 +327,7 @@ Microphone and Speech Recognition are not granted.
 
 ## Mentorship contexts
 
-Settings > Contexts is where you say what you want
+Settings > Mentoring is where you say what you want
 mentoring in, in your own words: a short name such as "building web apps" and
 an optional sentence saying what counts. **Only mentor inside these contexts**
 turns that list into a hard boundary; it is off by default, and while it is off
@@ -354,7 +354,7 @@ disables Add Context at the cap, refuses a name another context already uses,
 and caps both fields as they are typed with a note at the limit, so nothing
 saved is dropped or cut on the way in. With the switch on and no context
 declared, nothing is inside anything: no triage call is made at all, and the
-Contexts pane, the menu, and the debug panel all say so.
+Mentoring pane, the menu, and the debug panel all say so.
 
 To keep an app from being looked at at all, exclude it in Settings > Privacy >
 Excluded apps: while an excluded app is frontmost nothing is captured, so

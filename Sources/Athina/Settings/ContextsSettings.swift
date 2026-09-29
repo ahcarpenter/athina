@@ -1,17 +1,8 @@
 import AthinaCore
 import SwiftUI
 
-/// The Contexts pane: the kinds of work the user wants mentoring in, and the
-/// switch that makes them a hard boundary.
-struct ContextsSettings: View {
-  var body: some View {
-    Form {
-      MentorshipContextsSection()
-    }
-  }
-}
-
-/// The declared contexts, as a section of its own so snapshots can render it.
+/// The kinds of work the user wants mentoring in, and the switch that makes
+/// them a hard boundary, as a section of the Mentoring pane.
 ///
 /// The editor works on a local copy and commits on save, because
 /// `MentorSettings.validated()` runs on each change and would trim and drop

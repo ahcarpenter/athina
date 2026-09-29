@@ -2,8 +2,11 @@ import AppKit
 import AthinaCore
 import SwiftUI
 
-/// The General pane: whether Athina offers suggestions and how they are
-/// shown, talking back, and the categories turned off with Never for This.
+/// The General pane: whether Athina offers suggestions at all, and talking
+/// back.
+///
+/// How suggestions are shown, what they are about and the kinds turned off
+/// with Never for This are in the Mentoring pane.
 struct GeneralSettings: View {
   @Environment(AppState.self)
   private var state
@@ -11,52 +14,16 @@ struct GeneralSettings: View {
   var body: some View {
     @Bindable var state = state
     Form {
-      Section(
-        content: {
-          Toggle(isOn: $state.settings.mentor.enabled) {
-            Text("Offer suggestions")
-            Text(
-              "Athina points out a more helpful way to do what you are doing when it notices one."
-            )
-          }
-          PercentRow(
-            "Minimum confidence",
-            value: $state.settings.mentor.minimumConfidence,
-            range: 0...1,
-            step: 0.05,
-            help: "Suggestions the model is less sure of are logged but not shown."
+      Section {
+        Toggle(isOn: $state.settings.mentor.enabled) {
+          Text("Offer suggestions")
+          Text(
+            "Athina points out a more helpful way to do what you are doing when it notices one."
           )
-          NumberRow(
-            "Show each suggestion for",
-            value: $state.settings.mentor.toastTimeout,
-            range: 5...600,
-            step: 5,
-            unit: .seconds,
-            help: "The time runs out only while the pointer is elsewhere."
-          )
-          DurationRow(
-            "Not Now pauses a category for",
-            value: $state.settings.mentor.notNowSnooze,
-            help: "Suggestions of that kind stay quiet in that app until then."
-          )
-          Toggle(isOn: $state.settings.mentor.showCallouts) {
-            Text("Show callouts on screen")
-            Text(
-              """
-              When a suggestion is about one spot on screen, a box and a short note mark it. \
-              The callout goes away with the suggestion, and whenever its window moves or \
-              loses focus.
-              """
-            )
-          }
-        },
-        header: {
-          Text("Suggestions")
         }
-      )
+      }
 
       VoiceSection()
-      NeverRulesSection()
     }
   }
 }
@@ -130,60 +97,6 @@ struct VoiceSection: View {
           suggestion, and the text of the screen it was made from go to the mentor model.
           """
         )
-      }
-    )
-  }
-}
-
-// MARK: - Never for This
-
-/// The categories turned off for an app with Never for This, each removable.
-struct NeverRulesSection: View {
-  @Environment(AppState.self)
-  private var state
-
-  var body: some View {
-    @Bindable var state = state
-    Section(
-      content: {
-        if state.settings.mentor.neverRules.isEmpty {
-          Text(
-            """
-            None yet. Choose Never for This on a suggestion to stop that kind of suggestion in \
-            that app.
-            """
-          )
-          .foregroundStyle(.secondary)
-        } else {
-          ForEach(state.settings.mentor.neverRules) { rule in
-            LabeledContent(
-              content: {
-                RemoveButton(itemName: "\(rule.category.label) in \(rule.appName)") {
-                  state.settings.mentor.neverRules.removeAll { $0.id == rule.id }
-                }
-              },
-              label: {
-                Label(
-                  title: {
-                    Text("\(rule.category.label) in \(rule.appName)")
-                    Text("Turned off \(Formatting.dayAndTime(rule.createdAt))")
-                  },
-                  icon: {
-                    Image(systemName: rule.category.symbol)
-                      .foregroundStyle(.secondary)
-                      .accessibilityHidden(true)
-                  }
-                )
-              }
-            )
-          }
-        }
-      },
-      header: {
-        Text("Turned off with Never for This")
-      },
-      footer: {
-        Text("Remove a category to let Athina suggest it in that app again.")
       }
     )
   }

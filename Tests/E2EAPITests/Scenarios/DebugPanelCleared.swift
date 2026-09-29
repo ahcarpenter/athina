@@ -13,7 +13,7 @@
     /// blamed the permission then named the wrong cause. The card's records of the triage gate,
     /// the last calls and the last callout described rows that were gone. The suggestion comes
     /// from scripted sensing (docs/e2e.md "Scripted sensing"), Clear Journal is chosen in
-    /// Settings > Journal through Athina's own event path, and a hermetic run senses nothing it
+    /// Settings > Privacy through Athina's own event path, and a hermetic run senses nothing it
     /// does not script, so the panel is read with no capture since the clear.
     @Test func `debug-panel-cleared`() async {
       await Run.scenario("debug-panel-cleared", arguments: ["--open", "debug"]) { run in
@@ -76,21 +76,20 @@
           throw AppProcess.Failure("Settings never opened")
         }
         run.check(
-          "a click on the Journal toolbar item lands",
+          "a click on the Privacy toolbar item lands",
           true,
-          try await control.click(.label("Journal", in: "General")).ok
+          try await control.click(.label("Privacy", in: "General")).ok
         )
-        guard try await control.waitWindow("Journal", timeout: 5) else {
-          throw AppProcess.Failure("the Journal pane never showed")
+        guard try await control.waitWindow("Privacy", timeout: 5) else {
+          throw AppProcess.Failure("the Privacy pane never showed")
         }
-        // A destructive button takes no click into a window that is not forward, and a hermetic
-        // run's never are, so it is pressed as VoiceOver presses it.
-        run.check(
-          "Clear Journal… is pressed",
-          true,
-          try await control.press(.identifier("journal.clear", in: "Journal")).ok
-        )
-        let confirm = Target.role("AXButton", label: "Clear Journal", in: "Journal")
+        // The journal's section sits below the fold of the Privacy pane. A destructive button
+        // takes no click into a window that is not forward, and a hermetic run's never are, so
+        // it is pressed as VoiceOver presses it.
+        let clear = Target.identifier("journal.clear", in: "Privacy")
+        _ = try await control.scroll(clear)
+        run.check("Clear Journal… is pressed", true, try await control.press(clear).ok)
+        let confirm = Target.role("AXButton", label: "Clear Journal", in: "Privacy")
         run.check(
           "the confirmation comes up",
           "Clear Journal",
@@ -106,7 +105,7 @@
           try await run.settled(0) { try await rows("observations") }
         )
         run.check("the journal holds no model call", 0, try await rows("calls"))
-        _ = try await control.click(.subrole("AXCloseButton", in: "Journal"))
+        _ = try await control.click(.subrole("AXCloseButton", in: "Privacy"))
 
         let cleared = try await run.settled(true) {
           try await panelTexts("cleared").contains("Journal Cleared")

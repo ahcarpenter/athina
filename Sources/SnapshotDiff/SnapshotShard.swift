@@ -63,7 +63,7 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
     "understanding-card-refreshing": 4,
     "understanding-card-failed": 4,
     "settings-contexts-at-cap": 4,
-    "settings-journal": 4,
+    "settings-mentoring": 4,
     "settings-privacy": 4,
     "history-empty": 4,
     "toast-thinking": 4,

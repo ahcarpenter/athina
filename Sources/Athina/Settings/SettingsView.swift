@@ -10,7 +10,7 @@ import SwiftUI
 /// The last pane viewed is remembered, and `--open settings:<pane>` or a link
 /// inside another pane can choose it.
 enum SettingsPane: String, CaseIterable, Identifiable {
-  case general, contexts, models, capture, journal, privacy, advanced
+  case general, mentoring, privacy, models, advanced
 
   static let storageKey = "SettingsPane"
 
@@ -28,11 +28,9 @@ enum SettingsPane: String, CaseIterable, Identifiable {
   var title: String {
     switch self {
     case .general: "General"
-    case .contexts: "Contexts"
-    case .models: "Models"
-    case .capture: "Capture"
-    case .journal: "Journal"
+    case .mentoring: "Mentoring"
     case .privacy: "Privacy"
+    case .models: "Models"
     case .advanced: "Advanced"
     }
   }
@@ -40,11 +38,9 @@ enum SettingsPane: String, CaseIterable, Identifiable {
   var symbol: String {
     switch self {
     case .general: "gearshape"
-    case .contexts: "target"
-    case .models: "cpu"
-    case .capture: "camera.viewfinder"
-    case .journal: "book.closed"
+    case .mentoring: "text.bubble"
     case .privacy: "hand.raised"
+    case .models: "cpu"
     case .advanced: "gearshape.2"
     }
   }
@@ -109,27 +105,24 @@ struct SettingsView: View {
   var body: some View {
     TabView(selection: $selection.pane) {
       Tab(SettingsPane.general.title, systemImage: SettingsPane.general.symbol, value: .general) {
-        GeneralSettings().settingsPane(height: 640)
+        GeneralSettings().settingsPane(height: 440)
       }
-      Tab(SettingsPane.contexts.title, systemImage: SettingsPane.contexts.symbol, value: .contexts)
-      {
-        ContextsSettings().settingsPane(height: 520)
+      Tab(
+        SettingsPane.mentoring.title,
+        systemImage: SettingsPane.mentoring.symbol,
+        value: .mentoring
+      ) {
+        MentoringSettings().settingsPane(height: 640)
+      }
+      Tab(SettingsPane.privacy.title, systemImage: SettingsPane.privacy.symbol, value: .privacy) {
+        PrivacySettings().settingsPane(height: 640)
       }
       Tab(SettingsPane.models.title, systemImage: SettingsPane.models.symbol, value: .models) {
         ModelSettings().settingsPane(height: 640)
       }
-      Tab(SettingsPane.capture.title, systemImage: SettingsPane.capture.symbol, value: .capture) {
-        CaptureSettings().settingsPane(height: 640)
-      }
-      Tab(SettingsPane.journal.title, systemImage: SettingsPane.journal.symbol, value: .journal) {
-        JournalSettings().settingsPane(height: 500)
-      }
-      Tab(SettingsPane.privacy.title, systemImage: SettingsPane.privacy.symbol, value: .privacy) {
-        PrivacySettings().settingsPane(height: 560)
-      }
       Tab(SettingsPane.advanced.title, systemImage: SettingsPane.advanced.symbol, value: .advanced)
       {
-        AdvancedSettings().settingsPane(height: 180)
+        AdvancedSettings().settingsPane(height: 640)
       }
     }
   }
@@ -176,13 +169,15 @@ extension View {
 
 // MARK: - Capture
 
-struct CaptureSettings: View {
+/// When Athina captures, when it counts you as idle, how it compares frames and
+/// how it reads and stores them: timing and tuning, in the Advanced pane.
+struct CaptureSections: View {
   @Environment(AppState.self)
   private var state
 
   var body: some View {
     @Bindable var state = state
-    Form {
+    Group {
       Section(
         content: {
           NumberRow(
@@ -323,6 +318,14 @@ struct CaptureSettings: View {
             range: 0.1...1,
             step: 0.05
           )
+          NumberRow(
+            "Clean up the journal every",
+            value: $state.settings.retentionInterval,
+            range: 30...86400,
+            step: 30,
+            unit: .seconds,
+            help: "How often the journal removes what is past its time or over its size limit."
+          )
         },
         header: {
           Text("Recognition and storage")
@@ -334,7 +337,9 @@ struct CaptureSettings: View {
 
 // MARK: - Journal
 
-struct JournalSettings: View {
+/// How long the journal keeps what Athina sees and how large it may grow, where
+/// it is and what it holds, with Clear Journal, in the Privacy pane.
+struct JournalSection: View {
   @Environment(AppState.self)
   private var state
 
@@ -342,83 +347,67 @@ struct JournalSettings: View {
 
   var body: some View {
     @Bindable var state = state
-    Form {
-      Section(
-        content: {
-          DurationRow("Keep thumbnails for", value: $state.settings.thumbnailRetention)
-          DurationRow(
-            "Keep text and events for",
-            value: $state.settings.textRetention,
-            help: "Always at least as long as thumbnails."
-          )
-          NumberRow(
-            "Limit the journal to",
-            value: Binding(
-              get: { Double(state.settings.journalSizeCapBytes / (1024 * 1024)) },
-              set: {
-                state.settings.journalSizeCapBytes =
-                  Int64($0.clamped(to: 10...100_000)) * 1024 * 1024
-              }
-            ),
-            range: 10...100_000,
-            step: 50,
-            unit: .megabytes,
-            help:
-              """
-              The oldest thumbnails, then the oldest text and events, are removed to stay \
-              under this size.
-              """
-          )
-          NumberRow(
-            "Clean up every",
-            value: $state.settings.retentionInterval,
-            range: 30...86400,
-            step: 30,
-            unit: .seconds
-          )
-        },
-        header: {
-          Text("Retention")
+    Section(
+      content: {
+        DurationRow("Keep thumbnails for", value: $state.settings.thumbnailRetention)
+        DurationRow(
+          "Keep text and events for",
+          value: $state.settings.textRetention,
+          help: "Always at least as long as thumbnails."
+        )
+        NumberRow(
+          "Limit the journal to",
+          value: Binding(
+            get: { Double(state.settings.journalSizeCapBytes / (1024 * 1024)) },
+            set: {
+              state.settings.journalSizeCapBytes =
+                Int64($0.clamped(to: 10...100_000)) * 1024 * 1024
+            }
+          ),
+          range: 10...100_000,
+          step: 50,
+          unit: .megabytes,
+          help:
+            """
+            The oldest thumbnails, then the oldest text and events, are removed to stay \
+            under this size.
+            """
+        )
+        LabeledContent("Location") {
+          Text(Formatting.path(state.journalURL))
+            .textSelection(.enabled)
+            .multilineTextAlignment(.trailing)
+            .fixedSize(horizontal: false, vertical: true)
         }
-      )
-      Section(
-        content: {
-          LabeledContent("Location") {
-            Text(Formatting.path(state.journalURL))
-              .textSelection(.enabled)
-              .multilineTextAlignment(.trailing)
-              .fixedSize(horizontal: false, vertical: true)
+        if let stats = state.journalStats {
+          LabeledContent("Size", value: Formatting.bytes(stats.usedBytes))
+          LabeledContent("Contents") {
+            Text(
+              """
+              \(Plural.count(stats.observationCount, "observation", "observations")), \
+              \(Plural.count(stats.thumbnailCount, "thumbnail", "thumbnails")), \
+              \(Plural.count(stats.eventCount, "event", "events"))
+              """
+            )
+            .multilineTextAlignment(.trailing)
+            .fixedSize(horizontal: false, vertical: true)
           }
-          if let stats = state.journalStats {
-            LabeledContent("Size", value: Formatting.bytes(stats.usedBytes))
-            LabeledContent("Contents") {
-              Text(
-                """
-                \(Plural.count(stats.observationCount, "observation", "observations")), \
-                \(Plural.count(stats.thumbnailCount, "thumbnail", "thumbnails")), \
-                \(Plural.count(stats.eventCount, "event", "events"))
-                """
-              )
-              .multilineTextAlignment(.trailing)
-              .fixedSize(horizontal: false, vertical: true)
-            }
-          }
-          HStack {
-            Button("Reveal in Finder") {
-              NSWorkspace.shared.activateFileViewerSelecting([state.journalURL])
-            }
-            Spacer()
-            Button("Clear Journal…", role: .destructive) {
-              confirmClear = true
-            }
-            .accessibilityIdentifier("journal.clear")
-          }
-        },
-        header: {
-          Text("On disk")
         }
-      )
-    }
+        HStack {
+          Button("Reveal in Finder") {
+            NSWorkspace.shared.activateFileViewerSelecting([state.journalURL])
+          }
+          Spacer()
+          Button("Clear Journal…", role: .destructive) {
+            confirmClear = true
+          }
+          .accessibilityIdentifier("journal.clear")
+        }
+      },
+      header: {
+        Text("Journal on this Mac")
+      }
+    )
     // Clearing is what the person just chose, so the confirming button
     // is the plain default and Cancel stays available.
     .confirmationDialog(
@@ -441,9 +430,6 @@ struct JournalSettings: View {
         )
       }
     )
-    .task {
-      await state.refreshJournalStats()
-    }
   }
 }
 
@@ -493,10 +479,11 @@ struct PrivacySettings: View {
         },
         footer: {
           Text(
-            settingsMarkdown:
-              "Withdrawing stops all capturing and sending at once. What the journal already holds stays until it expires or you clear it in \(SettingsPane.journal.link("Journal"))."
+            """
+            Withdrawing stops all capturing and sending at once. What the journal already holds \
+            stays until it expires or you clear it below.
+            """
           )
-          .settingsPaneLinks()
         }
       )
       Section(
@@ -589,6 +576,11 @@ struct PrivacySettings: View {
           )
         }
       )
+      JournalSection()
+      RequiredPermissionsSection()
+    }
+    .task {
+      await state.refreshJournalStats()
     }
   }
 
@@ -620,6 +612,38 @@ extension PrivacySettings {
       return "Allowed \(when) to an earlier description of what is sent, so Athina asks again."
     case .declined: return "Not allowed since \(when). Athina captures nothing and sends nothing."
     }
+  }
+}
+
+/// Whether Athina has the two permissions it needs to watch, with the Setup
+/// window's permissions page a click away while one is missing.
+///
+/// The optional pair serves only talking back, so General settings lists them
+/// with the talk-back shortcut instead.
+private struct RequiredPermissionsSection: View {
+  @Environment(AppState.self)
+  private var state
+
+  var body: some View {
+    Section(
+      content: {
+        ForEach(Permission.required) { permission in
+          LabeledContent(permission.title) {
+            PermissionBadge(granted: state.permissions.isGranted(permission))
+          }
+        }
+        if !state.permissions.allGranted {
+          HStack {
+            Spacer()
+            Button("Show Permissions…") { state.perform(.openPermissions) }
+              .accessibilityIdentifier("privacy.showPermissions")
+          }
+        }
+      },
+      header: {
+        Text("Permissions")
+      }
+    )
   }
 }
 

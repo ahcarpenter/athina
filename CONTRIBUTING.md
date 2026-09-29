@@ -111,7 +111,7 @@ controls and ScreenCaptureKit still captures it, so nothing appears on screen
 (the run puts no item in the menu bar either) and a tall Settings pane renders
 whole. Replay mode has renders of its own. `open -n build/Athina.app --args
 --replay <dir> --open debug` (or `settings`, `settings:<pane>` for `general`,
-`contexts`, `models`, `capture`, `journal`, `privacy`, or `advanced`,
+`mentoring`, `privacy`, `models`, or `advanced`,
 `history`, or `consent`, `permissions`, `model`, `ready` for that page of the
 Setup window) starts a replay with that window already open, which
 is how a panel gets screenshotted from a shell

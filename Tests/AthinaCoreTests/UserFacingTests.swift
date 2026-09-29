@@ -153,7 +153,7 @@ import Testing
     )
     #expect(
       UserFacing.confirmation(of: .never, category: .risk, appName: "Xcode", until: nil)
-        == "Risk suggestions in Xcode are off. Turn them back on in General settings."
+        == "Risk suggestions in Xcode are off. Turn them back on in Mentoring settings."
     )
     for other in [SuggestionFeedback.tellMeMore, .expired, .expiredUnseen, .dismissed] {
       #expect(UserFacing.confirmation(of: other, category: .risk, appName: "X", until: nil) == nil)

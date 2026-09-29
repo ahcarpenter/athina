@@ -162,20 +162,22 @@ enum Snapshots {
         AnyView(SampleUnderstandingCard()),
         AppState.sampleUnderstanding(.failed)
       ),
-      Spec("settings-general", whole(860), AnyView(GeneralSettings().formStyle(.grouped)), state),
-      Spec("settings-contexts", pane, AnyView(ContextsSettings().formStyle(.grouped)), state),
+      Spec("settings-general", whole(460), AnyView(GeneralSettings().formStyle(.grouped)), state),
+      Spec(
+        "settings-mentoring",
+        whole(800),
+        AnyView(MentoringSettings().formStyle(.grouped)),
+        state
+      ),
+      // The Mentoring pane's contexts, on their own, in each state they can be in.
+      Spec("settings-contexts", pane, AnyView(SampleContextsSection()), state),
       Spec(
         "settings-contexts-empty",
         CGSize(width: SettingsView.paneWidth, height: 420),
-        AnyView(ContextsSettings().formStyle(.grouped)),
+        AnyView(SampleContextsSection()),
         empty
       ),
-      Spec(
-        "settings-contexts-at-cap",
-        whole(1200),
-        AnyView(ContextsSettings().formStyle(.grouped)),
-        atCap
-      ),
+      Spec("settings-contexts-at-cap", whole(1200), AnyView(SampleContextsSection()), atCap),
       Spec(
         "settings-context-editor",
         CGSize(width: 520, height: 360),
@@ -222,31 +224,27 @@ enum Snapshots {
         AnyView(SampleUnderstandingSettings()),
         noUnderstanding
       ),
-      Spec("settings-capture", whole(1100), AnyView(CaptureSettings().formStyle(.grouped)), state),
-      Spec(
-        "settings-journal",
-        CGSize(width: SettingsView.paneWidth, height: 500),
-        AnyView(JournalSettings().formStyle(.grouped)),
-        state
-      ),
-      Spec("settings-privacy", whole(620), AnyView(PrivacySettings().formStyle(.grouped)), state),
+      // The Advanced pane's capture tuning, below its troubleshooting section.
+      Spec("settings-capture", whole(1100), AnyView(SampleCaptureSections()), state),
+      Spec("settings-privacy", whole(1170), AnyView(PrivacySettings().formStyle(.grouped)), state),
       Spec(
         "settings-privacy-withdrawn",
-        whole(620),
+        whole(1170),
         AnyView(PrivacySettings().formStyle(.grouped)),
         AppState.sampleWithoutConsent(declined: true)
       ),
-      // Off, as every install starts, and enabled, with its button live.
+      // The Advanced pane's troubleshooting section, off, as every install
+      // starts, and enabled, with its button live.
       Spec(
         "settings-advanced",
         CGSize(width: SettingsView.paneWidth, height: 180),
-        AnyView(AdvancedSettings().formStyle(.grouped)),
+        AnyView(SampleTroubleshootingSection()),
         state
       ),
       Spec(
         "settings-advanced-on",
         CGSize(width: SettingsView.paneWidth, height: 180),
-        AnyView(AdvancedSettings().formStyle(.grouped)),
+        AnyView(SampleTroubleshootingSection()),
         debugPanelOn
       ),
       // The side-effect suggestion, so the goal it was judged against shows.
@@ -1298,6 +1296,37 @@ struct StatusMessagesPreview: View {
         )
       }
       VoiceSection()
+    }
+    .formStyle(.grouped)
+  }
+}
+
+/// The Mentoring pane's contexts section in a form of its own, so each of its
+/// states renders at the size it needs.
+private struct SampleContextsSection: View {
+  var body: some View {
+    Form {
+      MentorshipContextsSection()
+    }
+    .formStyle(.grouped)
+  }
+}
+
+/// The Advanced pane's capture sections in a form of their own.
+private struct SampleCaptureSections: View {
+  var body: some View {
+    Form {
+      CaptureSections()
+    }
+    .formStyle(.grouped)
+  }
+}
+
+/// The Advanced pane's troubleshooting section in a form of its own.
+private struct SampleTroubleshootingSection: View {
+  var body: some View {
+    Form {
+      TroubleshootingSection()
     }
     .formStyle(.grouped)
   }

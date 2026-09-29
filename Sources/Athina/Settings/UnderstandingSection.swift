@@ -76,7 +76,7 @@ struct UnderstandingSection: View {
         Text("Understanding")
       },
       footer: {
-        // The link opens the Journal pane in place rather than describing where it is.
+        // The link opens the Privacy pane in place rather than describing where it is.
         Text(
           settingsMarkdown:
             """
@@ -85,7 +85,7 @@ struct UnderstandingSection: View {
             than recent screens alone. The model writes it, and once it is forgotten Athina \
             starts a fresh one. Its revisions stay in the journal on this Mac until they are \
             reset here, or age out or are cleared with the rest of the journal in \
-            \(SettingsPane.journal.link("Journal settings")).
+            \(SettingsPane.privacy.link("Privacy settings")).
             """
         )
         .settingsPaneLinks()
