@@ -195,6 +195,29 @@ import Testing
     s.pauseShortcut = HotKey(keyCode: 1, modifiers: [.command, .shift])
     s.pauseShortcut = nil
     s.showDebugPanel = true
+    s.providerConsents = [
+      ModelProvider.openAI.rawValue: Consent(
+        answer: .allowed,
+        at: Date(timeIntervalSince1970: 1_700_000_100)
+      )
+    ]
+    s.mentor.provider = .openAI
+    s.mentor.openAIModels = TierModels(
+      triage: ModelCatalog.gpt6Sol.id,
+      mentor: ModelCatalog.gpt6Astra.id,
+      understanding: ModelCatalog.gpt6Luna.id,
+      triageEffort: .medium,
+      mentorEffort: .high,
+      understandingEffort: .medium
+    )
+    s.mentor.openCodeModels = TierModels(
+      triage: "gpt-6-luna",
+      mentor: "claude-opus-5-5",
+      understanding: "claude-sonnet-5",
+      triageEffort: .medium,
+      mentorEffort: .xhigh,
+      understandingEffort: .high
+    )
     s.mentor.enabled = false
     s.mentor.triageModel = ModelCatalog.sonnet5.id
     s.mentor.mentorModel = ModelCatalog.fable51.id

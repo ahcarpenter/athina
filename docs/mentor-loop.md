@@ -27,9 +27,11 @@ each kept observation it runs, in order:
    (line-set overlap of at least `triageSimilarityThreshold`, 0.9). Nothing
    runs before the person's Allow (see [Consent](privacy.md#consent)), while
    paused, idle, on an excluded app, without permissions, without an
-   API key, while another call is in flight, or while the spend cap holds.
+   API key for the provider in force, while another call is in flight, or
+   while the spend cap holds.
 2. **Triage call** on the cheap model (`claude-haiku-4-5-20251001` by default;
-   Sonnet 5, Opus 5, Opus 5.5, and Fable 5.1 are offered too) with structured output:
+   Sonnet 5, Opus 5, Opus 5.5, and Fable 5.1 are offered too; each provider has
+   its own models, see [Providers](#providers)) with structured output:
    `{"worth_a_look": bool, "reason": string}`, plus `context` while
    mentorship contexts are enforced.
 3. **Mentor gate** (`MentorScheduler.mentorGate`), the single yes-or-no between
@@ -94,8 +96,39 @@ served from cache within its five-minute window and the small triage prompt
 is not; the marker stays so a triage model with a lower minimum benefits.
 Menu > Show Last Suggestion brings a missed toast back; a toast asked for
 that way never expires on its own, and a non-answer never overwrites an
-answer already given. The API key is read from the Keychain inside the loop
-and passed per request; it is never journaled or logged.
+answer already given. The provider in force's API key is read from the
+Keychain inside the loop and passed per request; it is never journaled or
+logged.
+
+## Providers
+
+Settings > Models chooses whose API answers, with the person's own key for
+it (`ModelProvider`): Anthropic, the default; OpenAI, for the GPT-6 models
+Codex uses; or OpenCode, through its Zen gateway, for its Claude and GPT-6
+models. Each provider keeps its own key in the keychain, its own model and
+effort for each tier (`TierModels`; Anthropic's stay in the settings' own
+fields), and its own Allow in the consent window, since each sends to a
+different company (see [Consent](privacy.md#consent)). A provider with no
+key holds every call as a missing key does.
+
+Every call is built once, in the Messages API's terms, and `LiveModelClient`
+sends it to the provider in force. `AnthropicClient` posts it as it is.
+`OpenAIClient` maps it onto the Responses API with its words unchanged: the
+system blocks become one developer message with a text part per block, the
+screenshot a base64 JPEG data URL, the schema a strict `json_schema` format
+named after the call's kind, the effort `reasoning.effort`, and `store:
+false`. Reasoning counts against `max_output_tokens`, so a budget shorter
+than `MentorLoop.thinkingAllowance` (triage, Test Connection) gets that
+allowance added; the longer budgets already include it. The reply maps
+back, a refusal part to `refusal`, a reply cut off at `max_output_tokens` to
+`max_tokens`, cached input tokens to cache reads and cache writes to cache
+writes. `OpenCodeClient` sends Zen's Claude models to
+its Messages endpoint and its GPT models to its Responses endpoint, with the
+same two shapes. No prompt or schema changes with the provider, so the
+prompt version and the committed fixtures stay as they are, and a replay
+answers whatever provider is chosen. Every provider's reply is read the same
+way: the loop keeps what it can use of it, such as a suggestion beside a
+malformed understanding.
 
 ## Callouts
 
@@ -401,15 +434,17 @@ this understanding began.
 ## Spend control
 
 Every response's usage fields (`input_tokens`, `output_tokens`,
-`cache_creation_input_tokens`, `cache_read_input_tokens`) are priced with the
-table in Settings > Models (dollars per million tokens, defaults checked
-against Anthropic's pricing page on the date shown there, editable) and added
-to a per-clock-hour total. As the total approaches `hourlySpendCap` ($1 by
+`cache_creation_input_tokens`, `cache_read_input_tokens`, or the Responses
+API's counts mapped onto them) are priced with the table in Settings > Models
+(dollars per million tokens for each provider's models, defaults checked
+against each provider's pricing page on the date shown there, editable) and
+added to one per-clock-hour total across every provider. As the total approaches `hourlySpendCap` ($1 by
 default) both minimum intervals and the refresh interval stretch by
 `1 / (1 - spent / cap)`, capped at 8x: 2x at half the cap, 4x at three
 quarters. At the cap no call is made until the next clock hour. The hour's total is seeded from the journal at launch, so
 relaunching does not reset it. Spend this hour shows in the menu, the debug
-panel status bar, and the Mentor card, and the menu's next row names the model
-that answered the latest call and the tier that asked (`Last answer: Claude
-Haiku 4.5 (Triage), 15:23:06`), from the call log. Replayed calls cost nothing and are never
+panel status bar, and the Mentor card, with the provider it went to, and the
+menu's next row names the model that answered the latest call, the provider
+it went by, and the tier that asked (`Last answer: Claude Haiku 4.5 via
+Anthropic (Triage), 15:23:06`), from the call log. Replayed calls cost nothing and are never
 counted (see [Iterating without the network](replay.md)).

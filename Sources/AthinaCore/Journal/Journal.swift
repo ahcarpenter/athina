@@ -216,6 +216,12 @@ public actor Journal {
     // Columns added or dropped after a table shipped: CREATE TABLE IF NOT
     // EXISTS leaves an existing journal's table alone, so change them here.
     try addColumn("replayed INTEGER NOT NULL DEFAULT 0", named: "replayed", to: "model_calls", db)
+    try addColumn(
+      "provider TEXT NOT NULL DEFAULT 'anthropic'",
+      named: "provider",
+      to: "model_calls",
+      db
+    )
     try addColumn("region_json TEXT", named: "region_json", to: "suggestions", db)
     try addColumn(
       "callout_shown INTEGER NOT NULL DEFAULT 0",
@@ -415,8 +421,8 @@ public actor Journal {
         sql: """
           INSERT INTO model_calls (timestamp, tier, model, prompt_version, prompt_chars,
               image_bytes, input_tokens, output_tokens, cache_write_tokens, cache_read_tokens,
-              cost, latency, outcome, detail, replayed)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              cost, latency, outcome, detail, replayed, provider)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           """,
         arguments: [
           call.timestamp.timeIntervalSince1970,
@@ -434,6 +440,7 @@ public actor Journal {
           call.outcome.rawValue,
           call.detail,
           call.replayed,
+          call.provider.rawValue,
         ]
       )
       return db.lastInsertedRowID
@@ -1162,7 +1169,7 @@ public actor Journal {
   private static let modelCallColumns = """
     id, timestamp, tier, model, prompt_version, prompt_chars, image_bytes, input_tokens, \
     output_tokens,
-    cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail, replayed
+    cache_write_tokens, cache_read_tokens, cost, latency, outcome, detail, replayed, provider
     """
 
   private static func makeModelCall(from row: Row) -> ModelCallRecord {
@@ -1184,7 +1191,8 @@ public actor Journal {
       latency: row[12],
       outcome: ModelCallOutcome(rawValue: row[13]) ?? .error,
       detail: row[14],
-      replayed: row[15]
+      replayed: row[15],
+      provider: ModelProvider(rawValue: row[16] ?? "") ?? .anthropic
     )
   }
 

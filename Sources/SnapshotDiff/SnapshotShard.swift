@@ -17,7 +17,7 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
   ///
   /// Fixed rather than hashed so the shards stay even: every render costs about
   /// the same, the few large windows (the debug panel, the Models pane, the
-  /// callout) are spread out, and each shard gets ten. A snapshot with
+  /// callout) are spread out, and each shard gets eleven. A snapshot with
   /// no entry fails the render and an entry with no snapshot fails it too, so
   /// the table always names exactly the snapshots there are.
   public static let assignment: [String: Int] = [
@@ -26,6 +26,7 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
     "debug-panel-replay": 1,
     "understanding-card": 1,
     "settings-general": 1,
+    "settings-models-opencode": 1,
     "settings-context-editor": 1,
     "settings-understanding": 1,
     "settings-advanced": 1,
@@ -38,6 +39,7 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
     "settings-contexts": 2,
     "settings-context-editor-duplicate": 2,
     "settings-models": 2,
+    "consent-openai": 2,
     "settings-understanding-empty": 2,
     "settings-advanced-on": 2,
     "toast-expanded": 2,
@@ -48,6 +50,7 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
     "settings-contexts-empty": 3,
     "settings-status-messages": 3,
     "settings-models-empty": 3,
+    "settings-models-openai": 3,
     "settings-capture": 3,
     "history": 3,
     "toast-listening": 3,
@@ -64,6 +67,7 @@ public struct SnapshotShard: Equatable, Sendable, CustomStringConvertible {
     "toast-thinking": 4,
     "settings-models-replay": 4,
     "settings-privacy-withdrawn": 4,
+    "consent-opencode": 4,
   ]
 
   /// 1 through `count`.

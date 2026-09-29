@@ -239,6 +239,12 @@
       try await send("open-link", target.arguments)
     }
 
+    /// Chooses the item titled `item` in a pop-up button as VoiceOver does: the button is pressed,
+    /// which opens its menu, and the item is then pressed, which closes it.
+    func choose(_ target: Target, item: String) async throws -> ControlReply {
+      try await send("choose", target.arguments.merging(["item": .string(item)]) { _, new in new })
+    }
+
     /// `text` as key presses to the first responder of the window titled `window`, each held
     /// with `modifiers`: `type("a", holding: [.command], in: "Models")` is Command-A.
     func type(

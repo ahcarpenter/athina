@@ -168,7 +168,9 @@ import Testing
     _ tier: ModelTier,
     _ model: String,
     at timestamp: Date,
-    outcome: ModelCallOutcome = .quiet
+    outcome: ModelCallOutcome = .quiet,
+    replayed: Bool = false,
+    provider: ModelProvider = .anthropic
   ) -> ModelCallRecord {
     ModelCallRecord(
       timestamp: timestamp,
@@ -181,19 +183,21 @@ import Testing
       cost: 0.001,
       latency: 1,
       outcome: outcome,
-      detail: nil
+      detail: nil,
+      replayed: replayed,
+      provider: provider
     )
   }
 
   @Test func whichModelAnsweredSitsUnderTheMentorsSpend() {
     let lines = titles(
-      MenuModel(state(answerLine: "Last answer: Claude Haiku 4.5 (Triage), 15:23:06"))
+      MenuModel(state(answerLine: "Last answer: Claude Haiku 4.5 via replay (Triage), 15:23:06"))
     )
     let index = lines.firstIndex(of: "Mentor: replay mode, nothing billed")!
-    #expect(lines[index + 1] == "Last answer: Claude Haiku 4.5 (Triage), 15:23:06")
+    #expect(lines[index + 1] == "Last answer: Claude Haiku 4.5 via replay (Triage), 15:23:06")
     #expect(
-      MenuModel(state(answerLine: "Last answer: Claude Haiku 4.5 (Triage), 15:23:06"))
-        .items[index + 1] == .status("Last answer: Claude Haiku 4.5 (Triage), 15:23:06")
+      MenuModel(state(answerLine: "Last answer: Claude Haiku 4.5 via replay (Triage), 15:23:06"))
+        .items[index + 1] == .status("Last answer: Claude Haiku 4.5 via replay (Triage), 15:23:06")
     )
   }
 
@@ -209,7 +213,7 @@ import Testing
     // The log is newest first, but the line reads the times, not the order.
     #expect(
       MenuModel.answerLine(calls: [triage, mentor], now: now)
-        == "Last answer: Claude Opus 5.5 (Mentor), \(ClockFormat.time(mentor.timestamp))"
+        == "Last answer: Claude Opus 5.5 via Anthropic (Mentor), \(ClockFormat.time(mentor.timestamp))"
     )
   }
 
@@ -219,7 +223,7 @@ import Testing
     let failed = call(.mentor, "claude-opus-5-5", at: now.addingTimeInterval(-30), outcome: .error)
     #expect(
       MenuModel.answerLine(calls: [failed, triage], now: now)
-        == "Last answer: Claude Haiku 4.5 (Triage), \(ClockFormat.time(triage.timestamp))"
+        == "Last answer: Claude Haiku 4.5 via Anthropic (Triage), \(ClockFormat.time(triage.timestamp))"
     )
     #expect(MenuModel.answerLine(calls: [failed], now: now) == nil)
     #expect(MenuModel.answerLine(calls: [], now: now) == nil)
@@ -231,16 +235,45 @@ import Testing
     let old = call(.followUp, "claude-sonnet-5", at: yesterday, outcome: .answered)
     #expect(
       MenuModel.answerLine(calls: [old], now: now)
-        == "Last answer: Claude Sonnet 5 (Follow-up), \(ClockFormat.dayAndTime(yesterday))"
+        == "Last answer: Claude Sonnet 5 via Anthropic (Follow-up), \(ClockFormat.dayAndTime(yesterday))"
     )
   }
 
   @Test func aModelTheCatalogDoesNotKnowIsNamedByItsID() {
     let now = Date()
-    let replayed = call(.triage, "claude-retired-1", at: now)
+    let retired = call(.triage, "claude-retired-1", at: now)
+    #expect(
+      MenuModel.answerLine(calls: [retired], now: now)
+        == "Last answer: claude-retired-1 via Anthropic (Triage), \(ClockFormat.time(now))"
+    )
+  }
+
+  @Test func theLineSaysWhichProviderAnswered() {
+    let now = Date()
+    let openAI = call(.mentor, "gpt-6-sol", at: now, outcome: .suggested, provider: .openAI)
+    #expect(
+      MenuModel.answerLine(calls: [openAI], now: now)
+        == "Last answer: GPT-6 Sol via OpenAI (Mentor), \(ClockFormat.time(now))"
+    )
+    let zen = call(.triage, "claude-haiku-4-5", at: now, provider: .openCode)
+    #expect(
+      MenuModel.answerLine(calls: [zen], now: now)
+        == "Last answer: Claude Haiku 4.5 via OpenCode (Triage), \(ClockFormat.time(now))"
+    )
+  }
+
+  @Test func aReplayedAnswerSaysItWasReplayedWhateverTheProvider() {
+    let now = Date()
+    let replayed = call(
+      .triage,
+      "claude-haiku-4-5-20251001",
+      at: now,
+      replayed: true,
+      provider: .openAI
+    )
     #expect(
       MenuModel.answerLine(calls: [replayed], now: now)
-        == "Last answer: claude-retired-1 (Triage), \(ClockFormat.time(now))"
+        == "Last answer: Claude Haiku 4.5 via replay (Triage), \(ClockFormat.time(now))"
     )
   }
 }

@@ -55,14 +55,17 @@ public enum JournalQueries {
       """
   )
 
-  /// Every model call, with its tier, outcome, cost, latency, and whether it
-  /// was replayed, which a replay's calls are even when no fixture answered.
+  /// Every model call, with its tier, the provider it went by, outcome, cost,
+  /// latency, and whether it was replayed, which a replay's calls are even
+  /// when no fixture answered.
   public static let calls = JournalQuery(
     name: "calls",
-    summary: "every model call, its tier, outcome, and whether it was replayed",
-    columns: ["id", "at", "tier", "model", "outcome", "replayed", "cost", "latency"],
+    summary: "every model call, its tier, provider, outcome, and whether it was replayed",
+    columns: [
+      "id", "at", "tier", "model", "provider", "outcome", "replayed", "cost", "latency",
+    ],
     sql: """
-      select id, \(localTime("timestamp")) as at, tier, model, outcome, replayed,
+      select id, \(localTime("timestamp")) as at, tier, model, provider, outcome, replayed,
              printf('%.4f', cost) as cost, printf('%.2f', latency) as latency
       from model_calls order by id
       """

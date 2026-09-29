@@ -46,6 +46,7 @@ final class ControlCommands {
     "journal",
     "advance",
     "open-link",
+    "choose",
   ]
 
   /// Answers a request; a parameter of the wrong type is answered with an
@@ -73,6 +74,7 @@ final class ControlCommands {
       case "journal": return try await journal(request)
       case "advance": return try advance(request)
       case "open-link": return try await openLink(request)
+      case "choose": return try await choose(request)
       default:
         return .error(
           """

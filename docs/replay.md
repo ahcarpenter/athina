@@ -1,6 +1,7 @@
 # Iterating without the network
 
-Working on Athina needs no live call to Anthropic to build, test, or verify.
+Working on Athina needs no live call to Anthropic, OpenAI or OpenCode to
+build, test, or verify.
 The app, its tests, and every verification run use **replay**: each model call
 is answered from a recorded fixture, with no network, no API key, and no spend.
 Replay is the default way to exercise the app, including the end-to-end checks
@@ -340,7 +341,7 @@ scenario and an empty journal:
    recordings with the ones you keep, update its README, delete the rest, put
    the journal and settings back, and run `make test`.
 5. The receipt table in the top-level README's
-   [What it costs](../README.md#setup-the-anthropic-api-key) lists each call of this set with its tokens and
+   [What it costs](../README.md#setup-an-api-key) lists each call of this set with its tokens and
    cost. Update it with the new set.
 
 `ScriptedClaudeClient` stays for unit tests that need one exact hand-written

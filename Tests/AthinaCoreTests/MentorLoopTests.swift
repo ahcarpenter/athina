@@ -261,7 +261,7 @@ struct MentorLoopTests {
     #expect(request.outputConfig?.format?.schema == MentorPrompts.triageSchema(contexts: []))
     #expect(request.outputConfig?.effort == nil)
     #expect(request.imageByteCount == 0)
-    #expect(sent.first?.apiKey == "sk-ant-test")
+    #expect(sent.first?.route == CallRoute(.anthropic, key: "sk-ant-test"))
     let after = await h.loop.currentStatus()
     #expect(after.lastTriage?.outcome == .quiet)
     #expect(after.lastMentorHold?.hold == .triageSaidNo(reason: "Reading docs"))
@@ -631,7 +631,7 @@ struct MentorLoopTests {
       Fixtures.observation(id: 2, at: h.clock.date, window: "b", text: "b"),
       expectCalls: 1
     )
-    #expect(await h.client.sent.first?.apiKey == "sk-ant-new")
+    #expect(await h.client.sent.first?.route == CallRoute(.anthropic, key: "sk-ant-new"))
   }
 
   /// A harness whose journal already holds `spent` dollars of calls this
