@@ -17,6 +17,9 @@ final class CalloutController {
   private var panel: NSPanel?
   private var hosting: NSHostingView<CalloutView>?
   private(set) var placement: CalloutPlacement?
+  /// Told what the callout outlines when it appears or moves, and nil when it
+  /// goes, so the note can say what is outlined: the callout draws no words.
+  var onChange: ((String?) -> Void)?
 
   var isVisible: Bool { panel?.isVisible ?? false }
 
@@ -51,11 +54,14 @@ final class CalloutController {
       }
     }
     self.placement = placement
+    onChange?(placement.note)
   }
 
   func dismiss() {
+    let wasShown = placement != nil
     placement = nil
     panel?.orderOut(nil)
+    if wasShown { onChange?(nil) }
   }
 
   private func makePanel() -> NSPanel {

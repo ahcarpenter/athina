@@ -123,10 +123,17 @@ final class ToastController {
   func dismiss() {
     stopWatchingForOutsideClicks()
     clearNote()
+    model.outlined = nil
     model.suggestion = nil
     model.exchange = []
     model.talkBack = .idle
     orderOut()
+  }
+
+  /// Says what the callout outlines, or that it is gone: the callout draws no
+  /// words of its own, so the note carries them.
+  func showOutlined(_ outlined: String?) {
+    model.outlined = outlined
   }
 
   /// Orders the toast above anything shown since, such as a callout.
@@ -575,6 +582,8 @@ final class ToastModel {
   var note: String?
   /// The talk-back hotkey, shown in the button bar once it is set and voice is usable.
   var talkBackKey: String?
+  /// What the callout outlines on screen for this suggestion, while it is up.
+  var outlined: String?
 }
 
 /// The toast as the panel holds it: pinned to the panel's top edge, so while
@@ -616,6 +625,7 @@ struct ToastView: View {
           talkBack: model.talkBack,
           note: model.note,
           talkBackKey: model.talkBackKey,
+          outlined: model.outlined,
           onToggle: {
             // Expanding reports "tell me more"; AppState records it once
             // per suggestion, so folding back and forth is only a view change.
@@ -683,41 +693,39 @@ struct ToastContent: View {
   var talkBack: TalkBackState = .idle
   var note: String?
   var talkBackKey: String?
+  /// What the callout on screen outlines, while it is up.
+  var outlined: String?
   let onToggle: () -> Void
   let onAction: (SuggestionFeedback) -> Void
 
   private let inset = ToastView.inset
 
-  /// What the header line says: who is speaking, and what kind of suggestion
-  /// about which app.
-  private var source: String { "\(suggestion.category.label) in \(suggestion.appName)" }
+  /// The kind of note this suggestion is shown as.
+  private var kind: NoteKind { NoteKind(suggestion.category) }
 
-  /// A warning is drawn as one, in the attention color, not as a tip in the accent.
-  private var discTint: Color {
-    suggestion.category.isWarning ? StatusTint.attention.color : .accentColor
-  }
+  /// The model's own category and the app, which the header line's hover and
+  /// VoiceOver say in full; the line itself shows the kind of note.
+  private var source: String { "\(suggestion.category.label) in \(suggestion.appName)" }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       VStack(alignment: .leading, spacing: 8) {
-        HStack(alignment: .top, spacing: 10) {
-          Image(systemName: suggestion.category.symbol)
-            .font(.title3)
-            .foregroundStyle(discTint)
-            .frame(width: 28, height: 28)
-            .background(discTint.quaternary, in: Circle())
-            .accessibilityHidden(true)
+        HStack(alignment: .top, spacing: 12) {
+          // The kind's tile, beside its name in words, so a kind is never
+          // told by colour alone; the callout carries the same tile.
+          KindTile(kind: kind)
+            .padding(.top, 1)
           VStack(alignment: .leading, spacing: 2) {
-            // No system notification chrome names the source, so the toast does.
-            Text("\(Text("Athina").fontWeight(.semibold)) · \(source)")
-              .font(.caption)
+            Text("\(kind.label) · \(suggestion.appName)")
+              .font(.subheadline)
               .foregroundStyle(.secondary)
               .lineLimit(1)
-              // A long app name is cut on screen; the whole line is a hover away.
+              // A long app name is cut on screen; the whole line, with the
+              // model's own category, is a hover away.
               .help("Athina · \(source)")
-              .accessibilityLabel("Athina, \(source)")
+              .accessibilityLabel("Athina, \(kind.label), \(source)")
             Text(suggestion.title)
-              .font(.headline)
+              .font(.title3.weight(.semibold))
               .fixedSize(horizontal: false, vertical: true)
               .accessibilityAddTraits(.isHeader)
           }
@@ -738,8 +746,15 @@ struct ToastContent: View {
           .accessibilityIdentifier("toast.close")
         }
         Text(suggestion.body)
-          .font(.callout)
+          .font(.body)
           .fixedSize(horizontal: false, vertical: true)
+        if let outlined {
+          Label("Showing on screen: \(outlined)", systemImage: "scope")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("toast.outlined")
+        }
       }
       .padding(inset)
 

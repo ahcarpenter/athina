@@ -71,8 +71,11 @@ particular to this app:
   key would draw a system prominent button in the inactive grey. A person may
   drag it aside, and it keeps that place, growing downward, until the next
   suggestion; it grows and shrinks in a short animation, at once with Reduce
-  Motion. A kind of suggestion that warns of something going wrong draws its
-  symbol in the attention tint, a tip in the accent.
+  Motion. Its header leads with the note's kind, one of PRODUCT.md's three
+  (`NoteKind`: a faster way, a risk, a dead end), as a System Settings style
+  tile in the kind's own colour beside the kind's name in words, then the
+  app; the model's own category is a hover away. While a callout is up, a
+  line under the body says what it outlines, since the callout draws no words.
 - **The callout is a click-through overlay** that draws its own frame, since
   nothing in the system frames a spot in another app's window: a halo, then a
   pointer stroke over a faint fill, in a colour of its own rather than the

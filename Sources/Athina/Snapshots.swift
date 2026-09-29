@@ -279,10 +279,13 @@ enum Snapshots {
         "toast-answered",
         CGSize(width: ToastController.panelWidth, height: 400),
         AnyView(
+          // Its callout is still up while the answer comes, so the note
+          // says what it outlines.
           SampleToast(
             expanded: false,
             exchange: SampleSuggestions.followUps(now: referenceDate, suggestionID: 4),
-            suggestionID: 4
+            suggestionID: 4,
+            outlined: "this capture call"
           )
         ),
         state
@@ -1357,9 +1360,12 @@ struct SampleToast: View {
   var exchange: [FollowUp] = []
   /// The sample suggestion to show; the newest when nil.
   var suggestionID: Int64?
+  /// What the callout outlines, when the sample shows one up.
+  var outlined: String?
 
   var body: some View {
     let model = ToastModel()
+    model.outlined = outlined
     model.suggestion = SampleSuggestions.make(now: Snapshots.referenceDate).first {
       suggestionID == nil || $0.id == suggestionID
     }

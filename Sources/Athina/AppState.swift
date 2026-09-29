@@ -413,6 +413,9 @@ final class AppState {
     toast.onHover = { [weak self] hovering in
       self?.toastHoverChanged(hovering)
     }
+    callouts.onChange = { [weak self] outlined in
+      self?.toast.showOutlined(outlined)
+    }
     toast.setTalkBackKey(talkBackKey)
     screenObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.didChangeScreenParametersNotification,
